@@ -69,7 +69,9 @@ says otherwise.
 4. **Groups and spaces.** First the space alpha's primitives in
    `atproto` (`space.rs`: the LtHash set hash, space commits and record
    MACs, the KEM a MAC's secret is agreed by, STAR archives; done), then
-   its credentials and HTTP signatures, then the repos the host keeps in
+   its tokens and signed requests (`space_auth.rs`: delegation tokens,
+   space credentials, client attestations, HTTP message signatures; done),
+   then the repos the host keeps in
    spaces, then being the authority for its groups' spaces. Then the
    groups: `createGroup`, `getGroup`, `listGroups`,
    handles, profile, rules, activating and deleting; the meta and members

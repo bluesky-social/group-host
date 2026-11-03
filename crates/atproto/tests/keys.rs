@@ -35,6 +35,11 @@ fn signatures_as_the_vectors_say() {
         assert_eq!(key.curve().alg(), v["algorithm"].as_str().unwrap());
         assert_eq!(key.did_key(), v["publicKeyDid"].as_str().unwrap());
         let valid = key.verify(&b64(&v["messageBase64"]), &b64(&v["signatureBase64"]));
+        // A high-S signature is refused here, and taken where either S is.
+        let tags = v["tags"].as_array().unwrap();
+        if tags.iter().any(|t| t == "high-s") {
+            assert!(key.verify_either_s(&b64(&v["messageBase64"]), &b64(&v["signatureBase64"])));
+        }
         assert_eq!(
             valid,
             v["validSignature"].as_bool().unwrap(),

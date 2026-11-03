@@ -195,6 +195,19 @@ impl PublicKey {
         format!("did:key:{}", self.to_multibase())
     }
 
+    /// Whether `signature` is this key's of `message`, low-S or not: what an
+    /// HTTP message signature on a space request is held to, as the space
+    /// alpha takes either. Everywhere else, [`PublicKey::verify`].
+    pub fn verify_either_s(&self, message: &[u8], signature: &[u8]) -> bool {
+        use ecdsa::signature::Verifier;
+        match self {
+            PublicKey::K256(k) => k256::ecdsa::Signature::from_slice(signature)
+                .is_ok_and(|s| k.verify(message, &s.normalize_s().unwrap_or(s)).is_ok()),
+            PublicKey::P256(k) => p256::ecdsa::Signature::from_slice(signature)
+                .is_ok_and(|s| k.verify(message, &s).is_ok()),
+        }
+    }
+
     /// Whether `signature` is this key's of `message`: 64 bytes, `r` then
     /// `s`, low-S. A DER signature, or a high-S one, is refused.
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {

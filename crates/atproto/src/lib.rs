@@ -18,6 +18,7 @@ pub mod mst;
 pub mod plc;
 pub mod service_auth;
 pub mod space;
+pub mod space_auth;
 pub mod syntax;
 pub mod tid;
 
