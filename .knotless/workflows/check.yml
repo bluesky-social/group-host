@@ -1,0 +1,17 @@
+# Formatting and lints, as `just lint` checks the Rust, on every pull and
+# push to main; test.yml runs the tests.
+#
+# The image is the Rust `just lint` runs locally, so a newer release's new
+# lints land on purpose. The build and the toolchain's components are kept
+# between runs, so a push lints only what it changed.
+image: rust:1.98
+# A pre-flight: the merge queue takes a pull into a batch only once this
+# has passed at its head, so one that does not build fails no batch.
+queue: first
+on:
+  push: {refs: [refs/heads/main]}
+  pull: {base: [refs/heads/main, refs/heads/feature/*]}
+cache: [target, /usr/local/cargo/registry, /usr/local/rustup]
+steps:
+  # cargo fmt --check, then clippy over the workspace, warnings denied.
+  - uses: chadtmiller.com/steps/rust-lint@1

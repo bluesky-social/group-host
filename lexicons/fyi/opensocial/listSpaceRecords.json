@@ -1,0 +1,115 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.listSpaceRecords",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Records in one of a group's content spaces, from the host's index of it: one collection or every collection, newest first, a page at a time. Only for those the space's own access record lets read, checked on every call \u2014 anyone, signed in or not, for one open to anyone.",
+      "parameters": {
+        "type": "params",
+        "required": ["group", "space"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did"
+          },
+          "space": {
+            "type": "string",
+            "description": "The space's URI."
+          },
+          "collection": {
+            "type": "string",
+            "format": "nsid"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string",
+            "description": "From the last page: continues with older records."
+          },
+          "field": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Only records whose field (a name or a dotted path, like subject.uri) equals `equals`."
+          },
+          "equals": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "uri": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "One record in the space, by its URI."
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["records"],
+          "properties": {
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#spaceRecord"
+              }
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "rev": {
+              "type": "string",
+              "description": "Where the index has got to in the space: a reader that saw this revision has seen everything up to it."
+            },
+            "actors": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#actorView"
+              },
+              "description": "Who wrote the records, by name and picture: for a caller who isn't one of the group's members, who has no other way to know them."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "NotAuthorized"
+        }
+      ]
+    },
+    "spaceRecord": {
+      "type": "object",
+      "required": ["uri", "cid", "repo", "value", "createdAt"],
+      "properties": {
+        "uri": {
+          "type": "string"
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid"
+        },
+        "repo": {
+          "type": "string",
+          "format": "did"
+        },
+        "value": {
+          "type": "unknown"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    }
+  }
+}

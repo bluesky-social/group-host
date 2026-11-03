@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.importAccountSpace",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "While an account's move here is pending (importAccount), bring one of its spaces, as its own server serves it: `meta`, a space it governs (com.atproto.space.exportSpaceMeta's archive), before any repo in it; `repo`, its own repo in a space it wrote in (com.atproto.space.getRepo's archive); or `blob`, one of its files in a space, before the repos that hold it. Only for whoever started the move, and only the account's own.",
+      "parameters": {
+        "type": "params",
+        "required": ["did", "part"],
+        "properties": {
+          "did": {
+            "type": "string",
+            "format": "did"
+          },
+          "part": {
+            "type": "string",
+            "knownValues": ["meta", "repo", "blob"]
+          }
+        }
+      },
+      "input": {
+        "encoding": "*/*"
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "space": {
+              "type": "string"
+            },
+            "records": {
+              "type": "integer"
+            },
+            "cid": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "NotSpaceOwner"
+        },
+        {
+          "name": "InvalidArchive"
+        },
+        {
+          "name": "UnsupportedPolicy"
+        }
+      ]
+    }
+  }
+}

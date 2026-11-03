@@ -1,0 +1,52 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.updateSpace",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Change a space's config: its name, who can read it, and which roles may act as the group in it. Requires space.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "space"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "space": {
+              "type": "string",
+              "format": "space-ref"
+            },
+            "name": {
+              "type": "string"
+            },
+            "readableBy": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "credentialScopes": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.access#roleScopes"
+              },
+              "description": "Replace which roles may act as the group in this space, and for which collections. Omitted means unchanged."
+            },
+            "writableBy": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Who may write into the space in their own name: role ids, or 'public' for anyone signed in. Absent is any member. Empty puts it back to any member."
+            }
+          }
+        }
+      }
+    }
+  }
+}

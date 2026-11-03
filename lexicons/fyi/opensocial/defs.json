@@ -1,0 +1,625 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.defs",
+  "defs": {
+    "subjectView": {
+      "type": "object",
+      "required": ["subject", "status", "createdAt"],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "format": "uri",
+          "description": "A record's at-uri, or an account's DID."
+        },
+        "status": {
+          "type": "string",
+          "knownValues": ["open", "escalated", "resolved"]
+        },
+        "reportCount": {
+          "type": "integer"
+        },
+        "lastReportedAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    },
+    "eventView": {
+      "type": "object",
+      "required": ["type", "createdAt"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "knownValues": ["report", "label", "negate", "resolve", "escalate", "note", "eject"]
+        },
+        "actor": {
+          "type": "string",
+          "format": "did"
+        },
+        "reasonType": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "val": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    },
+    "inviteView": {
+      "type": "object",
+      "required": ["uri", "invitee", "createdAt"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "at-uri"
+        },
+        "invitee": {
+          "type": "string",
+          "format": "did"
+        },
+        "message": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    },
+    "joinRequestView": {
+      "type": "object",
+      "required": ["did", "createdAt"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        },
+        "message": {
+          "type": "string"
+        },
+        "invite": {
+          "type": "string",
+          "format": "at-uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "actor": {
+          "type": "ref",
+          "ref": "#actorView",
+          "description": "Who is asking, as a view names them."
+        }
+      }
+    },
+    "groupView": {
+      "type": "object",
+      "required": ["did", "handle", "meta", "members"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        },
+        "handle": {
+          "type": "string",
+          "format": "handle"
+        },
+        "address": {
+          "type": "string",
+          "description": "The hostname this host serves the group's site at: one label under its handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+        },
+        "meta": {
+          "type": "string",
+          "format": "space-ref"
+        },
+        "members": {
+          "type": "string",
+          "format": "space-ref"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The group's own site, if it keeps one."
+        },
+        "joinPolicy": {
+          "type": "string",
+          "description": "How new members get in, as the profile states it."
+        },
+        "location": {
+          "type": "union",
+          "refs": [
+            "community.lexicon.location.address",
+            "community.lexicon.location.geo",
+            "community.lexicon.location.fsq",
+            "community.lexicon.location.hthree"
+          ],
+          "description": "Where it meets, if it meets somewhere: a town or city is enough."
+        },
+        "online": {
+          "type": "boolean",
+          "description": "It meets online, as well as or instead of somewhere."
+        },
+        "topics": {
+          "type": "array",
+          "maxLength": 10,
+          "items": {
+            "type": "string",
+            "maxGraphemes": 64,
+            "maxLength": 640
+          },
+          "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
+        },
+        "languages": {
+          "type": "array",
+          "maxLength": 5,
+          "items": {
+            "type": "string",
+            "format": "language"
+          },
+          "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
+        },
+        "avatar": {
+          "type": "string",
+          "description": "CID of the avatar blob; the host serves it at /img/{did}/avatar."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#groupRule"
+          }
+        },
+        "deactivated": {
+          "type": "boolean",
+          "description": "Set while a steward has the group switched off. Its spaces cannot be read until one of the stewards who could switch it off switches it back on."
+        },
+        "banner": {
+          "type": "string",
+          "description": "CID of the banner blob; the host serves it at /img/{did}/banner."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When the group was started on this host."
+        }
+      }
+    },
+    "groupViewDetailed": {
+      "type": "object",
+      "required": ["did", "handle", "meta", "members"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        },
+        "handle": {
+          "type": "string",
+          "format": "handle"
+        },
+        "address": {
+          "type": "string",
+          "description": "The hostname this host serves the group's site at: one label under its handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+        },
+        "meta": {
+          "type": "string",
+          "format": "space-ref"
+        },
+        "members": {
+          "type": "string",
+          "format": "space-ref"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The group's own site, if it keeps one."
+        },
+        "joinPolicy": {
+          "type": "string",
+          "description": "How new members get in, as the profile states it."
+        },
+        "location": {
+          "type": "union",
+          "refs": [
+            "community.lexicon.location.address",
+            "community.lexicon.location.geo",
+            "community.lexicon.location.fsq",
+            "community.lexicon.location.hthree"
+          ],
+          "description": "Where it meets, if it meets somewhere: a town or city is enough."
+        },
+        "online": {
+          "type": "boolean",
+          "description": "It meets online, as well as or instead of somewhere."
+        },
+        "topics": {
+          "type": "array",
+          "maxLength": 10,
+          "items": {
+            "type": "string",
+            "maxGraphemes": 64,
+            "maxLength": 640
+          },
+          "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
+        },
+        "languages": {
+          "type": "array",
+          "maxLength": 5,
+          "items": {
+            "type": "string",
+            "format": "language"
+          },
+          "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
+        },
+        "avatar": {
+          "type": "string",
+          "description": "CID of the avatar blob; the host serves it at /img/{did}/avatar."
+        },
+        "deactivated": {
+          "type": "boolean",
+          "description": "Set while a steward has the group switched off. Its spaces cannot be read until one of the stewards who could switch it off switches it back on."
+        },
+        "banner": {
+          "type": "string",
+          "description": "CID of the banner blob; the host serves it at /img/{did}/banner."
+        },
+        "rules": {
+          "type": "array",
+          "description": "In the order they are presented. Absent when the meta space is closed to the viewer.",
+          "items": {
+            "type": "ref",
+            "ref": "#groupRule"
+          }
+        },
+        "viewer": {
+          "type": "ref",
+          "ref": "#viewerState"
+        }
+      },
+      "description": "A group in full, as the viewer may see it. Profile fields and rules are present only when the viewer may read the meta space."
+    },
+    "viewerState": {
+      "type": "object",
+      "description": "The requesting account's standing in the group. Only present for authed requests.",
+      "required": ["member", "roles", "actions"],
+      "properties": {
+        "member": {
+          "type": "boolean"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "description": "The union of actions across the viewer's roles: what the host would let them do.",
+          "items": {
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#action"
+          }
+        },
+        "accepted": {
+          "type": "boolean",
+          "description": "For a member: whether their own acceptance is in the members space."
+        },
+        "request": {
+          "type": "ref",
+          "ref": "#joinRequestView",
+          "description": "The viewer's own pending request to join, when they are not a member and have one."
+        }
+      }
+    },
+    "groupRule": {
+      "type": "object",
+      "required": ["rkey", "title"],
+      "properties": {
+        "rkey": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    },
+    "actorView": {
+      "type": "object",
+      "required": ["did"],
+      "description": "A person, as a view names them: their handle from their DID document, and their name, words about themselves and face from their profile in the group the view is of, or else the Bluesky profile in their own repo, or Grain's for somebody with none.",
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        },
+        "handle": {
+          "type": "string",
+          "format": "handle"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string",
+          "format": "uri",
+          "description": "Served renderably by the host: at /img/actor/{did}/{cid}; or their picture in the group, from its members space, through getSpaceBlob, for whoever may read it."
+        },
+        "pronouns": {
+          "type": "string"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#actorLink"
+          },
+          "description": "The links on their profile in the group, in order."
+        },
+        "bot": {
+          "type": "boolean",
+          "description": "In the group the view is of, one of their roles says its people are bots: an account that acts on its own, not a person."
+        },
+        "canCreateGroup": {
+          "type": "boolean",
+          "description": "Only on the caller's own view, from getActor: whether this host lets them start a group (createGroup)."
+        }
+      }
+    },
+    "memberView": {
+      "type": "object",
+      "required": ["actor", "roles"],
+      "properties": {
+        "actor": {
+          "type": "ref",
+          "ref": "#actorView"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "roleView": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The role id: its record key."
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "bot": {
+          "type": "boolean",
+          "description": "People with this role are bots."
+        }
+      }
+    },
+    "spaceView": {
+      "type": "object",
+      "required": ["uri", "type"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "space-ref"
+        },
+        "type": {
+          "type": "string",
+          "format": "nsid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "readableBy": {
+          "type": "array",
+          "description": "The space's read gate, when the viewer may read the space.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "people": {
+          "type": "array",
+          "description": "For chosen people: who they are, when the viewer is one of them. Only they read it or write in it.",
+          "items": {
+            "type": "string",
+            "format": "did"
+          }
+        },
+        "writableBy": {
+          "type": "array",
+          "description": "Who may write there in their own name, when the viewer may read the space. Absent is any member.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "credentialScopes": {
+          "type": "array",
+          "description": "What each role may write there as the group, when the viewer may read the space.",
+          "items": {
+            "type": "ref",
+            "ref": "fyi.opensocial.access#roleScopes"
+          }
+        }
+      }
+    },
+    "groupViewBasic": {
+      "type": "object",
+      "required": ["did", "handle"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        },
+        "handle": {
+          "type": "string",
+          "format": "handle"
+        },
+        "address": {
+          "type": "string",
+          "description": "The hostname this host serves the group's site at: one label under its handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string",
+          "description": "CID of the group's picture."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The group's own site, if not at its handle."
+        },
+        "memberCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many people are in it. Only to its members."
+        },
+        "sampleMembers": {
+          "type": "array",
+          "maxLength": 5,
+          "items": {
+            "type": "ref",
+            "ref": "#actorView"
+          },
+          "description": "A few of its members, each as they are in the group, to show their faces. Only to its members."
+        }
+      }
+    },
+    "actorLink": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "description": "One file of what a site, a channel or a template is made of, by its path there: a page, a script, a stylesheet, JSON (a lexicon), an image or a font. What it is served as follows its path's extension.",
+      "required": ["path", "file"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Where it is among the rest: `events/calendar.html`."
+        },
+        "file": {
+          "type": "blob",
+          "maxSize": 5000000
+        }
+      }
+    },
+    "action": {
+      "type": "string",
+      "knownValues": [
+        "mod.read",
+        "mod.resolve",
+        "label",
+        "takedown",
+        "invite",
+        "admit",
+        "eject",
+        "role.assign",
+        "space.create",
+        "space.configure",
+        "space.delete",
+        "group.configure"
+      ],
+      "maxLength": 64,
+      "description": "What a holder of a role may do, as the host's methods ask: each is answered by the scope that grants it in the role's grant."
+    },
+    "roleBinding": {
+      "type": "object",
+      "description": "What one role may do, as the host reads its grant.",
+      "required": ["role", "actions", "assignable"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#action"
+          }
+        },
+        "assignable": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "repoCollections": {
+          "type": "array",
+          "description": "The public-repo collections holders may write as the group; `*` for any.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "description": "The role's grant as the permissions record has it.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

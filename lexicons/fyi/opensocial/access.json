@@ -1,0 +1,68 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.access",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "Who may read this space. Present in every space under the group. The group authority issues space credentials according to this record and nothing else.",
+      "record": {
+        "type": "object",
+        "required": ["readableBy", "createdAt"],
+        "properties": {
+          "readableBy": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Role ids that may read the space, or the literal string 'public' meaning any authenticated requester.",
+            "maxLength": 50
+          },
+          "credentialScopes": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "#roleScopes"
+            },
+            "description": "Which OAuth scopes for the group DID each role may request in this space. A role that may write a kind of record as the group here may also publish that kind, as the group, in its public repo; '*' is any kind, in both.",
+            "maxLength": 50
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "writableBy": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Who may write into the space in their own name: role ids, or 'public' for anyone signed in. Absent is any member.",
+            "maxLength": 50
+          }
+        }
+      }
+    },
+    "roleScopes": {
+      "type": "object",
+      "required": ["role", "scopes"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "A role id: the record key of a fyi.opensocial.role record."
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": "Collections this role may write in the space as the group: an NSID, or * for any. Every write, unless the grant names some: xyz.task?action=create lets the role add tasks but not change or delete them.",
+          "maxLength": 100
+        }
+      }
+    }
+  }
+}

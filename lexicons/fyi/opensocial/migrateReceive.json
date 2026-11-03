@@ -1,0 +1,53 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.migrateReceive",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "On the destination host: take the group in. Pulls it from the host it's leaving with migratePrepare's token (its public repo, each space's meta archive and the group's repo there, its files), checked against the group's current key, and keeps it switched off. The caller must be an admin by the group's own permissions. Answers with what the PLC operation should name.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["did", "serviceJwt", "snapshot", "exportToken"],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "serviceJwt": {
+              "type": "string"
+            },
+            "snapshot": {
+              "type": "unknown"
+            },
+            "exportToken": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["recommendedCreds"],
+          "properties": {
+            "recommendedCreds": {
+              "type": "unknown"
+            },
+            "records": {
+              "type": "integer"
+            },
+            "blobs": {
+              "type": "integer"
+            },
+            "spaces": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  }
+}

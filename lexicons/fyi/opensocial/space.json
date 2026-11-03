@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.space",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "description": "Lists one space in the group's index, in its members space. A discovery aid, not an exhaustive list.",
+      "record": {
+        "type": "object",
+        "required": ["space", "createdAt"],
+        "properties": {
+          "space": {
+            "type": "string",
+            "format": "space-ref",
+            "description": "The space this entry lists."
+          },
+          "name": {
+            "type": "string",
+            "maxGraphemes": 64,
+            "maxLength": 640,
+            "description": "What the group calls it, for apps that list its spaces."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

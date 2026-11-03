@@ -1,0 +1,52 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.applyLabel",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Write a label record into the subject's space. Requires label, or takedown for !hide and !takedown. On the host's own queue, a template, a version of one or a like of one is labelled by the host: !hide leaves it out of where people look for things to add, and unsafe, on a version, sends every tab on it back to the last version that isn't.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "subject", "val"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles. Or the host's own DID, for its queue of what's shared with everyone: templates, their versions, and likes of them, for the host's moderators alone."
+            },
+            "subject": {
+              "type": "union",
+              "refs": ["com.atproto.admin.defs#repoRef", "com.atproto.repo.strongRef"]
+            },
+            "val": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string",
+              "format": "at-uri"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "description": "The label record a group's label is; nothing for the host's own, which it keeps itself.",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "format": "at-uri"
+            },
+            "cid": {
+              "type": "string",
+              "format": "cid"
+            }
+          }
+        }
+      }
+    }
+  }
+}

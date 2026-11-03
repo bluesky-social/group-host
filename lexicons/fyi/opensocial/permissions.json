@@ -1,0 +1,61 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.permissions",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "Group-wide grants for each role, in the members space: the OAuth scopes the role holds and the roles its holders may assign. Roles compose by union; there are no deny rules.",
+      "record": {
+        "type": "object",
+        "required": ["grants"],
+        "properties": {
+          "grants": {
+            "type": "array",
+            "maxLength": 100,
+            "description": "At most one entry per role.",
+            "items": {
+              "type": "ref",
+              "ref": "#grant"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "description": "Scopes a role is granted across the group, and the roles its holders may assign.",
+      "required": ["role", "scopes", "assignable"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "A role id: the record key of a fyi.opensocial.role record."
+        },
+        "scopes": {
+          "type": "array",
+          "maxLength": 100,
+          "description": "OAuth scopes, one per item. May include permission sets. `repo:` scopes are the public-repo collections holders may write as the group.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "assignable": {
+          "type": "array",
+          "maxLength": 100,
+          "description": "Roles holders may grant or revoke, and whose holders they may eject.",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      }
+    }
+  }
+}

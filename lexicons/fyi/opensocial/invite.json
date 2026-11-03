@@ -1,0 +1,35 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.invite",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "description": "An invitation, written by the inviting group into the invitee's own invites space. The group is the record's author.",
+      "record": {
+        "type": "object",
+        "required": ["createdAt"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxGraphemes": 300,
+            "maxLength": 3000
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "by": {
+            "type": "string",
+            "format": "did",
+            "description": "Who in the group sent it."
+          }
+        }
+      }
+    }
+  }
+}

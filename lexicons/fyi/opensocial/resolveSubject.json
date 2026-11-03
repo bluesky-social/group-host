@@ -1,0 +1,36 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.resolveSubject",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Resolve or escalate a subject, optionally with a note. Requires mod.resolve.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "subject", "action"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles. Or the host's own DID, for its queue of what's shared with everyone: templates, their versions, and likes of them, for the host's moderators alone."
+            },
+            "subject": {
+              "type": "string",
+              "format": "uri",
+              "description": "A record's at-uri, or an account's DID."
+            },
+            "action": {
+              "type": "string",
+              "knownValues": ["resolve", "escalate", "note"]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+@import './tokens.css';
+
+/* Every value here is a token from tokens.css; a new one goes there first.
+   Rules come in the order the pages are built up: the document, the page's
+   frame, then the parts any page uses. The components are unstyled beyond
+   this for now: the console's look comes once its pages do. */
+
+/* ── Document ─────────────────────────────────────────────────────── */
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:var(--text-base)/var(--leading) var(--font-sans);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
+a{color:inherit;text-decoration:underline;text-decoration-color:var(--link-line);text-underline-offset:2px}
+a:hover{text-decoration-color:currentColor}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+h1,h2,h3{letter-spacing:var(--tracking-tight);margin:0;font-weight:var(--weight-semibold)}
+h1{font-size:var(--text-2xl)}
+h2{font-size:var(--text-lg)}
+p{margin:0}
+code,.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+input,select,textarea,button{font:inherit;font-size:var(--text-field)}
+
+/* ── Utilities ────────────────────────────────────────────────────── */
+
+.mute{color:var(--mute)}
+.stack{display:flex;flex-direction:column;gap:var(--space-4)}
+
+/* ── Frame: header, footer, the column between ────────────────────── */
+
+.wrap{width:100%;max-width:var(--page);margin:0 auto;padding:0 var(--space-4)}
+.top{border-bottom:var(--border)}
+.top .wrap{display:flex;align-items:center;gap:var(--space-6);height:var(--header)}
+.brand{font:var(--weight-semibold) var(--text-base) var(--font-mono);text-decoration:none}
+main.wrap{flex:1;padding-top:var(--space-6);padding-bottom:var(--space-16)}
+.foot{color:var(--faint);font:var(--text-xs) var(--font-mono);padding-top:var(--space-5);padding-bottom:var(--space-8);border-top:1px dashed var(--line)}
+
+/* ── Atoms ────────────────────────────────────────────────────────── */
+
+.av{display:inline-grid;place-items:center;flex:none;width:var(--avatar);height:var(--avatar);border-radius:50%;object-fit:cover;background:var(--soft)}
+.av.md{width:var(--avatar-md);height:var(--avatar-md)}
+
+/* ── Molecules ────────────────────────────────────────────────────── */
+
+.empty{border:1px dashed var(--line);border-radius:var(--radius-md);padding:var(--space-8) var(--space-4);text-align:center;color:var(--mute);display:flex;flex-direction:column;gap:var(--space-2)}
+.empty-title{color:var(--fg);font-weight:var(--weight-semibold)}
+.group-row{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;border-bottom:var(--border)}
+.group-row:last-child{border-bottom:0}

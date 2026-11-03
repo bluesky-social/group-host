@@ -1,0 +1,60 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.putRule",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Create or update a rule. Requires group.configure. Fields are inlined rather than referencing fyi.opensocial.rule, because a record def cannot be used as an input object \u2014 same fix as updateProfile.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "title"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "rkey": {
+              "type": "string",
+              "format": "record-key"
+            },
+            "title": {
+              "type": "string",
+              "maxGraphemes": 100,
+              "maxLength": 1000
+            },
+            "text": {
+              "type": "string",
+              "maxGraphemes": 2000,
+              "maxLength": 20000
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Where it comes in the list, lowest first. Omitted keeps an existing rule's place and puts a new one last."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["uri", "cid"],
+          "properties": {
+            "uri": {
+              "type": "string",
+              "format": "at-uri"
+            },
+            "cid": {
+              "type": "string",
+              "format": "cid"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+[workspace]
+members = ["crates/atproto", "crates/group-host", "crates/group-host-mcp", "crates/opensocial"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.89"
+
+[workspace.dependencies]
+atproto = { path = "crates/atproto" }
+group-host = { path = "crates/group-host" }
+opensocial = { path = "crates/opensocial" }
+anyhow = "1"
+axum = "0.8"
+base64 = "0.22"
+ciborium = "0.2"
+futures = "0.3"
+k256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2", "gzip"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util", "time", "sync", "net", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "json", "env-filter", "registry"] }
+
+# Every worktree keeps its own target/, so debug info is kept small: line
+# tables for our crates, none for dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

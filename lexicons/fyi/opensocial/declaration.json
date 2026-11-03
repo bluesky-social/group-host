@@ -1,0 +1,26 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.declaration",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "Marks a DID as a group. Lives in the public repo. Points at the meta space. Discovery only.",
+      "record": {
+        "type": "object",
+        "required": ["meta"],
+        "properties": {
+          "meta": {
+            "type": "string",
+            "format": "space-ref",
+            "description": "The group's meta space."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.migratePrepare",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "On the source host: start moving the group to another host. Answers with a createAccount service token signed by the group, for the destination; the group's handle, address and spaces; and a token, good for an hour, with which the destination pulls the group from here (migrateExport). Requires group.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "destDid"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did"
+            },
+            "destDid": {
+              "type": "string",
+              "format": "did",
+              "description": "The destination host's service DID."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["serviceJwt", "snapshot", "exportToken"],
+          "properties": {
+            "serviceJwt": {
+              "type": "string"
+            },
+            "snapshot": {
+              "type": "unknown",
+              "description": "{handle, address, spaces: [{uri, type, skey}]}: every space the group holds."
+            },
+            "exportToken": {
+              "type": "string",
+              "description": "For migrateExport, for an hour."
+            }
+          }
+        }
+      }
+    }
+  }
+}

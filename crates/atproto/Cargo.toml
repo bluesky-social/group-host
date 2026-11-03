@@ -1,0 +1,9 @@
+[package]
+name = "atproto"
+description = "The atproto a group host needs, kept small: DRISL, CIDs, keys, the MST, CAR files, PLC operations and service auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

@@ -1,0 +1,19 @@
+# The tests, under `just cov`'s gate: every test binary, failing under 100%
+# of lines or functions. A binary the tests start (the host, the command)
+# is counted as it runs, so it is told to stop rather than killed.
+image: rust:1.98
+# A pre-flight, as check is: the merge queue takes a pull into a batch only
+# once this has passed at its head.
+queue: first
+on:
+  push: {refs: [refs/heads/main]}
+  pull: {base: [refs/heads/main, refs/heads/feature/*]}
+cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/tools]
+steps:
+  - uses: chadtmiller.com/steps/cargo-llvm-cov@1
+    with: {version: 0.9.1}
+  - name: test
+    run: |
+      export PATH=/opt/tools:$PATH
+      cargo llvm-cov --workspace --ignore-filename-regex '(tests/|harness/)' \
+        --fail-under-lines 100 --fail-under-functions 100 --show-missing-lines

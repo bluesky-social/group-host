@@ -1,0 +1,30 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.listGroups",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Host-level: the groups hosted here, with their profiles. v1 discovery; a real index would come from declarations on the public network.",
+      "parameters": {
+        "type": "params",
+        "properties": {}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["groups"],
+          "properties": {
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#groupView"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

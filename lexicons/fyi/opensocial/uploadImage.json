@@ -1,0 +1,36 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.uploadImage",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Upload an image for the profile avatar or banner. Requires group.configure. Binary input like com.atproto.repo.uploadBlob; the group is a parameter because the blob has to land in that group's repo for a profile record to reference it.",
+      "input": {
+        "encoding": "*/*"
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["blob"],
+          "properties": {
+            "blob": {
+              "type": "blob"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "type": "params",
+        "required": ["group"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did",
+            "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+          }
+        }
+      }
+    }
+  }
+}

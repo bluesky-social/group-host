@@ -1,0 +1,36 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.ejectMember",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Remove a member and their access. Requires eject; every role the member holds must be in the caller's assignable set.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "member"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "member": {
+              "type": "string",
+              "format": "did"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotAssignable"
+        }
+      ]
+    }
+  }
+}

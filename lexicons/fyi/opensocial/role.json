@@ -1,0 +1,39 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.role",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "any",
+      "description": "Declares that a role exists. The record key is the role id.",
+      "record": {
+        "type": "object",
+        "required": ["displayName"],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxGraphemes": 64,
+            "maxLength": 640
+          },
+          "description": {
+            "type": "string",
+            "maxGraphemes": 300,
+            "maxLength": 3000
+          },
+          "default": {
+            "type": "boolean",
+            "description": "Granted to members who join through requestJoin."
+          },
+          "bot": {
+            "type": "boolean",
+            "description": "People with this role are bots: accounts that act on their own, not a person. A member is a bot if any of their roles says so."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.cancelJoinRequest",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Withdraw a pending join request.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            }
+          }
+        }
+      }
+    }
+  }
+}

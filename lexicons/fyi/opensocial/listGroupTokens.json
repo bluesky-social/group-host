@@ -1,0 +1,41 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.listGroupTokens",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "The OAuth sessions issued by this host for the group DID (apps acting as the group), plus recent activity. Requires group.configure.",
+      "parameters": {
+        "type": "params",
+        "required": ["group"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["sessions", "activity"],
+          "properties": {
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "unknown"
+              }
+            },
+            "activity": {
+              "type": "array",
+              "items": {
+                "type": "unknown"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.migrateComplete",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Source host: sign and submit the PLC operation repointing the group's DID document at the destination, and relinquish the group. Requires group.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "recommendedCreds"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did"
+            },
+            "recommendedCreds": {
+              "type": "unknown"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "movedTo": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

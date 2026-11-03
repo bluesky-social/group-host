@@ -1,0 +1,29 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.deactivateGroup",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Switch the group off: its account is deactivated on this host, so nothing can read its spaces or write as it. Reversible with activateGroup. Requires group.configure. The host remembers who held group.configure at this moment, because while the group is off its membership cannot be read.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "AlreadyDeactivated"
+        }
+      ]
+    }
+  }
+}

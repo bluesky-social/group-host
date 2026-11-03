@@ -1,0 +1,20 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.members",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:self",
+      "name": "Group: members",
+      "description": "Roles, who holds them, the authz config, and the space index. Usually gated to members.",
+      "collections": [
+        "fyi.opensocial.permissions",
+        "fyi.opensocial.space",
+        "fyi.opensocial.role",
+        "fyi.opensocial.membership",
+        "fyi.opensocial.acceptance",
+        "fyi.opensocial.access"
+      ]
+    }
+  }
+}

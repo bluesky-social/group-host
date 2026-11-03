@@ -1,0 +1,36 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.rule",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "description": "One group rule, with a stable URI a moderation action can cite.",
+      "record": {
+        "type": "object",
+        "required": ["title", "text"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxGraphemes": 100,
+            "maxLength": 1000
+          },
+          "text": {
+            "type": "string",
+            "maxGraphemes": 2000,
+            "maxLength": 20000
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Where it comes in the list of rules, lowest first."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

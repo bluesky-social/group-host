@@ -1,0 +1,71 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.labeler",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "The group as a moderation service: the label values it applies and what it accepts reports about. Written by the group into the meta space.",
+      "record": {
+        "type": "object",
+        "required": ["policies", "createdAt"],
+        "properties": {
+          "policies": {
+            "type": "ref",
+            "ref": "#labelerPolicies"
+          },
+          "reasonTypes": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "com.atproto.moderation.defs#reasonType"
+            },
+            "description": "The report reasons it accepts."
+          },
+          "subjectTypes": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "com.atproto.moderation.defs#subjectType"
+            },
+            "description": "The kinds of subject it accepts reports about."
+          },
+          "subjectCollections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "nsid"
+            },
+            "description": "The record collections it accepts reports about. Omitted means any."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    },
+    "labelerPolicies": {
+      "type": "object",
+      "required": ["labelValues"],
+      "properties": {
+        "labelValues": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValue"
+          },
+          "description": "The label values it applies."
+        },
+        "labelValueDefinitions": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValueDefinition"
+          },
+          "description": "Its own label values, defined."
+        }
+      }
+    }
+  }
+}

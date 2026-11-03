@@ -1,0 +1,40 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.assignRoles",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Set a member's full role set. Requires role.assign; every role added or removed must be in the caller's assignable set.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "member", "roles"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "member": {
+              "type": "string",
+              "format": "did"
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotAssignable"
+        }
+      ]
+    }
+  }
+}

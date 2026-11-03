@@ -1,0 +1,31 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.readState",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "any",
+      "description": "How far you've read in one of a group's places, a chat or a board, say: kept in your own inbox, where only you read it.",
+      "record": {
+        "type": "object",
+        "required": ["space", "readUntil"],
+        "properties": {
+          "space": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "The space."
+          },
+          "room": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "In a chat, what its room is about, such as an event. Without one, the space as a whole."
+          },
+          "readUntil": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

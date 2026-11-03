@@ -1,0 +1,85 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.profile",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "The group's profile. Written by the group authority into the meta space.",
+      "record": {
+        "type": "object",
+        "required": ["displayName", "joinPolicy"],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxGraphemes": 64,
+            "maxLength": 640
+          },
+          "description": {
+            "type": "string",
+            "maxGraphemes": 300,
+            "maxLength": 3000
+          },
+          "avatar": {
+            "type": "blob",
+            "accept": ["image/png", "image/jpeg"],
+            "maxSize": 1000000
+          },
+          "banner": {
+            "type": "blob",
+            "accept": ["image/png", "image/jpeg"],
+            "maxSize": 1000000
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The group's own site, if it keeps one. A third-party app that shows the group can link back to it."
+          },
+          "joinPolicy": {
+            "type": "string",
+            "knownValues": ["open", "approval", "invite"],
+            "description": "How new members get in: open admits anyone, approval queues a join request for review, invite requires an invitation. An invitation admits its recipient under any policy.",
+            "maxLength": 128
+          },
+          "location": {
+            "type": "union",
+            "refs": [
+              "community.lexicon.location.address",
+              "community.lexicon.location.geo",
+              "community.lexicon.location.fsq",
+              "community.lexicon.location.hthree"
+            ],
+            "description": "Where it meets, if it meets somewhere: a town or city is enough."
+          },
+          "online": {
+            "type": "boolean",
+            "description": "It meets online, as well as or instead of somewhere."
+          },
+          "topics": {
+            "type": "array",
+            "maxLength": 10,
+            "items": {
+              "type": "string",
+              "maxGraphemes": 64,
+              "maxLength": 640
+            },
+            "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
+          },
+          "languages": {
+            "type": "array",
+            "maxLength": 5,
+            "items": {
+              "type": "string",
+              "format": "language"
+            },
+            "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

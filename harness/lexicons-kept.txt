@@ -1,0 +1,150 @@
+com.atproto.admin.defs#accountView.handle: accounts by DID, not handle
+com.atproto.admin.defs#accountView.relatedRecords: an array holds objects, which can grow, not bare values
+com.atproto.admin.defs#statusAttr.ref: a string without a format needs a maxLength
+com.atproto.admin.defs#threatSignature.property: a string without a format needs a maxLength
+com.atproto.admin.defs#threatSignature.value: a string without a format needs a maxLength
+com.atproto.label.defs: large-string: large max length
+com.atproto.repo.strongRef#main: a main def needs a description
+com.atproto.server.defs#inviteCode.code: a string without a format needs a maxLength
+com.atproto.server.defs#inviteCode.createdBy: a string without a format needs a maxLength
+com.atproto.server.defs#inviteCode.forAccount: a string without a format needs a maxLength
+community.lexicon.location.fsq: field-name-syntax: name doesn't match recommended syntax/characters: fsq_place_id
+fyi.opensocial.access#main.record.readableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.access#main.record.writableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.access#roleScopes.scopes: an array holds objects, which can grow, not bare values
+fyi.opensocial.activateGroup: endpoint-output-undefined: missing output definition
+fyi.opensocial.addRecoveryKey#main.input.key: a string without a format needs a maxLength
+fyi.opensocial.addRecoveryKey: endpoint-output-undefined: missing output definition
+fyi.opensocial.admitMember#main.input.roles: an array holds objects, which can grow, not bare values
+fyi.opensocial.admitMember: endpoint-output-undefined: missing output definition
+fyi.opensocial.applyLabel#main.input.val: a string without a format needs a maxLength
+fyi.opensocial.approveAuthorization#main.input.requestUri: a string without a format needs a maxLength
+fyi.opensocial.assignRoles#main.input.roles: an array holds objects, which can grow, not bare values
+fyi.opensocial.assignRoles: endpoint-output-undefined: missing output definition
+fyi.opensocial.basePermissions#main: a main def needs a description
+fyi.opensocial.basePermissions: lexicon-schema: unsupported permission resource: space
+fyi.opensocial.cancelJoinRequest: endpoint-output-undefined: missing output definition
+fyi.opensocial.checkGroupHandle#main.output.handle: accounts by DID, not handle
+fyi.opensocial.checkImport#main.output.address: accounts by DID, not handle
+fyi.opensocial.checkImport#main.output.handle: accounts by DID, not handle
+fyi.opensocial.completeImport#main.output.address: accounts by DID, not handle
+fyi.opensocial.completeImport#main.output.handle: accounts by DID, not handle
+fyi.opensocial.configure: lexicon-schema: unsupported permission resource: space
+fyi.opensocial.createGroup#main.input.handle: accounts by DID, not handle
+fyi.opensocial.createGroup#main.input.metaReadableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.createGroup#main.input.metaReadableBy[]: a string without a format needs a maxLength
+fyi.opensocial.createGroup#main.input.stewards: an array holds objects, which can grow, not bare values
+fyi.opensocial.createGroup: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.createInvite#main.input.message: a string without a format needs a maxLength
+fyi.opensocial.createSpace#main.input.name: a string without a format needs a maxLength
+fyi.opensocial.createSpace#main.input.readableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.createSpace#main.input.readableBy[]: a string without a format needs a maxLength
+fyi.opensocial.createSpace#main.input.writableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.createSpace#main.input.writableBy[]: a string without a format needs a maxLength
+fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type
+fyi.opensocial.createSpace: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.deactivateGroup: endpoint-output-undefined: missing output definition
+fyi.opensocial.declaration: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.declineAuthorization#main.input.requestUri: a string without a format needs a maxLength
+fyi.opensocial.declineInvite: endpoint-output-undefined: missing output definition
+fyi.opensocial.defs#actorLink.title: a string without a format needs a maxLength
+fyi.opensocial.defs#actorView.handle: accounts by DID, not handle
+fyi.opensocial.defs#groupRule.rkey: a string without a format needs a maxLength
+fyi.opensocial.defs#groupRule.text: a string without a format needs a maxLength
+fyi.opensocial.defs#groupRule.title: a string without a format needs a maxLength
+fyi.opensocial.defs#groupView.handle: accounts by DID, not handle
+fyi.opensocial.defs#groupView.languages: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#groupView.topics: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#groupViewBasic.handle: accounts by DID, not handle
+fyi.opensocial.defs#groupViewDetailed.handle: accounts by DID, not handle
+fyi.opensocial.defs#groupViewDetailed.languages: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#groupViewDetailed.topics: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#memberView.roles: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#roleBinding.assignable: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#roleBinding.repoCollections: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#roleBinding.repoCollections[]: a string without a format needs a maxLength
+fyi.opensocial.defs#roleBinding.scopes: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#roleBinding.scopes[]: a string without a format needs a maxLength
+fyi.opensocial.defs#spaceView.people: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#spaceView.readableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#spaceView.writableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#viewerState.roles: an array holds objects, which can grow, not bare values
+fyi.opensocial.defs#viewerState.roles[]: a string without a format needs a maxLength
+fyi.opensocial.defs: field-name-syntax: name is a commonly reserved keyword: type
+fyi.opensocial.defs: field-name-syntax: name is a commonly reserved keyword: type
+fyi.opensocial.defs: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.defs: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.defs: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.deleteRole: endpoint-output-undefined: missing output definition
+fyi.opensocial.deleteRule: endpoint-output-undefined: missing output definition
+fyi.opensocial.deleteSpace: endpoint-output-undefined: missing output definition
+fyi.opensocial.deleteSpace: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.denyJoinRequest: endpoint-output-undefined: missing output definition
+fyi.opensocial.ejectMember#main.input.reason: a string without a format needs a maxLength
+fyi.opensocial.ejectMember: endpoint-output-undefined: missing output definition
+fyi.opensocial.getAuthorization#group.granted: an array holds objects, which can grow, not bare values
+fyi.opensocial.getAuthorization#group.roles: an array holds objects, which can grow, not bare values
+fyi.opensocial.getAuthorization#group.withheld: an array holds objects, which can grow, not bare values
+fyi.opensocial.getAuthorization#main.output.requested: an array holds objects, which can grow, not bare values
+fyi.opensocial.getAuthorization: field-name-syntax: name is a commonly reserved keyword: id
+fyi.opensocial.getGroupAuth#main.output.collections: an array holds objects, which can grow, not bare values
+fyi.opensocial.getGroupAuth#main.output.repoCollections: an array holds objects, which can grow, not bare values
+fyi.opensocial.getGroupAuth: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.importAccount#main.input.address: a string without a format needs a maxLength
+fyi.opensocial.importAccount#main.input.serviceJwt: a string without a format needs a maxLength
+fyi.opensocial.importAccount#main.output.address: accounts by DID, not handle
+fyi.opensocial.importAccount#main.output.handle: accounts by DID, not handle
+fyi.opensocial.labeler#main.record.subjectCollections: an array holds objects, which can grow, not bare values
+fyi.opensocial.leaveGroup: endpoint-output-undefined: missing output definition
+fyi.opensocial.listConnectedApps: field-name-syntax: name is a commonly reserved keyword: id
+fyi.opensocial.listGroupTokens#main.output.activity: an array holds objects, which can grow, not bare values
+fyi.opensocial.listGroupTokens#main.output.sessions: an array holds objects, which can grow, not bare values
+fyi.opensocial.membership#main.record.roles: an array holds objects, which can grow, not bare values
+fyi.opensocial.migrateExport: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.migrateReceive#main.input.exportToken: a string without a format needs a maxLength
+fyi.opensocial.migrateReceive#main.input.serviceJwt: a string without a format needs a maxLength
+fyi.opensocial.negateLabel#main.input.val: a string without a format needs a maxLength
+fyi.opensocial.permissions#grant.assignable: an array holds objects, which can grow, not bare values
+fyi.opensocial.permissions#grant.scopes: an array holds objects, which can grow, not bare values
+fyi.opensocial.profile#main.record.languages: an array holds objects, which can grow, not bare values
+fyi.opensocial.profile#main.record.topics: an array holds objects, which can grow, not bare values
+fyi.opensocial.provisionGroup#main.input.client_assertion: a string without a format needs a maxLength
+fyi.opensocial.provisionGroup#main.input.client_assertion_type: a string without a format needs a maxLength
+fyi.opensocial.provisionGroup#main.input.client_id: a string without a format needs a maxLength
+fyi.opensocial.provisionGroup#main.input.handle: accounts by DID, not handle
+fyi.opensocial.provisionGroup#main.input.joinPolicy: a string without a format needs a maxLength
+fyi.opensocial.provisionGroup#main.input.metaReadableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.provisionGroup#main.input.metaReadableBy[]: a string without a format needs a maxLength
+fyi.opensocial.provisionGroup#main.input.scope: a string without a format needs a maxLength
+fyi.opensocial.provisionGroup#main.input.stewards: an array holds objects, which can grow, not bare values
+fyi.opensocial.provisionGroup: field-name-syntax: name doesn't match recommended syntax/characters: client_assertion
+fyi.opensocial.provisionGroup: field-name-syntax: name doesn't match recommended syntax/characters: client_assertion_type
+fyi.opensocial.provisionGroup: field-name-syntax: name doesn't match recommended syntax/characters: client_id
+fyi.opensocial.provisionGroup: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.putRole#main.input.assignable: an array holds objects, which can grow, not bare values
+fyi.opensocial.putRole#main.input.description: a string without a format needs a maxLength
+fyi.opensocial.putRole#main.input.name: a string without a format needs a maxLength
+fyi.opensocial.putRole#main.input.repoCollections: an array holds objects, which can grow, not bare values
+fyi.opensocial.putRole#main.input.repoCollections[]: a string without a format needs a maxLength
+fyi.opensocial.removeRecoveryKey#main.input.key: a string without a format needs a maxLength
+fyi.opensocial.removeRecoveryKey: endpoint-output-undefined: missing output definition
+fyi.opensocial.requestJoin#main.input.message: a string without a format needs a maxLength
+fyi.opensocial.resolveSubject#main.input.note: a string without a format needs a maxLength
+fyi.opensocial.resolveSubject: endpoint-output-undefined: missing output definition
+fyi.opensocial.revokeAppPassword#main.input.name: a string without a format needs a maxLength
+fyi.opensocial.revokeAppPassword: endpoint-output-undefined: missing output definition
+fyi.opensocial.revokeGroupToken#main.input.tokenId: a string without a format needs a maxLength
+fyi.opensocial.revokeGroupToken: endpoint-output-undefined: missing output definition
+fyi.opensocial.revokeInvite: endpoint-output-undefined: missing output definition
+fyi.opensocial.space: lexicon-schema: unknown string format: space-ref
+fyi.opensocial.updateGroupHandle#main.input.handle: a string without a format needs a maxLength
+fyi.opensocial.updateGroupHandle#main.output.handle: accounts by DID, not handle
+fyi.opensocial.updateProfile#main.input.languages: an array holds objects, which can grow, not bare values
+fyi.opensocial.updateProfile#main.input.topics: an array holds objects, which can grow, not bare values
+fyi.opensocial.updateSpace#main.input.name: a string without a format needs a maxLength
+fyi.opensocial.updateSpace#main.input.readableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.updateSpace#main.input.readableBy[]: a string without a format needs a maxLength
+fyi.opensocial.updateSpace#main.input.writableBy: an array holds objects, which can grow, not bare values
+fyi.opensocial.updateSpace#main.input.writableBy[]: a string without a format needs a maxLength
+fyi.opensocial.updateSpace: endpoint-output-undefined: missing output definition
+fyi.opensocial.updateSpace: lexicon-schema: unknown string format: space-ref

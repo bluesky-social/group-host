@@ -1,0 +1,50 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.migrateExport",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "On the source host, for the destination of a move migratePrepare started: a part of the group nothing public serves whole. `meta` is a space's meta archive (as com.atproto.space.exportSpaceMeta serves one), `repo` the group's own repo in a space (as com.atproto.space.getRepo does), `blobs` the list of its files and `blob` one of them. Authorized by migratePrepare's token, for an hour.",
+      "parameters": {
+        "type": "params",
+        "required": ["group", "token", "part"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did"
+          },
+          "token": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string",
+            "knownValues": ["meta", "repo", "blobs", "blob"]
+          },
+          "space": {
+            "type": "string",
+            "format": "space-ref"
+          },
+          "cid": {
+            "type": "string",
+            "format": "cid"
+          },
+          "leaving": {
+            "type": "boolean",
+            "description": "For a move to a plain PDS: a space's meta archive as a memberspace whose member list is who may use it now, read and write as their roles allow, so that PDS keeps them in without asking this host."
+          }
+        }
+      },
+      "output": {
+        "encoding": "*/*"
+      },
+      "errors": [
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        }
+      ]
+    }
+  }
+}

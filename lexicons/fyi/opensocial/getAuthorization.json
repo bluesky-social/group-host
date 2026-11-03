@@ -1,0 +1,137 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.getAuthorization",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "An app's pending request to sign in as a group, as the caller would approve it: the app, the groups the caller may act for, and for each one what the caller's roles let the app do. Called by the console's approval page, with service auth from the caller's own PDS.",
+      "parameters": {
+        "type": "params",
+        "required": ["requestUri"],
+        "properties": {
+          "requestUri": {
+            "type": "string",
+            "description": "The request_uri the app received from this host's pushed authorization request endpoint."
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["client", "groups", "requested"],
+          "properties": {
+            "client": {
+              "type": "ref",
+              "ref": "#client"
+            },
+            "requested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The scope values the app asked for."
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#label"
+              },
+              "description": "What each permission set the app asked for says it is for, in its own words."
+            },
+            "loginHint": {
+              "type": "string",
+              "description": "The group the app named, if it named one."
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#group"
+              },
+              "description": "The groups the caller may sign in as: the one the app named, or every group on this host where the caller holds a role."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "ExpiredRequest"
+        }
+      ]
+    },
+    "client": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "logo": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["did", "handle", "roles", "granted", "withheld"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string",
+          "format": "uri"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "granted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The requested scope values the caller's roles let the app have."
+        },
+        "withheld": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The requested scope values the app will not get."
+        }
+      }
+    },
+    "label": {
+      "type": "object",
+      "required": ["scope", "text"],
+      "properties": {
+        "scope": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

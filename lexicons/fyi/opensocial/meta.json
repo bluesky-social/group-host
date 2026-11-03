@@ -1,0 +1,18 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.meta",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:self",
+      "name": "Group: about",
+      "description": "The group's public face. Profile, rules, how to get in. Often readable by anyone, though may be private to members.",
+      "collections": [
+        "fyi.opensocial.profile",
+        "fyi.opensocial.rule",
+        "fyi.opensocial.labeler",
+        "fyi.opensocial.access"
+      ]
+    }
+  }
+}

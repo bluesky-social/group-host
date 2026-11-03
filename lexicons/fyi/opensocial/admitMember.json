@@ -1,0 +1,36 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.admitMember",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Approve a join request, giving the requester their roles. Requires admit. denyJoinRequest declines one.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "did"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "description": "The roles to give. Omitted gives the group's default roles."
+            }
+          }
+        }
+      }
+    }
+  }
+}

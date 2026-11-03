@@ -1,0 +1,14 @@
+[package]
+name = "opensocial"
+description = "A client for opensocial group hosts, and the opensocial command: create, inspect and run groups, seed a dev host, move a group or a host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+
+[[bin]]
+name = "opensocial"
+path = "src/bin/opensocial.rs"

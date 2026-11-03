@@ -1,0 +1,21 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.acceptance",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "The member's side of membership, written by the member into the members space. Gates appearing in the roster, not access.",
+      "record": {
+        "type": "object",
+        "required": ["createdAt"],
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

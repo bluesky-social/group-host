@@ -1,0 +1,6 @@
+{
+  "name": "group-host-harness",
+  "private": true,
+  "type": "module",
+  "description": "The checks run beside the tests: the web components' layers and the lexicons"
+}
