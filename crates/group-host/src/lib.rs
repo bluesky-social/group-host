@@ -10,12 +10,14 @@ pub mod firehose;
 pub mod plc;
 pub mod repo;
 pub mod secrets;
+pub mod space;
+pub mod space_api;
 pub mod store;
 pub mod time;
 pub mod xrpc;
 
 use axum::extract::Path;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use config::Config;
 use serde_json::{Value, json};
@@ -58,9 +60,19 @@ impl Host {
             writing: Default::default(),
             events: tokio::sync::broadcast::channel(16).0,
             crawled: Default::default(),
-            http: reqwest::Client::new(),
+            http: client(),
         })
     }
+}
+
+/// How long the host waits on another server before giving up on it: a
+/// server that takes a request and never answers holds nothing up longer.
+pub const OUTGOING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// A client for the host's requests to other servers.
+pub fn client() -> reqwest::Client {
+    let built = reqwest::Client::builder().timeout(OUTGOING_TIMEOUT).build();
+    built.expect("a client with a timeout builds")
 }
 
 /// The host's routes.
@@ -88,6 +100,32 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/com.atproto.identity.resolveHandle",
             get(api::resolve_handle),
+        )
+        .route(
+            "/xrpc/com.atproto.space.getRecord",
+            get(space_api::get_record),
+        )
+        .route(
+            "/xrpc/com.atproto.space.listRecords",
+            get(space_api::list_records),
+        )
+        .route("/xrpc/com.atproto.space.getRepo", get(space_api::get_repo))
+        .route(
+            "/xrpc/com.atproto.space.getLatestCommit",
+            get(space_api::get_latest_commit),
+        )
+        .route(
+            "/xrpc/com.atproto.space.listRepoOps",
+            get(space_api::list_repo_ops),
+        )
+        .route("/xrpc/com.atproto.space.getBlob", get(space_api::get_blob))
+        .route(
+            "/xrpc/com.atproto.space.listBlobs",
+            get(space_api::list_blobs),
+        )
+        .route(
+            "/xrpc/com.atproto.space.notifyCredentialRevoked",
+            post(space_api::notify_credential_revoked),
         )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))

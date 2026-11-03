@@ -51,6 +51,12 @@ pub fn net() -> &'static Net {
                 break serde_json::from_str(&line).unwrap();
             }
         };
+        // Named, the alpha is what the tests are to run on: none skips.
+        let named = std::env::var_os("GROUP_HOST_DEV_ENV").is_some();
+        assert!(
+            net.spaces || !named,
+            "GROUP_HOST_DEV_ENV names a PDS without spaces"
+        );
         std::thread::spawn(move || for _ in lines {});
         *CHILD.lock().unwrap() = Some(child);
         net

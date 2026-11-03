@@ -10,6 +10,7 @@
 use crate::cid::Cid;
 use crate::drisl::{self, Value};
 use crate::keys::{Keypair, PublicKey};
+use crate::syntax;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use hmac::{Hmac, Mac};
@@ -31,6 +32,47 @@ impl std::error::Error for SpaceError {}
 
 fn err<T>(what: impl Into<String>) -> Result<T, SpaceError> {
     Err(SpaceError(what.into()))
+}
+
+/// A space, as `at://<authority>/space/<type>/<skey>` names it: the DID
+/// of its authority, its type (an NSID), and its key (a record key).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpaceRef {
+    pub authority: String,
+    pub kind: String,
+    pub skey: String,
+}
+
+impl SpaceRef {
+    /// The space `uri` names, written exactly as [`SpaceRef`]'s `Display`
+    /// writes one.
+    pub fn parse(uri: &str) -> Result<SpaceRef, SpaceError> {
+        let parts: Vec<&str> = uri.strip_prefix("at://").unwrap_or("").split('/').collect();
+        match parts[..] {
+            [authority, "space", kind, skey]
+                if syntax::is_did(authority)
+                    && syntax::is_nsid(kind)
+                    && syntax::is_record_key(skey) =>
+            {
+                Ok(SpaceRef {
+                    authority: authority.into(),
+                    kind: kind.into(),
+                    skey: skey.into(),
+                })
+            }
+            _ => err(format!("not a space: {uri}")),
+        }
+    }
+}
+
+impl fmt::Display for SpaceRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "at://{}/space/{}/{}",
+            self.authority, self.kind, self.skey
+        )
+    }
 }
 
 /// The lanes of an LtHash, each a little-endian u16.

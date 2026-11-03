@@ -62,20 +62,34 @@ async fn document(
     let Some(Signed::Update { op, .. }) = ops.get(&did).and_then(|l| l.last()) else {
         return Err(StatusCode::NOT_FOUND);
     };
-    let key = op.verification_methods["atproto"]
-        .strip_prefix("did:key:")
-        .unwrap();
+    let methods: Vec<Value> = op
+        .verification_methods
+        .iter()
+        .map(|(name, key)| {
+            json!({
+                "id": format!("{did}#{name}"),
+                "type": "Multikey",
+                "controller": did,
+                "publicKeyMultibase": key.strip_prefix("did:key:").unwrap(),
+            })
+        })
+        .collect();
+    let services: Vec<Value> = op
+        .services
+        .iter()
+        .map(|(name, s)| json!({"id": format!("#{name}"), "type": s.kind, "serviceEndpoint": s.endpoint}))
+        .collect();
     Ok(Json(json!({
         "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"],
         "id": did,
         "alsoKnownAs": op.also_known_as,
-        "verificationMethod": [{"id": format!("{did}#atproto"), "type": "Multikey", "controller": did, "publicKeyMultibase": key}],
-        "service": [{"id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": op.services["atproto_pds"].endpoint}],
+        "verificationMethod": methods,
+        "service": services,
     })))
 }
 
 /// Serves `router` on a free port, answering its address.
-async fn serve(router: Router) -> String {
+pub async fn serve(router: Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });

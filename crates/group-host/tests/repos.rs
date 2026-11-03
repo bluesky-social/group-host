@@ -50,6 +50,11 @@ async fn makes_a_group_account_on_the_directory() {
         atproto::did::signing_key(&repo["didDoc"]).unwrap(),
         account.signing.public()
     );
+    // And the key a space's syncer agrees a secret with.
+    assert_eq!(
+        atproto::did::kem_key(&repo["didDoc"]).unwrap(),
+        account.kem.public()
+    );
 
     let (_, resolved) = h
         .get(
@@ -463,6 +468,7 @@ fn a_commit_builds_on_the_head_it_read() {
         did: "did:plc:a".into(),
         handle: "a.groups.test".into(),
         signing: atproto::Keypair::generate(atproto::Curve::K256),
+        kem: atproto::Keypair::generate(atproto::Curve::P256),
     };
     let tree = Tree::build(&Default::default());
     let commit = Commit::sign(&account.did, tree.root(), "3l5mz5mkbn22b", &account.signing);

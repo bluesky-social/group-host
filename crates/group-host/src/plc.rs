@@ -14,7 +14,7 @@ impl Directory {
     pub fn new(url: &str) -> Directory {
         Directory {
             url: url.trim_end_matches('/').to_string(),
-            http: reqwest::Client::new(),
+            http: crate::client(),
         }
     }
 

@@ -34,6 +34,30 @@ pub enum Write {
     },
 }
 
+impl Write {
+    /// Where it writes: its collection and record key.
+    pub fn path(&self) -> (&str, &str) {
+        match self {
+            Write::Create {
+                collection, rkey, ..
+            }
+            | Write::Update {
+                collection, rkey, ..
+            }
+            | Write::Delete { collection, rkey } => (collection, rkey),
+        }
+    }
+}
+
+/// A write checked against the records it changes: its path
+/// (`collection/rkey`), the record it puts as its CID and DRISL (none for
+/// a delete), and the blobs that record references.
+pub(crate) struct Checked {
+    pub path: String,
+    pub put: Option<(Cid, Vec<u8>)>,
+    pub blobs: Vec<Cid>,
+}
+
 /// A commit made: its CID and revision.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Committed {
@@ -41,7 +65,7 @@ pub struct Committed {
     pub rev: String,
 }
 
-fn invalid(message: impl Into<String>) -> XrpcError {
+pub(crate) fn invalid(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, "InvalidRequest", message)
 }
 
@@ -83,13 +107,16 @@ impl Host {
             return Err(taken());
         }
         let signing = Keypair::generate(Curve::K256);
+        let kem = Keypair::generate(Curve::P256);
         let rotation = [self.secrets.rotation.public().did_key()];
-        let op = Op::atproto(
+        let mut op = Op::atproto(
             &signing.public().did_key(),
             &rotation,
             handle,
             &self.config.public_url,
         );
+        op.verification_methods
+            .insert("atproto_kem".into(), kem.public().did_key());
         let genesis = op.sign(None, &self.secrets.rotation);
         let did = genesis.did();
         let failed = |e: anyhow::Error| {
@@ -107,6 +134,7 @@ impl Host {
             did: did.clone(),
             handle: handle.to_string(),
             signing,
+            kem,
         };
         let tree = Tree::build(&BTreeMap::new());
         let head = self.sign(&account, &tree);
@@ -189,46 +217,8 @@ impl Host {
         let mut new_blobs = Vec::new();
         let mut blocks = BTreeMap::new();
         for write in writes {
-            let (collection, rkey, value, exists) = match write {
-                Write::Create {
-                    collection,
-                    rkey,
-                    value,
-                } => (collection, rkey, Some(value), false),
-                Write::Update {
-                    collection,
-                    rkey,
-                    value,
-                } => (collection, rkey, Some(value), true),
-                Write::Delete { collection, rkey } => (collection, rkey, None, true),
-            };
-            if !syntax::is_nsid(collection) || !syntax::is_record_key(rkey) {
-                return Err(invalid(format!(
-                    "{collection}/{rkey} is not a record's path"
-                )));
-            }
-            let path = format!("{collection}/{rkey}");
-            if paths.contains_key(&path) != exists {
-                let what = if exists {
-                    "no record at"
-                } else {
-                    "a record already at"
-                };
-                return Err(invalid(format!("there is {what} {path}")));
-            }
-            let put = value.map(|v| record(collection, v)).transpose()?;
-            // A record may reference only blobs uploaded to its account.
-            let refs = value.map(blob_refs).unwrap_or_default();
-            for cid in &refs {
-                let blob = self
-                    .store
-                    .blob(&account.did, cid)
-                    .map_err(XrpcError::internal)?;
-                if blob.is_none() {
-                    return Err(invalid(format!("blob {cid} was not uploaded to {did}")));
-                }
-            }
-            new_blobs.extend(refs.iter().copied());
+            let Checked { path, put, blobs } = self.check(&account.did, write, &paths)?;
+            new_blobs.extend(blobs.iter().copied());
             let prev = match &put {
                 Some((cid, bytes)) => {
                     blocks.insert(*cid, bytes.clone());
@@ -237,11 +227,12 @@ impl Host {
                 None => paths.remove(&path),
             };
             ops.push(op(path, put.as_ref().map(|(cid, _)| *cid), prev));
+            let (collection, rkey) = write.path();
             changes.push(Change {
-                collection: collection.clone(),
-                rkey: rkey.clone(),
+                collection: collection.into(),
+                rkey: rkey.into(),
                 put,
-                blobs: refs,
+                blobs,
             });
         }
         let tree = Tree::build(&paths);
@@ -275,6 +266,48 @@ impl Host {
             cid: new.cid,
             rev: new.rev,
         })
+    }
+
+    /// `write` to `did`'s records, now at `paths`, checked: its path is a
+    /// record's, a create's free and an update's or delete's taken, its
+    /// record one by the data model of its collection's `$type`, and each
+    /// blob it references uploaded to `did`.
+    pub(crate) fn check(
+        &self,
+        did: &str,
+        write: &Write,
+        paths: &BTreeMap<String, Cid>,
+    ) -> Result<Checked, XrpcError> {
+        let (collection, rkey) = write.path();
+        let (value, exists) = match write {
+            Write::Create { value, .. } => (Some(value), false),
+            Write::Update { value, .. } => (Some(value), true),
+            Write::Delete { .. } => (None, true),
+        };
+        if !syntax::is_nsid(collection) || !syntax::is_record_key(rkey) {
+            return Err(invalid(format!(
+                "{collection}/{rkey} is not a record's path"
+            )));
+        }
+        let path = format!("{collection}/{rkey}");
+        if paths.contains_key(&path) != exists {
+            let what = if exists {
+                "no record at"
+            } else {
+                "a record already at"
+            };
+            return Err(invalid(format!("there is {what} {path}")));
+        }
+        let put = value.map(|v| record(collection, v)).transpose()?;
+        // A record may reference only blobs uploaded to its account.
+        let blobs = value.map(blob_refs).unwrap_or_default();
+        for cid in &blobs {
+            let blob = self.store.blob(did, cid).map_err(XrpcError::internal)?;
+            if blob.is_none() {
+                return Err(invalid(format!("blob {cid} was not uploaded to {did}")));
+            }
+        }
+        Ok(Checked { path, put, blobs })
     }
 
     /// Wakes the firehose's streams, and tells the relays in

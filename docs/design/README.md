@@ -58,8 +58,6 @@ says otherwise.
    - identity: PLC operations, DID documents, service-auth JWTs (done),
      checked against @did-plc/lib and @atproto/xrpc-server
      (`crates/atproto/tests/reference`) and against knotless's own.
-   Groups' DID documents will also need the space alpha's `#atproto_kem`
-   key, which the spaces step brings.
 3. **Accounts and repos.** The SQLite store, group accounts and their
    keys, `did:plc` creation, records and commits, `sync.*` and `did:web`
    for the host (done); the firehose (`subscribeRepos`, sync 1.1's
@@ -71,8 +69,14 @@ says otherwise.
    MACs, the KEM a MAC's secret is agreed by, STAR archives; done), then
    its tokens and signed requests (`space_auth.rs`: delegation tokens,
    space credentials, client attestations, HTTP message signatures; done),
-   then the repos the host keeps in
-   spaces, then being the authority for its groups' spaces. Then the
+   then the repos the host keeps in spaces, each group with its
+   `#atproto_kem` key, read with an authority's credential and each write
+   told to the authority (`space.rs`, `space_api.rs`; done, see
+   [spaces](spaces.md)); next, one resolver for `did:plc` and `did:web`
+   with a short cache of keys, so a space's authority may be either; then
+   being the authority for its groups' spaces, with a queue that tries a
+   `notifyWrite` again for a day, as the reference PDS does.
+   Then the
    groups: `createGroup`, `getGroup`, `listGroups`,
    handles, profile, rules, activating and deleting; the meta and members
    spaces, their `access` records, space credentials and the space index:

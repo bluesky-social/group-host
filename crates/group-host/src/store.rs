@@ -17,6 +17,7 @@ const MIGRATIONS: &[&str] = &[
         did TEXT PRIMARY KEY,
         handle TEXT NOT NULL UNIQUE,
         signing_key BLOB NOT NULL,
+        kem_key BLOB NOT NULL,
         created_at INTEGER NOT NULL
     );
     CREATE TABLE repo (
@@ -63,9 +64,51 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX record_blob_cid ON record_blob (did, cid);
 ",
+    "
+    CREATE TABLE space_repo (
+        did TEXT NOT NULL REFERENCES account (did),
+        space TEXT NOT NULL,
+        rev TEXT NOT NULL,
+        state BLOB NOT NULL,
+        PRIMARY KEY (did, space)
+    );
+    CREATE TABLE space_record (
+        did TEXT NOT NULL,
+        space TEXT NOT NULL,
+        path TEXT NOT NULL,
+        cid TEXT NOT NULL,
+        value BLOB NOT NULL,
+        rev TEXT NOT NULL,
+        PRIMARY KEY (did, space, path)
+    );
+    CREATE TABLE space_op (
+        did TEXT NOT NULL,
+        space TEXT NOT NULL,
+        rev TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        path TEXT NOT NULL,
+        cid TEXT,
+        prev TEXT,
+        PRIMARY KEY (did, space, rev, idx)
+    );
+    CREATE TABLE space_record_blob (
+        did TEXT NOT NULL,
+        space TEXT NOT NULL,
+        path TEXT NOT NULL,
+        cid TEXT NOT NULL,
+        PRIMARY KEY (did, space, path, cid)
+    );
+    CREATE INDEX space_record_blob_cid ON space_record_blob (did, cid);
+    CREATE TABLE revoked_credential (
+        space TEXT NOT NULL,
+        jti TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (space, jti)
+    );
+",
 ];
 
-const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (handle) DO NOTHING";
+const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
 const PUT_RECORD: &str = "INSERT INTO record (did, collection, rkey, cid, value, rev) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (did, collection, rkey) DO UPDATE SET cid = ?4, value = ?5, rev = ?6";
 const LIST_UP: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey > ?3 ORDER BY rkey LIMIT ?4";
 const LIST_DOWN: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey < ?3 ORDER BY rkey DESC LIMIT ?4";
@@ -74,7 +117,7 @@ const UNLINK: &str = "DELETE FROM record_blob WHERE did = ?1 AND collection = ?2
 const LINK: &str =
     "INSERT OR IGNORE INTO record_blob (did, collection, rkey, cid) VALUES (?1, ?2, ?3, ?4)";
 const KEEP_BLOB: &str = "UPDATE blob SET temporary = 0 WHERE did = ?1 AND cid = ?2";
-const FORGET_ORPHAN: &str = "DELETE FROM blob WHERE did = ?1 AND cid = ?2 AND temporary = 0 AND NOT EXISTS (SELECT 1 FROM record_blob WHERE did = ?1 AND cid = ?2)";
+const FORGET_ORPHAN: &str = "DELETE FROM blob WHERE did = ?1 AND cid = ?2 AND temporary = 0 AND NOT EXISTS (SELECT 1 FROM record_blob WHERE did = ?1 AND cid = ?2) AND NOT EXISTS (SELECT 1 FROM space_record_blob WHERE did = ?1 AND cid = ?2)";
 const PUT_BLOB: &str = "INSERT INTO blob (did, cid, mime_type, size, temporary, created_at) VALUES (?1, ?2, ?3, ?4, 1, ?5) ON CONFLICT (did, cid) DO UPDATE SET mime_type = excluded.mime_type";
 const GET_BLOB: &str = "SELECT mime_type, size, temporary FROM blob WHERE did = ?1 AND cid = ?2";
 const LIST_BLOBS: &str = "SELECT DISTINCT rb.cid FROM record_blob rb JOIN record r ON r.did = rb.did AND r.collection = rb.collection AND r.rkey = rb.rkey WHERE rb.did = ?1 AND r.rev > ?2 AND rb.cid > ?3 ORDER BY rb.cid LIMIT ?4";
@@ -84,6 +127,38 @@ const SEQUENCE: &str = "INSERT INTO event (did, kind, body) VALUES (?1, ?2, ?3)"
 const EVENTS: &str = "SELECT seq, kind, body FROM event WHERE seq > ?1 ORDER BY seq LIMIT ?2";
 const ACCOUNTS: &str =
     "SELECT did, cid, rev, commit_block FROM repo WHERE did > ?1 ORDER BY did LIMIT ?2";
+const SPACE_HEAD: &str = "SELECT rev, state FROM space_repo WHERE did = ?1 AND space = ?2";
+const SPACE_START: &str = "INSERT INTO space_repo (did, space, rev, state) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did, space) DO NOTHING";
+const SPACE_MOVE: &str =
+    "UPDATE space_repo SET rev = ?3, state = ?4 WHERE did = ?1 AND space = ?2 AND rev = ?5";
+const SPACE_PATHS: &str = "SELECT path, cid FROM space_record WHERE did = ?1 AND space = ?2";
+const SPACE_CID: &str = "SELECT cid FROM space_record WHERE did = ?1 AND space = ?2 AND path = ?3";
+const SPACE_PUT: &str = "INSERT INTO space_record (did, space, path, cid, value, rev) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (did, space, path) DO UPDATE SET cid = ?4, value = ?5, rev = ?6";
+const SPACE_DELETE: &str = "DELETE FROM space_record WHERE did = ?1 AND space = ?2 AND path = ?3";
+const SPACE_OP: &str = "INSERT INTO space_op (did, space, rev, idx, path, cid, prev) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
+const SPACE_LINKED: &str =
+    "SELECT cid FROM space_record_blob WHERE did = ?1 AND space = ?2 AND path = ?3";
+const SPACE_UNLINK: &str =
+    "DELETE FROM space_record_blob WHERE did = ?1 AND space = ?2 AND path = ?3";
+const SPACE_LINK: &str =
+    "INSERT OR IGNORE INTO space_record_blob (did, space, path, cid) VALUES (?1, ?2, ?3, ?4)";
+const SPACE_RECORD: &str =
+    "SELECT path, cid, value FROM space_record WHERE did = ?1 AND space = ?2 AND path = ?3";
+const SPACE_RECORDS: &str =
+    "SELECT path, cid, value FROM space_record WHERE did = ?1 AND space = ?2 ORDER BY path";
+// A collection's records are those whose path starts `<collection>/`.
+const SPACE_LIST_UP: &str = "SELECT path, cid, value FROM space_record WHERE did = ?1 AND space = ?2 AND (?3 IS NULL OR substr(path, 1, length(?3) + 1) = ?3 || '/') AND path > ?4 ORDER BY path LIMIT ?5";
+const SPACE_LIST_DOWN: &str = "SELECT path, cid, value FROM space_record WHERE did = ?1 AND space = ?2 AND (?3 IS NULL OR substr(path, 1, length(?3) + 1) = ?3 || '/') AND path < ?4 ORDER BY path DESC LIMIT ?5";
+// An op's value is its record's, while the record is still what it made.
+const SPACE_OPS: &str = "SELECT o.rev, o.idx, o.path, o.cid, o.prev, r.value FROM space_op o LEFT JOIN space_record r ON r.did = o.did AND r.space = o.space AND r.path = o.path AND r.cid = o.cid WHERE o.did = ?1 AND o.space = ?2 AND (o.rev > ?3 OR (o.rev = ?3 AND o.idx > ?4)) ORDER BY o.rev, o.idx LIMIT ?5";
+const SPACE_BLOBS: &str = "SELECT DISTINCT rb.cid FROM space_record_blob rb JOIN space_record r ON r.did = rb.did AND r.space = rb.space AND r.path = rb.path WHERE rb.did = ?1 AND rb.space = ?2 AND r.rev > ?3 AND rb.cid > ?4 ORDER BY rb.cid LIMIT ?5";
+const SPACE_HAS_BLOB: &str =
+    "SELECT 1 FROM space_record_blob WHERE did = ?1 AND space = ?2 AND cid = ?3 LIMIT 1";
+const REVOKE: &str =
+    "INSERT OR IGNORE INTO revoked_credential (space, jti, expires_at) VALUES (?1, ?2, ?3)";
+const FORGET_REVOKED: &str = "DELETE FROM revoked_credential WHERE expires_at <= ?1";
+const REVOKED: &str =
+    "SELECT 1 FROM revoked_credential WHERE space = ?1 AND jti = ?2 AND expires_at > ?3";
 const COLLECTIONS: &str =
     "SELECT DISTINCT collection FROM record WHERE did = ?1 ORDER BY collection";
 
@@ -97,6 +172,9 @@ pub struct Account {
     pub handle: String,
     /// Signs its repo's commits.
     pub signing: Keypair,
+    /// The P-256 key a space's syncer agrees a secret with, to have this
+    /// account's repos in spaces vouched for (`#atproto_kem`).
+    pub kem: Keypair,
 }
 
 /// A repo's current commit.
@@ -161,6 +239,29 @@ pub struct Change {
     pub blobs: Vec<Cid>,
 }
 
+/// A repo's state in a space: its revision, and its records' set hash
+/// (`atproto::space::LtHash::state`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceHead {
+    pub rev: String,
+    pub state: Vec<u8>,
+}
+
+/// A change made to a repo in a space, in the order made: its revision
+/// and place in it, the path, the record's CID after (none for a delete)
+/// and before (none for a create), and its value, while the record is
+/// still as the change left it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceOp {
+    pub rev: String,
+    pub idx: i64,
+    pub collection: String,
+    pub rkey: String,
+    pub cid: Option<Cid>,
+    pub prev: Option<Cid>,
+    pub value: Option<Vec<u8>>,
+}
+
 /// A blob as kept: its type, its size, and whether it waits for a record
 /// to reference it.
 #[derive(Debug, Clone, PartialEq)]
@@ -173,6 +274,23 @@ pub struct Blob {
 /// A CID the host wrote: one that does not read is a database broken.
 fn cid(text: String) -> Cid {
     Cid::parse(&text).expect("a CID the host wrote")
+}
+
+/// A path the host wrote, as `collection/rkey`.
+fn split(path: &str) -> (String, String) {
+    let (collection, rkey) = path.split_once('/').expect("a path the host wrote");
+    (collection.into(), rkey.into())
+}
+
+/// A record in a space, from its path, CID and value.
+fn space_record(row: &rusqlite::Row) -> rusqlite::Result<Record> {
+    let (collection, rkey) = split(&row.get::<_, String>(0)?);
+    Ok(Record {
+        collection,
+        rkey,
+        cid: cid(row.get(1)?),
+        value: row.get(2)?,
+    })
 }
 
 fn record(row: &rusqlite::Row) -> rusqlite::Result<Record> {
@@ -225,6 +343,7 @@ impl Store {
                 account.did,
                 account.handle,
                 account.signing.to_bytes().to_vec(),
+                account.kem.to_bytes().to_vec(),
                 now
             ],
         );
@@ -246,23 +365,25 @@ impl Store {
         let found = self
             .conn()
             .query_row(
-                "SELECT did, handle, signing_key FROM account WHERE did = ?1 OR handle = lower(?1)",
+                "SELECT did, handle, signing_key, kem_key FROM account WHERE did = ?1 OR handle = lower(?1)",
                 [did_or_handle],
                 |r| {
                     Ok((
                         r.get::<_, String>(0)?,
                         r.get::<_, String>(1)?,
                         r.get::<_, Vec<u8>>(2)?,
+                        r.get::<_, Vec<u8>>(3)?,
                     ))
                 },
             )
             .optional()?;
         found
-            .map(|(did, handle, key)| {
+            .map(|(did, handle, signing, kem)| {
                 Ok(Account {
                     did,
                     handle,
-                    signing: Keypair::from_bytes(Curve::K256, &key)?,
+                    signing: Keypair::from_bytes(Curve::K256, &signing)?,
+                    kem: Keypair::from_bytes(Curve::P256, &kem)?,
                 })
             })
             .transpose()
@@ -493,6 +614,221 @@ impl Store {
         let rows = q.query_map([cutoff], |r| Ok((r.get(0)?, cid(r.get(1)?))));
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// `did`'s repo in `space`, if it has written there.
+    pub fn space_head(&self, did: &str, space: &str) -> Result<Option<SpaceHead>> {
+        let conn = self.conn();
+        let found = conn.query_row(SPACE_HEAD, [did, space], |r| {
+            Ok(SpaceHead {
+                rev: r.get(0)?,
+                state: r.get(1)?,
+            })
+        });
+        Ok(found.optional()?)
+    }
+
+    /// Every record of `did`'s in `space`, by path, with its CID.
+    pub fn space_paths(&self, did: &str, space: &str) -> Result<BTreeMap<String, Cid>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SPACE_PATHS)?;
+        let rows = q.query_map([did, space], |r| Ok((r.get(0)?, cid(r.get(1)?))));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Moves `did`'s repo in `space` from `prev` (none for its first
+    /// write) to `head`, with `changes`, each kept as an op, unless another
+    /// write moved it first: none then, and nothing changes. Blobs are
+    /// linked and forgotten as [`Store::commit`] does.
+    pub fn space_commit(
+        &self,
+        did: &str,
+        space: &str,
+        prev: Option<&str>,
+        head: &SpaceHead,
+        changes: &[Change],
+    ) -> Result<Option<Vec<Cid>>> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let moved = match prev {
+            None => tx.execute(SPACE_START, params![did, space, head.rev, head.state]),
+            Some(prev) => tx.execute(SPACE_MOVE, params![did, space, head.rev, head.state, prev]),
+        };
+        if moved? == 0 {
+            return Ok(None);
+        }
+        let mut unlinked = Vec::new();
+        for (idx, change) in changes.iter().enumerate() {
+            let path = format!("{}/{}", change.collection, change.rkey);
+            let before = tx.query_row(SPACE_CID, params![did, space, path], |r| {
+                r.get::<_, String>(0)
+            });
+            let before = before.optional()?;
+            let mut q = tx.prepare(SPACE_LINKED)?;
+            let links = q.query_map(params![did, space, path], |r| Ok(cid(r.get(0)?)));
+            unlinked.extend(links?.collect::<rusqlite::Result<Vec<_>>>()?);
+            let cleared = tx.execute(SPACE_UNLINK, params![did, space, path]);
+            cleared?;
+            for blob in &change.blobs {
+                let link = tx.execute(SPACE_LINK, params![did, space, path, blob.to_string()]);
+                link?;
+                let kept = tx.execute(KEEP_BLOB, params![did, blob.to_string()]);
+                kept?;
+            }
+            let after = change.put.as_ref().map(|(cid, _)| cid.to_string());
+            let done = match &change.put {
+                Some((cid, value)) => tx.execute(
+                    SPACE_PUT,
+                    params![did, space, path, cid.to_string(), value, head.rev],
+                ),
+                None => tx.execute(SPACE_DELETE, params![did, space, path]),
+            };
+            done?;
+            let op = tx.execute(
+                SPACE_OP,
+                params![did, space, head.rev, idx as i64, path, after, before],
+            );
+            op?;
+        }
+        let mut orphans = Vec::new();
+        for cid in unlinked {
+            let gone = tx.execute(FORGET_ORPHAN, params![did, cid.to_string()]);
+            if gone? > 0 {
+                orphans.push(cid);
+            }
+        }
+        tx.commit()?;
+        Ok(Some(orphans))
+    }
+
+    /// `did`'s record in `space` at `collection/rkey`.
+    pub fn space_record(
+        &self,
+        did: &str,
+        space: &str,
+        collection: &str,
+        rkey: &str,
+    ) -> Result<Option<Record>> {
+        let conn = self.conn();
+        let path = format!("{collection}/{rkey}");
+        let found = conn.query_row(SPACE_RECORD, [did, space, &path], space_record);
+        Ok(found.optional()?)
+    }
+
+    /// Every record of `did`'s in `space`, by path, as DRISL.
+    pub fn space_records(&self, did: &str, space: &str) -> Result<BTreeMap<String, Vec<u8>>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SPACE_RECORDS)?;
+        let rows = q.query_map([did, space], |r| Ok((r.get(0)?, r.get(2)?)));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// `did`'s records in `space`, of `collection` or all, past `cursor`
+    /// (a path), at most `limit`: last path first, or first with `reverse`.
+    pub fn space_list(
+        &self,
+        did: &str,
+        space: &str,
+        collection: Option<&str>,
+        cursor: Option<&str>,
+        limit: u32,
+        reverse: bool,
+    ) -> Result<Vec<Record>> {
+        let conn = self.conn();
+        let sql = if reverse {
+            SPACE_LIST_UP
+        } else {
+            SPACE_LIST_DOWN
+        };
+        // No path sorts before "" or after "\u{7f}": its characters are ASCII.
+        let from = cursor.unwrap_or(if reverse { "" } else { "\u{7f}" });
+        let mut q = conn.prepare(sql)?;
+        let rows = q.query_map(params![did, space, collection, from, limit], space_record)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The changes to `did`'s repo in `space` after `since` (a revision)
+    /// and `cursor` (an op's revision and place), at most `limit`, with the
+    /// repo's state as they leave it, read at one moment.
+    pub fn space_ops(
+        &self,
+        did: &str,
+        space: &str,
+        after: (&str, i64),
+        limit: u32,
+    ) -> Result<(Vec<SpaceOp>, Option<SpaceHead>)> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SPACE_OPS)?;
+        let rows = q.query_map(params![did, space, after.0, after.1, limit], |r| {
+            let (collection, rkey) = split(&r.get::<_, String>(2)?);
+            Ok(SpaceOp {
+                rev: r.get(0)?,
+                idx: r.get(1)?,
+                collection,
+                rkey,
+                cid: r.get::<_, Option<String>>(3)?.map(cid),
+                prev: r.get::<_, Option<String>>(4)?.map(cid),
+                value: r.get(5)?,
+            })
+        });
+        let ops = rows?.collect::<rusqlite::Result<_>>()?;
+        let head = conn.query_row(SPACE_HEAD, [did, space], |r| {
+            Ok(SpaceHead {
+                rev: r.get(0)?,
+                state: r.get(1)?,
+            })
+        });
+        Ok((ops, head.optional()?))
+    }
+
+    /// The blobs `did`'s records in `space` reference, as
+    /// [`Store::list_blobs`] lists a repo's.
+    pub fn space_blobs(
+        &self,
+        did: &str,
+        space: &str,
+        since: Option<&str>,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<Cid>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SPACE_BLOBS)?;
+        let asked = params![did, space, since.unwrap_or(""), cursor.unwrap_or(""), limit];
+        let rows = q.query_map(asked, |r| Ok(cid(r.get(0)?)));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Whether a record of `did`'s in `space` references blob `cid`.
+    pub fn space_has_blob(&self, did: &str, space: &str, cid: &Cid) -> Result<bool> {
+        let conn = self.conn();
+        let found = conn.query_row(SPACE_HAS_BLOB, [did, space, &cid.to_string()], |_| Ok(()));
+        Ok(found.optional()?.is_some())
+    }
+
+    /// Keeps the credentials `jtis` to `space` as revoked until
+    /// `expires_at` (in seconds), when they would have lapsed anyway; those
+    /// lapsed by `now` are forgotten.
+    pub fn revoke(&self, space: &str, jtis: &[String], expires_at: i64, now: i64) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let forgot = tx.execute(FORGET_REVOKED, [now]);
+        forgot?;
+        for jti in jtis {
+            let kept = tx.execute(REVOKE, params![space, jti, expires_at]);
+            kept?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Whether the credential `jti` to `space` is revoked at `now`.
+    pub fn revoked(&self, space: &str, jti: &str, now: i64) -> Result<bool> {
+        let conn = self.conn();
+        let found = conn.query_row(REVOKED, params![space, jti, now], |_| Ok(()));
+        Ok(found.optional()?.is_some())
     }
 
     /// Up to `limit` events after `cursor`, in order.

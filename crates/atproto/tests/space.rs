@@ -4,8 +4,8 @@
 use atproto::cid::Cid;
 use atproto::keys::{Curve, Keypair};
 use atproto::space::{
-    COMMIT_MAC, Commit, LtHash, RECORD_MAC, STATE_BYTES, decapsulate, element, encapsulate,
-    mac_header, parse_want_mac, record_mac, star, want_mac_header,
+    COMMIT_MAC, Commit, LtHash, RECORD_MAC, STATE_BYTES, SpaceRef, decapsulate, element,
+    encapsulate, mac_header, parse_want_mac, record_mac, star, want_mac_header,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -118,6 +118,30 @@ fn agrees_secrets_as_the_vectors_say() {
     // A syncer's side and the author's agree.
     let (share, theirs) = encapsulate(&author.public().did_key()).unwrap();
     assert_eq!(decapsulate(&author, &share).unwrap(), theirs);
+}
+
+#[test]
+fn reads_space_refs() {
+    let uri = "at://did:plc:abc/space/fyi.opensocial.members/self";
+    let space = SpaceRef::parse(uri).unwrap();
+    assert_eq!(space.authority, "did:plc:abc");
+    assert_eq!(space.kind, "fyi.opensocial.members");
+    assert_eq!(space.skey, "self");
+    assert_eq!(space.to_string(), uri);
+    for bad in [
+        "did:plc:abc/space/fyi.opensocial.members/self",
+        "at://did:plc:abc/space/fyi.opensocial.members",
+        "at://did:plc:abc/space/fyi.opensocial.members/self/",
+        "at://did:plc:abc/repo/fyi.opensocial.members/self",
+        "at://alice.test/space/fyi.opensocial.members/self",
+        "at://did:plc:abc/space/members/self",
+        "at://did:plc:abc/space/fyi.opensocial.members/..",
+    ] {
+        assert_eq!(
+            SpaceRef::parse(bad).unwrap_err().to_string(),
+            format!("not a space: {bad}")
+        );
+    }
 }
 
 #[test]

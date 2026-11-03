@@ -13,15 +13,15 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-type Params = Query<HashMap<String, String>>;
+pub(crate) type Params = HashMap<String, String>;
 type Answer = Result<Json<Value>, XrpcError>;
 
-fn invalid(message: impl Into<String>) -> XrpcError {
+pub(crate) fn invalid(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, "InvalidRequest", message)
 }
 
 /// The parameter `name`, which the method needs.
-fn param<'a>(params: &'a HashMap<String, String>, name: &str) -> Result<&'a str, XrpcError> {
+pub(crate) fn param<'a>(params: &'a Params, name: &str) -> Result<&'a str, XrpcError> {
     params
         .get(name)
         .map(String::as_str)
@@ -29,14 +29,19 @@ fn param<'a>(params: &'a HashMap<String, String>, name: &str) -> Result<&'a str,
 }
 
 /// The page size `limit` asks for: 1 to 100, 50 unless it says.
-fn limit(params: &HashMap<String, String>) -> Result<u32, XrpcError> {
+fn limit(params: &Params) -> Result<u32, XrpcError> {
+    page(params, 50, 100)
+}
+
+/// The page size `limit` asks for: 1 to `max`, `default` unless it says.
+pub(crate) fn page(params: &Params, default: u32, max: u32) -> Result<u32, XrpcError> {
     match params.get("limit") {
-        None => Ok(50),
+        None => Ok(default),
         Some(l) => l
             .parse()
             .ok()
-            .filter(|n| (1..=100).contains(n))
-            .ok_or_else(|| invalid("limit is 1 to 100")),
+            .filter(|n| (1..=max).contains(n))
+            .ok_or_else(|| invalid(format!("limit is 1 to {max}"))),
     }
 }
 
@@ -61,7 +66,7 @@ fn view(did: &str, r: &Record) -> Value {
     json!({"uri": format!("at://{did}/{}/{}", r.collection, r.rkey), "cid": r.cid.to_string(), "value": value})
 }
 
-pub async fn describe_repo(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn describe_repo(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let repo = param(&p, "repo")?;
     let account = host.store.account(repo).map_err(XrpcError::internal)?;
     let account = account.ok_or_else(|| repo_not_found(repo))?;
@@ -83,7 +88,7 @@ pub async fn describe_repo(State(host): State<Arc<Host>>, Query(p): Params) -> A
     })))
 }
 
-pub async fn get_record(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn get_record(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let did = did_of(&host, param(&p, "repo")?)?;
     let (collection, rkey) = (param(&p, "collection")?, param(&p, "rkey")?);
     let found = host
@@ -102,7 +107,7 @@ pub async fn get_record(State(host): State<Arc<Host>>, Query(p): Params) -> Answ
     Ok(Json(view(&did, &found.ok_or_else(not_found)?)))
 }
 
-pub async fn list_records(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn list_records(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let did = did_of(&host, param(&p, "repo")?)?;
     let (collection, limit) = (param(&p, "collection")?, limit(&p)?);
     let reverse = p.get("reverse").is_some_and(|r| r == "true");
@@ -122,7 +127,7 @@ pub async fn list_records(State(host): State<Arc<Host>>, Query(p): Params) -> An
 
 pub async fn get_repo(
     State(host): State<Arc<Host>>,
-    Query(p): Params,
+    Query(p): Query<Params>,
 ) -> Result<Response, XrpcError> {
     let did = param(&p, "did")?;
     let car = host.export(did).map_err(XrpcError::internal)?;
@@ -130,14 +135,14 @@ pub async fn get_repo(
     Ok(([(header::CONTENT_TYPE, "application/vnd.ipld.car")], car).into_response())
 }
 
-pub async fn get_latest_commit(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn get_latest_commit(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let did = param(&p, "did")?;
     let head = host.store.head(did).map_err(XrpcError::internal)?;
     let head = head.ok_or_else(|| repo_not_found(did))?;
     Ok(Json(json!({"cid": head.cid.to_string(), "rev": head.rev})))
 }
 
-pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let limit = limit(&p)?;
     let repos = host
         .store
@@ -154,7 +159,7 @@ pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Params) -> Answ
     Ok(Json(json!({"repos": repos, "cursor": cursor})))
 }
 
-pub async fn resolve_handle(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn resolve_handle(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let handle = param(&p, "handle")?.to_ascii_lowercase();
     let account = host.store.account(&handle).map_err(XrpcError::internal)?;
     let account = account.filter(|a| a.handle == handle);
@@ -172,7 +177,7 @@ pub async fn resolve_handle(State(host): State<Arc<Host>>, Query(p): Params) -> 
 /// browser neither sniffs nor runs it.
 pub async fn get_blob(
     State(host): State<Arc<Host>>,
-    Query(p): Params,
+    Query(p): Query<Params>,
 ) -> Result<Response, XrpcError> {
     let did = did_of(&host, param(&p, "did")?)?;
     let cid = param(&p, "cid")?;
@@ -197,7 +202,7 @@ pub async fn get_blob(
     Ok((headers, bytes).into_response())
 }
 
-pub async fn list_blobs(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+pub async fn list_blobs(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let did = did_of(&host, param(&p, "did")?)?;
     let limit = limit(&p)?;
     let (since, cursor) = (
