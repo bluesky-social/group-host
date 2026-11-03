@@ -16,9 +16,10 @@ impl Running {
     }
 }
 
-fn start() -> Running {
+fn start(data: &std::path::Path) -> Running {
     let mut child = Command::new(env!("CARGO_BIN_EXE_group-host"))
         .env("PORT", "0")
+        .env("DATA_DIR", data)
         .env("RUST_LOG", "off")
         .stdout(Stdio::piped())
         .spawn()
@@ -34,7 +35,8 @@ fn start() -> Running {
 
 #[tokio::test]
 async fn answers_health_and_refuses_unknown_methods() {
-    let host = start();
+    let data = tempfile::tempdir().unwrap();
+    let host = start(data.path());
     let http = reqwest::Client::new();
 
     let health: serde_json::Value = http

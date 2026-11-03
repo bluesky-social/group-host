@@ -23,6 +23,16 @@ impl XrpcError {
         }
     }
 
+    /// What went wrong inside the host, said as it is: the database, or
+    /// a server it asked.
+    pub fn internal(err: impl std::fmt::Display) -> Self {
+        XrpcError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "InternalServerError",
+            err.to_string(),
+        )
+    }
+
     /// A call this host has no method for.
     pub fn not_implemented(nsid: &str) -> Self {
         XrpcError::new(

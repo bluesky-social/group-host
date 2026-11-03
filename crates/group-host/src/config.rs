@@ -19,6 +19,8 @@ pub struct Config {
     pub handle_domain: String,
     /// The database, blobs and keys, `DATA_DIR`.
     pub data_dir: PathBuf,
+    /// The PLC directory groups' identities are published to, `PLC_URL`.
+    pub plc_url: String,
 }
 
 impl Config {
@@ -47,12 +49,14 @@ impl Config {
             bail!("HANDLE_DOMAIN starts with a dot: .{handle_domain}");
         }
         let data_dir = var("DATA_DIR").unwrap_or_else(|| "data".into()).into();
+        let plc_url = var("PLC_URL").unwrap_or_else(|| "https://plc.directory".into());
         Ok(Config {
             port,
             public_url,
             service_did,
             handle_domain,
             data_dir,
+            plc_url,
         })
     }
 
