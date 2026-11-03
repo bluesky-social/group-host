@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod net;
+
 use atproto::plc::Signed;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;

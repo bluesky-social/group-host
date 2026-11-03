@@ -5,9 +5,11 @@ toolchain := `dirname "$(rustup which --toolchain stable cargo)"`
 cargo := "env PATH='" + toolchain + ":" + env_var('PATH') + "' rustup run stable cargo"
 ignore := "(tests/|harness/)"
 
-# Install the web pages' packages and coverage tools.
+# Install the web pages' packages, the harness's (the reference PDS the
+# tests reach the network through), and coverage tools.
 setup:
     cd web && npm install --no-audit --no-fund
+    cd harness && npm ci --no-audit --no-fund
     rustup component add llvm-tools-preview --toolchain stable
     command -v cargo-llvm-cov >/dev/null || cargo install cargo-llvm-cov
 

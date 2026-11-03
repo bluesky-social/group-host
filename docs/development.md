@@ -12,6 +12,14 @@ just web-dev   # the console, asking that host
 
 ## Tests
 
+The tests that reach the network run against the reference PDS and a PLC
+directory, which `harness/pds.mjs` starts once for each test binary that
+asks (`tests/common/net.rs`), on Node at the version `.node-version` names.
+On npm's PDS, which has no spaces, the tests of a space skip what needs
+one; CI runs them on the space alpha, built at the commit
+`.knotless/workflows/test.yml` names, and `GROUP_HOST_DEV_ENV` names such a
+build (an atproto checkout's `packages/dev-env`) to run them here.
+
 `just test` runs every test; `just t <cargo test args>` a selection;
 `just cov` all of them under the gate the `test` check holds: 100% of
 lines and functions, tests and the harness left out. A test that starts

@@ -2,5 +2,11 @@
   "name": "group-host-harness",
   "private": true,
   "type": "module",
-  "description": "The checks run beside the tests: the web components' layers and the lexicons"
+  "description": "The checks beside the tests, and the reference PDS and PLC the host's tests run against (pds.mjs)",
+  "dependencies": {
+    "@atproto/dev-env": "0.6.26"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2"
+  }
 }
