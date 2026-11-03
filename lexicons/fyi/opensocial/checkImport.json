@@ -7,7 +7,9 @@
       "description": "What moving an account here would make of it, before anything moves (importAccount moves it so): its handle here, whether that's the one it has, and its address, this host's own name for it, where its site lives. A handle on a domain of the account's own that still names it comes along; one its old server gives out becomes the address. `refused` says why it can't have that address, as importAccount would.",
       "parameters": {
         "type": "params",
-        "required": ["did"],
+        "required": [
+          "did"
+        ],
         "properties": {
           "did": {
             "type": "string",
@@ -23,7 +25,13 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "handle", "address", "label", "keeps"],
+          "required": [
+            "did",
+            "handle",
+            "address",
+            "label",
+            "keeps"
+          ],
           "properties": {
             "did": {
               "type": "string",
@@ -36,7 +44,7 @@
             },
             "address": {
               "type": "string",
-              "format": "handle"
+              "description": "The hostname its site and methods answer at."
             },
             "label": {
               "type": "string"

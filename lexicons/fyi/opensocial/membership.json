@@ -8,7 +8,11 @@
       "description": "Grants a member their roles. Written by the group authority; the record key is the member's DID.",
       "record": {
         "type": "object",
-        "required": ["member", "roles", "createdAt"],
+        "required": [
+          "member",
+          "roles",
+          "createdAt"
+        ],
         "properties": {
           "member": {
             "type": "string",
@@ -17,9 +21,8 @@
           "roles": {
             "type": "array",
             "items": {
-              "type": "string",
-              "maxLength": 64,
-              "description": "A role id: the record key of a fyi.opensocial.role record."
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#roleRef"
             }
           },
           "createdAt": {

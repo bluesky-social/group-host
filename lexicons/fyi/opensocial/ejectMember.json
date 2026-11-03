@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "member"],
+          "required": [
+            "group",
+            "member"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -21,7 +24,9 @@
               "format": "did"
             },
             "reason": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 3000,
+              "maxGraphemes": 300
             }
           }
         }
@@ -30,7 +35,14 @@
         {
           "name": "NotAssignable"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }

@@ -1,17 +1,17 @@
 # The lexicons, as `just lex` checks them: goat's lint, what it does not
-# see, and that they only grow from main's (harness/lexicons.mjs), less
-# the findings the prototype's schemas came with. goat is kept between runs.
+# see, and that they only grow from main's (harness/lexicons.mjs). goat is
+# kept between runs.
 image: node:24.22.1
 on:
   push: {refs: [refs/heads/main]}
   pull:
     base: [refs/heads/main, refs/heads/feature/*]
-    paths: [lexicons/**, harness/lexicons.mjs, harness/lexicons-kept.txt, .knotless/workflows/lexicons.yml]
+    paths: [lexicons/**, harness/lexicons.mjs, .knotless/workflows/lexicons.yml]
 cache: [/opt/goat]
 steps:
   - name: goat
     run: |
-      [ -x /opt/goat/goat ] || curl -fsSL https://github.com/bluesky-social/goat/releases/download/v0.2.6/goat_Linux_x86_64.tar.gz | tar -xz -C /opt/goat goat
+      [ "$(/opt/goat/goat --version 2>/dev/null)" = "goat version 0.2.8" ] || curl -fsSL https://github.com/bluesky-social/goat/releases/download/v0.2.8/goat_Linux_x86_64.tar.gz | tar -xz -C /opt/goat goat
       /opt/goat/goat --version
   - name: lexicons
     run: PATH=/opt/goat:$PATH node harness/lexicons.mjs

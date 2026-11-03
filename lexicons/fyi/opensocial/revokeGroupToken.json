@@ -9,16 +9,27 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "tokenId"],
+          "required": [
+            "group",
+            "tokenId"
+          ],
           "properties": {
             "group": {
               "type": "string",
               "format": "did"
             },
             "tokenId": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 128
             }
           }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
         }
       }
     }

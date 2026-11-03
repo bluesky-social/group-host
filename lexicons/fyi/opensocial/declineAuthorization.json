@@ -9,9 +9,14 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["requestUri"],
+          "required": [
+            "requestUri"
+          ],
           "properties": {
-            "requestUri": { "type": "string" }
+            "requestUri": {
+              "type": "string",
+              "maxLength": 512
+            }
           }
         }
       },
@@ -19,13 +24,22 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["redirectUrl"],
+          "required": [
+            "redirectUrl"
+          ],
           "properties": {
-            "redirectUrl": { "type": "string", "format": "uri" }
+            "redirectUrl": {
+              "type": "string",
+              "format": "uri"
+            }
           }
         }
       },
-      "errors": [{ "name": "ExpiredRequest" }]
+      "errors": [
+        {
+          "name": "ExpiredRequest"
+        }
+      ]
     }
   }
 }

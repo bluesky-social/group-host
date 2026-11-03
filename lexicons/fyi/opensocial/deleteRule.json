@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "rkey"],
+          "required": [
+            "group",
+            "rkey"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -21,6 +24,13 @@
               "format": "record-key"
             }
           }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
         }
       }
     }

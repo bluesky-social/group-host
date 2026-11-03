@@ -9,7 +9,9 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group"],
+          "required": [
+            "group"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -23,7 +25,14 @@
         {
           "name": "AlreadyDeactivated"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }

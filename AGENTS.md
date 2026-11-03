@@ -98,17 +98,17 @@ The schemas under `lexicons/` are the prototype's core, as a starting
 point: they are this host's to change until they are published from here.
 Once one is published, it is evolved, never changed, with new fields
 optional and nothing removed, renamed, retyped, made required or narrowed.
-A new or changed schema follows the Lexicon Style Guide
+Every schema of ours (`fyi.opensocial.*`) follows the Lexicon Style Guide
 (https://atproto.com/guides/lexinomicon) and passes `just lex`: goat's
 linter, then `harness/lexicons.mjs` for what it does not see (`knownValues`
-rather than `enum`; objects in new arrays; a description on every `main`;
-a `maxLength` on strings people write; accounts by DID), and that every
-schema only grows from main's. The findings the prototype's schemas came
-with are listed in `harness/lexicons-kept.txt`, one a line, so the check
-passes on them meanwhile; a new finding fails. They are debt: the pull that
-builds a part fixes its schemas' findings and takes their lines out. The
-space alpha's `space` type and `space-ref` format stay, as goat does not
-know them yet.
+rather than `enum`; arrays of objects, which can grow, not bare values,
+with the small shared ones in `fyi.opensocial.defs`; a description on
+every `main`; a `maxLength` on strings people write; accounts by DID, a
+handle only as an account's own `handle`), and that every schema only
+grows from main's. Nothing is let off but what the space alpha brings and
+goat does not know yet: the `space-ref` format and permissions over a
+`space`. The schemas under `lexicons/upstream` and `community/` are
+others', copied as they are for what ours refer to.
 
 ## Docs
 

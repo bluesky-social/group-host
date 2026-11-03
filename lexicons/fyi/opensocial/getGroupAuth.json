@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "space"],
+          "required": [
+            "group",
+            "space"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -27,7 +30,13 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "accessJwt", "pds", "collections", "expiresAt"],
+          "required": [
+            "did",
+            "accessJwt",
+            "pds",
+            "collections",
+            "expiresAt"
+          ],
           "properties": {
             "did": {
               "type": "string",
@@ -44,7 +53,8 @@
             "collections": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#collectionRef"
               },
               "description": "Collections the caller's roles may write as the group in that space ('*' for any)."
             },
@@ -59,7 +69,8 @@
             "repoCollections": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#collectionRef"
               },
               "description": "Public-repo collections this token may also write."
             }

@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "invitee"],
+          "required": [
+            "group",
+            "invitee"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -21,7 +24,9 @@
               "format": "did"
             },
             "message": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 3000,
+              "maxGraphemes": 300
             },
             "expiresAt": {
               "type": "string",
@@ -34,7 +39,9 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["uri"],
+          "required": [
+            "uri"
+          ],
           "properties": {
             "uri": {
               "type": "string",

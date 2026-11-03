@@ -9,7 +9,11 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "member", "roles"],
+          "required": [
+            "group",
+            "member",
+            "roles"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -23,8 +27,8 @@
             "roles": {
               "type": "array",
               "items": {
-                "type": "string",
-                "maxLength": 64
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#roleRef"
               }
             }
           }
@@ -34,7 +38,14 @@
         {
           "name": "NotAssignable"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }

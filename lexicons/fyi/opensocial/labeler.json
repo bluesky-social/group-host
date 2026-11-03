@@ -8,7 +8,10 @@
       "description": "The group as a moderation service: the label values it applies and what it accepts reports about. Written by the group into the meta space.",
       "record": {
         "type": "object",
-        "required": ["policies", "createdAt"],
+        "required": [
+          "policies",
+          "createdAt"
+        ],
         "properties": {
           "policies": {
             "type": "ref",
@@ -33,8 +36,8 @@
           "subjectCollections": {
             "type": "array",
             "items": {
-              "type": "string",
-              "format": "nsid"
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#collectionRef"
             },
             "description": "The record collections it accepts reports about. Omitted means any."
           },
@@ -47,7 +50,9 @@
     },
     "labelerPolicies": {
       "type": "object",
-      "required": ["labelValues"],
+      "required": [
+        "labelValues"
+      ],
       "properties": {
         "labelValues": {
           "type": "array",

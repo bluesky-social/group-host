@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["handle", "displayName"],
+          "required": [
+            "handle",
+            "displayName"
+          ],
           "properties": {
             "handle": {
               "type": "string",
@@ -18,8 +21,8 @@
             "stewards": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "did"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#accountRef"
               },
               "description": "Accounts that run the group alongside the founder, as admins from the start."
             },
@@ -44,7 +47,8 @@
             "metaReadableBy": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#audience"
               },
               "description": "Defaults to ['public']."
             }
@@ -55,7 +59,11 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "meta", "members"],
+          "required": [
+            "did",
+            "meta",
+            "members"
+          ],
           "properties": {
             "did": {
               "type": "string",

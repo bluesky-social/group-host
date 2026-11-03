@@ -4,7 +4,11 @@
   "defs": {
     "subjectView": {
       "type": "object",
-      "required": ["subject", "status", "createdAt"],
+      "required": [
+        "subject",
+        "status",
+        "createdAt"
+      ],
       "properties": {
         "subject": {
           "type": "string",
@@ -13,7 +17,11 @@
         },
         "status": {
           "type": "string",
-          "knownValues": ["open", "escalated", "resolved"]
+          "knownValues": [
+            "open",
+            "escalated",
+            "resolved"
+          ]
         },
         "reportCount": {
           "type": "integer"
@@ -34,12 +42,11 @@
     },
     "eventView": {
       "type": "object",
-      "required": ["type", "createdAt"],
+      "required": [
+        "kind",
+        "createdAt"
+      ],
       "properties": {
-        "type": {
-          "type": "string",
-          "knownValues": ["report", "label", "negate", "resolve", "escalate", "note", "eject"]
-        },
         "actor": {
           "type": "string",
           "format": "did"
@@ -59,12 +66,28 @@
         "createdAt": {
           "type": "string",
           "format": "datetime"
+        },
+        "kind": {
+          "type": "string",
+          "knownValues": [
+            "report",
+            "label",
+            "negate",
+            "resolve",
+            "escalate",
+            "note",
+            "eject"
+          ]
         }
       }
     },
     "inviteView": {
       "type": "object",
-      "required": ["uri", "invitee", "createdAt"],
+      "required": [
+        "uri",
+        "invitee",
+        "createdAt"
+      ],
       "properties": {
         "uri": {
           "type": "string",
@@ -89,7 +112,10 @@
     },
     "joinRequestView": {
       "type": "object",
-      "required": ["did", "createdAt"],
+      "required": [
+        "did",
+        "createdAt"
+      ],
       "properties": {
         "did": {
           "type": "string",
@@ -115,7 +141,12 @@
     },
     "groupView": {
       "type": "object",
-      "required": ["did", "handle", "meta", "members"],
+      "required": [
+        "did",
+        "handle",
+        "meta",
+        "members"
+      ],
       "properties": {
         "did": {
           "type": "string",
@@ -170,9 +201,8 @@
           "type": "array",
           "maxLength": 10,
           "items": {
-            "type": "string",
-            "maxGraphemes": 64,
-            "maxLength": 640
+            "type": "ref",
+            "ref": "#topicRef"
           },
           "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
         },
@@ -180,8 +210,8 @@
           "type": "array",
           "maxLength": 5,
           "items": {
-            "type": "string",
-            "format": "language"
+            "type": "ref",
+            "ref": "#languageRef"
           },
           "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
         },
@@ -213,7 +243,12 @@
     },
     "groupViewDetailed": {
       "type": "object",
-      "required": ["did", "handle", "meta", "members"],
+      "required": [
+        "did",
+        "handle",
+        "meta",
+        "members"
+      ],
       "properties": {
         "did": {
           "type": "string",
@@ -268,9 +303,8 @@
           "type": "array",
           "maxLength": 10,
           "items": {
-            "type": "string",
-            "maxGraphemes": 64,
-            "maxLength": 640
+            "type": "ref",
+            "ref": "#topicRef"
           },
           "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
         },
@@ -278,8 +312,8 @@
           "type": "array",
           "maxLength": 5,
           "items": {
-            "type": "string",
-            "format": "language"
+            "type": "ref",
+            "ref": "#languageRef"
           },
           "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
         },
@@ -313,7 +347,11 @@
     "viewerState": {
       "type": "object",
       "description": "The requesting account's standing in the group. Only present for authed requests.",
-      "required": ["member", "roles", "actions"],
+      "required": [
+        "member",
+        "roles",
+        "actions"
+      ],
       "properties": {
         "member": {
           "type": "boolean"
@@ -321,7 +359,8 @@
         "roles": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "#roleRef"
           }
         },
         "actions": {
@@ -345,16 +384,24 @@
     },
     "groupRule": {
       "type": "object",
-      "required": ["rkey", "title"],
+      "required": [
+        "rkey",
+        "title"
+      ],
       "properties": {
         "rkey": {
-          "type": "string"
+          "type": "string",
+          "format": "record-key"
         },
         "title": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 1000,
+          "maxGraphemes": 100
         },
         "text": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 20000,
+          "maxGraphemes": 2000
         },
         "createdAt": {
           "type": "string",
@@ -364,7 +411,9 @@
     },
     "actorView": {
       "type": "object",
-      "required": ["did"],
+      "required": [
+        "did"
+      ],
       "description": "A person, as a view names them: their handle from their DID document, and their name, words about themselves and face from their profile in the group the view is of, or else the Bluesky profile in their own repo, or Grain's for somebody with none.",
       "properties": {
         "did": {
@@ -409,7 +458,10 @@
     },
     "memberView": {
       "type": "object",
-      "required": ["actor", "roles"],
+      "required": [
+        "actor",
+        "roles"
+      ],
       "properties": {
         "actor": {
           "type": "ref",
@@ -418,14 +470,17 @@
         "roles": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "#roleRef"
           }
         }
       }
     },
     "roleView": {
       "type": "object",
-      "required": ["key"],
+      "required": [
+        "key"
+      ],
       "properties": {
         "key": {
           "type": "string",
@@ -445,15 +500,14 @@
     },
     "spaceView": {
       "type": "object",
-      "required": ["uri", "type"],
+      "required": [
+        "uri",
+        "spaceType"
+      ],
       "properties": {
         "uri": {
           "type": "string",
           "format": "space-ref"
-        },
-        "type": {
-          "type": "string",
-          "format": "nsid"
         },
         "name": {
           "type": "string"
@@ -462,22 +516,24 @@
           "type": "array",
           "description": "The space's read gate, when the viewer may read the space.",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "#audience"
           }
         },
         "people": {
           "type": "array",
           "description": "For chosen people: who they are, when the viewer is one of them. Only they read it or write in it.",
           "items": {
-            "type": "string",
-            "format": "did"
+            "type": "ref",
+            "ref": "#accountRef"
           }
         },
         "writableBy": {
           "type": "array",
           "description": "Who may write there in their own name, when the viewer may read the space. Absent is any member.",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "#audience"
           }
         },
         "credentialScopes": {
@@ -487,12 +543,19 @@
             "type": "ref",
             "ref": "fyi.opensocial.access#roleScopes"
           }
+        },
+        "spaceType": {
+          "type": "string",
+          "format": "nsid"
         }
       }
     },
     "groupViewBasic": {
       "type": "object",
-      "required": ["did", "handle"],
+      "required": [
+        "did",
+        "handle"
+      ],
       "properties": {
         "did": {
           "type": "string",
@@ -536,21 +599,28 @@
     },
     "actorLink": {
       "type": "object",
-      "required": ["url"],
+      "required": [
+        "url"
+      ],
       "properties": {
         "url": {
           "type": "string",
           "format": "uri"
         },
         "title": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 640,
+          "maxGraphemes": 64
         }
       }
     },
     "file": {
       "type": "object",
       "description": "One file of what a site, a channel or a template is made of, by its path there: a page, a script, a stylesheet, JSON (a lexicon), an image or a font. What it is served as follows its path's extension.",
-      "required": ["path", "file"],
+      "required": [
+        "path",
+        "file"
+      ],
       "properties": {
         "path": {
           "type": "string",
@@ -585,7 +655,11 @@
     "roleBinding": {
       "type": "object",
       "description": "What one role may do, as the host reads its grant.",
-      "required": ["role", "actions", "assignable"],
+      "required": [
+        "role",
+        "actions",
+        "assignable"
+      ],
       "properties": {
         "role": {
           "type": "string",
@@ -601,23 +675,121 @@
         "assignable": {
           "type": "array",
           "items": {
-            "type": "string",
-            "maxLength": 64
+            "type": "ref",
+            "ref": "#roleRef"
           }
         },
         "repoCollections": {
           "type": "array",
           "description": "The public-repo collections holders may write as the group; `*` for any.",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "#collectionRef"
           }
         },
         "scopes": {
           "type": "array",
           "description": "The role's grant as the permissions record has it.",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "#scopeRef"
           }
+        }
+      }
+    },
+    "roleRef": {
+      "type": "object",
+      "description": "A role, by its id: the record key of a fyi.opensocial.role record.",
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "audience": {
+      "type": "object",
+      "description": "Who may read or write a space: a role, by its id, or everyone signed in.",
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "maxLength": 64,
+          "knownValues": [
+            "public"
+          ],
+          "description": "A role id, or public for anyone signed in."
+        }
+      }
+    },
+    "scopeRef": {
+      "type": "object",
+      "description": "An OAuth scope, as a permission or permission set is written.",
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "maxLength": 400
+        }
+      }
+    },
+    "collectionRef": {
+      "type": "object",
+      "description": "A collection of records, by its NSID, or * for any.",
+      "required": [
+        "collection"
+      ],
+      "properties": {
+        "collection": {
+          "type": "string",
+          "maxLength": 317
+        }
+      }
+    },
+    "accountRef": {
+      "type": "object",
+      "description": "An account, by its DID.",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "did": {
+          "type": "string",
+          "format": "did"
+        }
+      }
+    },
+    "languageRef": {
+      "type": "object",
+      "description": "A language the group uses.",
+      "required": [
+        "language"
+      ],
+      "properties": {
+        "language": {
+          "type": "string",
+          "format": "language"
+        }
+      }
+    },
+    "topicRef": {
+      "type": "object",
+      "description": "A topic the group is about.",
+      "required": [
+        "topic"
+      ],
+      "properties": {
+        "topic": {
+          "type": "string",
+          "maxLength": 640,
+          "maxGraphemes": 64
         }
       }
     }

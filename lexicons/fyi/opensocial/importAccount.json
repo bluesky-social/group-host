@@ -9,15 +9,19 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["serviceJwt"],
+          "required": [
+            "serviceJwt"
+          ],
           "properties": {
             "serviceJwt": {
               "type": "string",
-              "description": "A service token from the account's own server (com.atproto.server.getServiceAuth), with this host's DID as aud and com.atproto.server.createAccount as lxm."
+              "description": "A service token from the account's own server (com.atproto.server.getServiceAuth), with this host's DID as aud and com.atproto.server.createAccount as lxm.",
+              "maxLength": 8192
             },
             "address": {
               "type": "string",
-              "description": "The label of its address on this host; by default its handle's first label."
+              "description": "The label of its address on this host; by default its handle's first label.",
+              "maxLength": 253
             }
           }
         }
@@ -36,16 +40,30 @@
             "recommendedCreds"
           ],
           "properties": {
-            "did": { "type": "string", "format": "did" },
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
             "handle": {
               "type": "string",
               "format": "handle",
               "description": "Its handle once moved: its own domain if it has one that still names it, otherwise its address."
             },
-            "address": { "type": "string", "format": "handle" },
-            "displayName": { "type": "string" },
-            "records": { "type": "integer", "description": "Records copied." },
-            "blobs": { "type": "integer", "description": "Files copied." },
+            "address": {
+              "type": "string",
+              "description": "The hostname its site and methods answer at."
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "records": {
+              "type": "integer",
+              "description": "Records copied."
+            },
+            "blobs": {
+              "type": "integer",
+              "description": "Files copied."
+            },
             "recommendedCreds": {
               "type": "unknown",
               "description": "rotationKeys, alsoKnownAs, verificationMethods and services, as com.atproto.identity.getRecommendedDidCredentials answers: what the account's server signs into its PLC operation (com.atproto.identity.signPlcOperation)."
@@ -54,15 +72,33 @@
         }
       },
       "errors": [
-        { "name": "NotAllowed" },
-        { "name": "InvalidToken" },
-        { "name": "NotPlc" },
-        { "name": "SameAccount" },
-        { "name": "AlreadyHere" },
-        { "name": "InvalidHandle" },
-        { "name": "HandleNotAvailable" },
-        { "name": "InvalidRepo" },
-        { "name": "UpstreamFailure" }
+        {
+          "name": "NotAllowed"
+        },
+        {
+          "name": "InvalidToken"
+        },
+        {
+          "name": "NotPlc"
+        },
+        {
+          "name": "SameAccount"
+        },
+        {
+          "name": "AlreadyHere"
+        },
+        {
+          "name": "InvalidHandle"
+        },
+        {
+          "name": "HandleNotAvailable"
+        },
+        {
+          "name": "InvalidRepo"
+        },
+        {
+          "name": "UpstreamFailure"
+        }
       ]
     }
   }

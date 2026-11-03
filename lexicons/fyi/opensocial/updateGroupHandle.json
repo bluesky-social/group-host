@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "handle"],
+          "required": [
+            "group",
+            "handle"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -18,7 +21,8 @@
             },
             "handle": {
               "type": "string",
-              "description": "The new handle: a domain that names the group, or the group's own address."
+              "description": "The new handle: a domain that names the group, or the group's own address.",
+              "format": "handle"
             }
           }
         }
@@ -27,7 +31,9 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["handle"],
+          "required": [
+            "handle"
+          ],
           "properties": {
             "handle": {
               "type": "string",

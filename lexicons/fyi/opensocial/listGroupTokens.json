@@ -7,7 +7,9 @@
       "description": "The OAuth sessions issued by this host for the group DID (apps acting as the group), plus recent activity. Requires group.configure.",
       "parameters": {
         "type": "params",
-        "required": ["group"],
+        "required": [
+          "group"
+        ],
         "properties": {
           "group": {
             "type": "string",
@@ -19,21 +21,106 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["sessions", "activity"],
+          "required": [
+            "sessions",
+            "activity"
+          ],
           "properties": {
             "sessions": {
               "type": "array",
               "items": {
-                "type": "unknown"
+                "type": "ref",
+                "ref": "#sessionView"
               }
             },
             "activity": {
               "type": "array",
               "items": {
-                "type": "unknown"
+                "type": "ref",
+                "ref": "#activityView"
               }
             }
           }
+        }
+      }
+    },
+    "sessionView": {
+      "type": "object",
+      "description": "A session an app holds as the group.",
+      "required": [
+        "tokenId",
+        "clientId",
+        "member",
+        "source",
+        "grantedAt"
+      ],
+      "properties": {
+        "tokenId": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "The app's OAuth client id."
+        },
+        "member": {
+          "type": "string",
+          "format": "did",
+          "description": "Who let it in."
+        },
+        "role": {
+          "type": "string",
+          "description": "The role it was given, if one."
+        },
+        "source": {
+          "type": "string",
+          "knownValues": [
+            "oauth",
+            "getGroupAuth",
+            "appPassword"
+          ]
+        },
+        "scope": {
+          "type": "string"
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "lastUsedAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    },
+    "activityView": {
+      "type": "object",
+      "description": "Something an app did as the group.",
+      "required": [
+        "member",
+        "action",
+        "at"
+      ],
+      "properties": {
+        "member": {
+          "type": "string",
+          "format": "did",
+          "description": "Who let the app in."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "The app's OAuth client id."
+        },
+        "action": {
+          "type": "string",
+          "description": "The method it called, or the record it wrote."
+        },
+        "at": {
+          "type": "string",
+          "format": "datetime"
         }
       }
     }

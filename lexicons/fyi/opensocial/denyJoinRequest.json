@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "member"],
+          "required": [
+            "group",
+            "member"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -28,7 +31,14 @@
         {
           "name": "JoinRequestNotFound"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }

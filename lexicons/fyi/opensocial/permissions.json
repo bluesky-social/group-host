@@ -8,7 +8,9 @@
       "description": "Group-wide grants for each role, in the members space: the OAuth scopes the role holds and the roles its holders may assign. Roles compose by union; there are no deny rules.",
       "record": {
         "type": "object",
-        "required": ["grants"],
+        "required": [
+          "grants"
+        ],
         "properties": {
           "grants": {
             "type": "array",
@@ -29,7 +31,11 @@
     "grant": {
       "type": "object",
       "description": "Scopes a role is granted across the group, and the roles its holders may assign.",
-      "required": ["role", "scopes", "assignable"],
+      "required": [
+        "role",
+        "scopes",
+        "assignable"
+      ],
       "properties": {
         "role": {
           "type": "string",
@@ -41,9 +47,8 @@
           "maxLength": 100,
           "description": "OAuth scopes, one per item. May include permission sets. `repo:` scopes are the public-repo collections holders may write as the group.",
           "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#scopeRef"
           }
         },
         "assignable": {
@@ -51,8 +56,8 @@
           "maxLength": 100,
           "description": "Roles holders may grant or revoke, and whose holders they may eject.",
           "items": {
-            "type": "string",
-            "maxLength": 64
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#roleRef"
           }
         }
       }

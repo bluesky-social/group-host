@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "displayName"],
+          "required": [
+            "group",
+            "displayName"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -57,9 +60,8 @@
               "type": "array",
               "maxLength": 10,
               "items": {
-                "type": "string",
-                "maxGraphemes": 64,
-                "maxLength": 640
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#topicRef"
               },
               "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
             },
@@ -67,20 +69,26 @@
               "type": "array",
               "maxLength": 5,
               "items": {
-                "type": "string",
-                "format": "language"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#languageRef"
               },
               "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
             },
             "avatar": {
               "type": "blob",
-              "accept": ["image/png", "image/jpeg"],
+              "accept": [
+                "image/png",
+                "image/jpeg"
+              ],
               "maxSize": 1000000,
               "description": "The group's avatar, as returned by uploadImage. Omit to keep the current one; null to clear it."
             },
             "banner": {
               "type": "blob",
-              "accept": ["image/png", "image/jpeg"],
+              "accept": [
+                "image/png",
+                "image/jpeg"
+              ],
               "maxSize": 1000000,
               "description": "The group's banner, as returned by uploadImage. Omit to keep the current one; null to clear it."
             }
@@ -91,7 +99,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["uri", "cid"],
+          "required": [
+            "uri",
+            "cid"
+          ],
           "properties": {
             "uri": {
               "type": "string",

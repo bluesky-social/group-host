@@ -4,15 +4,14 @@
 // schema already published is evolved, never changed, with records and
 // clients written to it out there.
 //
-//   node harness/lexicons.mjs [base] [--keep]    base: a git revision; where this
+//   node harness/lexicons.mjs [base]    base: a git revision; where this
 //                                       branch left origin/main if that
 //                                       exists, else none
 //
-// Prints each problem as `nsid#def.path: what`, failing on any that
-// harness/lexicons-kept.txt does not hold (see below).
+// Prints each problem as `nsid#def.path: what`, failing if there is any.
 
 import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -31,7 +30,7 @@ const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8'
 // main, on what it changed: a feature branch behind main has not taken
 // back what main added since. A pull into main is checked merged with it,
 // so that is main itself.
-const base = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? (() => {
+const base = process.argv[2] ?? (() => {
   try {
     return git('merge-base', 'HEAD', 'origin/main').trim()
   } catch {
@@ -49,7 +48,16 @@ const problems = []
 const say = (at, what) => retracted.has(at) || problems.push(`${at}: ${what}`)
 
 // goat (github.com/bluesky-social/goat), one finding a line.
-const kept = new Set([])
+// The schemas held to the guide are this host's own. Those under
+// lexicons/upstream and community.lexicon.* are others', copied as they
+// are for what ours refer to, and are only checked to grow from main's.
+const ours = (id) => typeof id === 'string' && id.startsWith('fyi.opensocial.')
+
+// What the space alpha brings, which goat does not know yet: a space's
+// reference (format `space-ref`), and a permission over a space
+// (`resource: space`). Both are the alpha's spec, not a style to fix.
+const alpha = (found) =>
+  found.message === 'unknown string format: space-ref' || found.message === 'unsupported permission resource: space'
 let linted
 try {
   linted = execFileSync('goat', ['lex', 'lint', '--json', 'lexicons/'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
@@ -72,8 +80,8 @@ const unknownSpace = (found) =>
   found['lint-name'] === 'schema-json-parse' && found.message === 'unexpected schema type: space' && spaces.has(found['file-path'])
 for (const line of linted.split('\n').filter(Boolean)) {
   const found = JSON.parse(line)
-  if (unknownSpace(found)) continue
-  if (!kept.has(`${found.nsid} ${found['lint-name']}`)) say(found.nsid ?? found['file-path'], `${found['lint-name']}: ${found.message}`)
+  if (unknownSpace(found) || alpha(found) || !ours(found.nsid)) continue
+  say(found.nsid, `${found['lint-name']}: ${found.message}`)
 }
 
 /// Walks every schema in `def`, calling `visit(schema, path)`.
@@ -94,6 +102,7 @@ const now = new Map()
 for (const file of files(dir)) {
   const doc = JSON.parse(readFileSync(file, 'utf8'))
   now.set(relative(root, file), doc)
+  if (!ours(doc.id)) continue
   // What people write: records, the shapes beside them, and what is sent
   // in. What the server answers it bounds itself, as it does a view, which
   // only an answer holds, wherever it is defined.
@@ -108,7 +117,10 @@ for (const file of files(dir)) {
       if (kept && s.type === 'string' && !s.format && !s.enum && !s.knownValues && s.maxLength === undefined && s.const === undefined)
         say(path, 'a string without a format needs a maxLength')
       if (s.type === 'union' && s.closed) say(path, 'unions stay open')
-      if (s.type === 'string' && s.format === 'handle') say(path, 'accounts by DID, not handle')
+      // An account is named by its DID. Its own handle, as `handle`, beside
+      // its DID or as the name being chosen, is the one place a handle goes.
+      if (s.type === 'string' && s.format === 'handle' && !path.endsWith('.handle'))
+        say(path, 'accounts by DID, not handle')
     })
   }
 }
@@ -204,6 +216,7 @@ if (base) {
     for (const [name, def] of Object.entries(before.defs ?? {})) walk(def, `${before.id}#${name}`, (_, path) => published.add(path))
   }
   for (const doc of now.values()) {
+    if (!ours(doc.id)) continue
     for (const [name, def] of Object.entries(doc.defs ?? {})) {
       walk(def, `${doc.id}#${name}`, (s, path) => {
         const param = path.includes('.parameters.')
@@ -214,18 +227,6 @@ if (base) {
   }
 }
 
-// What the prototype's schemas came with: debt, listed so the check passes
-// on it meanwhile, which the pull that builds each part pays off, taking
-// its lines out. A line each, as this prints it. `--keep` writes what it
-// finds now; a finding not listed fails.
-const keptFile = join(root, 'harness/lexicons-kept.txt')
-if (process.argv.includes('--keep')) {
-  writeFileSync(keptFile, problems.sort().join('\n') + '\n')
-  console.log(`kept ${problems.length} findings in harness/lexicons-kept.txt`)
-  process.exit(0)
-}
-const inherited = new Set(readFileSync(keptFile, 'utf8').split('\n').filter(Boolean))
-const fresh = problems.filter((p) => !inherited.has(p))
-for (const p of fresh) console.log(p)
-if (fresh.length) process.exit(1)
+for (const p of problems) console.log(p)
+if (problems.length) process.exit(1)
 console.log(`lexicons: as the guide asks${base ? `, and only grown since ${base}` : ''}`)

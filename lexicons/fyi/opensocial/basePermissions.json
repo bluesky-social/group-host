@@ -119,7 +119,8 @@
             "fyi.opensocial.getActorGroups"
           ]
         }
-      ]
+      ],
+      "description": "What an app asks a member for to take part in their groups, and to act for those where they hold a role."
     }
   }
 }

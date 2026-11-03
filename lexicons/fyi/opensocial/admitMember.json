@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "did"],
+          "required": [
+            "group",
+            "did"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -23,12 +26,19 @@
             "roles": {
               "type": "array",
               "items": {
-                "type": "string",
-                "maxLength": 64
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#roleRef"
               },
               "description": "The roles to give. Omitted gives the group's default roles."
             }
           }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
         }
       }
     }

@@ -7,7 +7,9 @@
       "description": "An app's pending request to sign in as a group, as the caller would approve it: the app, the groups the caller may act for, and for each one what the caller's roles let the app do. Called by the console's approval page, with service auth from the caller's own PDS.",
       "parameters": {
         "type": "params",
-        "required": ["requestUri"],
+        "required": [
+          "requestUri"
+        ],
         "properties": {
           "requestUri": {
             "type": "string",
@@ -19,7 +21,11 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["client", "groups", "requested"],
+          "required": [
+            "client",
+            "groups",
+            "requested"
+          ],
           "properties": {
             "client": {
               "type": "ref",
@@ -28,7 +34,8 @@
             "requested": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#scopeRef"
               },
               "description": "The scope values the app asked for."
             },
@@ -63,11 +70,10 @@
     },
     "client": {
       "type": "object",
-      "required": ["id"],
+      "required": [
+        "clientId"
+      ],
       "properties": {
-        "id": {
-          "type": "string"
-        },
         "name": {
           "type": "string"
         },
@@ -78,12 +84,21 @@
         "logo": {
           "type": "string",
           "format": "uri"
+        },
+        "clientId": {
+          "type": "string"
         }
       }
     },
     "group": {
       "type": "object",
-      "required": ["did", "handle", "roles", "granted", "withheld"],
+      "required": [
+        "did",
+        "handle",
+        "roles",
+        "granted",
+        "withheld"
+      ],
       "properties": {
         "did": {
           "type": "string",
@@ -102,20 +117,23 @@
         "roles": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#roleRef"
           }
         },
         "granted": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#scopeRef"
           },
           "description": "The requested scope values the caller's roles let the app have."
         },
         "withheld": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#scopeRef"
           },
           "description": "The requested scope values the app will not get."
         }
@@ -123,7 +141,10 @@
     },
     "label": {
       "type": "object",
-      "required": ["scope", "text"],
+      "required": [
+        "scope",
+        "text"
+      ],
       "properties": {
         "scope": {
           "type": "string"

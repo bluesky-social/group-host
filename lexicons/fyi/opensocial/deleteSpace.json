@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "space"],
+          "required": [
+            "group",
+            "space"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -27,7 +30,14 @@
         {
           "name": "WellKnownSpace"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }

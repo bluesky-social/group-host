@@ -9,10 +9,19 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["requestUri", "group"],
+          "required": [
+            "requestUri",
+            "group"
+          ],
           "properties": {
-            "requestUri": { "type": "string" },
-            "group": { "type": "string", "format": "did" }
+            "requestUri": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "group": {
+              "type": "string",
+              "format": "did"
+            }
           }
         }
       },
@@ -20,13 +29,25 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["redirectUrl"],
+          "required": [
+            "redirectUrl"
+          ],
           "properties": {
-            "redirectUrl": { "type": "string", "format": "uri" }
+            "redirectUrl": {
+              "type": "string",
+              "format": "uri"
+            }
           }
         }
       },
-      "errors": [{ "name": "ExpiredRequest" }, { "name": "Forbidden" }]
+      "errors": [
+        {
+          "name": "ExpiredRequest"
+        },
+        {
+          "name": "Forbidden"
+        }
+      ]
     }
   }
 }

@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "space"],
+          "required": [
+            "group",
+            "space"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -21,12 +24,15 @@
               "format": "space-ref"
             },
             "name": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 640,
+              "maxGraphemes": 64
             },
             "readableBy": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#audience"
               }
             },
             "credentialScopes": {
@@ -40,11 +46,19 @@
             "writableBy": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#audience"
               },
               "description": "Who may write into the space in their own name: role ids, or 'public' for anyone signed in. Absent is any member. Empty puts it back to any member."
             }
           }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
         }
       }
     }

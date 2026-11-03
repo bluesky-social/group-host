@@ -8,7 +8,10 @@
       "description": "The group's profile. Written by the group authority into the meta space.",
       "record": {
         "type": "object",
-        "required": ["displayName", "joinPolicy"],
+        "required": [
+          "displayName",
+          "joinPolicy"
+        ],
         "properties": {
           "displayName": {
             "type": "string",
@@ -22,12 +25,18 @@
           },
           "avatar": {
             "type": "blob",
-            "accept": ["image/png", "image/jpeg"],
+            "accept": [
+              "image/png",
+              "image/jpeg"
+            ],
             "maxSize": 1000000
           },
           "banner": {
             "type": "blob",
-            "accept": ["image/png", "image/jpeg"],
+            "accept": [
+              "image/png",
+              "image/jpeg"
+            ],
             "maxSize": 1000000
           },
           "url": {
@@ -37,7 +46,11 @@
           },
           "joinPolicy": {
             "type": "string",
-            "knownValues": ["open", "approval", "invite"],
+            "knownValues": [
+              "open",
+              "approval",
+              "invite"
+            ],
             "description": "How new members get in: open admits anyone, approval queues a join request for review, invite requires an invitation. An invitation admits its recipient under any policy.",
             "maxLength": 128
           },
@@ -59,9 +72,8 @@
             "type": "array",
             "maxLength": 10,
             "items": {
-              "type": "string",
-              "maxGraphemes": 64,
-              "maxLength": 640
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#topicRef"
             },
             "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
           },
@@ -69,8 +81,8 @@
             "type": "array",
             "maxLength": 5,
             "items": {
-              "type": "string",
-              "format": "language"
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#languageRef"
             },
             "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
           },

@@ -9,7 +9,12 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "role", "name", "actions"],
+          "required": [
+            "group",
+            "role",
+            "name",
+            "actions"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -22,10 +27,14 @@
             },
             "name": {
               "type": "string",
-              "description": "What the role is called. Written as the role record's displayName."
+              "description": "What the role is called. Written as the role record's displayName.",
+              "maxLength": 640,
+              "maxGraphemes": 64
             },
             "description": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 3000,
+              "maxGraphemes": 300
             },
             "bot": {
               "type": "boolean",
@@ -46,14 +55,15 @@
             "assignable": {
               "type": "array",
               "items": {
-                "type": "string",
-                "maxLength": 64
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#roleRef"
               }
             },
             "repoCollections": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#collectionRef"
               },
               "description": "Collections holders may write in the group's public repo as the group, `*` for any; written as `repo:` scopes. Omitted keeps the role's current value."
             }
@@ -64,7 +74,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["uri", "cid"],
+          "required": [
+            "uri",
+            "cid"
+          ],
           "properties": {
             "uri": {
               "type": "string",

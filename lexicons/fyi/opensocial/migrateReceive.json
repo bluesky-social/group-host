@@ -9,20 +9,27 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "serviceJwt", "snapshot", "exportToken"],
+          "required": [
+            "did",
+            "serviceJwt",
+            "snapshot",
+            "exportToken"
+          ],
           "properties": {
             "did": {
               "type": "string",
               "format": "did"
             },
             "serviceJwt": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 8192
             },
             "snapshot": {
               "type": "unknown"
             },
             "exportToken": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 8192
             }
           }
         }
@@ -31,7 +38,9 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["recommendedCreds"],
+          "required": [
+            "recommendedCreds"
+          ],
           "properties": {
             "recommendedCreds": {
               "type": "unknown"

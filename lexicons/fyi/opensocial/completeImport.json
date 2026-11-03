@@ -9,9 +9,15 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "operation"],
+          "required": [
+            "did",
+            "operation"
+          ],
           "properties": {
-            "did": { "type": "string", "format": "did" },
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
             "operation": {
               "type": "unknown",
               "description": "The signed PLC operation, as com.atproto.identity.signPlcOperation answers it."
@@ -23,17 +29,43 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "handle", "address", "meta", "members"],
+          "required": [
+            "did",
+            "handle",
+            "address",
+            "meta",
+            "members"
+          ],
           "properties": {
-            "did": { "type": "string", "format": "did" },
-            "handle": { "type": "string", "format": "handle" },
-            "address": { "type": "string", "format": "handle" },
-            "meta": { "type": "string" },
-            "members": { "type": "string" }
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "handle": {
+              "type": "string",
+              "format": "handle"
+            },
+            "address": {
+              "type": "string",
+              "description": "The hostname its site and methods answer at."
+            },
+            "meta": {
+              "type": "string"
+            },
+            "members": {
+              "type": "string"
+            }
           }
         }
       },
-      "errors": [{ "name": "NotFound" }, { "name": "InvalidOperation" }]
+      "errors": [
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "InvalidOperation"
+        }
+      ]
     }
   }
 }

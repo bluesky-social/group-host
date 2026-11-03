@@ -9,25 +9,68 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["handle", "displayName", "scope", "client_id"],
+          "required": [
+            "handle",
+            "displayName",
+            "scope",
+            "clientId"
+          ],
           "properties": {
-            "handle": { "type": "string", "format": "handle" },
-            "displayName": { "type": "string", "maxGraphemes": 64, "maxLength": 640 },
-            "description": { "type": "string", "maxGraphemes": 300, "maxLength": 3000 },
-            "joinPolicy": { "type": "string" },
-            "metaReadableBy": { "type": "array", "items": { "type": "string" } },
+            "handle": {
+              "type": "string",
+              "format": "handle"
+            },
+            "displayName": {
+              "type": "string",
+              "maxGraphemes": 64,
+              "maxLength": 640
+            },
+            "description": {
+              "type": "string",
+              "maxGraphemes": 300,
+              "maxLength": 3000
+            },
+            "joinPolicy": {
+              "type": "string",
+              "knownValues": [
+                "fyi.opensocial.profile#open",
+                "fyi.opensocial.profile#request",
+                "fyi.opensocial.profile#invite"
+              ]
+            },
+            "metaReadableBy": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#audience"
+              }
+            },
             "stewards": {
               "type": "array",
-              "items": { "type": "string", "format": "did" },
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#accountRef"
+              },
               "description": "Accounts that run the group alongside the founder."
             },
             "scope": {
               "type": "string",
-              "description": "The OAuth scope the app wants on the group. Must include `atproto`, and every entry must be one the app's client metadata declares."
+              "description": "The OAuth scope the app wants on the group. Must include `atproto`, and every entry must be one the app's client metadata declares.",
+              "maxLength": 2048
             },
-            "client_id": { "type": "string" },
-            "client_assertion_type": { "type": "string" },
-            "client_assertion": { "type": "string" }
+            "clientId": {
+              "type": "string",
+              "maxLength": 2048,
+              "description": "The app's OAuth client id, its client metadata's URL."
+            },
+            "clientAssertionType": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "clientAssertion": {
+              "type": "string",
+              "maxLength": 8192
+            }
           }
         }
       },
@@ -35,11 +78,25 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["did", "meta", "members", "session"],
+          "required": [
+            "did",
+            "meta",
+            "members",
+            "session"
+          ],
           "properties": {
-            "did": { "type": "string", "format": "did" },
-            "meta": { "type": "string", "format": "space-ref" },
-            "members": { "type": "string", "format": "space-ref" },
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "meta": {
+              "type": "string",
+              "format": "space-ref"
+            },
+            "members": {
+              "type": "string",
+              "format": "space-ref"
+            },
             "session": {
               "type": "unknown",
               "description": "An OAuth token response (access_token, token_type, refresh_token, expires_in, scope, sub), as /oauth/token returns it."
@@ -48,10 +105,18 @@
         }
       },
       "errors": [
-        { "name": "UntrustedApp" },
-        { "name": "InvalidScope" },
-        { "name": "use_dpop_nonce" },
-        { "name": "HandleTaken" }
+        {
+          "name": "UntrustedApp"
+        },
+        {
+          "name": "InvalidScope"
+        },
+        {
+          "name": "use_dpop_nonce"
+        },
+        {
+          "name": "HandleTaken"
+        }
       ]
     }
   }

@@ -9,7 +9,11 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "subject", "val"],
+          "required": [
+            "group",
+            "subject",
+            "val"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -18,10 +22,14 @@
             },
             "subject": {
               "type": "union",
-              "refs": ["com.atproto.admin.defs#repoRef", "com.atproto.repo.strongRef"]
+              "refs": [
+                "com.atproto.admin.defs#repoRef",
+                "com.atproto.repo.strongRef"
+              ]
             },
             "val": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 128
             }
           }
         }
@@ -30,7 +38,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["uri", "cid"],
+          "required": [
+            "uri",
+            "cid"
+          ],
           "properties": {
             "uri": {
               "type": "string",

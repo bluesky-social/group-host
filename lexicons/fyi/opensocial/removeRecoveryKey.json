@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "key"],
+          "required": [
+            "group",
+            "key"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -18,7 +21,8 @@
             },
             "key": {
               "type": "string",
-              "description": "A did:key (secp256k1 or P-256). Only the public key: the host never sees the private half."
+              "description": "A did:key (secp256k1 or P-256). Only the public key: the host never sees the private half.",
+              "format": "did"
             }
           }
         }
@@ -36,7 +40,14 @@
         {
           "name": "NotController"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }

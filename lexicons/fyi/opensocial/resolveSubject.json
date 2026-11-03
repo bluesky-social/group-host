@@ -9,7 +9,11 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "subject", "action"],
+          "required": [
+            "group",
+            "subject",
+            "action"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -23,12 +27,25 @@
             },
             "action": {
               "type": "string",
-              "knownValues": ["resolve", "escalate", "note"]
+              "knownValues": [
+                "resolve",
+                "escalate",
+                "note"
+              ]
             },
             "note": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 3000,
+              "maxGraphemes": 300
             }
           }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
         }
       }
     }

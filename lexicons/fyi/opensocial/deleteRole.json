@@ -9,7 +9,10 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["group", "role"],
+          "required": [
+            "group",
+            "role"
+          ],
           "properties": {
             "group": {
               "type": "string",
@@ -27,7 +30,14 @@
         {
           "name": "RoleInUse"
         }
-      ]
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
     }
   }
 }
