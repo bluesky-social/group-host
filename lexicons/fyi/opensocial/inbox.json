@@ -6,12 +6,9 @@
       "type": "space",
       "key": "literal:self",
       "name": "Inbox",
-      "description": "Each person's own inbox, hosted by them rather than by a group: where groups' invites arrive, where whoever puts them in a conversation leaves a pointer to it, and where they keep how far they've read their conversations and their groups' chats, boards and calendars, which only they read.",
+      "description": "Each person's own inbox, hosted by them rather than by a group: where groups' invites arrive.",
       "collections": [
-        "fyi.opensocial.invite",
-        "fyi.opensocial.conversation.pointer",
-        "fyi.opensocial.conversation.state",
-        "fyi.opensocial.readState"
+        "fyi.opensocial.invite"
       ]
     }
   }

@@ -3,22 +3,24 @@
 The group host is one server. It is the PDS for every group it hosts, the
 authority for their private spaces, their OAuth server, and the web server
 for the console. Members keep their own accounts on their own PDSes,
-anywhere on the network. opensocial's `docs/design/README.md` explains why
-a group needs each of those; this host is that one, written again.
+anywhere on the network. The prototype's `docs/design/README.md`
+(`~/code/opensocial`) explains why a group needs each of those.
 
-## Why again, and why this way
+## From the prototype
 
-The TypeScript host is built on `@atproto/*` packages, an embedded
-reference PDS and the space alpha's libraries among them, and on Express
-and React. This one is built as knotless is: Rust for the server, with
-the atproto it needs written for it and held to a 100% coverage gate;
-SvelteKit for the console, its types made from the lexicons; and the
-lexicons checked against the style guide and against what is published.
+opensocial.fyi is a prototype, built in TypeScript on `@atproto/*`
+packages (an embedded reference PDS and the space alpha's libraries among
+them), Express and React. It found what a group host has to do. This host
+does what the prototype's core does, built as knotless is: Rust for the
+server, with the atproto it needs written for it and held to a 100%
+coverage gate; SvelteKit for the console, its types made from the
+lexicons; the lexicons checked against the style guide.
 
-It stays wire-compatible. The `fyi.opensocial.*` methods answer as their
-lexicons say, so the sites, the templates and apps written against
-opensocial.fyi work against it unchanged, and a group can move between
-the two hosts with `migrate*`.
+It is not a one-to-one port. Each part keeps what the prototype got right
+and changes what it did not, and its methods and records take the shape
+that is right here; the pull that builds a part says what changed. The
+lexicons start as the prototype's core and are this host's to change until
+they are published from here.
 
 ## The pieces
 
@@ -29,17 +31,18 @@ the two hosts with `migrate*`.
 | `crates/group-host-mcp` | the core's methods as MCP tools, asked as the member who connected it |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command |
 | `web/` | the console, where people start and run groups and approve apps |
-| `lexicons/` | the schemas, as opensocial publishes them |
+| `lexicons/` | the schemas, starting from the prototype's core |
 
-What the TypeScript host's modules bring (the sites at each group's
-address, templates, drafts, the network index, notifications) is not part
-of this port. The core imports nothing of them there; here, they would
-come as crates beside `group-host`, following it rather than called by it.
+Only the prototype's core comes over. What its modules bring (the sites
+at each group's address, templates, drafts, the network index,
+notifications) is not part of this host; if something like them comes
+later, it comes as crates beside `group-host`, following it rather than
+called by it.
 
 ## The order
 
-Each step is a pull, or a few, with its tests ported first. A step lists
-the TypeScript it replaces, under `packages/group-host/src` unless it
+Each step is a pull, or a few, with its tests first. A step names the
+prototype's code it learns from, under `packages/group-host/src` unless it
 says otherwise.
 
 1. **Scaffold.** The workspace, the console's shell, the lexicons, the

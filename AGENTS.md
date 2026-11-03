@@ -2,11 +2,12 @@
 
 For every agent working here: CLAUDE.md is this file, imported.
 
-This is opensocial's group host, written again in Rust and Svelte as
-knotless is built: the core of `~/code/opensocial` (`packages/group-host`)
-and its console (the console's pages in `apps/web`). That TypeScript host is
-the reference for what each part does. `docs/design/README.md` says what is
-here, what is still to come over, and in what order.
+This is a group host for atproto, built in Rust and Svelte as knotless is.
+Its first take is the prototype at `~/code/opensocial`: the core of its host
+(`packages/group-host`) and the console's pages (`apps/web`). That prototype
+is what we learned from, not a spec: this host does what its core does, in
+the shape that is right here. `docs/design/README.md` says what is here,
+what is still to come, and in what order.
 
 Use `rustup run stable cargo` (the Justfile's `cargo`), not a system cargo.
 Node is the version `.node-version` names, CI's.
@@ -30,24 +31,25 @@ fixed, with `CARGO_BUILD_JOBS=2`: other agents build on this machine too.
   counts as a line never run: bind the value first, or use a named
   function, rather than lowering the gate.
 
-## Porting
+## Building from the prototype
 
-Each pull brings over one part of the TypeScript host, whole: its methods,
-its records, its tests, and its page in `docs/`. Its tests are the spec.
-Port the cases the TypeScript tests hold, as Rust tests here, before
-porting the code they test, and keep their names recognisable.
+Each pull brings one part of the host, whole: its methods, its records,
+its tests, and its page in `docs/`. Read how the prototype does that part,
+and its tests, for what it has to handle; then write it as it should be.
 
-- The host stays wire-compatible with opensocial's. The `fyi.opensocial.*`
-  methods answer as their lexicons say, so the sites, the templates and
-  any app written against opensocial.fyi work against this host
-  unchanged. A method's behaviour that its lexicon does not pin down
-  follows the TypeScript host's, unless the pull says why not.
+- Not one to one. A method, record or field the prototype has can be
+  renamed, merged, reshaped or left out when that makes the host simpler
+  or clearer; the pull says what changed from the prototype and why. Only
+  the prototype's core comes over, never its sites module (sites,
+  templates, drafts, the network index, notifications).
+- Its tests say what a part must get right; the cases they hold become
+  tests here, in this host's terms, before the code they test.
 - The atproto primitives (DRISL, CIDs, keys, the MST, CAR, PLC, service
   auth) are this repo's own, in `crates/atproto`, as knotless writes its
   own: few dependencies, every line under the gate. Check each against
   atproto's interop test vectors (github.com/bluesky-social/atproto-interop-tests)
   and the reference implementation, not only against itself.
-- What the TypeScript host gets from `@atproto/*` packages (a PDS's repo
+- What the prototype gets from `@atproto/*` packages (a PDS's repo
   handling, the OAuth provider, the space alpha) is written here as far as
   the host uses it, and no further.
 
@@ -92,21 +94,21 @@ porting the code they test, and keep their names recognisable.
 
 ## Lexicons
 
-The schemas under `lexicons/` came from opensocial, where they are
-published and read by its clients: they are evolved, never changed, with
-new fields optional and nothing removed, renamed, retyped, made required or
-narrowed. A new or changed schema follows the Lexicon Style Guide
+The schemas under `lexicons/` are the prototype's core, as a starting
+point: they are this host's to change until they are published from here.
+Once one is published, it is evolved, never changed, with new fields
+optional and nothing removed, renamed, retyped, made required or narrowed.
+A new or changed schema follows the Lexicon Style Guide
 (https://atproto.com/guides/lexinomicon) and passes `just lex`: goat's
 linter, then `harness/lexicons.mjs` for what it does not see (`knownValues`
 rather than `enum`; objects in new arrays; a description on every `main`;
 a `maxLength` on strings people write; accounts by DID), and that every
-schema only grows from main's. What they had when they came over is kept in
-`harness/lexicons-kept.txt`, one finding a line; a new finding fails. The
-space alpha's `space` type and `space-ref` format are among those goat does
-not know yet.
-
-A change to a lexicon here is a change to opensocial's: make it there too,
-or say in the pull why not.
+schema only grows from main's. The findings the prototype's schemas came
+with are listed in `harness/lexicons-kept.txt`, one a line, so the check
+passes on them meanwhile; a new finding fails. They are debt: the pull that
+builds a part fixes its schemas' findings and takes their lines out. The
+space alpha's `space` type and `space-ref` format stay, as goat does not
+know them yet.
 
 ## Docs
 
@@ -114,14 +116,14 @@ or say in the pull why not.
 the reference lists what. A change that alters what a page says updates
 that page in the same pull:
 
-- what is ported and what is next: `docs/design/README.md`
+- what is built and what is next: `docs/design/README.md`
 - an environment variable: `docs/reference/config.md`
 - a command of `opensocial`, or a `just` recipe: `docs/reference/cli.md`
 - building, testing, the checks: `docs/development.md`
 
 Design pages for each part (groups, membership, signing in, moderation)
-come over from opensocial's `docs/design/` with the part, rewritten to the
-code here.
+arrive with the part, written from the code here; the prototype's
+`docs/design/` is background, not a source to copy.
 
 ## What CI checks
 

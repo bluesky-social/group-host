@@ -1,9 +1,9 @@
 # group-host
 
-The opensocial group host, in Rust: the PDS, space authority and OAuth
-server for groups on atproto, and the console where people start and run
-them. It is opensocial's `packages/group-host` and its console, written
-again as knotless is built, and wire-compatible with it.
+A group host for atproto, in Rust: the PDS, space authority and OAuth
+server for groups, and the console where people start and run them. It
+does what the core of the opensocial.fyi prototype does, built as knotless
+is, and not one to one: each part takes the shape that is right here.
 
 ```sh
 just setup
@@ -12,7 +12,7 @@ just web-dev    # the console
 ```
 
 [docs/design](docs/design/README.md) says how it is put together and what
-is still to come over; [docs/development.md](docs/development.md) how to
+is still to come; [docs/development.md](docs/development.md) how to
 build and test it. AGENTS.md is for agents working here.
 
 Licensed under MIT or Apache-2.0, at your option.

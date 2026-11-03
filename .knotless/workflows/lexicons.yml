@@ -1,6 +1,6 @@
 # The lexicons, as `just lex` checks them: goat's lint, what it does not
 # see, and that they only grow from main's (harness/lexicons.mjs), less
-# what they had when they came from opensocial. goat is kept between runs.
+# the findings the prototype's schemas came with. goat is kept between runs.
 image: node:24.22.1
 on:
   push: {refs: [refs/heads/main]}

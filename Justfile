@@ -26,8 +26,8 @@ cov-html:
     {{cargo}} llvm-cov --workspace --ignore-filename-regex '{{ignore}}' --html --open
 
 # The lexicons: goat's lint (github.com/bluesky-social/goat), what it does
-# not see, and that they only grow from main's; less what they had when they
-# came from opensocial (harness/lexicons-kept.txt).
+# not see, and that they only grow from main's; less the findings the
+# prototype's schemas came with (harness/lexicons-kept.txt).
 lex:
     node harness/lexicons.mjs
 

@@ -214,10 +214,10 @@ if (base) {
   }
 }
 
-// What the schemas had when they came from opensocial, already published
-// there and read by its clients, so kept as they are: a line each, as this
-// prints it. `--keep` writes what it finds now; a finding not there fails.
-// A line that no longer matches anything can go.
+// What the prototype's schemas came with: debt, listed so the check passes
+// on it meanwhile, which the pull that builds each part pays off, taking
+// its lines out. A line each, as this prints it. `--keep` writes what it
+// finds now; a finding not listed fails.
 const keptFile = join(root, 'harness/lexicons-kept.txt')
 if (process.argv.includes('--keep')) {
   writeFileSync(keptFile, problems.sort().join('\n') + '\n')

@@ -1,7 +1,7 @@
-//! The opensocial group host: the PDS for every group it runs, the
+//! The group host: the PDS for every group it runs, the
 //! authority for their spaces, their OAuth server, and the
 //! `fyi.opensocial.*` methods that run a group. `docs/design/README.md`
-//! says how it is built and what is still to come from the TypeScript host.
+//! says how it is built and what is still to come.
 
 pub mod config;
 pub mod xrpc;

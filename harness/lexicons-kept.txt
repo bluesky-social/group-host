@@ -4,6 +4,8 @@ com.atproto.admin.defs#statusAttr.ref: a string without a format needs a maxLeng
 com.atproto.admin.defs#threatSignature.property: a string without a format needs a maxLength
 com.atproto.admin.defs#threatSignature.value: a string without a format needs a maxLength
 com.atproto.label.defs: large-string: large max length
+com.atproto.managedspace.checkUserAccess: lexicon-schema: unknown string format: space-ref
+com.atproto.moderation.createReport: field-name-syntax: name is a commonly reserved keyword: id
 com.atproto.repo.strongRef#main: a main def needs a description
 com.atproto.server.defs#inviteCode.code: a string without a format needs a maxLength
 com.atproto.server.defs#inviteCode.createdBy: a string without a format needs a maxLength
