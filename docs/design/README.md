@@ -53,7 +53,8 @@ says otherwise.
    atproto's interop test vectors (`crates/atproto/tests/interop`):
    - the data model: DRISL and CIDs, TIDs, the identifiers' syntax, and
      secp256k1 and P-256 keys as multikeys and `did:key`s (done);
-   - the repo: the MST, CAR files, signed commits;
+   - the repo: the MST, CAR files, signed commits, and the firehose's
+     commit proofs (done);
    - identity: PLC operations, DID documents, service-auth JWTs.
 3. **Accounts and repos.** The SQLite store, group accounts and their
    keys, `did:plc` creation, records and commits, the firehose

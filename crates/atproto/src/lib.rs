@@ -8,12 +8,16 @@
 //! `tests/interop`. The parts still to come are in `docs/design/README.md`.
 
 pub mod base32;
+pub mod car;
 pub mod cid;
+pub mod commit;
 pub mod drisl;
 pub mod keys;
+pub mod mst;
 pub mod syntax;
 pub mod tid;
 
 pub use cid::Cid;
+pub use commit::Commit;
 pub use drisl::Value;
 pub use keys::{Curve, Keypair, PublicKey};
