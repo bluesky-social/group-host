@@ -63,7 +63,8 @@ says otherwise.
 3. **Accounts and repos.** The SQLite store, group accounts and their
    keys, `did:plc` creation, records and commits, `sync.*` and `did:web`
    for the host (done); the firehose (`subscribeRepos`, sync 1.1's
-   commits with their proofs) and crawlers (done); blobs:
+   commits with their proofs) and crawlers (done); blobs, kept on disk
+   until no record references them (done):
    `pds/*`, `db/*`, `didWeb.ts`, `actors.ts`.
 4. **Groups and spaces.** `createGroup`, `getGroup`, `listGroups`,
    handles, profile, rules, activating and deleting; the meta and members

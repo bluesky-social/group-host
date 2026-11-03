@@ -43,12 +43,43 @@ const MIGRATIONS: &[&str] = &[
         body BLOB NOT NULL
     );
 ",
+    "
+    CREATE TABLE blob (
+        did TEXT NOT NULL REFERENCES account (did),
+        cid TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        temporary INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (did, cid)
+    );
+    CREATE INDEX blob_temporary ON blob (temporary, created_at);
+    CREATE TABLE record_blob (
+        did TEXT NOT NULL,
+        collection TEXT NOT NULL,
+        rkey TEXT NOT NULL,
+        cid TEXT NOT NULL,
+        PRIMARY KEY (did, collection, rkey, cid)
+    );
+    CREATE INDEX record_blob_cid ON record_blob (did, cid);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (handle) DO NOTHING";
 const PUT_RECORD: &str = "INSERT INTO record (did, collection, rkey, cid, value, rev) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (did, collection, rkey) DO UPDATE SET cid = ?4, value = ?5, rev = ?6";
 const LIST_UP: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey > ?3 ORDER BY rkey LIMIT ?4";
 const LIST_DOWN: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey < ?3 ORDER BY rkey DESC LIMIT ?4";
+const LINKED: &str = "SELECT cid FROM record_blob WHERE did = ?1 AND collection = ?2 AND rkey = ?3";
+const UNLINK: &str = "DELETE FROM record_blob WHERE did = ?1 AND collection = ?2 AND rkey = ?3";
+const LINK: &str =
+    "INSERT OR IGNORE INTO record_blob (did, collection, rkey, cid) VALUES (?1, ?2, ?3, ?4)";
+const KEEP_BLOB: &str = "UPDATE blob SET temporary = 0 WHERE did = ?1 AND cid = ?2";
+const FORGET_ORPHAN: &str = "DELETE FROM blob WHERE did = ?1 AND cid = ?2 AND temporary = 0 AND NOT EXISTS (SELECT 1 FROM record_blob WHERE did = ?1 AND cid = ?2)";
+const PUT_BLOB: &str = "INSERT INTO blob (did, cid, mime_type, size, temporary, created_at) VALUES (?1, ?2, ?3, ?4, 1, ?5) ON CONFLICT (did, cid) DO UPDATE SET mime_type = excluded.mime_type";
+const GET_BLOB: &str = "SELECT mime_type, size, temporary FROM blob WHERE did = ?1 AND cid = ?2";
+const LIST_BLOBS: &str = "SELECT DISTINCT rb.cid FROM record_blob rb JOIN record r ON r.did = rb.did AND r.collection = rb.collection AND r.rkey = rb.rkey WHERE rb.did = ?1 AND r.rev > ?2 AND rb.cid > ?3 ORDER BY rb.cid LIMIT ?4";
+const SWEEP_BLOBS: &str =
+    "DELETE FROM blob WHERE temporary = 1 AND created_at < ?1 RETURNING did, cid";
 const SEQUENCE: &str = "INSERT INTO event (did, kind, body) VALUES (?1, ?2, ?3)";
 const EVENTS: &str = "SELECT seq, kind, body FROM event WHERE seq > ?1 ORDER BY seq LIMIT ?2";
 const ACCOUNTS: &str =
@@ -103,6 +134,14 @@ pub struct Sequenced {
     pub body: Vec<u8>,
 }
 
+/// The blobs the record at `collection/rkey` references now.
+fn linked(tx: &rusqlite::Transaction, did: &str, collection: &str, rkey: &str) -> Result<Vec<Cid>> {
+    let mut q = tx.prepare(LINKED)?;
+    let rows = q.query_map(params![did, collection, rkey], |r| Ok(cid(r.get(0)?)));
+    let rows = rows?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
 fn sequence(tx: &rusqlite::Transaction, did: &str, events: &[Event]) -> Result<()> {
     for e in events {
         let added = tx.execute(SEQUENCE, params![did, e.kind, e.body]);
@@ -111,8 +150,25 @@ fn sequence(tx: &rusqlite::Transaction, did: &str, events: &[Event]) -> Result<(
     Ok(())
 }
 
-/// What a commit changes: a record put, or taken out (`None`).
-pub type Change = (String, String, Option<(Cid, Vec<u8>)>);
+/// What a commit changes at one path: a record put, or taken out.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Change {
+    pub collection: String,
+    pub rkey: String,
+    /// The record's CID and DRISL, or none for a delete.
+    pub put: Option<(Cid, Vec<u8>)>,
+    /// The blobs the record put references.
+    pub blobs: Vec<Cid>,
+}
+
+/// A blob as kept: its type, its size, and whether it waits for a record
+/// to reference it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Blob {
+    pub mime_type: String,
+    pub size: i64,
+    pub temporary: bool,
+}
 
 /// A CID the host wrote: one that does not read is a database broken.
 fn cid(text: String) -> Cid {
@@ -313,8 +369,10 @@ impl Store {
     }
 
     /// Moves `did`'s repo from `prev` to `head`, with `changes` and
-    /// `events`, unless another commit moved it first: `false` then, and
-    /// nothing changes.
+    /// `events`, unless another commit moved it first: none then, and
+    /// nothing changes. Each record's blobs are linked to it and made
+    /// permanent; the blobs no record references any more are forgotten,
+    /// and answered, for their files to go.
     pub fn commit(
         &self,
         did: &str,
@@ -322,7 +380,7 @@ impl Store {
         head: &Head,
         changes: &[Change],
         events: &[Event],
-    ) -> Result<bool> {
+    ) -> Result<Option<Vec<Cid>>> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let moved = tx.execute(
@@ -336,9 +394,25 @@ impl Store {
             ],
         );
         if moved? == 0 {
-            return Ok(false);
+            return Ok(None);
         }
-        for (collection, rkey, put) in changes {
+        let mut unlinked = Vec::new();
+        for Change {
+            collection,
+            rkey,
+            put,
+            blobs,
+        } in changes
+        {
+            unlinked.extend(linked(&tx, did, collection, rkey)?);
+            let cleared = tx.execute(UNLINK, params![did, collection, rkey]);
+            cleared?;
+            for cid in blobs {
+                let link = tx.execute(LINK, params![did, collection, rkey, cid.to_string()]);
+                link?;
+                let kept = tx.execute(KEEP_BLOB, params![did, cid.to_string()]);
+                kept?;
+            }
             let done = match put {
                 Some((cid, value)) => tx.execute(
                     PUT_RECORD,
@@ -351,9 +425,74 @@ impl Store {
             };
             done?;
         }
+        let mut orphans = Vec::new();
+        for cid in unlinked {
+            let gone = tx.execute(FORGET_ORPHAN, params![did, cid.to_string()]);
+            if gone? > 0 {
+                orphans.push(cid);
+            }
+        }
         sequence(&tx, did, events)?;
         tx.commit()?;
-        Ok(true)
+        Ok(Some(orphans))
+    }
+
+    /// Keeps a blob of `did`'s, temporary until a record references it; one
+    /// kept already keeps its standing.
+    pub fn put_blob(
+        &self,
+        did: &str,
+        cid: &Cid,
+        mime_type: &str,
+        size: i64,
+        now: i64,
+    ) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            PUT_BLOB,
+            params![did, cid.to_string(), mime_type, size, now],
+        )?;
+        Ok(())
+    }
+
+    /// `did`'s blob `cid`.
+    pub fn blob(&self, did: &str, cid: &Cid) -> Result<Option<Blob>> {
+        let conn = self.conn();
+        let found = conn.query_row(GET_BLOB, params![did, cid.to_string()], |r| {
+            Ok(Blob {
+                mime_type: r.get(0)?,
+                size: r.get(1)?,
+                temporary: r.get(2)?,
+            })
+        });
+        Ok(found.optional()?)
+    }
+
+    /// The blobs `did`'s records reference, in CID order after `cursor`,
+    /// at most `limit`; with `since`, of records written after that rev.
+    pub fn list_blobs(
+        &self,
+        did: &str,
+        since: Option<&str>,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<Cid>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(LIST_BLOBS)?;
+        let asked = params![did, since.unwrap_or(""), cursor.unwrap_or(""), limit];
+        let rows = q.query_map(asked, |r| Ok(cid(r.get(0)?)));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Forgets the temporary blobs made before `cutoff`, answering them,
+    /// for their files to go.
+    pub fn sweep_blobs(&self, cutoff: i64) -> Result<Vec<(String, Cid)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SWEEP_BLOBS)?;
+        let rows = q.query_map([cutoff], |r| Ok((r.get(0)?, cid(r.get(1)?))));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Up to `limit` events after `cursor`, in order.

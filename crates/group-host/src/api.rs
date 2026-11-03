@@ -168,6 +168,54 @@ pub async fn resolve_handle(State(host): State<Arc<Host>>, Query(p): Params) -> 
     Ok(Json(json!({"did": account.ok_or_else(not_found)?.did})))
 }
 
+/// A blob a record of the account references, served as a download: a
+/// browser neither sniffs nor runs it.
+pub async fn get_blob(
+    State(host): State<Arc<Host>>,
+    Query(p): Params,
+) -> Result<Response, XrpcError> {
+    let did = did_of(&host, param(&p, "did")?)?;
+    let cid = param(&p, "cid")?;
+    let cid = atproto::Cid::parse(cid).map_err(|e| invalid(format!("cid: {e}")))?;
+    let found = host.read_blob(&did, &cid).map_err(XrpcError::internal)?;
+    let not_found = || {
+        XrpcError::new(
+            StatusCode::BAD_REQUEST,
+            "BlobNotFound",
+            format!("no blob {cid} here"),
+        )
+    };
+    let (blob, bytes) = found.ok_or_else(not_found)?;
+    let headers = [
+        (header::CONTENT_TYPE, blob.mime_type),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+        (
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; sandbox".to_string(),
+        ),
+    ];
+    Ok((headers, bytes).into_response())
+}
+
+pub async fn list_blobs(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
+    let did = did_of(&host, param(&p, "did")?)?;
+    let limit = limit(&p)?;
+    let (since, cursor) = (
+        p.get("since").map(String::as_str),
+        p.get("cursor").map(String::as_str),
+    );
+    let cids = host
+        .store
+        .list_blobs(&did, since, cursor, limit)
+        .map_err(XrpcError::internal)?;
+    let cursor = cids
+        .last()
+        .filter(|_| cids.len() == limit as usize)
+        .map(ToString::to_string);
+    let cids: Vec<String> = cids.iter().map(ToString::to_string).collect();
+    Ok(Json(json!({"cids": cids, "cursor": cursor})))
+}
+
 /// The host's own DID document, when its DID is a `did:web` of its address.
 pub async fn did_json(State(host): State<Arc<Host>>) -> Result<Json<Value>, StatusCode> {
     let did = &host.config.service_did;

@@ -4,6 +4,7 @@
 //! says how it is built and what is still to come.
 
 pub mod api;
+pub mod blobs;
 pub mod config;
 pub mod firehose;
 pub mod plc;
@@ -78,6 +79,8 @@ pub fn router(host: Arc<Host>) -> Router {
             get(api::get_latest_commit),
         )
         .route("/xrpc/com.atproto.sync.listRepos", get(api::list_repos))
+        .route("/xrpc/com.atproto.sync.getBlob", get(api::get_blob))
+        .route("/xrpc/com.atproto.sync.listBlobs", get(api::list_blobs))
         .route(
             "/xrpc/com.atproto.sync.subscribeRepos",
             get(firehose::subscribe_repos),
@@ -108,7 +111,17 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;
     println!("listening on {}", listener.local_addr()?);
     tracing::info!(public_url = %config.public_url, did = %config.service_did, "serving");
-    let app = router(Arc::new(Host::open(config)?));
+    let host = Arc::new(Host::open(config)?);
+    // Uploads no record took, swept now and each hour after.
+    let sweeping = host.clone();
+    tokio::spawn(async move {
+        loop {
+            let swept = sweeping.sweep_blobs(time::now_millis());
+            tracing::info!(?swept, "swept the uploads no record took");
+            tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+        }
+    });
+    let app = router(host);
     axum::serve(listener, app)
         .with_graceful_shutdown(stopped())
         .await?;

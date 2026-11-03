@@ -52,6 +52,10 @@ fn refuses_what_does_not_read() {
         "PUBLIC_URL is no origin: https://example.com/path"
     );
     assert_eq!(
+        err(&[("BLOB_UPLOAD_LIMIT", "lots")]),
+        "BLOB_UPLOAD_LIMIT is no number of bytes: lots"
+    );
+    assert_eq!(
         err(&[("HANDLE_DOMAIN", "example.com")]),
         "HANDLE_DOMAIN starts with a dot: .example.com"
     );

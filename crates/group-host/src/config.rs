@@ -23,6 +23,8 @@ pub struct Config {
     pub plc_url: String,
     /// The relays told of this host's news, `PDS_CRAWLERS`, comma-separated.
     pub crawlers: Vec<String>,
+    /// The most bytes one blob may be, `BLOB_UPLOAD_LIMIT`.
+    pub blob_upload_limit: u64,
 }
 
 impl Config {
@@ -58,6 +60,12 @@ impl Config {
             .map(|c| c.trim().trim_end_matches('/').to_string())
             .filter(|c| !c.is_empty())
             .collect();
+        let blob_upload_limit = match var("BLOB_UPLOAD_LIMIT") {
+            Some(l) => l
+                .parse()
+                .with_context(|| format!("BLOB_UPLOAD_LIMIT is no number of bytes: {l}"))?,
+            None => 50 * 1024 * 1024,
+        };
         Ok(Config {
             port,
             public_url,
@@ -66,6 +74,7 @@ impl Config {
             data_dir,
             plc_url,
             crawlers,
+            blob_upload_limit,
         })
     }
 

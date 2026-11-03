@@ -11,6 +11,7 @@ and refuses to start on a value that does not read, saying which.
 | `HANDLE_DOMAIN` | the domain groups' handles are made under, with its leading dot | `.test` |
 | `DATA_DIR` | where its database (`host.sqlite`), blobs and keys (`host-secrets.json`) are kept | `data` |
 | `PLC_URL` | the PLC directory groups' `did:plc`s are published to | `https://plc.directory` |
+| `BLOB_UPLOAD_LIMIT` | the most bytes one blob may be | 52428800 (50 MiB) |
 | `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated: at most every 20 minutes, and the first time after a start | none |
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON | `info` |
 

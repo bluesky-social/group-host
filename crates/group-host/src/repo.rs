@@ -2,10 +2,11 @@
 //! changing its records a signed commit at a time.
 
 use crate::Host;
+use crate::blobs::blob_refs;
 use crate::store::{Account, Change, Event, Head};
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result};
 use atproto::mst::{Entry, Node, Tree};
 use atproto::plc::Op;
 use atproto::{Cid, Commit, Curve, Keypair, Value, car, drisl, syntax};
@@ -127,7 +128,15 @@ impl Host {
                     ("time", at),
                 ],
             ),
-            commit_event(&did, &head, None, None, Vec::new(), tree.blocks()),
+            commit_event(
+                &did,
+                &head,
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                tree.blocks(),
+            ),
         ];
         // The handle checked above can still be taken as this was made:
         // the database's unique handle is what holds.
@@ -177,6 +186,7 @@ impl Host {
         let before = Tree::build(&paths);
         let mut changes: Vec<Change> = Vec::new();
         let mut ops = Vec::new();
+        let mut new_blobs = Vec::new();
         let mut blocks = BTreeMap::new();
         for write in writes {
             let (collection, rkey, value, exists) = match write {
@@ -207,6 +217,18 @@ impl Host {
                 return Err(invalid(format!("there is {what} {path}")));
             }
             let put = value.map(|v| record(collection, v)).transpose()?;
+            // A record may reference only blobs uploaded to its account.
+            let refs = value.map(blob_refs).unwrap_or_default();
+            for cid in &refs {
+                let blob = self
+                    .store
+                    .blob(&account.did, cid)
+                    .map_err(XrpcError::internal)?;
+                if blob.is_none() {
+                    return Err(invalid(format!("blob {cid} was not uploaded to {did}")));
+                }
+            }
+            new_blobs.extend(refs.iter().copied());
             let prev = match &put {
                 Some((cid, bytes)) => {
                     blocks.insert(*cid, bytes.clone());
@@ -215,15 +237,20 @@ impl Host {
                 None => paths.remove(&path),
             };
             ops.push(op(path, put.as_ref().map(|(cid, _)| *cid), prev));
-            changes.push((collection.clone(), rkey.clone(), put));
+            changes.push(Change {
+                collection: collection.clone(),
+                rkey: rkey.clone(),
+                put,
+                blobs: refs,
+            });
         }
         let tree = Tree::build(&paths);
         let new = self.sign(&account, &tree);
         // What a reader needs to check the commit against the repo before
         // it: the new nodes, and each changed path's covering proof.
         blocks.extend(tree.new_since(&before));
-        for (collection, rkey, _) in &changes {
-            blocks.extend(tree.covering_proof(&format!("{collection}/{rkey}")));
+        for c in &changes {
+            blocks.extend(tree.covering_proof(&format!("{}/{}", c.collection, c.rkey)));
         }
         let previous = Commit::from_bytes(&head.block).expect("a commit the host wrote");
         let events = [commit_event(
@@ -232,17 +259,17 @@ impl Host {
             Some(&head.rev),
             Some(previous.data),
             ops,
+            new_blobs,
             blocks,
         )];
         let moved = self
             .store
             .commit(&account.did, &head.cid, &new, &changes, &events);
-        moved
-            .and_then(|moved| {
-                ensure!(moved, "{did}'s repo moved under a write");
-                Ok(())
-            })
+        let raced = format!("{did}'s repo moved under a write");
+        let orphans = moved
+            .and_then(|moved| moved.context(raced))
             .map_err(XrpcError::internal)?;
+        self.remove_blobs(orphans.iter().map(|cid| (account.did.as_str(), cid)));
         self.announce();
         Ok(Committed {
             cid: new.cid,
@@ -347,6 +374,7 @@ fn commit_event(
     since: Option<&str>,
     prev_data: Option<Cid>,
     ops: Vec<Value>,
+    blobs: Vec<Cid>,
     mut blocks: BTreeMap<Cid, Vec<u8>>,
 ) -> Event {
     blocks.insert(head.cid, head.block.clone());
@@ -361,7 +389,10 @@ fn commit_event(
         ),
         ("blocks", Value::Bytes(car)),
         ("ops", Value::Array(ops)),
-        ("blobs", Value::Array(Vec::new())),
+        (
+            "blobs",
+            Value::Array(blobs.into_iter().map(Value::Link).collect()),
+        ),
         ("rebase", Value::Bool(false)),
         ("tooBig", Value::Bool(false)),
         ("time", Value::String(iso(now_millis()))),

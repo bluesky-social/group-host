@@ -480,7 +480,12 @@ fn a_commit_builds_on_the_head_it_read() {
     assert!(!store.create_account(&twin, &head, 0, &[]).unwrap());
     // A commit from a head that is no longer the head changes nothing.
     let stale = atproto::Cid::of_cbor(b"\xa0");
-    assert!(!store.commit("did:plc:a", &stale, &head, &[], &[]).unwrap());
+    assert!(
+        store
+            .commit("did:plc:a", &stale, &head, &[], &[])
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(store.head("did:plc:a").unwrap().unwrap(), head);
 }
 
