@@ -471,16 +471,16 @@ fn a_commit_builds_on_the_head_it_read() {
         rev: commit.rev.clone(),
         block: commit.to_bytes(),
     };
-    assert!(store.create_account(&account, &head, 0).unwrap());
+    assert!(store.create_account(&account, &head, 0, &[]).unwrap());
     // Another account at the same handle is turned away.
     let twin = Account {
         did: "did:plc:b".into(),
         ..account
     };
-    assert!(!store.create_account(&twin, &head, 0).unwrap());
+    assert!(!store.create_account(&twin, &head, 0, &[]).unwrap());
     // A commit from a head that is no longer the head changes nothing.
     let stale = atproto::Cid::of_cbor(b"\xa0");
-    assert!(!store.commit("did:plc:a", &stale, &head, &[]).unwrap());
+    assert!(!store.commit("did:plc:a", &stale, &head, &[], &[]).unwrap());
     assert_eq!(store.head("did:plc:a").unwrap().unwrap(), head);
 }
 

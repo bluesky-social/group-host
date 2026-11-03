@@ -5,10 +5,12 @@
 
 pub mod api;
 pub mod config;
+pub mod firehose;
 pub mod plc;
 pub mod repo;
 pub mod secrets;
 pub mod store;
+pub mod time;
 pub mod xrpc;
 
 use axum::extract::Path;
@@ -30,6 +32,11 @@ pub struct Host {
     pub clock: atproto::tid::TidClock,
     /// Held while a commit is made, so each builds on the one before.
     writing: std::sync::Mutex<()>,
+    /// Told of each new event, which wakes the firehose's streams.
+    pub events: tokio::sync::broadcast::Sender<()>,
+    /// When the relays were last told of news.
+    crawled: std::sync::Mutex<Option<std::time::Instant>>,
+    http: reqwest::Client,
 }
 
 impl Host {
@@ -48,6 +55,9 @@ impl Host {
             plc,
             clock,
             writing: Default::default(),
+            events: tokio::sync::broadcast::channel(16).0,
+            crawled: Default::default(),
+            http: reqwest::Client::new(),
         })
     }
 }
@@ -68,6 +78,10 @@ pub fn router(host: Arc<Host>) -> Router {
             get(api::get_latest_commit),
         )
         .route("/xrpc/com.atproto.sync.listRepos", get(api::list_repos))
+        .route(
+            "/xrpc/com.atproto.sync.subscribeRepos",
+            get(firehose::subscribe_repos),
+        )
         .route(
             "/xrpc/com.atproto.identity.resolveHandle",
             get(api::resolve_handle),

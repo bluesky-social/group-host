@@ -11,7 +11,8 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
 /// Each version of the schema, applied in order to a database below it.
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE account (
         did TEXT PRIMARY KEY,
         handle TEXT NOT NULL UNIQUE,
@@ -33,12 +34,23 @@ const MIGRATIONS: &[&str] = &["
         rev TEXT NOT NULL,
         PRIMARY KEY (did, collection, rkey)
     );
-"];
+",
+    "
+    CREATE TABLE event (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        did TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        body BLOB NOT NULL
+    );
+",
+];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (handle) DO NOTHING";
 const PUT_RECORD: &str = "INSERT INTO record (did, collection, rkey, cid, value, rev) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (did, collection, rkey) DO UPDATE SET cid = ?4, value = ?5, rev = ?6";
 const LIST_UP: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey > ?3 ORDER BY rkey LIMIT ?4";
 const LIST_DOWN: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey < ?3 ORDER BY rkey DESC LIMIT ?4";
+const SEQUENCE: &str = "INSERT INTO event (did, kind, body) VALUES (?1, ?2, ?3)";
+const EVENTS: &str = "SELECT seq, kind, body FROM event WHERE seq > ?1 ORDER BY seq LIMIT ?2";
 const ACCOUNTS: &str =
     "SELECT did, cid, rev, commit_block FROM repo WHERE did > ?1 ORDER BY did LIMIT ?2";
 const COLLECTIONS: &str =
@@ -72,6 +84,31 @@ pub struct Record {
     pub rkey: String,
     pub cid: Cid,
     pub value: Vec<u8>,
+}
+
+/// An event for the firehose: its kind (`#commit`, `#identity`,
+/// `#account`) and its body as DRISL, without its `seq`, which the
+/// database gives it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Event {
+    pub kind: &'static str,
+    pub body: Vec<u8>,
+}
+
+/// An event as kept: its `seq`, kind and body.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sequenced {
+    pub seq: i64,
+    pub kind: String,
+    pub body: Vec<u8>,
+}
+
+fn sequence(tx: &rusqlite::Transaction, did: &str, events: &[Event]) -> Result<()> {
+    for e in events {
+        let added = tx.execute(SEQUENCE, params![did, e.kind, e.body]);
+        added?;
+    }
+    Ok(())
 }
 
 /// What a commit changes: a record put, or taken out (`None`).
@@ -115,9 +152,15 @@ impl Store {
         self.conn.lock().expect("not poisoned")
     }
 
-    /// Keeps a new account, with its first commit. `false` if its handle
-    /// is taken.
-    pub fn create_account(&self, account: &Account, head: &Head, now: i64) -> Result<bool> {
+    /// Keeps a new account, with its first commit and `events`. `false` if
+    /// its handle is taken.
+    pub fn create_account(
+        &self,
+        account: &Account,
+        head: &Head,
+        now: i64,
+        events: &[Event],
+    ) -> Result<bool> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let added = tx.execute(
@@ -137,6 +180,7 @@ impl Store {
             params![account.did, head.cid.to_string(), head.rev, head.block],
         );
         kept?;
+        sequence(&tx, &account.did, events)?;
         tx.commit()?;
         Ok(true)
     }
@@ -268,9 +312,17 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Moves `did`'s repo from `prev` to `head`, with `changes`, unless
-    /// another commit moved it first: `false` then, and nothing changes.
-    pub fn commit(&self, did: &str, prev: &Cid, head: &Head, changes: &[Change]) -> Result<bool> {
+    /// Moves `did`'s repo from `prev` to `head`, with `changes` and
+    /// `events`, unless another commit moved it first: `false` then, and
+    /// nothing changes.
+    pub fn commit(
+        &self,
+        did: &str,
+        prev: &Cid,
+        head: &Head,
+        changes: &[Change],
+        events: &[Event],
+    ) -> Result<bool> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let moved = tx.execute(
@@ -299,7 +351,29 @@ impl Store {
             };
             done?;
         }
+        sequence(&tx, did, events)?;
         tx.commit()?;
         Ok(true)
+    }
+
+    /// Up to `limit` events after `cursor`, in order.
+    pub fn events_after(&self, cursor: i64, limit: u32) -> Result<Vec<Sequenced>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(EVENTS)?;
+        let rows = q.query_map(params![cursor, limit], |r| {
+            Ok(Sequenced {
+                seq: r.get(0)?,
+                kind: r.get(1)?,
+                body: r.get(2)?,
+            })
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The last event's `seq`, 0 before any.
+    pub fn last_seq(&self) -> Result<i64> {
+        let conn = self.conn();
+        Ok(conn.query_row("SELECT COALESCE(MAX(seq), 0) FROM event", [], |r| r.get(0))?)
     }
 }

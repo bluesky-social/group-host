@@ -21,6 +21,8 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// The PLC directory groups' identities are published to, `PLC_URL`.
     pub plc_url: String,
+    /// The relays told of this host's news, `PDS_CRAWLERS`, comma-separated.
+    pub crawlers: Vec<String>,
 }
 
 impl Config {
@@ -50,6 +52,12 @@ impl Config {
         }
         let data_dir = var("DATA_DIR").unwrap_or_else(|| "data".into()).into();
         let plc_url = var("PLC_URL").unwrap_or_else(|| "https://plc.directory".into());
+        let crawlers = var("PDS_CRAWLERS").unwrap_or_default();
+        let crawlers = crawlers
+            .split(',')
+            .map(|c| c.trim().trim_end_matches('/').to_string())
+            .filter(|c| !c.is_empty())
+            .collect();
         Ok(Config {
             port,
             public_url,
@@ -57,6 +65,7 @@ impl Config {
             handle_domain,
             data_dir,
             plc_url,
+            crawlers,
         })
     }
 

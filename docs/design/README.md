@@ -61,8 +61,9 @@ says otherwise.
    Groups' DID documents will also need the space alpha's `#atproto_kem`
    key, which the spaces step brings.
 3. **Accounts and repos.** The SQLite store, group accounts and their
-   keys, `did:plc` creation, records and commits, the firehose
-   (`subscribeRepos`), blobs, `sync.*`, `did:web` for the host, crawlers:
+   keys, `did:plc` creation, records and commits, `sync.*` and `did:web`
+   for the host (done); the firehose (`subscribeRepos`, sync 1.1's
+   commits with their proofs) and crawlers (done); blobs:
    `pds/*`, `db/*`, `didWeb.ts`, `actors.ts`.
 4. **Groups and spaces.** `createGroup`, `getGroup`, `listGroups`,
    handles, profile, rules, activating and deleting; the meta and members

@@ -2,7 +2,8 @@
 //! changing its records a signed commit at a time.
 
 use crate::Host;
-use crate::store::{Account, Change, Head};
+use crate::store::{Account, Change, Event, Head};
+use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::{Result, ensure};
 use atproto::mst::{Entry, Node, Tree};
@@ -106,13 +107,35 @@ impl Host {
             handle: handle.to_string(),
             signing,
         };
-        let head = self.sign(&account, &Tree::build(&BTreeMap::new()));
+        let tree = Tree::build(&BTreeMap::new());
+        let head = self.sign(&account, &tree);
+        let at = Value::String(iso(now_millis()));
+        let events = [
+            event(
+                "#identity",
+                [
+                    ("did", Value::String(did.clone())),
+                    ("handle", Value::String(handle.into())),
+                    ("time", at.clone()),
+                ],
+            ),
+            event(
+                "#account",
+                [
+                    ("did", Value::String(did.clone())),
+                    ("active", Value::Bool(true)),
+                    ("time", at),
+                ],
+            ),
+            commit_event(&did, &head, None, None, Vec::new(), tree.blocks()),
+        ];
         // The handle checked above can still be taken as this was made:
         // the database's unique handle is what holds.
         let kept = self
             .store
-            .create_account(&account, &head, now())
+            .create_account(&account, &head, now(), &events)
             .map_err(XrpcError::internal)?;
+        self.announce();
         kept.then_some(did).ok_or_else(taken)
     }
 
@@ -151,7 +174,10 @@ impl Host {
             .store
             .paths(&account.did)
             .map_err(XrpcError::internal)?;
+        let before = Tree::build(&paths);
         let mut changes: Vec<Change> = Vec::new();
+        let mut ops = Vec::new();
+        let mut blocks = BTreeMap::new();
         for write in writes {
             let (collection, rkey, value, exists) = match write {
                 Write::Create {
@@ -181,24 +207,81 @@ impl Host {
                 return Err(invalid(format!("there is {what} {path}")));
             }
             let put = value.map(|v| record(collection, v)).transpose()?;
-            match &put {
-                Some((cid, _)) => paths.insert(path, *cid),
+            let prev = match &put {
+                Some((cid, bytes)) => {
+                    blocks.insert(*cid, bytes.clone());
+                    paths.insert(path.clone(), *cid)
+                }
                 None => paths.remove(&path),
             };
+            ops.push(op(path, put.as_ref().map(|(cid, _)| *cid), prev));
             changes.push((collection.clone(), rkey.clone(), put));
         }
-        let new = self.sign(&account, &Tree::build(&paths));
-        let moved = self.store.commit(&account.did, &head.cid, &new, &changes);
+        let tree = Tree::build(&paths);
+        let new = self.sign(&account, &tree);
+        // What a reader needs to check the commit against the repo before
+        // it: the new nodes, and each changed path's covering proof.
+        blocks.extend(tree.new_since(&before));
+        for (collection, rkey, _) in &changes {
+            blocks.extend(tree.covering_proof(&format!("{collection}/{rkey}")));
+        }
+        let previous = Commit::from_bytes(&head.block).expect("a commit the host wrote");
+        let events = [commit_event(
+            &account.did,
+            &new,
+            Some(&head.rev),
+            Some(previous.data),
+            ops,
+            blocks,
+        )];
+        let moved = self
+            .store
+            .commit(&account.did, &head.cid, &new, &changes, &events);
         moved
             .and_then(|moved| {
                 ensure!(moved, "{did}'s repo moved under a write");
                 Ok(())
             })
             .map_err(XrpcError::internal)?;
+        self.announce();
         Ok(Committed {
             cid: new.cid,
             rev: new.rev,
         })
+    }
+
+    /// Wakes the firehose's streams, and tells the relays in
+    /// `PDS_CRAWLERS` this host has news: at most every twenty minutes,
+    /// and the first time after it starts, so a relay that marked it
+    /// offline comes back.
+    fn announce(&self) {
+        let _ = self.events.send(());
+        let mut last = self.crawled.lock().expect("not poisoned");
+        if last.is_some_and(|at| at.elapsed() < CRAWL_EVERY) {
+            return;
+        }
+        *last = Some(std::time::Instant::now());
+        let hostname = self
+            .config
+            .public_url
+            .split("://")
+            .nth(1)
+            .unwrap_or_default()
+            .to_string();
+        for crawler in self.config.crawlers.clone() {
+            let body = serde_json::json!({ "hostname": hostname });
+            let send = self
+                .http
+                .post(format!("{crawler}/xrpc/com.atproto.sync.requestCrawl"))
+                .json(&body)
+                .send();
+            tokio::spawn(async move {
+                let said = send.await.and_then(|r| r.error_for_status());
+                if let Err(e) = said {
+                    tracing::warn!(crawler, error = %e, "requestCrawl failed");
+                }
+            });
+        }
     }
 
     /// `did`'s whole repo as a CAR file: its commit, then each node of its
@@ -221,6 +304,78 @@ impl Host {
             &[head.cid],
             blocks.iter().map(|(c, b)| (c, *b)),
         )))
+    }
+}
+
+/// How long between telling the relays of news.
+const CRAWL_EVERY: std::time::Duration = std::time::Duration::from_secs(20 * 60);
+
+/// An event of `kind` with the fields given.
+fn event<const N: usize>(kind: &'static str, fields: [(&str, Value); N]) -> Event {
+    let map = fields
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    Event {
+        kind,
+        body: drisl::encode(&Value::Map(map)),
+    }
+}
+
+/// A commit's op: what changed at `path`, as the firehose has it.
+fn op(path: String, cid: Option<Cid>, prev: Option<Cid>) -> Value {
+    let action = match (cid, prev) {
+        (Some(_), None) => "create",
+        (Some(_), Some(_)) => "update",
+        (None, _) => "delete",
+    };
+    let mut map = BTreeMap::from([
+        ("action".to_string(), Value::String(action.into())),
+        ("path".to_string(), Value::String(path)),
+        ("cid".to_string(), cid.map_or(Value::Null, Value::Link)),
+    ]);
+    if let Some(prev) = prev {
+        map.insert("prev".into(), Value::Link(prev));
+    }
+    Value::Map(map)
+}
+
+/// A `#commit` of `head`: its ops, and a CAR of `blocks` and the commit.
+fn commit_event(
+    did: &str,
+    head: &Head,
+    since: Option<&str>,
+    prev_data: Option<Cid>,
+    ops: Vec<Value>,
+    mut blocks: BTreeMap<Cid, Vec<u8>>,
+) -> Event {
+    blocks.insert(head.cid, head.block.clone());
+    let car = car::write(&[head.cid], blocks.iter().map(|(c, b)| (c, b.as_slice())));
+    let mut fields = vec![
+        ("repo", Value::String(did.into())),
+        ("commit", Value::Link(head.cid)),
+        ("rev", Value::String(head.rev.clone())),
+        (
+            "since",
+            since.map_or(Value::Null, |s| Value::String(s.into())),
+        ),
+        ("blocks", Value::Bytes(car)),
+        ("ops", Value::Array(ops)),
+        ("blobs", Value::Array(Vec::new())),
+        ("rebase", Value::Bool(false)),
+        ("tooBig", Value::Bool(false)),
+        ("time", Value::String(iso(now_millis()))),
+    ];
+    if let Some(data) = prev_data {
+        fields.push(("prevData", Value::Link(data)));
+    }
+    let map = fields
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    Event {
+        kind: "#commit",
+        body: drisl::encode(&Value::Map(map)),
     }
 }
 

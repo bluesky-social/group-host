@@ -123,6 +123,27 @@ fn refuses_every_other_form() {
 }
 
 #[test]
+fn says_whether_a_value_is_a_map() {
+    assert_eq!(
+        Value::Map(Default::default()).into_map(),
+        Some(Default::default())
+    );
+    assert_eq!(Value::Null.into_map(), None);
+}
+
+#[test]
+fn reads_values_one_after_another() {
+    let frame = [
+        encode(&Value::Integer(1)),
+        encode(&Value::String("t".into())),
+    ]
+    .concat();
+    let (first, read) = drisl::decode_first(&frame).unwrap();
+    assert_eq!((first, read), (Value::Integer(1), 1));
+    assert_eq!(decode(&frame[read..]).unwrap(), Value::String("t".into()));
+}
+
+#[test]
 fn refuses_json_no_record_holds() {
     let refused = |j: serde_json::Value| Value::from_json(&j).unwrap_err().to_string();
     assert_eq!(refused(json!(1.5)), "1.5 is not an integer");

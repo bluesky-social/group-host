@@ -9,7 +9,9 @@ and refuses to start on a value that does not read, saying which.
 | `PUBLIC_URL` | its origin, an `http` or `https` address with no path | `http://localhost:<PORT>` |
 | `SERVICE_DID` | its own DID | `did:web:` of `PUBLIC_URL`'s host, a port as `%3A` |
 | `HANDLE_DOMAIN` | the domain groups' handles are made under, with its leading dot | `.test` |
-| `DATA_DIR` | where its database, blobs and keys are kept | `data` |
+| `DATA_DIR` | where its database (`host.sqlite`), blobs and keys (`host-secrets.json`) are kept | `data` |
+| `PLC_URL` | the PLC directory groups' `did:plc`s are published to | `https://plc.directory` |
+| `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated: at most every 20 minutes, and the first time after a start | none |
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON | `info` |
 
 It stops on SIGTERM or ctrl-c, answering the requests under way first.

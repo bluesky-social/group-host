@@ -124,12 +124,19 @@ fn write(value: &Value, out: &mut Vec<u8>) {
 
 /// The value `bytes` hold, all of them, refusing any form but DRISL's one.
 pub fn decode(bytes: &[u8]) -> Result<Value, DrislError> {
-    let mut reader = Reader { bytes, at: 0 };
-    let value = reader.value(0)?;
-    if reader.at != bytes.len() {
+    let (value, read) = decode_first(bytes)?;
+    if read != bytes.len() {
         return err("bytes after the value");
     }
     Ok(value)
+}
+
+/// The first value in `bytes`, and how many bytes it took: a firehose
+/// frame is a header and a body, one after the other.
+pub fn decode_first(bytes: &[u8]) -> Result<(Value, usize), DrislError> {
+    let mut reader = Reader { bytes, at: 0 };
+    let value = reader.value(0)?;
+    Ok((value, reader.at))
 }
 
 struct Reader<'a> {
@@ -243,6 +250,14 @@ impl Reader<'_> {
 }
 
 impl Value {
+    /// The map this is, if it is one.
+    pub fn into_map(self) -> Option<BTreeMap<String, Value>> {
+        match self {
+            Value::Map(map) => Some(map),
+            _ => None,
+        }
+    }
+
     /// The value a record's JSON holds, as atproto writes it: an object
     /// of `$link` alone a link, of `$bytes` alone bytes, a number with a
     /// fraction refused.
