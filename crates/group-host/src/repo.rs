@@ -53,6 +53,9 @@ impl Host {
     /// domain: its keys, its `did:plc` published to the directory with
     /// the host's rotation key, and an empty repo. Its DID.
     pub async fn create_account(&self, handle: &str) -> Result<String, XrpcError> {
+        // A handle names one account whatever its case: kept in lower case.
+        let handle = handle.to_ascii_lowercase();
+        let handle = handle.as_str();
         let domain = &self.config.handle_domain;
         let label = handle.strip_suffix(domain.as_str()).unwrap_or_default();
         if label.is_empty() || label.contains('.') || !syntax::is_handle(handle) {
@@ -94,6 +97,9 @@ impl Host {
                 format!("{e:#}"),
             )
         };
+        // Published before the account is kept: if keeping it fails, or
+        // another took the handle meanwhile, the DID stays in the directory
+        // with no account here behind it.
         self.plc.publish(&did, &genesis).await.map_err(failed)?;
         let account = Account {
             did: did.clone(),

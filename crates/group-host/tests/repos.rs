@@ -80,6 +80,32 @@ async fn makes_a_group_account_on_the_directory() {
 }
 
 #[tokio::test]
+async fn keeps_a_handle_in_lower_case() {
+    let h = start(&[], false).await;
+    let did = h.host.create_account("Riders.Groups.Test").await.unwrap();
+    let account = h.host.store.account(&did).unwrap().unwrap();
+    assert_eq!(account.handle, RIDERS);
+    let err = h.host.create_account(RIDERS).await.unwrap_err();
+    assert_eq!(err.error, "HandleNotAvailable");
+    let (_, resolved) = h
+        .get(
+            "com.atproto.identity.resolveHandle",
+            "handle=RIDERS.groups.test",
+        )
+        .await;
+    assert_eq!(resolved["did"], did.as_str());
+    let (_, repo) = h
+        .get("com.atproto.repo.describeRepo", "repo=Riders.groups.test")
+        .await;
+    assert_eq!(repo["did"], did.as_str());
+    let ops = h.plc.ops.lock().unwrap()[&did].clone();
+    let atproto::plc::Signed::Update { op, .. } = &ops[0] else {
+        panic!()
+    };
+    assert_eq!(op.handle(), Some(RIDERS));
+}
+
+#[tokio::test]
 async fn refuses_handles_it_cannot_give() {
     let h = start(&[], false).await;
     for bad in [

@@ -155,8 +155,8 @@ pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Params) -> Answ
 }
 
 pub async fn resolve_handle(State(host): State<Arc<Host>>, Query(p): Params) -> Answer {
-    let handle = param(&p, "handle")?;
-    let account = host.store.account(handle).map_err(XrpcError::internal)?;
+    let handle = param(&p, "handle")?.to_ascii_lowercase();
+    let account = host.store.account(&handle).map_err(XrpcError::internal)?;
     let account = account.filter(|a| a.handle == handle);
     let not_found = || {
         XrpcError::new(

@@ -146,7 +146,7 @@ impl Store {
         let found = self
             .conn()
             .query_row(
-                "SELECT did, handle, signing_key FROM account WHERE did = ?1 OR handle = ?1",
+                "SELECT did, handle, signing_key FROM account WHERE did = ?1 OR handle = lower(?1)",
                 [did_or_handle],
                 |r| {
                     Ok((
