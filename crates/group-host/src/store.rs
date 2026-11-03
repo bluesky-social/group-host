@@ -35,6 +35,10 @@ const MIGRATIONS: &[&str] = &["
     );
 "];
 
+const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (handle) DO NOTHING";
+const PUT_RECORD: &str = "INSERT INTO record (did, collection, rkey, cid, value, rev) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (did, collection, rkey) DO UPDATE SET cid = ?4, value = ?5, rev = ?6";
+const LIST_UP: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey > ?3 ORDER BY rkey LIMIT ?4";
+const LIST_DOWN: &str = "SELECT collection, rkey, cid, value FROM record WHERE did = ?1 AND collection = ?2 AND rkey < ?3 ORDER BY rkey DESC LIMIT ?4";
 const ACCOUNTS: &str =
     "SELECT did, cid, rev, commit_block FROM repo WHERE did > ?1 ORDER BY did LIMIT ?2";
 const COLLECTIONS: &str =
@@ -117,8 +121,7 @@ impl Store {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let added = tx.execute(
-            "INSERT INTO account (did, handle, signing_key, created_at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT (handle) DO NOTHING",
+            NEW_ACCOUNT,
             params![
                 account.did,
                 account.handle,
@@ -178,7 +181,8 @@ impl Store {
                     block: r.get(3)?,
                 },
             ))
-        })?;
+        });
+        let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -210,7 +214,8 @@ impl Store {
                 format!("{}/{}", r.get::<_, String>(0)?, r.get::<_, String>(1)?),
                 cid(r.get(2)?),
             ))
-        })?;
+        });
+        let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -247,16 +252,7 @@ impl Store {
         reverse: bool,
     ) -> Result<Vec<Record>> {
         let conn = self.conn();
-        let sql = match reverse {
-            true => {
-                "SELECT collection, rkey, cid, value FROM record
-                     WHERE did = ?1 AND collection = ?2 AND rkey > ?3 ORDER BY rkey LIMIT ?4"
-            }
-            false => {
-                "SELECT collection, rkey, cid, value FROM record
-                      WHERE did = ?1 AND collection = ?2 AND rkey < ?3 ORDER BY rkey DESC LIMIT ?4"
-            }
-        };
+        let sql = if reverse { LIST_UP } else { LIST_DOWN };
         // No rkey sorts before "" or after "\u{7f}": its characters are ASCII.
         let from = cursor.unwrap_or(if reverse { "" } else { "\u{7f}" });
         let mut q = conn.prepare(sql)?;
@@ -293,8 +289,7 @@ impl Store {
         for (collection, rkey, put) in changes {
             let done = match put {
                 Some((cid, value)) => tx.execute(
-                    "INSERT INTO record (did, collection, rkey, cid, value, rev) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                     ON CONFLICT (did, collection, rkey) DO UPDATE SET cid = ?4, value = ?5, rev = ?6",
+                    PUT_RECORD,
                     params![did, collection, rkey, cid.to_string(), value, head.rev],
                 ),
                 None => tx.execute(

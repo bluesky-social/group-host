@@ -29,7 +29,10 @@ fixed, with `CARGO_BUILD_JOBS=2`: other agents build on this machine too.
   as it does for a deploy.
 - `cargo fmt` can put a `?` on a line of its own, which coverage then
   counts as a line never run: bind the value first, or use a named
-  function, rather than lowering the gate.
+  function, rather than lowering the gate. A call taking a closure ends in
+  `})?;`, the same line. The report may count such a line without naming
+  it, as it counts each function at the build of it with the most lines;
+  `--show-missing-lines` and the HTML then show nothing missed.
 
 ## Building from the prototype
 
