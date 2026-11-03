@@ -1,0 +1,11 @@
+/target
+/harness/node_modules
+/web/node_modules
+/web/.svelte-kit
+/web/build
+/web/.lexicons
+/web/src/lib/lexicons
+*.profraw
+/lcov.info
+/data
+.DS_Store
