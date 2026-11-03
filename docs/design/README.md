@@ -48,11 +48,13 @@ says otherwise.
 1. **Scaffold.** The workspace, the console's shell, the lexicons, the
    checks. The host answers `_health` and refuses every other method as
    not implemented.
-2. **atproto primitives.** DRISL encoding and CIDs, secp256k1 and P-256
-   keys and `did:key`, the MST, CAR reading and writing, signed commits,
-   PLC operations, service-auth JWTs: what `@atproto/repo`,
-   `@atproto/crypto`, `@atproto/identity` and `@did-plc/lib` give it.
-   Checked against atproto's interop test vectors.
+2. **atproto primitives.** What `@atproto/repo`, `@atproto/crypto`,
+   `@atproto/identity` and `@did-plc/lib` give it, checked against
+   atproto's interop test vectors (`crates/atproto/tests/interop`):
+   - the data model: DRISL and CIDs, TIDs, the identifiers' syntax, and
+     secp256k1 and P-256 keys as multikeys and `did:key`s (done);
+   - the repo: the MST, CAR files, signed commits;
+   - identity: PLC operations, DID documents, service-auth JWTs.
 3. **Accounts and repos.** The SQLite store, group accounts and their
    keys, `did:plc` creation, records and commits, the firehose
    (`subscribeRepos`), blobs, `sync.*`, `did:web` for the host, crawlers:

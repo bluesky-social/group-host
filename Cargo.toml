@@ -15,7 +15,9 @@ opensocial = { path = "crates/opensocial" }
 anyhow = "1"
 axum = "0.8"
 base64 = "0.22"
+bs58 = "0.5"
 ciborium = "0.2"
+ecdsa = { version = "0.16", features = ["signing", "verifying"] }
 futures = "0.3"
 k256 = { version = "0.13", features = ["ecdsa"] }
 p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
