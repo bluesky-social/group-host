@@ -55,7 +55,11 @@ says otherwise.
      secp256k1 and P-256 keys as multikeys and `did:key`s (done);
    - the repo: the MST, CAR files, signed commits, and the firehose's
      commit proofs (done);
-   - identity: PLC operations, DID documents, service-auth JWTs.
+   - identity: PLC operations, DID documents, service-auth JWTs (done),
+     checked against @did-plc/lib and @atproto/xrpc-server
+     (`crates/atproto/tests/reference`) and against knotless's own.
+   Groups' DID documents will also need the space alpha's `#atproto_kem`
+   key, which the spaces step brings.
 3. **Accounts and repos.** The SQLite store, group accounts and their
    keys, `did:plc` creation, records and commits, the firehose
    (`subscribeRepos`), blobs, `sync.*`, `did:web` for the host, crawlers:

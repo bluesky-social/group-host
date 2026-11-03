@@ -1,0 +1,7 @@
+{
+  "aud": "did:web:groups.example.com",
+  "didKey": "did:key:zDnaezAvTCS153h4H9zmhpfJm5TPxRGBdgyCk2Fx8CDeo2kqm",
+  "iss": "did:plc:abc",
+  "lxm": "fyi.opensocial.getGroup",
+  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJkaWQ6d2ViOmdyb3Vwcy5leGFtcGxlLmNvbSIsImV4cCI6NDEwMjQ0NDgwMCwiaWF0IjoxNzkzNzM2MzAwLCJpc3MiOiJkaWQ6cGxjOmFiYyIsImx4bSI6ImZ5aS5vcGVuc29jaWFsLmdldEdyb3VwIn0.oVnY1mHwppydmgywIPk6JOl6lHARGXb-Em6nKRiqIZ8oqlzEA2NoqgEmdbBzI2u4PR2jrNYFFpjqIO54tI1Skg"
+}

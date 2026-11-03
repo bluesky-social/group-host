@@ -11,9 +11,12 @@ pub mod base32;
 pub mod car;
 pub mod cid;
 pub mod commit;
+pub mod did;
 pub mod drisl;
 pub mod keys;
 pub mod mst;
+pub mod plc;
+pub mod service_auth;
 pub mod syntax;
 pub mod tid;
 
