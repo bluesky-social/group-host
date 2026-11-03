@@ -66,7 +66,12 @@ says otherwise.
    commits with their proofs) and crawlers (done); blobs, kept on disk
    until no record references them (done):
    `pds/*`, `db/*`, `didWeb.ts`, `actors.ts`.
-4. **Groups and spaces.** `createGroup`, `getGroup`, `listGroups`,
+4. **Groups and spaces.** First the space alpha's primitives in
+   `atproto` (`space.rs`: the LtHash set hash, space commits and record
+   MACs, the KEM a MAC's secret is agreed by, STAR archives; done), then
+   its credentials and HTTP signatures, then the repos the host keeps in
+   spaces, then being the authority for its groups' spaces. Then the
+   groups: `createGroup`, `getGroup`, `listGroups`,
    handles, profile, rules, activating and deleting; the meta and members
    spaces, their `access` records, space credentials and the space index:
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,

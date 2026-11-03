@@ -8,8 +8,10 @@ rust-version.workspace = true
 
 [dependencies]
 base64.workspace = true
+blake3.workspace = true
 bs58.workspace = true
 ecdsa.workspace = true
+hmac.workspace = true
 k256.workspace = true
 p256.workspace = true
 rand_core.workspace = true

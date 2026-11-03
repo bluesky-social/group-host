@@ -17,6 +17,7 @@ pub mod keys;
 pub mod mst;
 pub mod plc;
 pub mod service_auth;
+pub mod space;
 pub mod syntax;
 pub mod tid;
 

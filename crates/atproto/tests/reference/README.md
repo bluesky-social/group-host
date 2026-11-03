@@ -8,3 +8,10 @@ and the DIDs they make, the DID document the directory serves, and a
 service-auth JWT. `knotless.json` is a service-auth JWT knotless's own
 client signs (`knotless::crypto::P256Key::sign_jwt`), checked here as
 knotless checks one.
+
+`space-vectors.json` is pds.js's (`test/fixtures/space-vectors.json`),
+made by running `@atproto/space` (its `generatedFrom` names the build): the
+LtHash set hash, a space repo's commit, its MAC and MAC header and its STAR
+archive, a record's MAC, a KEM decapsulation and its want-MAC header, and
+an HTTP signature, which the credentials' pull reads.
+

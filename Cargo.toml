@@ -15,10 +15,12 @@ opensocial = { path = "crates/opensocial" }
 anyhow = "1"
 axum = { version = "0.8", features = ["ws"] }
 base64 = "0.22"
+blake3 = "1"
 bs58 = "0.5"
 ciborium = "0.2"
 ecdsa = { version = "0.16", features = ["signing", "verifying"] }
 futures = "0.3"
+hmac = "0.12"
 k256 = { version = "0.13", features = ["ecdsa"] }
 p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
