@@ -184,6 +184,18 @@ fn refuses_every_tree_but_the_one_its_keys_make() {
         "the tree is not the one its keys make"
     );
 
+    // One node reached from two places: the left link and an entry's
+    // right link both name it.
+    let (leaf, leaf_bytes) = node(Value::Null, vec![entry(0, b"g", v, Value::Null)]);
+    let (both, both_bytes) = node(
+        Value::Link(leaf),
+        vec![entry(0, b"h", v, Value::Link(leaf))],
+    );
+    assert_eq!(
+        refused(both, &[(leaf, leaf_bytes), (both, both_bytes)]),
+        format!("node {leaf} is reached twice")
+    );
+
     // A chain of nodes deeper than any tree of real keys.
     let mut chain = vec![node(Value::Null, vec![entry(0, b"a", v, Value::Null)])];
     for _ in 0..65 {

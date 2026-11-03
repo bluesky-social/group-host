@@ -75,6 +75,11 @@ impl Commit {
         let Ok(Value::Map(map)) = drisl::decode(bytes) else {
             return Err(bad);
         };
+        // Its fields and no others: one more would be dropped here, and the
+        // commit written back would not come to its CID.
+        if map.len() != 6 {
+            return Err(bad);
+        }
         let field = |k: &str| map.get(k);
         let (
             Some(Value::String(did)),

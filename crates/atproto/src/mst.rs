@@ -273,7 +273,7 @@ impl Tree {
     /// tree its keys make. A node missing from `blocks` fails it.
     pub fn read(root: Cid, blocks: &Blocks) -> Result<Tree, MstError> {
         let mut records = BTreeMap::new();
-        read_node(root, blocks, &mut records, 0)?;
+        read_node(root, blocks, &mut records, &mut BTreeSet::new(), 0)?;
         let tree = Tree::build(&records);
         if tree.root() != root {
             return err("the tree is not the one its keys make");
@@ -306,14 +306,21 @@ fn build(items: &[(&str, Cid, u32)], height: u32) -> Node {
 /// How deep a tree read from elsewhere may go.
 const MAX_LAYERS: usize = 64;
 
+/// Reads the node `cid` and the tree under it into `records`. A node
+/// reached twice is refused: no tree reaches one node from two places, and
+/// blocks that do could make the walk take time exponential in depth.
 fn read_node(
     cid: Cid,
     blocks: &Blocks,
     records: &mut BTreeMap<String, Cid>,
+    seen: &mut BTreeSet<Cid>,
     layer: usize,
 ) -> Result<(), MstError> {
     if layer > MAX_LAYERS {
         return err("the tree is too deep");
+    }
+    if !seen.insert(cid) {
+        return err(format!("node {cid} is reached twice"));
     }
     if cid.codec() != DAG_CBOR {
         return err(format!("node {cid} is not DAG-CBOR"));
@@ -330,12 +337,13 @@ fn read_node(
     else {
         return Err(bad());
     };
-    let subtree = |v: &Value, records: &mut BTreeMap<String, Cid>| match v {
+    let subtree = |v: &Value, records: &mut BTreeMap<String, Cid>, seen: &mut BTreeSet<Cid>| match v
+    {
         Value::Null => Ok(()),
-        Value::Link(c) => read_node(*c, blocks, records, layer + 1),
+        Value::Link(c) => read_node(*c, blocks, records, seen, layer + 1),
         _ => Err(bad()),
     };
-    subtree(left, records)?;
+    subtree(left, records, seen)?;
     let mut last: Vec<u8> = Vec::new();
     for e in entries {
         let Value::Map(e) = e else {
@@ -353,7 +361,7 @@ fn read_node(
         let key = [&last[..p], k].concat();
         let key = String::from_utf8(key).map_err(|_| bad())?;
         records.insert(key.clone(), *v);
-        subtree(t, records)?;
+        subtree(t, records, seen)?;
         last = key.into_bytes();
     }
     Ok(())

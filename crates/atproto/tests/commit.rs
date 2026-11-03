@@ -61,4 +61,8 @@ fn refuses_what_is_no_commit() {
         refused(with("prev", Value::Integer(2))),
         "not a version 3 commit"
     );
+    assert_eq!(
+        refused(with("extra", Value::Integer(2))),
+        "not a version 3 commit"
+    );
 }
