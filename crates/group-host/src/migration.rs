@@ -748,6 +748,10 @@ pub async fn migrate_activate(
     }
     let on = host.activate_arrived(&group, &account.handle);
     on.map_err(XrpcError::internal)?;
+    // Its repos in spaces were written while it was off, which no space
+    // hears of: each is told now, as an account brought here is.
+    let told = host.tell_spaces(&group).await;
+    told.map_err(XrpcError::internal)?;
     let spaces = host.store.spaces_of(&group).map_err(XrpcError::internal)?;
     for space in &spaces {
         host.reindex(space);

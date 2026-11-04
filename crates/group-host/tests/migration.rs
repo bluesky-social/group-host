@@ -242,6 +242,11 @@ async fn moves_a_group_whole_to_another_host() {
     assert_eq!(status, 200, "{on}");
     assert_eq!(on["spaces"], spaces.len());
     assert!(b.host.deactivation(&did).unwrap().is_none());
+    // The group's own repo in each of its spaces is told once it is on.
+    for space in spaces.iter().filter_map(Json::as_str) {
+        let writers = b.host.store.writers(space, None, 100).unwrap();
+        assert!(writers.iter().any(|w| w.did == did), "{space}: {writers:?}");
+    }
     let lxm = format!("{NS}.getGroup");
     let (_, view) = get(&b, &lxm, &format!("group={did}"), &[auth(&b, &alice, &lxm)]).await;
     assert_eq!(view["group"]["displayName"], "Riders");

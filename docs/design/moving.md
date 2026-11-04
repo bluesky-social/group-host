@@ -108,8 +108,9 @@ of it. The group's account and data stay there, switched off.
 `migrateActivate` is refused `NotYet` until the DID document names the
 new host's `PUBLIC_URL` as its PDS and the signing key made there; asking
 again once the directory has caught up succeeds. It switches the group
-on, tells the relays its handle and that it is active, and queues each of
-its spaces to be read again for the index.
+on, tells the relays its handle and that it is active, tells each of its
+spaces of the group's repo there (written while it was off, which no
+space hears of), and queues each to be read again for the index.
 
 So the group is whole on one host at every step. Before the hand-over,
 the host it leaves controls it, and a failed receive left nothing at the
