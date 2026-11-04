@@ -9,8 +9,11 @@ pub mod authority_api;
 pub mod blobs;
 pub mod config;
 pub mod firehose;
+pub mod group;
+pub mod group_api;
 pub mod identity;
 pub mod plc;
+pub mod rbac;
 pub mod repo;
 pub mod secrets;
 pub mod space;
@@ -153,6 +156,15 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/com.atproto.space.unregisterNotify",
             post(authority_api::unregister_notify),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.createGroup",
+            post(group_api::create_group),
+        )
+        .route("/xrpc/fyi.opensocial.getGroup", get(group_api::get_group))
+        .route(
+            "/xrpc/fyi.opensocial.listGroups",
+            get(group_api::list_groups),
         )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))

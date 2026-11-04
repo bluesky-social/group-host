@@ -59,15 +59,26 @@ pub async fn get_space_credential(
     if !matches!(PublicKey::from_did_key(kid), Ok(PublicKey::P256(_))) {
         return Err(invalid("credentialKid is a P-256 did:key"));
     }
-    let user = match body["delegationToken"].as_str() {
+    let delegation = match body["delegationToken"].as_str() {
         Some(token) => Some(delegated(&host, token, &space).await?),
         None => None,
     };
+    let user = delegation.as_ref().map(|d| d.iss.as_str());
     let hosted = host.store.space(uri).map_err(XrpcError::internal)?;
     let hosted = hosted.ok_or_else(not_found)?;
-    let may = host.may(uri, &hosted, user.as_deref(), Access::Read);
+    let may = host.may(uri, &hosted, user, Access::Read);
     if !may.map_err(XrpcError::internal)? {
         return Err(not_found());
+    }
+    // Spent once it buys a credential: one token, one credential.
+    if let Some(d) = &delegation {
+        let spent = host.store.spend(&d.iss, &d.jti, d.exp as i64, now() as i64);
+        if !spent.map_err(XrpcError::internal)? {
+            return Err(bad(
+                "InvalidDelegationToken",
+                "the delegation token was used already",
+            ));
+        }
     }
     let authority = host
         .store
@@ -85,9 +96,13 @@ pub async fn get_space_credential(
     Ok(Json(json!({ "credential": credential })))
 }
 
-/// The user a delegation token speaks for: signed by them, for this
-/// space's authority and this space, and not spent before.
-async fn delegated(host: &Host, token: &str, space: &SpaceRef) -> Result<String, XrpcError> {
+/// What a delegation token says, once it is signed by the user it names,
+/// for this space's authority and this space.
+async fn delegated(
+    host: &Host,
+    token: &str,
+    space: &SpaceRef,
+) -> Result<space_auth::Token, XrpcError> {
     let refused = |m: String| bad("InvalidDelegationToken", m);
     let (_, claims) = space_auth::parse(Kind::Delegation, token).map_err(|e| refused(e.message))?;
     let aud = space_host_aud(&space.authority);
@@ -99,15 +114,7 @@ async fn delegated(host: &Host, token: &str, space: &SpaceRef) -> Result<String,
     let check = |key: &PublicKey| space_auth::verify(Kind::Delegation, token, key, &expect, now());
     let checked = host.identity.with_key(&claims.iss, check).await;
     let checked = checked.ok_or_else(|| refused(format!("no signing key for {}", claims.iss)))?;
-    let claims = checked.map_err(|e| refused(e.message))?;
-    let spent = host
-        .store
-        .spend(&claims.iss, &claims.jti, claims.exp as i64, now() as i64)
-        .map_err(XrpcError::internal)?;
-    if !spent {
-        return Err(refused("the delegation token was used already".into()));
-    }
-    Ok(claims.iss)
+    checked.map_err(|e| refused(e.message))
 }
 
 /// A repo host says a repo of one of its accounts was written in a space

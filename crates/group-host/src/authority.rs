@@ -12,6 +12,7 @@
 //! or a day has passed, as pds.js's `outbox.js` does.
 
 use crate::Host;
+use crate::rbac::{self, NS};
 use crate::repo::invalid;
 use crate::space::NOTIFY_WRITE;
 use crate::store::{Notice, Space};
@@ -135,17 +136,30 @@ impl Host {
         uri: &str,
         space: &Space,
         user: Option<&str>,
-        access: Access,
+        access_kind: Access,
     ) -> Result<bool> {
         let Some(user) = user else {
-            return Ok(access == Access::Read && space.public_read);
+            return Ok(access_kind == Access::Read && space.public_read);
         };
         // The authority never locks itself out of its own space.
         if user == space.authority {
             return Ok(true);
         }
+        // A group's space with an access record: the record decides,
+        // against the user's roles in the group.
+        let access = self.group_record(&space.authority, uri, &format!("{NS}.access"), "self")?;
+        if let Some(access) = access.as_ref().map(rbac::Access::of) {
+            let roles = self.roles(&space.authority, user)?;
+            let by_record = match access_kind {
+                Access::Read => access.can_read(&roles, user),
+                Access::Write => access.can_write_own(&roles, user),
+            };
+            if by_record {
+                return Ok(true);
+            }
+        }
         let granted = self.store.granted(uri, user)?;
-        Ok(match access {
+        Ok(match access_kind {
             Access::Read => space.public_read || granted.is_some_and(|(read, _)| read),
             Access::Write => granted.is_some_and(|(_, write)| write),
         })

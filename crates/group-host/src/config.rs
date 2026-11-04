@@ -24,6 +24,9 @@ pub struct Config {
     /// How a `did:web`'s document is read, `DID_WEB_SCHEME`: `https`, or
     /// `http` for a network of test servers.
     pub did_web_scheme: String,
+    /// Who this host starts groups for, `GROUP_FOUNDERS`, comma-separated
+    /// DIDs: anyone when it names none.
+    pub group_founders: Vec<String>,
     /// The relays told of this host's news, `PDS_CRAWLERS`, comma-separated.
     pub crawlers: Vec<String>,
     /// The most bytes one blob may be, `BLOB_UPLOAD_LIMIT`.
@@ -61,12 +64,16 @@ impl Config {
         if !["https", "http"].contains(&did_web_scheme.as_str()) {
             bail!("DID_WEB_SCHEME is https or http, not {did_web_scheme}");
         }
-        let crawlers = var("PDS_CRAWLERS").unwrap_or_default();
-        let crawlers = crawlers
-            .split(',')
-            .map(|c| c.trim().trim_end_matches('/').to_string())
-            .filter(|c| !c.is_empty())
-            .collect();
+        let list = |name: &str| -> Vec<String> {
+            var(name)
+                .unwrap_or_default()
+                .split(',')
+                .map(|c| c.trim().trim_end_matches('/').to_string())
+                .filter(|c| !c.is_empty())
+                .collect()
+        };
+        let group_founders = list("GROUP_FOUNDERS");
+        let crawlers = list("PDS_CRAWLERS");
         let blob_upload_limit = match var("BLOB_UPLOAD_LIMIT") {
             Some(l) => l
                 .parse()
@@ -81,6 +88,7 @@ impl Config {
             data_dir,
             plc_url,
             did_web_scheme,
+            group_founders,
             crawlers,
             blob_upload_limit,
         })

@@ -78,9 +78,11 @@ says otherwise.
    `notifyWrite` again for a day (`authority.rs`, `authority_api.rs`;
    done).
    Then the
-   groups: `createGroup`, `getGroup`, `listGroups`,
-   handles, profile, rules, activating and deleting; the meta and members
-   spaces, their `access` records, space credentials and the space index:
+   groups: `createGroup`, `getGroup`, `listGroups`, with their meta and
+   members spaces, access records and roles (`group.rs`, `group_api.rs`,
+   `rbac.rs`; done, see [groups](groups.md)), then
+   handles, profile, rules, activating and deleting; spaces made and
+   configured by members, `checkUserAccess`, and the space index:
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,
    `spaceIndex.ts`, `methods/checkUserAccess.ts`.
 5. **Membership and roles.** Roles and permissions, assigning, joining
