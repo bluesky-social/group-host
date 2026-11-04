@@ -105,6 +105,58 @@ test('being told why the host refused', async () => {
   await expect(page.getByText('You are a member.')).toBeVisible()
 })
 
+test("changing a group's profile", async () => {
+  await page.goto(url('/g/hikers.groups.test'))
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Hikers of the Hills')
+  await page.getByRole('button', { name: 'Save the profile' }).click()
+  await page.goto(url('/g/hikers.groups.test'))
+  await expect(page.getByRole('heading', { name: 'Hikers of the Hills' })).toBeVisible()
+  await expect(page.getByText('Walks on Sundays.')).toBeVisible()
+})
+
+test('adding a rule, and taking it away', async () => {
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  await page.getByRole('textbox', { name: 'Rule' }).fill('Leave no trace')
+  await page.getByRole('button', { name: 'Add the rule' }).click()
+  await expect(page.locator('.rules', { hasText: 'Leave no trace' })).toBeVisible()
+  await page.goto(url('/g/hikers.groups.test'))
+  await expect(page.getByText('Leave no trace')).toBeVisible()
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  await page.getByRole('button', { name: 'Take away “Leave no trace”' }).click()
+  await expect(page.locator('.rules')).toHaveCount(0)
+})
+
+test('defining a role', async () => {
+  await page.getByRole('textbox', { name: 'Its key' }).fill('leader')
+  await page.getByRole('textbox', { name: 'Its name' }).fill('Ride leader')
+  await page.getByRole('checkbox', { name: 'invite' }).check()
+  await page.getByRole('button', { name: 'Define the role' }).click()
+  await expect(page.locator('.roles li', { hasText: 'Ride leader' })).toContainText('invite')
+  await page.getByRole('button', { name: 'Take away Ride leader' }).click()
+  await expect(page.locator('.roles li', { hasText: 'Ride leader' })).toHaveCount(0)
+})
+
+test('making an app password, and ending what it signed in', async () => {
+  await page.getByRole('textbox', { name: 'Where it is used' }).fill('Phone')
+  await page.getByRole('button', { name: 'Make an app password' }).click()
+  const password = (await page.locator('code.password').textContent()).trim()
+  const signIn = () =>
+    fetch(`${world.host}/xrpc/com.atproto.server.createSession`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ identifier: 'hikers.groups.test', password }),
+    })
+  expect((await signIn()).status).toBe(200)
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  await expect(page.locator('.passwords', { hasText: 'Phone' })).toBeVisible()
+  await page.getByRole('button', { name: "End app-password:Phone's access" }).click()
+  await expect(page.locator('.sessions')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Revoke “Phone”' }).click()
+  await expect(page.locator('.passwords')).toHaveCount(0)
+  expect((await signIn()).status).toBe(401)
+})
+
 test('signing an app in as her group', async () => {
   const app = await new App('atproto repo:app.bsky.feed.post').listen()
   await page.goto(await app.push())

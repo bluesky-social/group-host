@@ -114,8 +114,9 @@ says otherwise.
    profile and rules, joining and leaving, its members, and admitting
    those asking; done); its members run from its page (roles given and
    taken, people put out, invites by handle, and invitations taken up or
-   turned down on home; done); then its settings (profile, rules, its
-   apps and app passwords): the console's pages in
+   turned down on home; done); and its settings (`/g/<handle>/settings`:
+   profile, rules, roles, the apps acting as it with their log, and app
+   passwords; done): the console's pages in
    `apps/web/src/pages`. Each is used end to end in `harness/e2e`.
 8. **Moderation, recovery and moving.** Reports, labels, subjects and
    history; recovery keys; importing an account; migrating a group to

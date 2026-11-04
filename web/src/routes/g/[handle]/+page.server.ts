@@ -70,12 +70,7 @@ export const actions: Actions = {
 		const found = await event.fetch(`/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
 		if (!found.ok) return fail(400, { failed: `We cannot find ${handle}.` });
 		const { did } = await found.json();
-		const made = await event.fetch('/xrpc/fyi.opensocial.createInvite', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ group, invitee: did })
-		});
-		if (!made.ok) return fail(made.status, { failed: (await made.json().catch(() => null))?.message ?? made.statusText });
+		return act(event, 'fyi.opensocial.createInvite', { group, invitee: did });
 	},
 	uninvite: async (event) => {
 		const { group, form } = await asked(event);

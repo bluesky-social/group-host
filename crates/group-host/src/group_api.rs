@@ -252,14 +252,17 @@ pub async fn get_group(
         host.group_records(group, &members, &format!("{NS}.{collection}"))
             .map_err(XrpcError::internal)
     };
-    let mut people = Vec::new();
-    for (_, m) in records("membership")? {
-        let actor = host
-            .actor_view(m["member"].as_str().unwrap_or_default())
-            .await;
-        people.push(json!({"actor": actor, "roles": objects("role", listed(&m, "roles", "role"))}));
-    }
-    out["members"] = json!(people);
+    // Each named by their document, read at once rather than in turn.
+    let memberships = records("membership")?;
+    let actors = memberships
+        .iter()
+        .map(|(_, m)| host.actor_view(m["member"].as_str().unwrap_or_default()));
+    let actors = futures::future::join_all(actors).await;
+    out["members"] = memberships
+        .iter()
+        .zip(actors)
+        .map(|((_, m), actor)| json!({"actor": actor, "roles": objects("role", listed(m, "roles", "role"))}))
+        .collect();
     out["roles"] = records("role")?
         .into_iter()
         .map(|(key, r)| {
@@ -317,13 +320,17 @@ pub async fn get_group(
             .store
             .asking(group, None, 100)
             .map_err(XrpcError::internal)?;
-        let mut asking = Vec::new();
-        for r in &waiting {
-            let mut view = crate::group_join::request_view(r);
-            view["actor"] = host.actor_view(&r.did).await;
-            asking.push(view);
-        }
-        out["joinRequests"] = json!(asking);
+        let actors = waiting.iter().map(|r| host.actor_view(&r.did));
+        let actors = futures::future::join_all(actors).await;
+        out["joinRequests"] = waiting
+            .iter()
+            .zip(actors)
+            .map(|(r, actor)| {
+                let mut view = crate::group_join::request_view(r);
+                view["actor"] = actor;
+                view
+            })
+            .collect();
     }
     Ok(Json(out))
 }
