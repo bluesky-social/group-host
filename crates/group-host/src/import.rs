@@ -24,10 +24,11 @@
 //! while the move is pending.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{ANSWER_AT_MOST, Params, REPO_AT_MOST, invalid, param, too_much};
 use crate::group::NewGroup;
 use crate::group_api::{for_host, signed_in};
 use crate::import_space::keeps;
+use crate::index_api::capped;
 use crate::migration::{creds, repo_writes, take_in};
 use crate::rbac::NS;
 use crate::repo::{Asked, Write};
@@ -259,7 +260,9 @@ impl Host {
             let mut query = vec![("did", did), ("limit", "1000")];
             query.extend(cursor.as_deref().map(|c| ("cursor", c)));
             let res = self.ask_server(&list, &query).await?;
-            let page: Value = res.json().await.map_err(upstream)?;
+            let read = capped(res, ANSWER_AT_MOST).await;
+            let read = read.ok_or(upstream(too_much(ANSWER_AT_MOST)))?;
+            let page: Value = serde_json::from_slice(&read).map_err(upstream)?;
             let listed = page["cids"].as_array().cloned().unwrap_or_default();
             let next = page["cursor"].as_str().filter(|_| !listed.is_empty());
             cursor = next.map(String::from);
@@ -285,7 +288,9 @@ impl Host {
             let res = self.ask_server(url, &[("did", did), ("cid", cid)]).await?;
             let mime = res.headers().get(header::CONTENT_TYPE).cloned();
             let mime = mime.and_then(|m| m.to_str().ok().map(String::from));
-            let bytes = res.bytes().await.map_err(upstream)?;
+            let most = self.config.blob_upload_limit as usize;
+            let read = capped(res, most).await;
+            let bytes = read.ok_or(upstream(too_much(most)))?;
             if Cid::of_raw(&bytes).to_string() != cid {
                 return Err(upstream(format!("the file {cid} is not what it says")));
             }
@@ -307,7 +312,8 @@ impl Host {
         let blobs = self.copy_blobs(did, &plan.pds).await?;
         let url = format!("{}/xrpc/com.atproto.sync.getRepo", plan.pds);
         let res = self.ask_server(&url, &[("did", did)]).await?;
-        let bytes = res.bytes().await.map_err(upstream)?;
+        let read = capped(res, REPO_AT_MOST).await;
+        let bytes = read.ok_or(upstream(too_much(REPO_AT_MOST)))?;
         let Some(writes) = repo_writes(&bytes, did, &plan.key) else {
             return Err(refused(
                 "InvalidRepo",
@@ -419,13 +425,7 @@ impl Host {
         jwt: &str,
         address: Option<&str>,
     ) -> Result<Value, XrpcError> {
-        if !self.may_found(me) {
-            return Err(XrpcError::new(
-                StatusCode::FORBIDDEN,
-                "NotAllowed",
-                "this host is not starting groups for you",
-            ));
-        }
+        self.founding(me)?;
         let did = proof(self, jwt).await?;
         if did == me {
             return Err(refused(

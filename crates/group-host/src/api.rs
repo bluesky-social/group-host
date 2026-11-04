@@ -11,6 +11,17 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+
+/// The most a JSON answer from another server is read to.
+pub const ANSWER_AT_MOST: usize = 16 * 1024 * 1024;
+/// The most a repo, or a repo in a space, brought from another server is
+/// read to.
+pub const REPO_AT_MOST: usize = 256 * 1024 * 1024;
+
+/// Why an answer read up to `max` bytes was not taken.
+pub(crate) fn too_much(max: usize) -> String {
+    format!("an answer of more than {max} bytes, or one cut off")
+}
 use std::sync::Arc;
 
 pub(crate) type Params = HashMap<String, String>;

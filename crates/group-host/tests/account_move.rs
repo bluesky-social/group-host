@@ -57,6 +57,8 @@ struct Old {
     spaces: Mutex<bool>,
     undescribed: Mutex<bool>,
     no_refresh: Mutex<bool>,
+    /// Whether it asks for a DPoP nonce without giving one.
+    nonceless: Mutex<bool>,
 }
 
 impl Old {
@@ -165,17 +167,20 @@ async fn revoke(
 /// given for: a refusal if not, asking for a nonce first, as atproto's
 /// servers do, and taking a lapsed token as lapsed once.
 fn bound(old: &Old, headers: &HeaderMap, nsid: &str) -> Option<Response> {
+    let nonceless = *old.nonceless.lock().unwrap();
     let refuse = |error: &str| {
         let challenge = format!("DPoP error=\"{error}\"");
         let headers = [("www-authenticate", challenge), ("dpop-nonce", "n2".into())];
-        Some(
-            (
-                StatusCode::UNAUTHORIZED,
-                headers,
-                Json(json!({"error": error})),
-            )
-                .into_response(),
+        let mut res = (
+            StatusCode::UNAUTHORIZED,
+            headers,
+            Json(json!({"error": error})),
         )
+            .into_response();
+        if nonceless {
+            res.headers_mut().remove("dpop-nonce");
+        }
+        Some(res)
     };
     let auth = headers["authorization"].to_str().unwrap();
     let access = auth.strip_prefix("DPoP ").unwrap();
@@ -744,6 +749,20 @@ async fn stops_rather_than_move_without_what_it_cannot_read_or_renew() {
     w.sign_in_to_move().await;
     let said = w.call("startAccountMove", Some(json!({}))).await;
     assert_eq!(error(&said), (400, "SignInAgain"));
+}
+
+#[tokio::test]
+async fn asks_once_for_a_nonce_its_server_never_gives() {
+    let w = world().await;
+    w.sign_in_to_move().await;
+    // A server that asks for a nonce and never gives one is asked once
+    // more, then taken at its word, rather than asked forever.
+    *w.old.nonceless.lock().unwrap() = true;
+    let started = w.call("startAccountMove", Some(json!({})));
+    let said = tokio::time::timeout(std::time::Duration::from_secs(20), started)
+        .await
+        .expect("an answer, not a loop");
+    assert_ne!(said.0, 200, "{}", said.1);
 }
 
 #[tokio::test]

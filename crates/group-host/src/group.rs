@@ -135,16 +135,23 @@ impl Host {
         founders.is_empty() || founders.iter().any(|f| f == did)
     }
 
+    /// Refuses `did` a group here, made, moved or brought, unless the host
+    /// starts groups for them.
+    pub(crate) fn founding(&self, did: &str) -> Result<(), XrpcError> {
+        if self.may_found(did) {
+            return Ok(());
+        }
+        Err(XrpcError::new(
+            StatusCode::FORBIDDEN,
+            "NotAllowed",
+            "this host is not starting groups for you",
+        ))
+    }
+
     /// Makes a group: its account, its two spaces and what they hold from
     /// its first day, and its declaration if anyone may read its meta.
     pub async fn create_group(&self, new: &NewGroup) -> Result<Made, XrpcError> {
-        if !self.may_found(&new.founder) {
-            return Err(XrpcError::new(
-                StatusCode::FORBIDDEN,
-                "NotAllowed",
-                "this host is not starting groups for you",
-            ));
-        }
+        self.founding(&new.founder)?;
         let shape = shape(new)?;
         let did = self.create_account(&new.handle).await.map_err(|e| {
             if e.error == "HandleNotAvailable" {

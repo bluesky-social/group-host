@@ -720,6 +720,37 @@ async fn takes_in_nothing_it_cannot_check() {
     );
 }
 
+#[tokio::test]
+async fn takes_in_only_what_it_may_and_no_more_than_it_keeps() {
+    // A host that starts groups for someone else takes in none of Alice's.
+    let (_, b, _, _, [alice, ..]) =
+        two_hosts_with(&[("GROUP_FOUNDERS", "did:plc:someoneelse")]).await;
+    let key = Keypair::generate(Curve::K256);
+    let said = from_fake(&b, &alice, Arc::new(Fake::default()), &key).await;
+    assert_eq!(error(&said), (403, "NotAllowed"), "{}", said.1);
+    // A file larger than the host keeps stops the move, unread.
+    let (_, b, _, _, [alice, ..]) = two_hosts_with(&[("BLOB_UPLOAD_LIMIT", "4")]).await;
+    let fake = Arc::new(Fake::default());
+    let big = b"more than four".to_vec();
+    fake.said.lock().unwrap().insert(
+        "blobs".into(),
+        json!({"blobs": [{"cid": Cid::of_raw(&big).to_string(), "mimeType": "image/png"}]})
+            .to_string()
+            .into_bytes(),
+    );
+    fake.said.lock().unwrap().insert("blob".into(), big);
+    let said = from_fake(&b, &alice, fake, &key).await;
+    assert_eq!(error(&said), (502, "SourceUnreadable"), "{}", said.1);
+    assert!(
+        said.1["message"]
+            .as_str()
+            .unwrap()
+            .contains("more than 4 bytes"),
+        "{}",
+        said.1
+    );
+}
+
 #[test]
 fn takes_a_handle_here() {
     use group_host::migration::handle_here;

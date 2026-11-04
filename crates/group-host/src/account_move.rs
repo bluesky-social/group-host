@@ -22,8 +22,10 @@
 //!   unfinished copy discarded.
 
 use crate::Host;
+use crate::api::{ANSWER_AT_MOST, REPO_AT_MOST, too_much};
 use crate::console_login::{Pending, sign_in};
 use crate::group_api::signed_in;
+use crate::index_api::capped;
 use crate::migration::creds;
 use crate::rbac::NS;
 use crate::store::Store;
@@ -273,7 +275,8 @@ impl Host {
             Method::GET
         };
         let key = Keypair::from_bytes(Curve::P256, &m.key).expect("a key the host made");
-        let (mut nonce, mut renewed) = (None::<String>, false);
+        // Each asked for once: a nonce, and a renewed token.
+        let (mut nonce, mut nonced, mut renewed) = (None::<String>, false, false);
         loop {
             let mut claims = json!({
                 "jti": jose::random(12),
@@ -302,9 +305,9 @@ impl Host {
             let asked = asked.map(String::from);
             if res.status() == StatusCode::UNAUTHORIZED
                 && challenged(&res, "use_dpop_nonce")
-                && nonce.is_none()
+                && !nonced
             {
-                nonce = asked;
+                (nonce, nonced) = (asked, true);
                 continue;
             }
             if res.status() == StatusCode::UNAUTHORIZED
@@ -330,7 +333,8 @@ impl Host {
     ) -> Result<Value, XrpcError> {
         let res = self.as_moving(mover, m, nsid, query, body).await?;
         let status = res.status();
-        let said: Value = res.json().await.unwrap_or_default();
+        let read = capped(res, ANSWER_AT_MOST).await.unwrap_or_default();
+        let said: Value = serde_json::from_slice(&read).unwrap_or_default();
         if !status.is_success() {
             let why = said["message"].as_str().or(said["error"].as_str());
             return Err(upstream(format!(
@@ -357,7 +361,8 @@ impl Host {
             .and_then(|v| v.to_str().ok());
         let kind = kind.unwrap_or("application/octet-stream").to_string();
         let status = res.status();
-        let bytes = res.bytes().await.map_err(upstream)?;
+        let read = capped(res, REPO_AT_MOST).await;
+        let bytes = read.ok_or(upstream(too_much(REPO_AT_MOST)))?;
         let said: Value = serde_json::from_slice(&bytes).unwrap_or_default();
         if status.is_success() {
             return Ok(Some((bytes.to_vec(), kind)));

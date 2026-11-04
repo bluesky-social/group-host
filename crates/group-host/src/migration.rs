@@ -28,8 +28,9 @@
 //! this host keeps it, not as the space alpha's meta archive.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{ANSWER_AT_MOST, Params, REPO_AT_MOST, invalid, param, too_much};
 use crate::group_api::signed_in;
+use crate::index_api::capped;
 use crate::rbac::NS;
 use crate::repo::{Asked, Write};
 use crate::store::{Account, Store};
@@ -57,6 +58,13 @@ pub const RECEIVE: &str = "fyi.opensocial.migrateReceive";
 
 fn refused(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)
+}
+
+/// A JSON answer of the group's host, read up to `ANSWER_AT_MOST`.
+async fn json_at_most(res: reqwest::Response) -> Result<Value, XrpcError> {
+    let read = capped(res, ANSWER_AT_MOST).await;
+    let bytes = read.ok_or(source(too_much(ANSWER_AT_MOST)))?;
+    serde_json::from_slice(&bytes).map_err(source)
 }
 
 fn source(why: impl std::fmt::Display) -> XrpcError {
@@ -455,6 +463,7 @@ pub async fn migrate_receive(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.migrateReceive")).await?;
+    host.founding(&me)?;
     let group = body["did"]
         .as_str()
         .ok_or_else(|| invalid("did is required"))?;
@@ -512,7 +521,8 @@ pub async fn migrate_receive(
         .send()
         .await
         .map_err(source)?;
-    let bytes = res.bytes().await.map_err(source)?;
+    let read = capped(res, REPO_AT_MOST).await;
+    let bytes = read.ok_or(source(too_much(REPO_AT_MOST)))?;
     let writes = repo_writes(&bytes, group, &key);
     let writes = writes.ok_or(source("a repo that is not the group's, signed and whole"))?;
 
@@ -555,19 +565,17 @@ async fn receive(
     };
 
     // Its files first: its records hold them.
-    let listed: Value = host
-        .pull(pds, group, token, &[("part", "blobs")])
-        .await?
-        .json()
-        .await
-        .map_err(source)?;
+    let res = host.pull(pds, group, token, &[("part", "blobs")]).await?;
+    let listed: Value = json_at_most(res).await?;
     let blobs = listed["blobs"].as_array().cloned().unwrap_or_default();
     for blob in &blobs {
         let cid = blob["cid"].as_str().unwrap_or_default();
         let res = host
             .pull(pds, group, token, &[("part", "blob"), ("cid", cid)])
             .await?;
-        let bytes = res.bytes().await.map_err(source)?;
+        let most = host.config.blob_upload_limit as usize;
+        let read = capped(res, most).await;
+        let bytes = read.ok_or(source(too_much(most)))?;
         if Cid::of_raw(&bytes).to_string() != cid {
             return Err(source(format!("the file {cid} is not what it says")));
         }
@@ -590,19 +598,16 @@ async fn receive(
         if space.authority != group {
             return Err(invalid(format!("{uri} is not one of the group's spaces")));
         }
-        let meta: Value = host
+        let res = host
             .pull(pds, group, token, &[("part", "meta"), ("space", uri)])
-            .await?
-            .json()
-            .await
-            .map_err(source)?;
+            .await?;
+        let meta: Value = json_at_most(res).await?;
         host.create_space(group, &space.kind, &space.skey, meta["publicRead"] == true)?;
-        let bytes = host
+        let res = host
             .pull(pds, group, token, &[("part", "repo"), ("space", uri)])
-            .await?
-            .bytes()
-            .await
-            .map_err(source)?;
+            .await?;
+        let read = capped(res, REPO_AT_MOST).await;
+        let bytes = read.ok_or(source(too_much(REPO_AT_MOST)))?;
         let writes = space_writes(&bytes, group, uri);
         let writes = writes.ok_or(source(format!(
             "the group's repo in {uri} is not what its commit says"

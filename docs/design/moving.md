@@ -84,6 +84,12 @@ Details:
   it still resolves to the group.
 - If that label or handle is another account's here, the move is refused
   `HandleNotAvailable`.
+- Only someone this host starts groups for (`GROUP_FOUNDERS`) may bring
+  a group here, as only they may start one.
+- What is pulled is read up to a limit: a file to `BLOB_UPLOAD_LIMIT`, a
+  repo to 256 MiB, any other answer to 16 MiB. More stops the move.
+  Bringing an account here reads to the same limits, and leaves out a
+  file over its limit as it does any file that does not come.
 
 ### Handing over
 
