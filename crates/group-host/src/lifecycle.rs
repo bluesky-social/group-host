@@ -89,32 +89,35 @@ impl Host {
         Ok(done)
     }
 
-    /// Deletes `did` from the host whole, and ends its DID in the
-    /// directory, as only this host holds a key to it. Whether it was
-    /// ended.
+    /// Ends `did` in the directory, as only this host holds a key to it,
+    /// then deletes it from the host whole. Whether its DID was ended.
+    ///
+    /// The DID goes first: once the account is gone, nobody could ask
+    /// again, and a DID nobody else can end would stay live with nothing
+    /// behind it. The directory unreachable or refusing, the account stays
+    /// as it was, to be deleted again.
     pub async fn delete_account(&self, did: &str) -> Result<bool> {
+        let ended = self.tombstone(did).await?;
         let blobs = self
             .store
             .delete_account(did, &[status(did, Some("deleted"))])?;
         self.remove_blobs(blobs.iter().map(|cid| (did, cid)));
         self.announce();
-        let ended = self.tombstone(did).await;
-        if let Err(e) = &ended {
-            tracing::warn!(did, error = %format!("{e:#}"), "could not end the DID");
-        }
-        Ok(ended.unwrap_or(false))
+        Ok(ended)
     }
 
     /// Ends `did` in the directory, if nobody but this host could ever use
     /// it again: with a steward's recovery key on it, it is theirs to keep,
-    /// to bring the group back elsewhere, and is left alone. Whether it
-    /// ended it.
+    /// to bring the group back elsewhere, and is left alone. Whether it is
+    /// ended, as it is already when asked again.
     async fn tombstone(&self, did: &str) -> Result<bool> {
         let last = self.plc.last_op(did).await?;
         let ours = self.secrets.rotation.public().did_key();
-        if let atproto::plc::Signed::Update { op, .. } = &last
-            && op.rotation_keys.iter().any(|k| *k != ours)
-        {
+        let op = match &last {
+            atproto::plc::Signed::Tombstone { .. } => return Ok(true),
+            atproto::plc::Signed::Update { op, .. } => op,
+        };
+        if op.rotation_keys.iter().any(|k| *k != ours) {
             return Ok(false);
         }
         let end = atproto::plc::tombstone(last.cid(), &self.secrets.rotation);

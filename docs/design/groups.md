@@ -181,8 +181,11 @@ A group may want more places, such as one only its admins read. Each
 further space has an access record and an index entry in `members` that
 apps read to find it. `createSpace` (for `space.create`) makes one from a
 type, its readers, and optionally its writers, key, name and credential
-scopes. `updateSpace` (for `space.configure`) changes those. Both refuse
-a `readableBy` that names nobody, and a name over 64 characters.
+scopes. A space is made whole or not at all: if its access record or
+its index entry cannot be written, the host ends it again, and its key
+is free to use. `updateSpace` (for `space.configure`) changes those,
+and changes nothing when it cannot change them all. Both refuse a
+`readableBy` that names nobody, and a name over 64 characters.
 `deleteSpace` (for `space.delete`) removes the index entry, tells the
 space's syncers, and deletes the space and the group's repo in it. What
 members wrote there stays theirs at their PDSes.
@@ -200,9 +203,10 @@ the group the way any handle names an account: by
 Under `HANDLE_DOMAIN` a group may take only its own address.
 
 `checkGroupHandle` says whether a handle names the group yet, changing
-nothing. `updateGroupHandle` checks the same, updates the group's DID
-document with the host's rotation key, then the host's own record, and
-tells relays. It fails when the domain does not name the group, or when
+nothing. `updateGroupHandle` checks the same, holds the handle in the
+host's own record, updates the group's DID document with the host's
+rotation key, and tells relays. If the directory refuses the update, the
+host puts the group's previous handle back. It fails when the domain does not name the group, or when
 the host's key no longer controls the DID. Both are for `group.configure`.
 
 ## Switching off, on and deleting
@@ -216,8 +220,8 @@ the host keeps who held `group.configure` when it was switched off.
 `activateGroup` is for one of those stewards.
 
 `deleteGroup` is for a holder of `group.configure`, or for a kept steward
-while the group is off. It tells the syncers of each space, then deletes
-the account, repos, spaces, address, invites, join requests, tokens,
+while the group is off. It tells the syncers of each space, ends the
+DID, then deletes the account, repos, spaces, address, invites, join requests, tokens,
 moderation state and blobs together, and tells relays. What members wrote
 in its spaces stays theirs, at their PDSes.
 
@@ -225,4 +229,6 @@ The host ends the DID with a tombstone only when its own key is the only
 rotation key on it. If a steward holds a recovery key there, the host
 leaves the DID for its holder to bring the group back elsewhere, and
 `deleteGroup` answers `tombstoned: false` ([recovery](recovery.md),
-[moving](moving.md)).
+[moving](moving.md)). If the directory cannot be reached or refuses the
+tombstone, `deleteGroup` fails and the group stays as it was, to be
+deleted again.

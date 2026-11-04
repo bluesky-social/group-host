@@ -510,6 +510,7 @@ const INVITE: &str = "INSERT INTO invite (grp, invitee, by, message, rkey, creat
 const INVITED: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE grp = ?1 AND invitee = ?2";
 const INVITES: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE grp = ?1 AND seq < ?2 AND (expires_at IS NULL OR expires_at > ?3) ORDER BY seq DESC LIMIT ?4";
 const INVITES_TO: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE invitee = ?1 AND (expires_at IS NULL OR expires_at > ?2) ORDER BY seq DESC";
+const LAPSED_INVITES: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE expires_at <= ?1 ORDER BY seq";
 const UNINVITE: &str = "DELETE FROM invite WHERE grp = ?1 AND invitee = ?2";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
@@ -1604,6 +1605,14 @@ impl Store {
         let conn = self.conn();
         let mut q = conn.prepare(INVITES_TO)?;
         let rows = q.query_map(params![invitee, now], invite)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The invites lapsed by `now`, oldest first.
+    pub fn lapsed_invites(&self, now: i64) -> Result<Vec<Invite>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(LAPSED_INVITES)?;
+        let rows = q.query_map([now], invite)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 

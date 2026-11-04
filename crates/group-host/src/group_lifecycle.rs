@@ -86,9 +86,10 @@ pub async fn activate_group(
     }
 }
 
-/// Deletes a group: its account, repos and spaces here, and what the host
-/// keeps of them; the services syncing its spaces are told; its DID is
-/// ended. They are told first, while the group has a key to sign with:
+/// Deletes a group: its DID is ended; its account, repos and spaces here
+/// go, and what the host keeps of them; the services syncing its spaces
+/// are told. The directory refusing, the group stays, to be deleted
+/// again. They are told first, while the group has a key to sign with:
 /// best effort, so a delete that then fails has told them of one that
 /// did not happen, and they find it again when they next read. What
 /// members wrote in its spaces is theirs, at their own PDSes.

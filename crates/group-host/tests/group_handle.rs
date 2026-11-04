@@ -8,7 +8,7 @@ use axum::extract::{Query, State};
 use axum::routing::get as route_get;
 use common::groups::*;
 use common::spaces::*;
-use common::{Running, serve, start};
+use common::{Running, serve, start, turn};
 use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -187,6 +187,19 @@ async fn takes_a_domain_that_names_it_and_its_address_back() {
     let before = h.plc.ops.lock().unwrap()[&did].len();
     assert_eq!(update(&h, &alice, &did, "riders.test").await.0, 200);
     assert_eq!(h.plc.ops.lock().unwrap()[&did].len(), before);
+    // Refused by the directory, the host keeps the handle the directory
+    // names, and the relays hear nothing.
+    let told = h.host.store.events_after(0, 1000).unwrap().len();
+    turn(&h.plc.refuse, true);
+    // A refusal is the caller's to send again: InvalidOperation.
+    assert_eq!(update(&h, &alice, &did, RIDERS).await.0, 400);
+    turn(&h.plc.refuse, false);
+    assert_eq!(h.plc.ops.lock().unwrap()[&did].len(), before);
+    assert_eq!(
+        h.host.store.account(&did).unwrap().unwrap().handle,
+        "riders.test"
+    );
+    assert_eq!(h.host.store.events_after(0, 1000).unwrap().len(), told);
     // And back to its address.
     assert_eq!(
         update(&h, &alice, &did, RIDERS).await,

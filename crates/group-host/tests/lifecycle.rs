@@ -7,7 +7,7 @@ mod common;
 use atproto::plc::Signed;
 use common::groups::*;
 use common::spaces::*;
-use common::{Running, start};
+use common::{Running, start, turn};
 use group_host::authority::Access;
 use group_host::group::{members_space, meta_space};
 use group_host::repo::Write;
@@ -299,12 +299,39 @@ async fn a_group_switched_off_is_deleted_by_its_stewards_of_then() {
 }
 
 #[tokio::test]
-async fn a_did_the_directory_will_not_end_stays() {
+async fn a_did_the_directory_will_not_end_keeps_its_account() {
     let h = start(&[], false).await;
     let did = h.host.create_account(RIDERS).await.unwrap();
-    // The directory has forgotten it, so there is no operation to end.
+    // The directory has forgotten it, so there is no operation to end:
+    // the account stays, to be deleted again.
     h.plc.ops.lock().unwrap().remove(&did);
-    assert!(!h.host.delete_account(&did).await.unwrap());
+    assert!(h.host.delete_account(&did).await.is_err());
+    assert!(h.host.store.account(&did).unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_group_the_directory_would_not_end_is_deleted_again() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    turn(&h.plc.refuse, true);
+    let said = call(&h, &alice, "deleteGroup", &did).await;
+    assert_eq!(said.0, 500);
+    turn(&h.plc.refuse, false);
+    assert!(h.host.store.account(&did).unwrap().is_some());
+    let (status, deleted) = call(&h, &alice, "deleteGroup", &did).await;
+    assert_eq!((status, deleted), (200, json!({"tombstoned": true})));
+    assert!(h.host.store.account(&did).unwrap().is_none());
+}
+
+#[tokio::test]
+async fn a_did_ended_already_is_ended() {
+    let h = start(&[], false).await;
+    let did = h.host.create_account(RIDERS).await.unwrap();
+    let last = h.host.plc.last_op(&did).await.unwrap();
+    let end = atproto::plc::tombstone(last.cid(), &h.host.secrets.rotation);
+    h.host.plc.publish(&did, &end).await.unwrap();
+    assert!(h.host.delete_account(&did).await.unwrap());
+    assert!(h.host.store.account(&did).unwrap().is_none());
 }
 
 #[tokio::test]
@@ -324,4 +351,17 @@ async fn a_group_half_made_frees_its_handle() {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
+}
+
+#[tokio::test]
+async fn a_group_half_made_that_cannot_go_fails_as_it_did() {
+    let h = start(&[], false).await;
+    let [alice, _, _] = people(&h).await;
+    let lxm = format!("{NS}.createGroup");
+    turn(&h.plc.refuse_ends, true);
+    let body = json!({"handle": RIDERS, "displayName": "Riders", "stewards": [{"did": "did:web:example.com%20x"}]});
+    let said = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+    // Its DID could not be ended, so its account stays.
+    assert!(h.host.store.account(RIDERS).unwrap().is_some());
 }

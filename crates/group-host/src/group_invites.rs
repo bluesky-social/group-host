@@ -140,7 +140,7 @@ pub fn millis_of(text: &str) -> Option<i64> {
 impl Host {
     /// Takes `invite` back: its record out of the group's repo in the
     /// inbox, and the host's list.
-    async fn take_back(&self, invite: &Invite) -> Result<(), XrpcError> {
+    pub(crate) async fn take_back(&self, invite: &Invite) -> Result<(), XrpcError> {
         let gone = Write::Delete {
             collection: format!("{NS}.invite"),
             rkey: invite.rkey.clone(),
@@ -152,21 +152,37 @@ impl Host {
         forgot.map_err(XrpcError::internal)
     }
 
-    /// `group`'s invite to `did`, if one waits and has not lapsed: taken
-    /// back, as it is redeemed.
-    pub(crate) async fn redeem(&self, group: &str, did: &str) -> Result<bool, XrpcError> {
+    /// `group`'s invite to `did`, if one waits and has not lapsed. One
+    /// lapsed is taken back.
+    pub(crate) async fn waiting_invite(
+        &self,
+        group: &str,
+        did: &str,
+    ) -> Result<Option<Invite>, XrpcError> {
         let invited = self
             .store
             .invited(group, did)
             .map_err(XrpcError::internal)?;
-        let live = invited.filter(|i| i.expires_at.is_none_or(|at| at > now_millis()));
-        match live {
-            Some(invite) => {
-                self.take_back(&invite).await?;
-                Ok(true)
+        match invited {
+            Some(lapsed) if lapsed.expires_at.is_some_and(|at| at <= now_millis()) => {
+                self.take_back(&lapsed).await?;
+                Ok(None)
             }
-            None => Ok(false),
+            waiting => Ok(waiting),
         }
+    }
+
+    /// Takes back the invites lapsed by `now`, saying how many. One whose
+    /// group is switched off waits until it is on again.
+    pub async fn sweep_invites(&self, now: i64) -> anyhow::Result<usize> {
+        let lapsed = self.store.lapsed_invites(now)?;
+        let mut swept = 0;
+        for invite in &lapsed {
+            if self.take_back(invite).await.is_ok() {
+                swept += 1;
+            }
+        }
+        Ok(swept)
     }
 }
 
@@ -201,15 +217,8 @@ pub async fn create_invite(
     let group = members.group.clone();
     // One waiting is the one answered; one lapsed is taken back, and a
     // fresh one written.
-    let invited = host
-        .store
-        .invited(&group, invitee)
-        .map_err(XrpcError::internal)?;
-    if let Some(waiting) = invited {
-        if waiting.expires_at.is_none_or(|at| at > now_millis()) {
-            return Ok(Json(json!({ "uri": uri_of(&waiting) })));
-        }
-        host.take_back(&waiting).await?;
+    if let Some(waiting) = host.waiting_invite(&group, invitee).await? {
+        return Ok(Json(json!({ "uri": uri_of(&waiting) })));
     }
     let invite = Invite {
         seq: 0,

@@ -125,6 +125,27 @@ pub async fn create_space(
         None => host.clock.next(),
     };
     let uri = host.create_space(&group, kind, &skey, false)?;
+    // A space without its access record or its entry could be neither
+    // changed nor deleted, and its key never made again: it is made whole
+    // or not at all.
+    let furnished = furnish(&host, &group, &uri, &body, readers, writers).await;
+    if let Err(e) = furnished {
+        host.end_space(&group, &uri).map_err(XrpcError::internal)?;
+        return Err(e);
+    }
+    Ok(Json(json!({ "uri": uri })))
+}
+
+/// Writes a space just made its access record, and its entry in the
+/// group's index, as `body` has them.
+async fn furnish(
+    host: &Host,
+    group: &str,
+    uri: &str,
+    body: &Value,
+    readers: Vec<Value>,
+    writers: Option<Vec<Value>>,
+) -> Result<(), XrpcError> {
     let at = iso(now_millis());
     let mut access =
         json!({"$type": format!("{NS}.access"), "readableBy": readers, "createdAt": at});
@@ -139,9 +160,9 @@ pub async fn create_space(
         rkey: "self".into(),
         value: access,
     };
-    host.space_write(&group, &uri, &[access_write]).await?;
+    host.space_write(group, uri, &[access_write]).await?;
     let mut entry = json!({"$type": format!("{NS}.space"), "space": uri, "createdAt": at});
-    if let Some(name) = name {
+    if let Some(name) = body["name"].as_str() {
         entry["name"] = json!(name);
     }
     let indexed = Write::Create {
@@ -149,9 +170,9 @@ pub async fn create_space(
         rkey: host.clock.next(),
         value: entry,
     };
-    host.space_write(&group, &members_space(&group), &[indexed])
+    host.space_write(group, &members_space(group), &[indexed])
         .await?;
-    Ok(Json(json!({ "uri": uri })))
+    Ok(())
 }
 
 /// Changes a space: its name, who reads it, who writes in it in their own
@@ -192,6 +213,12 @@ pub async fn update_space(
     if writers.is_some() && space == members {
         return Err(invalid("who may write in the members space is fixed"));
     }
+    // The entry is found before anything is written, so a change refused
+    // for want of it changes nothing.
+    let named = match name {
+        Some(name) => Some((name, entry_of(&host, &group, &space)?)),
+        None => None,
+    };
     if readers.is_some() || writers.is_some() || body.get("credentialScopes").is_some() {
         let mut access = current.clone();
         if let Some(readers) = &readers {
@@ -216,8 +243,7 @@ pub async fn update_space(
         let declared = host.declare(&group, names(readers).iter().any(|r| r == PUBLIC));
         declared.await?;
     }
-    if let Some(name) = name {
-        let (rkey, mut entry) = entry_of(&host, &group, &space)?;
+    if let Some((name, (rkey, mut entry))) = named {
         entry["name"] = json!(name);
         let put = put_in(&host, &group, &members, &space_collection, &rkey, entry);
         let _written = put.await?;

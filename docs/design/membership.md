@@ -115,9 +115,12 @@ after a day.
 
 The inbox is the invitee's to read, so the host keeps its own list of
 invites sent, one per group and invitee, and redeems from that list.
-Redeeming takes the invite back, from the inbox and the list. Inviting
-again answers the waiting invite; one past its `expiresAt` no longer
-admits, and inviting again replaces it. The invitee may refuse with
+Redeeming takes the invite back, from the inbox and the list, once the
+membership is written, so a join that fails leaves the invite waiting.
+Inviting again answers the waiting invite. One past its `expiresAt` no
+longer admits: the host takes it back when the invitee asks to join, or
+within the hour on its own, and inviting again replaces it. The
+invitee may refuse with
 `declineInvite`, and the group may still invite them later. Holders of
 `invite` list invites with `listInvites` and take one back with
 `revokeInvite`. A site that cannot read someone's inbox shows them their

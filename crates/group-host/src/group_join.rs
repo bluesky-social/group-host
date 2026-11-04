@@ -60,10 +60,13 @@ pub async fn request_join(
     if members.membership(&me)?.is_some() {
         return Err(bad("AlreadyMember", "you are a member already"));
     }
-    // An invite is pre-approval: redeemed, whatever the policy.
-    if host.redeem(group, &me).await? {
+    // An invite is pre-approval: redeemed, whatever the policy. It is
+    // taken back once they are a member, so a membership not written
+    // leaves it waiting.
+    if let Some(invite) = host.waiting_invite(group, &me).await? {
         let roles = members.default_roles()?;
         members.put_membership(&me, &roles).await?;
+        host.take_back(&invite).await?;
         host.store.decide(group, &me).map_err(XrpcError::internal)?;
         return Ok(Json(json!({"status": "admitted"})));
     }

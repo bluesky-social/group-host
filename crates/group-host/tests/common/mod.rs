@@ -17,17 +17,30 @@ use group_host::Host;
 use group_host::config::Config;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// A PLC directory: each DID's operations, each checked as the real one
 /// checks them, and its document as it serves one. `refuse` turns every
-/// operation away; `slow` holds each read of a last operation a while, so
-/// two changes at once both read before either writes.
+/// operation away, and `refuse_ends` every tombstone; `slow` holds each
+/// read of a last operation a while, so two changes at once both read
+/// before either writes.
 #[derive(Default)]
 pub struct Plc {
     pub ops: Mutex<HashMap<String, Vec<Signed>>>,
-    pub refuse: bool,
-    pub slow: std::sync::atomic::AtomicBool,
+    pub refuse: AtomicBool,
+    pub refuse_ends: AtomicBool,
+    pub slow: AtomicBool,
+}
+
+/// Whether `switch` is on.
+pub fn on(switch: &AtomicBool) -> bool {
+    switch.load(Ordering::SeqCst)
+}
+
+/// Turns `switch` to `to`.
+pub fn turn(switch: &AtomicBool, to: bool) {
+    switch.store(to, Ordering::SeqCst);
 }
 
 async fn publish(
@@ -62,7 +75,8 @@ async fn publish(
         }
         Signed::Tombstone { .. } => true,
     };
-    if plc.refuse || !signed || !keys_taken {
+    let ending = matches!(op, Signed::Tombstone { .. });
+    if on(&plc.refuse) || (ending && on(&plc.refuse_ends)) || !signed || !keys_taken {
         return StatusCode::BAD_REQUEST;
     }
     log.push(op);
@@ -127,7 +141,7 @@ pub async fn serve(router: Router) -> String {
 
 pub async fn start_plc(refuse: bool) -> (Arc<Plc>, String) {
     let plc = Arc::new(Plc {
-        refuse,
+        refuse: refuse.into(),
         ..Plc::default()
     });
     let router = Router::new()

@@ -111,6 +111,8 @@ switched off, to have held it when the group was switched off (see
 [groups](groups.md)). `deleteGroup` answers `tombstoned`, which says
 whether the DID was ended.
 
-The host deletes the group's account and data first, then publishes the
-tombstone. Deleting a group also forgets the host's notes of who added
+The host publishes the tombstone first, then deletes the group's account
+and data. If the directory cannot be reached or refuses it, nothing is
+deleted and `deleteGroup` fails, so it can be asked again; a DID already
+ended counts as ended. Deleting a group also forgets the host's notes of who added
 which key.

@@ -166,10 +166,13 @@ impl Host {
             }
         })?;
         // A group half made is no group: its account goes, so its handle
-        // is free again.
+        // is free again. Should that fail, what was asked fails as it did,
+        // and the host says why the handle stays taken.
         let made = self.set_up(&did, new, &shape).await;
-        if made.is_err() {
-            let _ = self.delete_account(&did).await;
+        if made.is_err()
+            && let Err(e) = self.delete_account(&did).await
+        {
+            tracing::warn!(did = %did, error = %format!("{e:#}"), "could not undo a group half made");
         }
         made
     }

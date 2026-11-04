@@ -97,7 +97,7 @@ pub async fn check_group_handle(
 }
 
 /// Gives the group a handle on a domain that names it, or its own address
-/// back: its `did:plc` first, then the host, then the relays.
+/// back: the host holds it, its `did:plc` names it, then the relays hear.
 pub async fn update_group_handle(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -112,7 +112,8 @@ pub async fn update_group_handle(
     let address = configurable(&host, &headers, group, "updateGroupHandle").await?;
     let handle = wanted(&host, group, &address, asked)?;
     let current = host.store.account(group).map_err(XrpcError::internal)?;
-    if current.is_some_and(|a| a.handle == handle) {
+    let before = current.map(|a| a.handle).unwrap_or_default();
+    if before == handle {
         return Ok(Json(json!({ "handle": handle })));
     }
     if named(&host, group, &address, &handle).await.as_deref() != Some(group) {
@@ -123,8 +124,7 @@ pub async fn update_group_handle(
             ),
         ));
     }
-    // The directory first: until it names the handle, nobody takes it for
-    // the group's.
+    // One change to the group's identity at a time.
     let turn = host.plc.turn().await;
     let last = host.plc.last_op(group).await.map_err(XrpcError::internal)?;
     let Signed::Update { op, .. } = &last else {
@@ -140,12 +140,19 @@ pub async fn update_group_handle(
     let mut next = op.clone();
     next.also_known_as = vec![format!("at://{handle}")];
     let signed = next.sign(Some(last.cid()), &host.secrets.rotation);
-    host.plc
-        .publish(group, &signed)
-        .await
-        .map_err(crate::plc::not_published)?;
+    // The host holds the handle first, so the directory never names one
+    // the host refuses: taken here meanwhile, the database's unique handle
+    // refuses it. The directory refusing, the host puts its handle back.
+    let held = host.store.set_handle(group, &handle, &[]);
+    held.map_err(XrpcError::internal)?;
+    let published = host.plc.publish(group, &signed).await;
+    if let Err(e) = published {
+        let back = host.store.set_handle(group, &before, &[]);
+        back.map_err(XrpcError::internal)?;
+        return Err(crate::plc::not_published(e));
+    }
     drop(turn);
-    // Taken here meanwhile, the database's unique handle refuses it.
+    // Until the directory names it, the relays are not told.
     let set = host
         .store
         .set_handle(group, &handle, &[identity(group, &handle)]);

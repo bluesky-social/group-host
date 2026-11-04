@@ -171,6 +171,19 @@ async fn an_admin_makes_a_space() {
         let said = call(&h, who, "createSpace", body.clone()).await;
         assert_eq!(error(&said), refused, "{body}");
     }
+
+    // An access record that is no record leaves no space behind, and its
+    // key free to be made again.
+    let wrong = json!({"group": did, "spaceType": CALENDAR, "skey": "laps", "readableBy": [{"role": "member"}], "credentialScopes": [{"role": "admin", "scopes": 1.5}]});
+    let said = call(&h, &alice, "createSpace", wrong).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+    let laps = format!("at://{did}/space/{CALENDAR}/laps");
+    assert!(h.host.store.space(&laps).unwrap().is_none());
+    assert!(h.host.store.space_head(&did, &laps).unwrap().is_none());
+    let right = json!({"group": did, "spaceType": CALENDAR, "skey": "laps", "readableBy": [{"role": "member"}]});
+    let said = call(&h, &alice, "createSpace", right).await;
+    assert_eq!(said, (200, json!({"uri": laps})));
+    assert!(entry(&h, &did, &laps).is_some());
 }
 
 #[tokio::test]
@@ -321,7 +334,7 @@ async fn an_admin_changes_a_space() {
         ),
         (
             &alice,
-            json!({"group": did, "space": unlisted, "name": "Named"}),
+            json!({"group": did, "space": unlisted, "name": "Named", "readableBy": [{"role": "public"}]}),
             (400, "SpaceNotFound"),
         ),
         (
@@ -370,6 +383,8 @@ async fn an_admin_changes_a_space() {
         let said = call(&h, who, "updateSpace", body.clone()).await;
         assert_eq!(error(&said), refused, "{body}");
     }
+    // A change refused for want of the space's entry changes nothing.
+    assert_eq!(access(&h, &did, &unlisted)["readableBy"], json!([]));
     // The members space may change, readable by members still.
     let said = call(&h, &alice, "updateSpace", json!({"group": did, "space": members, "readableBy": [{"role": "member"}, {"role": "admin"}]})).await;
     assert_eq!(said.0, 200);

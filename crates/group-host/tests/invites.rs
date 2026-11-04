@@ -10,6 +10,8 @@ use common::{Running, start};
 use group_host::group::meta_space;
 use group_host::group_invites::{inbox_of, millis_of};
 use group_host::repo::Write;
+use group_host::store::Invite;
+use group_host::time::now_millis;
 use serde_json::{Value as Json, json};
 
 const NS: &str = "fyi.opensocial";
@@ -273,16 +275,14 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
         (400, "InvalidRequest")
     );
 
-    // Lapsed, it is no invite.
-    let lapse = group_host::time::iso(group_host::time::now_millis() + 1000);
-    let (status, _) = call(
-        &h,
-        &alice,
-        "createInvite",
-        json!({"group": did, "invitee": carol.did, "expiresAt": lapse}),
-    )
-    .await;
-    assert_eq!(status, 200);
+    // Lapsed, it is no invite, and is taken back once found so. A past
+    // expiry is refused, so these lapse a second after they are made.
+    let lapse = group_host::time::iso(now_millis() + 1000);
+    let lapsed = |who: &str| json!({"group": did, "invitee": who, "expiresAt": lapse});
+    let (status, made) = call(&h, &alice, "createInvite", lapsed(&carol.did)).await;
+    assert_eq!(status, 200, "{made}");
+    let (status, bobs) = call(&h, &alice, "createInvite", lapsed(&bob.did)).await;
+    assert_eq!(status, 200, "{bobs}");
     tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     assert_eq!(
         ask(&h, &alice, "listInvites", &format!("group={did}"))
@@ -294,6 +294,21 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
         error(&call(&h, &carol, "requestJoin", json!({"group": did})).await),
         (400, "InviteRequired")
     );
+    let gone = |made: &Json, invitee: &str| {
+        let rkey = made["uri"].as_str().unwrap().rsplit('/').next().unwrap();
+        let record = h
+            .host
+            .group_record(&did, &inbox_of(invitee), &format!("{NS}.invite"), rkey)
+            .unwrap();
+        record.is_none() && h.host.store.invited(&did, invitee).unwrap().is_none()
+    };
+    assert!(gone(&made, &carol.did));
+    // Or by the host's sweep, asked of no one.
+    let made = bobs;
+    assert!(!gone(&made, &bob.did));
+    assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 1);
+    assert!(gone(&made, &bob.did));
+    assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 0);
     // Invited again, a fresh invite, which admits.
     let (_, again) = call(
         &h,
@@ -327,6 +342,23 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
         ask(&h, &dave, "getActorInvites", "").await.1["invites"],
         json!([])
     );
+    // Its lapsed invites wait for it to be on again.
+    let erin = "did:plc:erin";
+    h.host
+        .store
+        .invite(&Invite {
+            seq: 0,
+            group: did.clone(),
+            invitee: erin.into(),
+            by: alice.did.clone(),
+            message: None,
+            rkey: "3lapsed".into(),
+            created_at: 0,
+            expires_at: Some(1),
+        })
+        .unwrap();
+    assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 0);
+    assert!(h.host.store.invited(&did, erin).unwrap().is_some());
 }
 
 async fn check(

@@ -629,8 +629,8 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     println!("listening on {}", listener.local_addr()?);
     tracing::info!(public_url = %config.public_url, did = %config.service_did, "serving");
     let host = Arc::new(Host::open(config)?);
-    // Uploads no record took, and moves kept a day, swept now and each
-    // hour after.
+    // Uploads no record took, moves kept a day, and invites lapsed, swept
+    // now and each hour after.
     let sweeping = host.clone();
     tokio::spawn(async move {
         loop {
@@ -638,6 +638,8 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             tracing::info!(?swept, "swept the uploads no record took");
             let moves = sweeping.sweep_moves(time::now_millis()).await;
             tracing::info!(?moves, "gave back the moves kept a day");
+            let invites = sweeping.sweep_invites(time::now_millis()).await;
+            tracing::info!(?invites, "took back the invites lapsed");
             tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
         }
     });
