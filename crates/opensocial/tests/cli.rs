@@ -24,3 +24,19 @@ fn refuses_an_unknown_command() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).starts_with("no command frobnicate"));
 }
+
+#[test]
+fn reads_who_it_is_from_the_environment() {
+    let out = Command::new(env!("CARGO_BIN_EXE_opensocial"))
+        .args(["inspect", "riders.groups.test"])
+        .env_remove("OPENSOCIAL_AS")
+        .env_remove("OPENSOCIAL_PASSWORD")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        said.contains("set OPENSOCIAL_AS and OPENSOCIAL_PASSWORD"),
+        "{said}"
+    );
+}

@@ -11,12 +11,31 @@ Anything else fails with its usage.
 
 ## `opensocial`
 
+It acts as a person: it signs in to their own PDS and asks it for a
+service token for each method it calls, as an app does, so an account on
+any PDS may run it against any host.
+
 | Command | What it does |
 | --- | --- |
 | `help`, `--help`, `-h`, or none | prints its usage |
+| `create-group <handle> [--name] [--description] [--join open\|approval\|invite]` | starts a group, run by you |
+| `inspect <group>` | the group as you may see it: its roles, members and spaces |
+| `membership assign <group> <member> <role,role…>` | gives a member these roles, in place of theirs (`member` among them) |
+| `membership eject <group> <member> [--reason]` | puts a member out |
+| `membership invite <group> <person> [--message]` | invites someone in |
+| `migrate <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another ([moving](../design/moving.md)) |
+| `seed <handle>` | a group to try things on: two rules, a moderator role, and an invite for each of `OPENSOCIAL_SEED_INVITE` |
 
-Any other command fails with `no command <name>` and the usage. Commands
-arrive with the methods they call (see [the order](../design/README.md#the-order)).
+A group or person is a handle or a DID. Anything else fails with its
+usage.
+
+| Variable | What it is |
+| --- | --- |
+| `OPENSOCIAL_AS`, `OPENSOCIAL_PASSWORD` | the handle you sign in as, and its password (an app password is enough) |
+| `PDS_URL` | where you sign in; `http://localhost:2583` |
+| `OPENSOCIAL_HOST` | the host; `http://localhost:2600` |
+| `OPENSOCIAL_HOST_DID` | its DID; the did:web of its address |
+| `OPENSOCIAL_SEED_INVITE` | who `seed` invites, comma-separated |
 
 ## `just`
 

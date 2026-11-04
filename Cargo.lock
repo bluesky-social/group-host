@@ -1065,6 +1065,13 @@ name = "opensocial"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
+ "group-host",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

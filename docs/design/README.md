@@ -129,9 +129,12 @@ says otherwise.
    [moving](moving.md#moving-the-host)):
    `methods/{moderation,recovery,importAccount,migration}.ts`,
    `hostLabels.ts`, `scripts/move-host.ts`.
-9. **MCP and the command.** The MCP tools over what steps 4 to 8 brought,
-   and the `opensocial` command's `create-group`, `inspect`, `membership`,
-   `migrate`, `move-host` and seeds, as `packages/cli` has them.
+9. **MCP and the command.** The `opensocial` command's `create-group`,
+   `inspect`, `membership`, `migrate` and `seed`, signed in as a person on
+   their own PDS (done, see [the commands](../reference/cli.md); moving
+   the host is `group-host move-host`, as it needs the host's own
+   database and keys); then the MCP tools over what steps 4 to 8 brought,
+   with the OAuth an assistant signs in by and `listConnectedApps`.
 
 The MCP tools and the command's subcommands may come in with each step
 instead, beside the methods they call, where that is the smaller pull.

@@ -1,11 +1,13 @@
 //! `opensocial`: see [`opensocial::USAGE`].
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match opensocial::run(&args) {
+    let env = opensocial::Env::from(|k| std::env::var(k).ok());
+    match opensocial::run(&args, &env).await {
         Ok(out) => print!("{out}"),
         Err(e) => {
-            eprintln!("{e}");
+            eprintln!("{e:#}");
             std::process::exit(1);
         }
     }
