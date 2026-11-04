@@ -15,6 +15,16 @@ LtHash set hash, a space repo's commit, its MAC and MAC header and its STAR
 archive, a record's MAC, a KEM decapsulation and its want-MAC header, and
 an HTTP signature, which the credentials' pull reads.
 
+`space-meta.json` is from `space-meta.mjs`, run against `@atproto/space`
+0.0.0-spaces-alpha-20261029171913, the first alpha with a space meta
+archive (exportSpaceMeta's): two archives it writes and what it reads
+back, and archives it refuses (its own tests' cases, built as they build
+them), each with its refusal. That build's published dependency ranges
+resolve `@atproto/lex-cbor` and `@atproto/lex-data` to a stray `0.0.0`
+whose own dependencies are `workspace:*`, so install it with each of
+`@atproto/{car,crypto,syntax,lex-cbor,lex-data}` pinned to the same
+version in `overrides`.
+
 
 `jose.json` is from `jose.mjs`, run against jose 5.10.0 (panva's, which
 @atproto/oauth-provider checks DPoP proofs and client assertions with):

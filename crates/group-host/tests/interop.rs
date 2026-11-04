@@ -5,7 +5,8 @@ mod common;
 
 use atproto::did;
 use atproto::space::{
-    COMMIT_MAC, RECORD_MAC, encapsulate, mac_header, record_mac, star, want_mac_header,
+    COMMIT_MAC, LtHash, RECORD_MAC, element, encapsulate, mac_header, read_space_meta, read_star,
+    record_mac, star, want_mac_header,
 };
 use atproto::space_auth::{Expect, Kind, sign_request, space_host_aud, verify};
 use atproto::{Curve, Keypair};
@@ -508,4 +509,97 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         .map(|r| r["did"].as_str().unwrap())
         .collect();
     assert!(writers.contains(&group.as_str()), "{repos}");
+}
+
+#[tokio::test]
+async fn reads_the_archives_the_reference_pds_exports_of_a_space() {
+    let net = net();
+    if !net.spaces {
+        eprintln!("the reference PDS has no spaces: GROUP_HOST_DEV_ENV names the alpha's build");
+        return;
+    }
+    // Alice, on the reference PDS, governs a space Bob reads and she writes in.
+    let (alice, bob) = (&net.accounts[0], &net.accounts[1]);
+    let session = call(
+        &net.pds,
+        "com.atproto.server.createSession",
+        "",
+        &json!({"identifier": alice.handle, "password": alice.password}),
+    )
+    .await;
+    let jwt = session["accessJwt"].as_str().unwrap();
+    let created = call(
+        &net.pds,
+        "com.atproto.space.createSpace",
+        jwt,
+        &json!({
+            "spaceType": "com.example.forum",
+            "skey": "moving",
+            "policy": {"$type": "com.atproto.memberspace.policy", "publicRead": true},
+        }),
+    )
+    .await;
+    let space = created["uri"].as_str().unwrap().to_string();
+    call(
+        &net.pds,
+        "com.atproto.memberspace.putMember",
+        jwt,
+        &json!({"space": space, "did": bob.did, "read": true, "write": false}),
+    )
+    .await;
+    let note = json!({"$type": "com.example.note", "text": "moving soon", "createdAt": "2026-11-04T00:00:00Z"});
+    call(
+        &net.pds,
+        "com.atproto.space.createRecord",
+        jwt,
+        &json!({"space": space, "repo": alice.did, "collection": "com.example.note", "rkey": "one", "record": note}),
+    )
+    .await;
+
+    // What it exports as she moves: the space as its authority keeps it...
+    let http = reqwest::Client::new();
+    let export = async |nsid: &str, query: &[(&str, &str)]| {
+        let res = http
+            .get(format!("{}/xrpc/com.atproto.space.{nsid}", net.pds))
+            .query(query)
+            .bearer_auth(jwt)
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "{nsid}: {}", res.status());
+        res.bytes().await.unwrap().to_vec()
+    };
+    let meta = read_space_meta(&export("exportSpaceMeta", &[("space", &space)]).await).unwrap();
+    assert_eq!(meta.space, space);
+    let policy = atproto::Value::Map(meta.policy).to_json();
+    assert_eq!(policy["$type"], "com.atproto.memberspace.policy");
+    assert_eq!(policy["publicRead"], true);
+    let members: Vec<(String, Value)> = meta
+        .policy_state
+        .into_iter()
+        .map(|(k, v)| (k, atproto::Value::Map(v).to_json()))
+        .collect();
+    let bob_key = format!("com.atproto.memberspace.member/{}", bob.did);
+    let bob_member = members.iter().find(|(k, _)| *k == bob_key).unwrap();
+    assert_eq!(
+        (&bob_member.1["read"], &bob_member.1["write"]),
+        (&json!(true), &json!(false))
+    );
+    let writer = meta.writers.iter().find(|w| w.did == alice.did).unwrap();
+
+    // ...and her repo there, whole, as the writer set last heard of it.
+    let repo = export("getRepo", &[("space", &space), ("repo", &alice.did)]).await;
+    let (commit, records) = read_star(&repo).unwrap();
+    assert_eq!(
+        (commit.repo.as_str(), commit.space.as_str()),
+        (alice.did.as_str(), space.as_str())
+    );
+    assert_eq!(writer.data, commit.data.to_vec());
+    let mut hash = LtHash::default();
+    for (path, value) in &records {
+        let (collection, rkey) = path.split_once('/').unwrap();
+        hash.add(&element(collection, rkey, &atproto::Cid::of_cbor(value)));
+    }
+    assert_eq!(hash.digest(), commit.data);
+    assert_eq!(records.keys().collect::<Vec<_>>(), ["com.example.note/one"]);
 }

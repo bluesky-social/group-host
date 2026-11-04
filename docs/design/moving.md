@@ -100,12 +100,46 @@ confirms it (an emailed code, on the reference PDS).
 The old server keeps its copy until its owner deletes it there; once the
 DID names this host, the network reads the account here.
 
+## Its spaces
+
+Between steps 2 and 3, the one moving it brings its spaces, with
+**`importAccountSpace`** (`import_space.rs`). Only the account, signed in
+at its server, may export them, so they come as that server serves
+them, one part at a time:
+
+- `meta`, a space it governs, as the space alpha's meta archive
+  (`com.atproto.space.exportSpaceMeta`): its policy, the state the
+  policy keeps (a memberspace's members), and who writes there and what
+  they last wrote. It comes before any repo in that space.
+- `repo`, its own repo in a space, its own or another's, as a STAR
+  archive (`com.atproto.space.getRepo`). It is kept only once its records
+  are what its commit's set hash says, and a record this host would not
+  keep is left out, as with its public repo.
+- `blob`, one of its files in a space, before the repos that hold it. A
+  record whose file did not come still points at it.
+
+A space's policy becomes this host's say over it. A personalspace is the
+group's alone. A memberspace's members are granted what it let them do,
+and anyone may read it if it said so. A policy this host would not keep
+as it says is refused rather than kept as something else: anyone
+writing, only some apps, or a managing app. So are the two spaces the
+group makes for itself as it is made. Brought again, a part replaces
+what came before, and starting the move over discards them all.
+
+While the account is switched off, its repos tell their spaces nothing.
+An authority elsewhere would check its word against the key the
+directory still names, its old server's. Once `completeImport` switches
+it on, each space it has a repo in is told, by its key here, as of any
+write. Spaces it governs here also hear of its own repos there, and are
+read again for the index.
+
 ## From the prototype
 
-- `importAccountSpace`, which brings the spaces such an account governs
-  and its repos in others' in the space alpha's archives, is not here
-  yet: it waits for the alpha to publish its meta archive, which the
-  version the prototype builds against does not have.
+- A space's policy is kept as this host's grants, not as the policy
+  object: this host decides who reads and writes from its grants and a
+  group's access records. So a policy it would not keep as it says is
+  refused, where the prototype keeps the policy itself.
+- Its repos tell their spaces once it is switched on, not as they come.
 
 # Moving the host
 

@@ -20,17 +20,17 @@
 //! The old server keeps its copy until its owner deletes it there; once
 //! the DID names this host, the network reads the account here.
 //!
-//! As the prototype's `methods/importAccount.ts`, but for
-//! `importAccountSpace`, which brings an account's spaces in the space
-//! alpha's archives: that waits for the alpha to settle its meta archive.
+//! Its spaces come with it, by `importAccountSpace` (`import_space.rs`),
+//! while the move is pending. As the prototype's `methods/importAccount.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
 use crate::group::NewGroup;
 use crate::group_api::{for_host, signed_in};
+use crate::import_space::keeps;
 use crate::migration::{creds, repo_writes, take_in};
 use crate::rbac::NS;
-use crate::repo::{Asked, Write, record_cid};
+use crate::repo::{Asked, Write};
 use crate::store::Store;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
@@ -338,12 +338,6 @@ impl Host {
     }
 }
 
-/// Whether this host keeps `write`'s record: one by the data model, of
-/// its collection's type.
-fn keeps(write: &Write) -> bool {
-    matches!(write, Write::Create { collection, value, .. } if record_cid(collection, value).is_ok())
-}
-
 /// The account a token is the word of, for moving it here: its own
 /// token, signed with its key, for this host and `createAccount`.
 async fn proof(host: &Host, jwt: &str) -> Result<String, XrpcError> {
@@ -532,6 +526,7 @@ pub async fn complete_import(
     })?;
     let on = host.activate_arrived(did, &account.handle);
     on.map_err(XrpcError::internal)?;
+    host.tell_spaces(did).await.map_err(XrpcError::internal)?;
     let group = NewGroup {
         handle: account.handle.clone(),
         founder: me.clone(),

@@ -10,6 +10,7 @@ mod common;
 use atproto::mst::Tree;
 use atproto::plc::{Op, Service, Signed, tombstone};
 use atproto::service_auth::{self, Claims};
+use atproto::space::{Commit as SpaceCommit, LtHash, element, star, write_star};
 use atproto::{Cid, Commit, Curve, Keypair, car, drisl};
 use axum::Router;
 use axum::extract::{Query, State};
@@ -21,6 +22,7 @@ use common::spaces::*;
 use common::{Running, serve, start_reachable};
 use group_host::group::{members_space, meta_space};
 use group_host::import::label_of;
+use group_host::import_space::record_key_to_did;
 use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
@@ -28,6 +30,7 @@ use std::sync::{Arc, Mutex};
 const CHECK: &str = "fyi.opensocial.checkImport";
 const IMPORT: &str = "fyi.opensocial.importAccount";
 const COMPLETE: &str = "fyi.opensocial.completeImport";
+const BRING: &str = "fyi.opensocial.importAccountSpace";
 const CREATE_ACCOUNT: &str = "com.atproto.server.createAccount";
 const AVATAR: &[u8] = &[1, 2, 3, 4];
 
@@ -276,6 +279,33 @@ impl World {
         op.sign(Some(last.cid()), &self.rotation).to_json()
     }
 
+    /// One of the account's spaces, a repo in one, or a file: `part`.
+    async fn bring(&self, who: &Authority, part: &str, bytes: Vec<u8>) -> (u16, Json) {
+        let (k, v) = auth(&self.h, who, BRING);
+        let res = self
+            .h
+            .http
+            .post(format!(
+                "{}/xrpc/{BRING}?did={}&part={part}",
+                self.h.url, self.did
+            ))
+            .header(k, v)
+            .header("content-type", "image/png")
+            .body(bytes)
+            .send()
+            .await
+            .unwrap();
+        (
+            res.status().as_u16(),
+            res.json().await.unwrap_or(Json::Null),
+        )
+    }
+
+    /// The account's space of `kind` at `skey`.
+    fn space(&self, kind: &str, skey: &str) -> String {
+        format!("at://{}/space/{kind}/{skey}", self.did)
+    }
+
     async fn finish(&self, who: &Authority, operation: Json) -> (u16, Json) {
         self.call(
             who,
@@ -291,6 +321,72 @@ type Change<'a> = Box<dyn FnOnce(&mut Op) + 'a>;
 
 fn error(said: &(u16, Json)) -> (u16, &str) {
     (said.0, said.1["error"].as_str().unwrap_or_default())
+}
+
+/// A space meta archive, as an account's server exports one: `policy`,
+/// its `state` by key, and its writers by DID, each at `rev`.
+fn meta_archive(space: &str, policy: Json, state: &[(&str, Json)], writers: &[&str]) -> Vec<u8> {
+    let value = |j: Json| drisl::encode(&drisl::Value::from_json(&j).unwrap());
+    let meta =
+        drisl::Value::from_json(&json!({"$type": "atproto-space-meta", "ver": 1, "space": space}));
+    let drisl::Value::Map(meta) = meta.unwrap() else {
+        panic!("a map")
+    };
+    // Each section in byte order of its keys, as the alpha writes them.
+    let state: BTreeMap<Vec<u8>, Vec<u8>> = state
+        .iter()
+        .map(|(k, v)| (k.as_bytes().to_vec(), value(v.clone())))
+        .collect();
+    let writer = json!({"rev": "3lzaaaaaaaaab", "data": {"$bytes": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"}, "spaceRev": "3lzaaaaaaaaac"});
+    let writers: BTreeMap<Vec<u8>, Vec<u8>> = writers
+        .iter()
+        .map(|did| (format!("writer/{did}").into_bytes(), value(writer.clone())))
+        .collect();
+    let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = vec![(b"policy".to_vec(), value(policy))];
+    pairs.extend(state);
+    pairs.extend(writers);
+    write_star(
+        &meta,
+        pairs.iter().map(|(k, v)| (k.as_slice(), v.as_slice())),
+    )
+}
+
+fn member(did: &str, read: bool, write: bool) -> (String, Json) {
+    (
+        format!("com.atproto.memberspace.member/{did}"),
+        json!({"$type": "com.atproto.memberspace.member", "read": read, "write": write}),
+    )
+}
+
+fn memberspace(public_read: bool) -> Json {
+    json!({"$type": "com.atproto.memberspace.policy", "publicRead": public_read})
+}
+
+/// `did`'s repo in `space` as a STAR archive, of `records` by path: its
+/// commit's digest theirs, or `data` in its place.
+fn space_repo(did: &str, space: &str, records: &[(&str, Json)], data: Option<[u8; 32]>) -> Vec<u8> {
+    let records: BTreeMap<String, Vec<u8>> = records
+        .iter()
+        .map(|(p, r)| (p.to_string(), encoded(r.clone())))
+        .collect();
+    let mut hash = LtHash::default();
+    // A path that is no record's, which the host refuses, is no element.
+    for (path, value) in &records {
+        if let Some((collection, rkey)) = path.split_once('/') {
+            hash.add(&element(collection, rkey, &Cid::of_cbor(value)));
+        }
+    }
+    let commit = SpaceCommit {
+        repo: did.into(),
+        space: space.into(),
+        rev: "3lzaaaaaaaaad".into(),
+        data: data.unwrap_or(hash.digest()),
+    };
+    star(&commit, &records)
+}
+
+fn note(text: &str) -> Json {
+    json!({"$type": "com.example.note", "text": text, "createdAt": "2026-10-01T00:00:00Z"})
 }
 
 #[tokio::test]
@@ -818,6 +914,344 @@ async fn says_when_its_address_or_its_own_domain_is_taken_here() {
     let (_, said) = w.check(&format!("did={}", w.did)).await;
     assert_eq!(said["keeps"], true);
     assert_eq!(said["refused"]["error"], "HandleNotAvailable");
+}
+
+#[tokio::test]
+async fn brings_its_spaces_and_tells_them_once_it_is_switched_on() {
+    let w = world().await;
+    let [dana, alice, carol] = &w.people;
+    let (status, out) = w.start(dana, json!({})).await;
+    assert_eq!(status, 200, "{out}");
+    let host = &w.h.host;
+
+    // A forum it governs: its members, who reads it, and who writes there.
+    let forum = w.space("com.example.forum", "general");
+    let local = "did:web:localhost%3A2583";
+    let (alice_key, alice_member) = member(&alice.did, true, true);
+    let (local_key, local_member) = member("did:web:localhost:2583", true, false);
+    let archive = meta_archive(
+        &forum,
+        memberspace(true),
+        &[(&alice_key, alice_member), (&local_key, local_member)],
+        &[&alice.did, &w.did],
+    );
+    let said = w.bring(dana, "meta", archive.clone()).await;
+    assert_eq!(said, (200, json!({ "space": forum })));
+    let kept = host.store.space(&forum).unwrap().unwrap();
+    assert!(kept.public_read);
+    assert_eq!(kept.authority, w.did);
+    let granted = |space: &str, who: &str| host.store.granted(space, who).unwrap();
+    assert_eq!(granted(&forum, &alice.did), Some((true, true)));
+    assert_eq!(granted(&forum, local), Some((true, false)));
+    // Its own repo there comes as a repo, and the space hears of it later.
+    let writers = |space: &str| -> Vec<String> {
+        let all = host.store.writers(space, None, 100).unwrap();
+        all.into_iter().map(|w| w.did).collect()
+    };
+    assert_eq!(writers(&forum), vec![alice.did.clone()]);
+
+    // A file in it, then its repo there, holding that file and one that
+    // never came; a record not of its collection's type is left out.
+    const PHOTO: &[u8] = &[9, 8, 7];
+    let photo = Cid::of_raw(PHOTO).to_string();
+    let said = w.bring(dana, "blob", PHOTO.to_vec()).await;
+    assert_eq!(said, (200, json!({ "cid": photo })));
+    let blob = |cid: &str| json!({"$type": "blob", "ref": {"$link": cid}, "mimeType": "image/png", "size": 3});
+    let mut with_photo = note("the harbor at dawn");
+    with_photo["image"] = blob(&photo);
+    let mut lost = note("a file deleted there");
+    lost["image"] = blob(&Cid::of_raw(b"gone").to_string());
+    let records = [
+        ("com.example.note/1", with_photo),
+        ("com.example.note/2", lost),
+        ("com.example.like/3", note("not a like")),
+    ];
+    let said = w
+        .bring(dana, "repo", space_repo(&w.did, &forum, &records, None))
+        .await;
+    assert_eq!(said, (200, json!({ "space": forum, "records": 2 })));
+    let paths = host.store.space_paths(&w.did, &forum).unwrap();
+    assert_eq!(
+        paths.keys().collect::<Vec<_>>(),
+        ["com.example.note/1", "com.example.note/2"]
+    );
+    assert_eq!(
+        host.read_blob(&w.did, &Cid::parse(&photo).unwrap())
+            .unwrap()
+            .unwrap()
+            .1,
+        PHOTO
+    );
+    assert_eq!(writers(&forum), vec![alice.did.clone()]);
+
+    // A space only it uses.
+    let diary = w.space("com.example.diary", "self");
+    let personal = json!({"$type": "com.atproto.personalspace.policy"});
+    let said = w
+        .bring(dana, "meta", meta_archive(&diary, personal, &[], &[]))
+        .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+    assert!(!host.store.space(&diary).unwrap().unwrap().public_read);
+
+    // Its repo in a space another group here governs, which lets it write.
+    let elsewhere = start_group(
+        &w.h,
+        carol,
+        json!({"handle": "lighthouse.groups.test", "displayName": "Lighthouse"}),
+    )
+    .await;
+    let calendar = host
+        .create_space(&elsewhere, "com.example.calendar", "main", false)
+        .unwrap();
+    host.grant(&calendar, &w.did, true, true).unwrap();
+    let event = [("com.example.note/1", note("a ride on Saturday"))];
+    let said = w
+        .bring(dana, "repo", space_repo(&w.did, &calendar, &event, None))
+        .await;
+    assert_eq!(said, (200, json!({ "space": calendar, "records": 1 })));
+    assert!(writers(&calendar).is_empty());
+    // And in one that lets it write no more: its authority turns it away.
+    let closed = host
+        .create_space(&elsewhere, "com.example.calendar", "old", false)
+        .unwrap();
+    let said = w
+        .bring(dana, "repo", space_repo(&w.did, &closed, &event, None))
+        .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+
+    // Switched on here, it tells each space of its repo there, by its key
+    // here; the spaces it governs keep its group's own beside them.
+    let operation = w.signed(&out["recommendedCreds"], |_| {}).await;
+    let (status, done) = w.finish(dana, operation).await;
+    assert_eq!(status, 200, "{done}");
+    assert_eq!(writers(&forum), vec![alice.did.clone(), w.did.clone()]);
+    assert_eq!(writers(&calendar), vec![w.did.clone()]);
+    assert!(writers(&closed).is_empty());
+    assert!(host.store.space(&meta_space(&w.did)).unwrap().is_some());
+}
+
+#[tokio::test]
+async fn brings_a_space_again_in_place_of_what_came_before() {
+    let w = world().await;
+    let [dana, alice, bob] = &w.people;
+    w.start(dana, json!({})).await;
+    let host = &w.h.host;
+    let forum = w.space("com.example.forum", "general");
+    let (alice_key, alice_member) = member(&alice.did, true, true);
+    let first = meta_archive(
+        &forum,
+        memberspace(true),
+        &[(&alice_key, alice_member)],
+        &[&alice.did],
+    );
+    assert_eq!(w.bring(dana, "meta", first).await.0, 200);
+    let (bob_key, bob_member) = member(&bob.did, true, false);
+    let again = meta_archive(
+        &forum,
+        memberspace(false),
+        &[(&bob_key, bob_member)],
+        &[&bob.did],
+    );
+    assert_eq!(w.bring(dana, "meta", again).await.0, 200);
+    assert!(!host.store.space(&forum).unwrap().unwrap().public_read);
+    assert_eq!(host.store.granted(&forum, &alice.did).unwrap(), None);
+    assert_eq!(
+        host.store.granted(&forum, &bob.did).unwrap(),
+        Some((true, false))
+    );
+    let writers = host.store.writers(&forum, None, 100).unwrap();
+    assert_eq!(
+        writers.iter().map(|w| w.did.as_str()).collect::<Vec<_>>(),
+        [bob.did.as_str()]
+    );
+
+    let two = [
+        ("com.example.note/1", note("one")),
+        ("com.example.note/2", note("two")),
+    ];
+    let said = w
+        .bring(dana, "repo", space_repo(&w.did, &forum, &two, None))
+        .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+    let one = [("com.example.note/2", note("two, again"))];
+    let said = w
+        .bring(dana, "repo", space_repo(&w.did, &forum, &one, None))
+        .await;
+    assert_eq!(said, (200, json!({ "space": forum, "records": 1 })));
+    let paths = host.store.space_paths(&w.did, &forum).unwrap();
+    assert_eq!(paths.keys().collect::<Vec<_>>(), ["com.example.note/2"]);
+    assert_eq!(
+        paths["com.example.note/2"],
+        Cid::of_cbor(&encoded(note("two, again")))
+    );
+
+    // Started over, what it brought goes with the rest.
+    assert_eq!(w.start(dana, json!({})).await.0, 200);
+    assert!(host.store.space(&forum).unwrap().is_none());
+    assert!(host.store.space_paths(&w.did, &forum).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn brings_only_what_this_host_would_keep_as_its_policy_says() {
+    let w = world().await;
+    let [dana, alice, _] = &w.people;
+    let forum = w.space("com.example.forum", "general");
+    let refused = async |part: &str, bytes: Vec<u8>| {
+        let said = w.bring(dana, part, bytes).await;
+        (
+            said.0,
+            said.1["error"].as_str().unwrap_or_default().to_string(),
+        )
+    };
+    let personal = json!({"$type": "com.atproto.personalspace.policy"});
+    let archive = meta_archive(&forum, personal.clone(), &[], &[]);
+    // Nothing moving here, or not the caller's move.
+    assert_eq!(
+        refused("meta", archive.clone()).await,
+        (400, "NotFound".into())
+    );
+    w.start(dana, json!({})).await;
+    assert_eq!(
+        error(&w.bring(alice, "meta", archive.clone()).await),
+        (400, "NotFound")
+    );
+    assert_eq!(
+        refused("star", archive).await,
+        (400, "InvalidRequest".into())
+    );
+
+    let is = |code: &str| (400, code.to_string());
+    let (alice_key, alice_member) = member(&alice.did, true, true);
+    let others = format!("at://{}/space/com.example.forum/general", alice.did);
+    for (archive, why) in [
+        (b"not an archive".to_vec(), "InvalidArchive"),
+        (
+            meta_archive(&others, personal.clone(), &[], &[]),
+            "NotSpaceOwner",
+        ),
+        (
+            meta_archive(&meta_space(&w.did), personal.clone(), &[], &[]),
+            "SpaceReserved",
+        ),
+        (
+            meta_archive(&members_space(&w.did), personal.clone(), &[], &[]),
+            "SpaceReserved",
+        ),
+        (
+            meta_archive(
+                &forum,
+                json!({"$type": "com.atproto.managedspace.policy", "managingApp": "did:web:app.test"}),
+                &[],
+                &[],
+            ),
+            "UnsupportedPolicy",
+        ),
+        (
+            meta_archive(&forum, json!({"publicRead": true}), &[], &[]),
+            "UnsupportedPolicy",
+        ),
+        (
+            meta_archive(
+                &forum,
+                json!({"$type": "com.atproto.memberspace.policy", "publicWrite": true}),
+                &[],
+                &[],
+            ),
+            "UnsupportedPolicy",
+        ),
+        (
+            meta_archive(
+                &forum,
+                json!({"$type": "com.atproto.memberspace.policy", "allowedApps": []}),
+                &[],
+                &[],
+            ),
+            "UnsupportedPolicy",
+        ),
+        // Members are a memberspace's alone, each a DID, reading and writing said.
+        (
+            meta_archive(
+                &forum,
+                personal.clone(),
+                &[(&alice_key, alice_member.clone())],
+                &[],
+            ),
+            "InvalidArchive",
+        ),
+        (
+            meta_archive(
+                &forum,
+                memberspace(true),
+                &[("com.example.other/x", alice_member.clone())],
+                &[],
+            ),
+            "InvalidArchive",
+        ),
+        (
+            meta_archive(
+                &forum,
+                memberspace(true),
+                &[("com.atproto.memberspace.member/bob", alice_member)],
+                &[],
+            ),
+            "InvalidArchive",
+        ),
+        (
+            meta_archive(
+                &forum,
+                memberspace(true),
+                &[(&alice_key, json!({"read": true}))],
+                &[],
+            ),
+            "InvalidArchive",
+        ),
+    ] {
+        assert_eq!(refused("meta", archive).await, is(why), "{why}");
+    }
+    assert!(w.h.host.store.space(&forum).unwrap().is_none());
+
+    let notes = [("com.example.note/1", note("one"))];
+    let outside = [("note", note("one"))];
+    for (archive, why) in [
+        (b"not an archive".to_vec(), "InvalidArchive"),
+        (
+            space_repo(&alice.did, &forum, &notes, None),
+            "NotSpaceOwner",
+        ),
+        // Its own space's repo waits for the space.
+        (space_repo(&w.did, &forum, &notes, None), "NotFound"),
+        (
+            space_repo(&w.did, "general", &notes, None),
+            "InvalidArchive",
+        ),
+        (
+            space_repo(&w.did, &others, &notes, Some([0; 32])),
+            "InvalidArchive",
+        ),
+        (
+            space_repo(&w.did, &others, &outside, None),
+            "InvalidArchive",
+        ),
+    ] {
+        assert_eq!(refused("repo", archive).await, is(why), "{why}");
+    }
+}
+
+#[test]
+fn reads_a_members_did_from_its_record_key() {
+    assert_eq!(
+        record_key_to_did("did:web:localhost:2583"),
+        "did:web:localhost%3A2583"
+    );
+    for same in [
+        "did:plc:alice",
+        "did:web:example.com",
+        "did:web::2583",
+        "did:web:localhost:",
+        "did:web:localhost:25a",
+    ] {
+        assert_eq!(record_key_to_did(same), same);
+    }
 }
 
 #[test]

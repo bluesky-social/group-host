@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "While an account's move here is pending (importAccount), bring one of its spaces, as its own server serves it: `meta`, a space it governs (com.atproto.space.exportSpaceMeta's archive), before any repo in it; `repo`, its own repo in a space it wrote in (com.atproto.space.getRepo's archive); or `blob`, one of its files in a space, before the repos that hold it. Only for whoever started the move, and only the account's own.",
+      "description": "While an account's move here is pending (importAccount), bring one of its spaces, as its own server serves it: `meta`, a space it governs (com.atproto.space.exportSpaceMeta's archive), before any repo in it; `repo`, its own repo in a space it wrote in (com.atproto.space.getRepo's archive); or `blob`, one of its files in a space, before the repos that hold it. Only for whoever started the move, and only the account's own. A personalspace or memberspace policy is kept as this host's grants; one this host would not keep as it says is refused.",
       "parameters": {
         "type": "params",
         "required": ["did", "part"],
@@ -28,29 +28,44 @@
           "type": "object",
           "properties": {
             "space": {
-              "type": "string"
+              "type": "string",
+              "description": "The space a meta archive or repo was for."
             },
             "records": {
-              "type": "integer"
+              "type": "integer",
+              "description": "How many of a repo's records were kept: one this host would not keep, not of its collection's type, is left out."
             },
             "cid": {
-              "type": "string"
+              "type": "string",
+              "description": "A file's CID."
             }
           }
         }
       },
       "errors": [
         {
-          "name": "NotFound"
+          "name": "NotFound",
+          "description": "No move of the account here by the caller, or a repo in a space of the account's whose meta has not come."
         },
         {
-          "name": "NotSpaceOwner"
+          "name": "NotSpaceOwner",
+          "description": "A space or repo that is not the account's."
         },
         {
-          "name": "InvalidArchive"
+          "name": "InvalidArchive",
+          "description": "An archive that is not whole, or not what its commit says."
         },
         {
-          "name": "UnsupportedPolicy"
+          "name": "UnsupportedPolicy",
+          "description": "A space whose policy this host would not keep as it says: anyone writing, only some apps, or a managing app."
+        },
+        {
+          "name": "SpaceReserved",
+          "description": "A space the group makes for itself as it is made."
+        },
+        {
+          "name": "TooLarge",
+          "description": "More than this host takes in one part."
         }
       ]
     }

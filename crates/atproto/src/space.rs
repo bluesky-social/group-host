@@ -171,15 +171,15 @@ fn hmac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
 
 impl Commit {
     /// The commit as its STAR archive's metadata holds it.
-    pub fn to_value(&self) -> Value {
-        Value::Map(BTreeMap::from([
+    pub fn to_meta(&self) -> BTreeMap<String, Value> {
+        BTreeMap::from([
             ("$type".into(), Value::String(COMMIT_MAC.into())),
             ("ver".into(), Value::Integer(COMMIT_VERSION)),
             ("repo".into(), Value::String(self.repo.clone())),
             ("space".into(), Value::String(self.space.clone())),
             ("rev".into(), Value::String(self.rev.clone())),
             ("data".into(), Value::Bytes(self.data.to_vec())),
-        ]))
+        ])
     }
 
     /// The commit's MAC under `secret`.
@@ -299,6 +299,13 @@ pub fn encapsulate(author: &str) -> Result<(String, [u8; 32]), SpaceError> {
 /// The magic bytes a STAR archive starts with.
 pub const STAR_MAGIC: [u8; 4] = [0x2a, 0x6c, 0x01, 0x00];
 
+/// The longest a STAR archive's metadata, or a key in it, may be.
+const STAR_FRAME_MAX: usize = 64 * 1024 * 1024;
+/// The longest a varint in a STAR archive may be, in bytes.
+const STAR_VARINT_MAX: usize = 6;
+/// The longest a record's DRISL may be, in a repo's archive.
+pub const RECORD_MAX: usize = 1024 * 1024;
+
 fn varint(mut n: usize, out: &mut Vec<u8>) {
     while n >= 0x80 {
         out.push((n as u8) | 0x80);
@@ -307,87 +314,155 @@ fn varint(mut n: usize, out: &mut Vec<u8>) {
     out.push(n as u8);
 }
 
-/// A repo as a STAR archive: its commit, then each record's path and DRISL,
-/// in byte order of the path.
-pub fn star(commit: &Commit, records: &BTreeMap<String, Vec<u8>>) -> Vec<u8> {
+fn frame(bytes: &[u8], out: &mut Vec<u8>) {
+    varint(bytes.len(), out);
+    out.extend(bytes);
+}
+
+/// A STAR archive (STAR-lite v1): `meta`, then each pair's key and value,
+/// as they come. What the keys and values mean is the profile's that
+/// `meta`'s `$type` names.
+pub fn write_star<'a>(
+    meta: &BTreeMap<String, Value>,
+    pairs: impl IntoIterator<Item = (&'a [u8], &'a [u8])>,
+) -> Vec<u8> {
     let mut out = STAR_MAGIC.to_vec();
-    let meta = drisl::encode(&commit.to_value());
-    varint(meta.len(), &mut out);
-    out.extend(meta);
-    for (path, value) in records {
-        varint(path.len(), &mut out);
-        out.extend(path.as_bytes());
-        varint(value.len(), &mut out);
-        out.extend(value);
+    frame(&drisl::encode(&Value::Map(meta.clone())), &mut out);
+    for (key, value) in pairs {
+        frame(key, &mut out);
+        frame(value, &mut out);
     }
     out
 }
 
-/// A varint at the front of `bytes`, and what follows it.
-fn read_varint(bytes: &[u8]) -> Result<(usize, &[u8]), SpaceError> {
-    let mut n = 0usize;
-    for (i, b) in bytes.iter().enumerate().take(10) {
-        n |= usize::from(b & 0x7f) << (7 * i);
-        if b & 0x80 == 0 {
-            return Ok((n, &bytes[i + 1..]));
-        }
-    }
-    err("a STAR archive cut short")
+/// A STAR archive's parts: its metadata, a DRISL map with a `$type`, and
+/// its pairs in the order they came.
+#[derive(Debug, PartialEq)]
+pub struct Star<'a> {
+    pub meta: BTreeMap<String, Value>,
+    pub pairs: Vec<(&'a [u8], &'a [u8])>,
 }
 
-/// A frame at the front of `bytes`: its length, then that many bytes.
-fn read_frame(bytes: &[u8]) -> Result<(&[u8], &[u8]), SpaceError> {
-    let (len, rest) = read_varint(bytes)?;
+/// A varint at the front of `bytes`, in its shortest form, and what
+/// follows it; none if `bytes` is empty.
+fn read_varint(bytes: &[u8]) -> Result<Option<(usize, &[u8])>, SpaceError> {
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    let mut n = 0usize;
+    for (i, &b) in bytes.iter().enumerate().take(STAR_VARINT_MAX) {
+        n += usize::from(b & 0x7f) << (7 * i);
+        if b < 0x80 {
+            // A last byte of zero only pads the number out.
+            if b == 0 && i > 0 {
+                return err("a STAR length not in its shortest form");
+            }
+            return Ok(Some((n, &bytes[i + 1..])));
+        }
+    }
+    let long = bytes.len() >= STAR_VARINT_MAX;
+    err(if long {
+        "a STAR length too long"
+    } else {
+        "a STAR archive cut short"
+    })
+}
+
+/// A frame, and the bytes after it.
+type Framed<'a> = (&'a [u8], &'a [u8]);
+
+/// A frame at the front of `bytes`, at most `max` long, and what follows
+/// it; none if `bytes` is empty.
+fn read_frame(bytes: &[u8], max: usize) -> Result<Option<Framed<'_>>, SpaceError> {
+    let Some((len, rest)) = read_varint(bytes)? else {
+        return Ok(None);
+    };
+    if len > max {
+        return err(format!("a STAR frame of {len} bytes, past {max}"));
+    }
     if rest.len() < len {
         return err("a STAR archive cut short");
     }
-    Ok(rest.split_at(len))
+    Ok(Some(rest.split_at(len)))
+}
+
+/// A STAR archive read, each value at most `max_value` long. Its metadata
+/// is checked as DRISL's one form; its pairs are left to its profile.
+pub fn read_star_parts(bytes: &[u8], max_value: usize) -> Result<Star<'_>, SpaceError> {
+    let Some(rest) = bytes.strip_prefix(&STAR_MAGIC[..]) else {
+        return err("not a STAR archive");
+    };
+    let Some((meta, mut rest)) = read_frame(rest, STAR_FRAME_MAX)? else {
+        return err("a STAR archive with no metadata");
+    };
+    let Ok(Value::Map(meta)) = drisl::decode(meta) else {
+        return err("STAR metadata that is not a DRISL map");
+    };
+    if !matches!(meta.get("$type"), Some(Value::String(_))) {
+        return err("STAR metadata with no $type");
+    }
+    let mut pairs = Vec::new();
+    // The end comes only between pairs.
+    while let Some((key, after)) = read_frame(rest, STAR_FRAME_MAX)? {
+        let value = read_frame(after, max_value)?;
+        let (value, after) = value.ok_or(SpaceError("a STAR key with no value".into()))?;
+        pairs.push((key, value));
+        rest = after;
+    }
+    Ok(Star { meta, pairs })
+}
+
+/// A key of a STAR archive whose keys are text.
+fn key_text(key: &[u8]) -> Result<&str, SpaceError> {
+    std::str::from_utf8(key).map_err(|_| SpaceError("a STAR key that is not text".into()))
+}
+
+/// `meta`'s text at `key`.
+fn text(meta: &BTreeMap<String, Value>, key: &str) -> Option<String> {
+    match meta.get(key) {
+        Some(Value::String(s)) => Some(s.clone()),
+        _ => None,
+    }
+}
+
+/// A repo as a STAR archive: its commit, then each record's path and DRISL,
+/// in byte order of the path.
+pub fn star(commit: &Commit, records: &BTreeMap<String, Vec<u8>>) -> Vec<u8> {
+    write_star(
+        &commit.to_meta(),
+        records.iter().map(|(p, v)| (p.as_bytes(), v.as_slice())),
+    )
 }
 
 /// A repo's STAR archive read: its commit, and each record's DRISL by
 /// path. The records are not checked against the commit here: that is
 /// the reader's, as their CIDs are its set hash's elements.
 pub fn read_star(bytes: &[u8]) -> Result<(Commit, BTreeMap<String, Vec<u8>>), SpaceError> {
-    let Some(mut rest) = bytes.strip_prefix(&STAR_MAGIC[..]) else {
-        return err("not a STAR archive");
-    };
-    let (meta, after) = read_frame(rest)?;
-    rest = after;
-    let meta = drisl::decode(meta);
-    let Ok(Value::Map(meta)) = meta else {
-        return err("STAR metadata that is not a DRISL map");
-    };
-    let field = |key: &str| meta.get(key);
-    let text = |key: &str| match field(key) {
-        Some(Value::String(s)) => Some(s.clone()),
+    let Star { meta, pairs } = read_star_parts(bytes, RECORD_MAX)?;
+    let data = match meta.get("data") {
+        Some(Value::Bytes(b)) => <[u8; 32]>::try_from(b.as_slice()).ok(),
         _ => None,
     };
-    let data = match field("data") {
-        Some(Value::Bytes(b)) if b.len() == 32 => {
-            Some(<[u8; 32]>::try_from(b.as_slice()).expect("32 bytes"))
-        }
-        _ => None,
-    };
-    let ours = text("$type").as_deref() == Some(COMMIT_MAC)
-        && field("ver") == Some(&Value::Integer(COMMIT_VERSION));
-    let (Some(repo), Some(space), Some(rev), Some(data), true) =
-        (text("repo"), text("space"), text("rev"), data, ours)
-    else {
+    let ours = text(&meta, "$type").as_deref() == Some(COMMIT_MAC)
+        && meta.get("ver") == Some(&Value::Integer(COMMIT_VERSION));
+    let (Some(repo), Some(space), Some(rev), Some(data), true) = (
+        text(&meta, "repo"),
+        text(&meta, "space"),
+        text(&meta, "rev"),
+        data,
+        ours,
+    ) else {
         return err("not a repo's STAR archive");
     };
     let mut records = BTreeMap::new();
-    let mut last: Option<String> = None;
-    while !rest.is_empty() {
-        let (key, after) = read_frame(rest)?;
-        let (value, after) = read_frame(after)?;
-        rest = after;
-        let path = String::from_utf8(key.to_vec())
-            .map_err(|_| SpaceError("a STAR key that is not text".into()))?;
-        if last.as_deref().is_some_and(|l| l >= path.as_str()) {
+    let mut last: Option<&[u8]> = None;
+    for (key, value) in pairs {
+        let path = key_text(key)?;
+        if last.is_some_and(|l| l >= key) {
             return err("a STAR archive's records out of order");
         }
-        last = Some(path.clone());
-        records.insert(path, value.to_vec());
+        last = Some(key);
+        records.insert(path.to_string(), value.to_vec());
     }
     let commit = Commit {
         repo,
@@ -396,4 +471,100 @@ pub fn read_star(bytes: &[u8]) -> Result<(Commit, BTreeMap<String, Vec<u8>>), Sp
         data,
     };
     Ok((commit, records))
+}
+
+/// A space meta archive's `$type`: what a space's authority keeps, moving
+/// with it from one host to another.
+pub const SPACE_META: &str = "atproto-space-meta";
+/// The version of space meta archive this reads.
+pub const SPACE_META_VERSION: i64 = 1;
+const WRITER_PREFIX: &str = "writer/";
+
+/// A repo in a space's writer set, as its authority keeps it: the repo's
+/// revision and digest it last heard of, and the space's revision then.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpaceWriter {
+    pub did: String,
+    pub rev: String,
+    pub data: Vec<u8>,
+    pub space_rev: String,
+}
+
+/// A space as its authority's host keeps it (`exportSpaceMeta`): its
+/// policy, whatever state the policy keeps beyond itself (a memberspace's
+/// members), by key, and its writer set.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceMeta {
+    pub space: String,
+    pub policy: BTreeMap<String, Value>,
+    pub policy_state: Vec<(String, BTreeMap<String, Value>)>,
+    pub writers: Vec<SpaceWriter>,
+}
+
+/// Which of a space meta archive's sections, in their order, `key` is in.
+fn section(key: &str) -> u8 {
+    match key {
+        "policy" => 0,
+        _ if key.starts_with(WRITER_PREFIX) => 2,
+        _ => 1,
+    }
+}
+
+/// A writer from its key and value, if they are one.
+fn writer(key: &str, value: &BTreeMap<String, Value>) -> Option<SpaceWriter> {
+    let did = key
+        .strip_prefix(WRITER_PREFIX)
+        .filter(|d| syntax::is_did(d))?;
+    let tid = |k: &str| text(value, k).filter(|t| syntax::is_tid(t));
+    let Some(Value::Bytes(data)) = value.get("data") else {
+        return None;
+    };
+    Some(SpaceWriter {
+        did: did.into(),
+        rev: tid("rev")?,
+        data: data.clone(),
+        space_rev: tid("spaceRev")?,
+    })
+}
+
+/// A space meta archive read: its sections each whole, in order, each key
+/// once and in byte order, and every value a map.
+pub fn read_space_meta(bytes: &[u8]) -> Result<SpaceMeta, SpaceError> {
+    let Star { meta, pairs } = read_star_parts(bytes, usize::MAX)?;
+    let space = text(&meta, "space").filter(|s| SpaceRef::parse(s).is_ok());
+    let ours = text(&meta, "$type").as_deref() == Some(SPACE_META)
+        && meta.get("ver") == Some(&Value::Integer(SPACE_META_VERSION));
+    let (Some(space), true) = (space, ours) else {
+        return err("not a space meta archive");
+    };
+    let mut policy = None;
+    let mut policy_state = Vec::new();
+    let mut writers = Vec::new();
+    let mut at: Option<(u8, &[u8])> = None;
+    for (key, value) in pairs {
+        let text = key_text(key)?;
+        let part = section(text);
+        if at.is_some_and(|(s, last)| part < s || (part == s && key <= last)) {
+            return err(format!("{text} out of order, or twice"));
+        }
+        at = Some((part, key));
+        let Ok(Value::Map(value)) = drisl::decode(value) else {
+            return err(format!("{text} is not a DRISL map"));
+        };
+        match part {
+            0 => policy = Some(value),
+            1 => policy_state.push((text.to_string(), value)),
+            _ => {
+                let found = writer(text, &value);
+                writers.push(found.ok_or(SpaceError(format!("{text} is no writer")))?);
+            }
+        }
+    }
+    let policy = policy.ok_or(SpaceError("a space meta archive with no policy".into()))?;
+    Ok(SpaceMeta {
+        space,
+        policy,
+        policy_state,
+        writers,
+    })
 }

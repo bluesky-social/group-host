@@ -124,8 +124,8 @@ says otherwise.
    [moderation](moderation.md)); recovery keys (`recovery.rs`; done, see
    [recovery](recovery.md)); moving a group to another host
    (`migration.rs`; done, see [moving](moving.md)); an account on
-   another server becoming a group (`import.rs`; done, but for its
-   spaces, see [moving](moving.md#an-account-becoming-a-group)); and
+   another server becoming a group, its spaces with it (`import.rs`,
+   `import_space.rs`; done, see [moving](moving.md#an-account-becoming-a-group)); and
    moving the host itself (`move_host.rs`; done, see
    [moving](moving.md#moving-the-host)):
    `methods/{moderation,recovery,importAccount,migration}.ts`,

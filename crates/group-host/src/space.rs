@@ -56,7 +56,7 @@ impl Host {
         Ok(Some((commit, made)))
     }
 
-    async fn tell_authority(&self, space: &SpaceRef, commit: &Commit) -> Result<()> {
+    pub(crate) async fn tell_authority(&self, space: &SpaceRef, commit: &Commit) -> Result<()> {
         let uri = space.to_string();
         if let Some(hosted) = self.store.space(&uri)? {
             if !self.may(&uri, &hosted, Some(&commit.repo), Access::Write)? {
@@ -78,7 +78,7 @@ impl Host {
         Ok(())
     }
 
-    fn space_commit(
+    pub(crate) fn space_commit(
         &self,
         did: &str,
         space: &SpaceRef,
@@ -116,7 +116,8 @@ impl Host {
         }
         let mut changes = Vec::new();
         for write in &writes {
-            let Checked { path, put, blobs } = self.check(&account.did, write, &paths, false)?;
+            let Checked { path, put, blobs } =
+                self.check(&account.did, write, &paths, asked.copied)?;
             let (collection, rkey) = write.path();
             let prev = match &put {
                 Some((cid, _)) => paths.insert(path, *cid),

@@ -287,7 +287,7 @@ pub async fn migrate_export(
 }
 
 /// The record at `path`, `collection/rkey`, of `value`'s DRISL, to write.
-fn create(path: &str, value: &[u8]) -> Option<Write> {
+pub(crate) fn create(path: &str, value: &[u8]) -> Option<Write> {
     let (collection, rkey) = path.split_once('/')?;
     let value = drisl::decode(value).ok()?.to_json();
     Some(Write::Create {

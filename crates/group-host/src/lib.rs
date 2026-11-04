@@ -26,6 +26,7 @@ pub mod group_spaces;
 pub mod group_tokens;
 pub mod identity;
 pub mod import;
+pub mod import_space;
 pub mod index;
 pub mod index_api;
 pub mod lifecycle;
@@ -430,6 +431,10 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.completeImport",
             post(import::complete_import),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.importAccountSpace",
+            post(import_space::import_account_space),
         )
         .route("/oauth/authorize", get(oauth::authorize))
         .route(

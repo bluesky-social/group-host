@@ -1,22 +1,25 @@
 //! The space alpha's primitives, against vectors made by running
-//! `@atproto/space` (tests/reference/space-vectors.json, from pds.js).
+//! `@atproto/space` (tests/reference/space-vectors.json, from pds.js, and
+//! tests/reference/space-meta.json, from space-meta.mjs beside it).
 
 use atproto::cid::Cid;
 use atproto::drisl;
 use atproto::keys::{Curve, Keypair};
 use atproto::space::{
-    COMMIT_MAC, Commit, LtHash, RECORD_MAC, STATE_BYTES, SpaceRef, decapsulate, element,
-    encapsulate, mac_header, parse_want_mac, record_mac, star, want_mac_header,
+    COMMIT_MAC, Commit, LtHash, RECORD_MAC, RECORD_MAX, STAR_MAGIC, STATE_BYTES, SpaceRef,
+    SpaceWriter, Star, decapsulate, element, encapsulate, mac_header, parse_want_mac,
+    read_space_meta, read_star_parts, record_mac, star, want_mac_header, write_star,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-fn vectors() -> Value {
-    let path = format!(
-        "{}/tests/reference/space-vectors.json",
-        env!("CARGO_MANIFEST_DIR")
-    );
+fn reference(name: &str) -> Value {
+    let path = format!("{}/tests/reference/{name}", env!("CARGO_MANIFEST_DIR"));
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn vectors() -> Value {
+    reference("space-vectors.json")
 }
 
 fn hex(v: &Value) -> Vec<u8> {
@@ -234,7 +237,16 @@ fn reads_a_star_archive_back() {
         "a STAR archive cut short"
     );
     assert_eq!(
-        refused(&[magic.clone(), vec![0xff; 11]].concat()),
+        refused(&[magic.clone(), vec![0xff; 6]].concat()),
+        "a STAR length too long"
+    );
+    assert_eq!(
+        refused(&[magic.clone(), vec![0x81, 0x00]].concat()),
+        "a STAR length not in its shortest form"
+    );
+    assert_eq!(refused(&magic), "a STAR archive with no metadata");
+    assert_eq!(
+        refused(&[magic.clone(), vec![0x81]].concat()),
         "a STAR archive cut short"
     );
     assert_eq!(
@@ -249,6 +261,11 @@ fn reads_a_star_archive_back() {
     assert_eq!(
         refused(&[magic.clone(), framed(&not_a_commit)].concat()),
         "not a repo's STAR archive"
+    );
+    let untyped = drisl::encode(&atproto::Value::Map(BTreeMap::new()));
+    assert_eq!(
+        refused(&[magic.clone(), framed(&untyped)].concat()),
+        "STAR metadata with no $type"
     );
     let head = star(&commit, &BTreeMap::new());
     let record = |path: &str| [framed(path.as_bytes()), framed(b"\xa0")].concat();
@@ -265,7 +282,123 @@ fn reads_a_star_archive_back() {
         "a STAR key that is not text"
     );
     assert_eq!(
-        refused(&[head, framed(b"a/1")].concat()),
+        refused(&[head.clone(), framed(b"a/1")].concat()),
+        "a STAR key with no value"
+    );
+    assert_eq!(
+        refused(&[head.clone(), framed(b"a/1"), vec![5, 1]].concat()),
         "a STAR archive cut short"
     );
+    // A record is a mebibyte at most.
+    let mut big = BTreeMap::new();
+    big.insert("a/1".to_string(), vec![0xa0; RECORD_MAX + 1]);
+    assert_eq!(
+        refused(&star(&commit, &big)),
+        format!(
+            "a STAR frame of {} bytes, past {RECORD_MAX}",
+            RECORD_MAX + 1
+        )
+    );
+}
+
+#[test]
+fn writes_and_reads_a_star_archive_of_any_profile() {
+    let meta = BTreeMap::from([("$type".into(), atproto::Value::String("test".into()))]);
+    let pairs: [(&[u8], &[u8]); 2] = [(&[1], &[2, 3]), (&[], &[])];
+    let bytes = write_star(&meta, pairs);
+    assert_eq!(bytes[..4], STAR_MAGIC);
+    let read = read_star_parts(&bytes, 2).unwrap();
+    assert_eq!(
+        read,
+        Star {
+            meta,
+            pairs: pairs.to_vec()
+        }
+    );
+    assert!(read_star_parts(&bytes, 1).is_err());
+}
+
+#[test]
+fn reads_a_space_meta_archive_as_the_alpha_writes_it() {
+    let v = reference("space-meta.json");
+    let read = |case: &Value| read_space_meta(&hex(&case["hex"])).unwrap();
+    let full = read(&v["full"]);
+    let want = &v["full"]["read"];
+    assert_eq!(full.space, s(&want["space"]));
+    let json = |m: &BTreeMap<String, atproto::Value>| atproto::Value::Map(m.clone()).to_json();
+    assert_eq!(json(&full.policy), want["policy"]);
+    let state: Vec<(String, Value)> = full
+        .policy_state
+        .iter()
+        .map(|(k, v)| (k.clone(), json(v)))
+        .collect();
+    let wanted: Vec<(String, Value)> = want["policyState"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (s(&e["key"]).to_string(), e["value"].clone()))
+        .collect();
+    assert_eq!(state, wanted);
+    let writers: Vec<SpaceWriter> = want["writers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| SpaceWriter {
+            did: s(&w["did"]).into(),
+            rev: s(&w["rev"]).into(),
+            data: hex(&w["data"]),
+            space_rev: s(&w["spaceRev"]).into(),
+        })
+        .collect();
+    assert_eq!(full.writers, writers);
+
+    let empty = read(&v["empty"]);
+    assert_eq!(json(&empty.policy), v["empty"]["read"]["policy"]);
+    assert!(empty.policy_state.is_empty() && empty.writers.is_empty());
+
+    // A writer's digest is bytes.
+    let text = |t: &str| atproto::Value::String(t.into());
+    let map = |pairs: &[(&str, atproto::Value)]| {
+        let m: BTreeMap<String, atproto::Value> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+        drisl::encode(&atproto::Value::Map(m))
+    };
+    let meta = BTreeMap::from([
+        ("$type".into(), text("atproto-space-meta")),
+        ("ver".into(), atproto::Value::Integer(1)),
+        ("space".into(), text(&full.space)),
+    ]);
+    let policy = map(&[("$type", text("com.atproto.personalspace.policy"))]);
+    let tid = text("3kbcq3p7ad42b");
+    let writer = map(&[
+        ("rev", tid.clone()),
+        ("data", text("01")),
+        ("spaceRev", tid),
+    ]);
+    let archive = write_star(
+        &meta,
+        [
+            (&b"policy"[..], &policy[..]),
+            (b"writer/did:plc:alice", &writer),
+        ],
+    );
+    assert_eq!(
+        read_space_meta(&archive).unwrap_err().to_string(),
+        "writer/did:plc:alice is no writer"
+    );
+
+    // Whatever the alpha refuses, refused here too.
+    let refused = v["refused"].as_array().unwrap();
+    assert_eq!(refused.len(), 19);
+    for case in refused {
+        let why = read_space_meta(&hex(&case["hex"]));
+        assert!(
+            why.is_err(),
+            "{} read, though the alpha says: {}",
+            case["why"],
+            case["error"]
+        );
+    }
 }
