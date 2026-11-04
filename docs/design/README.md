@@ -108,7 +108,8 @@ says otherwise.
    confidential client, as knotless does, keeping only a signed cookie
    (`console_login.rs`; done).
 7. **The console.** Signing in as oneself (step 6); who is looking
-   (`getViewer`, as knotless's) and their groups (`getActorGroups`), on
+   (`getViewer`, as knotless's), a person (`getActor`) and their groups
+   (`getActorGroups`), on
    home, and approving an app (`/authorize`; `actors.rs`; done);
    starting a group (`/new`) and a group's page (`/g/<handle>`: its
    profile and rules, joining and leaving, its members, and admitting

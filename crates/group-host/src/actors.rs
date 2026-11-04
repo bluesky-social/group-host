@@ -1,5 +1,6 @@
 //! People, as the console shows them: who is asking (`getViewer`, as
-//! knotless's), and the groups someone is in (`getActorGroups`).
+//! knotless's), a person (`getActor`), and the groups someone is in
+//! (`getActorGroups`).
 //!
 //! As the prototype's `methods/groups.ts`'s `getActorGroups`.
 
@@ -8,6 +9,7 @@ use crate::api::{Params, page, param};
 use crate::group::{members_space, meta_space};
 use crate::group_api::{caller, group_of, signed_in};
 use crate::rbac::{Access, NS};
+use crate::store::Store;
 use crate::xrpc::XrpcError;
 use atproto::did;
 use axum::Json;
@@ -69,6 +71,45 @@ impl Host {
         view["memberCount"] = json!(members.map_err(XrpcError::internal)?.len());
         Ok(Json(view))
     }
+}
+
+impl Store {
+    /// Whether `did` is asking to join any group here.
+    pub fn asking_anywhere(&self, did: &str) -> anyhow::Result<bool> {
+        let sql = "SELECT 1 FROM join_request WHERE did = ?1 LIMIT 1";
+        let found = self.conn().query_row(sql, [did], |_| Ok(()));
+        Ok(rusqlite::OptionalExtension::optional(found)?.is_some())
+    }
+}
+
+/// A person, as a view names them, for someone signed in: themselves, or
+/// anyone the host shows, a member of one of its groups or someone asking
+/// to join one; and to themselves, whether the host starts groups for them.
+pub async fn get_actor(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+    headers: HeaderMap,
+) -> Answer {
+    let me = signed_in(&host, &headers, &format!("{NS}.getActor")).await?;
+    let actor = param(&p, "actor")?;
+    let shown = actor == me
+        || !host.groups_of(actor)?.is_empty()
+        || host
+            .store
+            .asking_anywhere(actor)
+            .map_err(XrpcError::internal)?;
+    if !shown {
+        return Err(XrpcError::new(
+            StatusCode::BAD_REQUEST,
+            "ActorNotFound",
+            format!("no one here by {actor}"),
+        ));
+    }
+    let mut view = host.actor_view(actor).await;
+    if actor == me {
+        view["canCreateGroup"] = json!(host.may_found(&me));
+    }
+    Ok(Json(view))
 }
 
 /// The groups here someone is in: every one of the caller's own, and of

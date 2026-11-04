@@ -358,6 +358,7 @@ pub fn router(host: Arc<Host>) -> Router {
             post(group_tokens::revoke_group_token),
         )
         .route("/xrpc/fyi.opensocial.getViewer", get(actors::get_viewer))
+        .route("/xrpc/fyi.opensocial.getActor", get(actors::get_actor))
         .route(
             "/xrpc/fyi.opensocial.getActorGroups",
             get(actors::get_actor_groups),

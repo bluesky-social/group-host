@@ -202,3 +202,62 @@ async fn names_by_did_alone_someone_whose_document_it_cannot_read() {
         json!({"did": "did:plc:nobodynobodynobodyxx"})
     );
 }
+
+#[tokio::test]
+async fn names_a_person_the_host_shows() {
+    let h = start(&[], false).await;
+    let [alice, bob, carol] = people(&h).await;
+    let lxm = format!("{NS}.getActor");
+    let actor = async |asker: &Authority, who: &str| {
+        get(&h, &lxm, &format!("actor={who}"), &[auth(&h, asker, &lxm)]).await
+    };
+    // Oneself, and whether the host starts groups for them.
+    let (status, me) = actor(&alice, &alice.did).await;
+    assert_eq!(status, 200, "{me}");
+    assert_eq!(me["did"], alice.did.as_str());
+    assert_eq!(me["handle"], "authority.test");
+    assert_eq!(me["canCreateGroup"], true);
+    // No one else, until they are in a group here, or asking to join one.
+    for who in [&bob, &carol] {
+        let said = actor(&alice, &who.did).await;
+        assert_eq!(
+            (said.0, said.1["error"].as_str()),
+            (400, Some("ActorNotFound"))
+        );
+    }
+    let group = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    join(&h, &group, &bob.did).await;
+    let ask = format!("{NS}.requestJoin");
+    let (status, said) = post(
+        &h,
+        &ask,
+        &json!({"group": group}),
+        &[auth(&h, &carol, &ask)],
+    )
+    .await;
+    assert_eq!(status, 200, "{said}");
+    for who in [&bob, &carol] {
+        let (status, view) = actor(&alice, &who.did).await;
+        assert_eq!(status, 200, "{view}");
+        assert_eq!(view["did"], who.did.as_str());
+        assert!(view.get("canCreateGroup").is_none());
+    }
+    let said = get(&h, &lxm, &format!("actor={}", bob.did), &[]).await;
+    assert_eq!(said.0, 401);
+
+    let closed = start(&[("GROUP_FOUNDERS", "did:plc:someone")], false).await;
+    let [dana, ..] = people(&closed).await;
+    let (_, me) = get(
+        &closed,
+        &lxm,
+        &format!("actor={}", dana.did),
+        &[auth(&closed, &dana, &lxm)],
+    )
+    .await;
+    assert_eq!(me["canCreateGroup"], false);
+}
