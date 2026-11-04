@@ -507,6 +507,47 @@ async fn writes_only_what_its_member_still_may() {
 }
 
 #[tokio::test]
+async fn uploads_only_while_its_member_may_write_and_the_group_is_on() {
+    let h = start(&[], false).await;
+    let (did, calendar, [alice, bob, _]) = group(&h).await;
+    membership(&h, &did, &bob.did, &["member", "admin"]).await;
+    let app = App::loopback(&format!("atproto repo:{POST} blob:image/*"));
+    let access = token(&h, &app, &bob, &did).await;
+    let upload = async || {
+        let nsid = "com.atproto.repo.uploadBlob";
+        let req = h
+            .http
+            .post(format!("{}/xrpc/{nsid}", h.url))
+            .header("authorization", format!("DPoP {access}"))
+            .header("dpop", app.resource_proof(&h, "POST", nsid, &access))
+            .header("content-type", "image/png")
+            .body(b"face".to_vec());
+        app.said(req).await
+    };
+    assert_eq!(upload().await.status, 200);
+    // Not while the group is switched off.
+    let off = format!("{NS}.deactivateGroup");
+    post(&h, &off, &json!({"group": did}), &[auth(&h, &alice, &off)]).await;
+    assert_eq!(upload().await.error(), (400, "RepoDeactivated"));
+    let on = format!("{NS}.activateGroup");
+    post(&h, &on, &json!({"group": did}), &[auth(&h, &alice, &on)]).await;
+    assert_eq!(upload().await.status, 200);
+    // While Bob, an admin no more, may still add events in the calendar,
+    // the app may upload; once he may write nothing as the group, not.
+    membership(&h, &did, &bob.did, &["member"]).await;
+    assert_eq!(upload().await.status, 200);
+    let access_record = json!({"$type": format!("{NS}.access"), "readableBy": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"});
+    let write = Write::Update {
+        collection: format!("{NS}.access"),
+        rkey: "self".into(),
+        value: access_record,
+    };
+    h.host.space_write(&did, &calendar, &[write]).await.unwrap();
+    let said = upload().await;
+    assert_eq!(said.status, 403, "{}", said.body);
+}
+
+#[tokio::test]
 async fn writes_the_groups_spaces_within_its_scope() {
     let h = start(&[], false).await;
     let (did, calendar, [alice, bob, _]) = group(&h).await;

@@ -15,8 +15,8 @@ use crate::Host;
 use crate::api::invalid;
 use crate::group::{join_policy, members_space, meta_space};
 use crate::oauth_resource::{Acting, Refusal};
-use crate::oauth_scope::{may_write, writes_for};
-use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
+use crate::oauth_scope::{may_write, writes_in};
+use crate::rbac::{self, NS, actions_for, grants, repo_collections_for};
 use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -410,6 +410,13 @@ pub async fn apply_writes(
 /// A blob for the group's records, of a type the token's scope takes.
 pub async fn upload_blob(State(host): State<Arc<Host>>, headers: HeaderMap, body: Body) -> Answer {
     let acting = host.acting(&headers, "POST", "/xrpc/com.atproto.repo.uploadBlob")?;
+    let (group, member) = (&acting.grant.group, &acting.grant.member);
+    host.active(group)?;
+    let (roles, grants) = host.standing(&acting)?;
+    if !host.writes_anything(group, &roles, &grants, member)? {
+        let no_more = "the member who signed this app in may no longer write anything as the group";
+        return Err(forbidden(no_more).into());
+    }
     let mime = headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -419,7 +426,7 @@ pub async fn upload_blob(State(host): State<Arc<Host>>, headers: HeaderMap, body
     }
     let limit = host.config.blob_upload_limit;
     let bytes = crate::xrpc::read_body(body, limit, "BlobTooLarge").await?;
-    let blob = host.upload_blob(&acting.grant.group, &bytes, mime)?;
+    let blob = host.upload_blob(group, &bytes, mime)?;
     Ok(Json(json!({ "blob": blob })))
 }
 
@@ -448,9 +455,8 @@ impl Host {
         let configures = actions_for(&grants, &roles).contains("group.configure");
         let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
         let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        let rules = Access::of(&access);
         let everything = repo_collections_for(&grants, &roles).contains("*");
-        let writable = writes_for(&access, &roles);
+        let writable = writes_in(&access, &roles, &acting.grant.member, everything);
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.space(space, Some(collection), action(w)) {
@@ -460,10 +466,9 @@ impl Host {
                     action(w)
                 )));
             }
-            let still = match &rules.people {
-                _ if own => configures,
-                Some(_) => everything && rules.can_read(&roles, &acting.grant.member),
-                None => may_write(&writable, collection, action(w)),
+            let still = match own {
+                true => configures,
+                false => may_write(&writable, collection, action(w)),
             };
             if !still {
                 return Err(no_longer(collection));

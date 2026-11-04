@@ -340,3 +340,43 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
         format!("created {EVENT}/ride")
     );
 }
+
+#[tokio::test]
+async fn in_a_space_for_chosen_people_gives_those_of_them_who_may_do_anything() {
+    let h = start(&[], false).await;
+    let (did, calendar, [alice, bob, carol]) = group(&h).await;
+    membership(&h, &did, &carol.did, &["admin"]).await;
+    // Alice and Bob its people, members given events though its people
+    // decide; Carol an admin but not one of them.
+    let access = json!({
+        "$type": format!("{NS}.access"),
+        "readableBy": [],
+        "people": [{"did": alice.did}, {"did": bob.did}],
+        "credentialScopes": [{"role": "member", "scopes": [{"collection": EVENT}]}],
+        "createdAt": "2026-11-03T00:00:00Z",
+    });
+    let write = Write::Update {
+        collection: format!("{NS}.access"),
+        rkey: "self".into(),
+        value: access,
+    };
+    h.host.space_write(&did, &calendar, &[write]).await.unwrap();
+    let app = App::new("console");
+    let body = json!({"group": did, "space": calendar});
+    let said = group_auth(&h, &app, &alice, &body).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(said.body["collections"], json!([{"collection": "*"}]));
+    let token = said.body["accessJwt"].as_str().unwrap();
+    let in_space =
+        json!({"repo": did, "space": calendar, "collection": EVENT, "record": record(EVENT)});
+    let said = app
+        .call(&h, "com.atproto.space.createRecord", token, Some(&in_space))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    // Bob is one of its people, but may not do anything as the group;
+    // Carol may, but is not one of them.
+    for who in [&bob, &carol] {
+        let said = group_auth(&h, &app, who, &body).await;
+        assert_eq!(said.error(), (403, "Forbidden"), "{}", said.body);
+    }
+}

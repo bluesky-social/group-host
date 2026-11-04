@@ -120,8 +120,11 @@ async fn authorize(
             _ => back.append_pair("code", "c1"),
         };
         back.append_pair("state", &pushed["state"]);
-        let iss = pds.says("iss").as_str().map_or(pds.base(), String::from);
-        back.append_pair("iss", &iss);
+        // Unless asked to leave it out, as atproto's servers never may.
+        if pds.says("iss") != false {
+            let iss = pds.says("iss").as_str().map_or(pds.base(), String::from);
+            back.append_pair("iss", &iss);
+        }
     }
     Redirect::to(to.as_str())
 }
@@ -400,6 +403,7 @@ async fn refuses_a_sign_in_it_cannot_trust() {
             json!("https://elsewhere.test"),
             "came from another server",
         ),
+        ("iss", json!(false), "did not say which server"),
         ("approve", json!("deny"), "it was refused: access_denied"),
         ("approve", json!("bare"), "it was refused: no reason given"),
         ("token", json!("refuse"), "refused: invalid_grant"),

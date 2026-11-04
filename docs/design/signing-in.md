@@ -57,7 +57,9 @@ Details:
   browser holds the same `state` in a cookie; the callback requires
   both.
 - The authorization server's `issuer` must equal the URL its metadata
-  came from, and the callback's `iss` must equal that issuer.
+  came from, and the callback must carry `iss`, equal to that issuer:
+  atproto's servers always send it, and a callback without it is
+  refused.
 - Every server reached is fetched only at a public address, as client
   metadata is (below). `back` is kept only as a path on the console.
 
@@ -102,7 +104,10 @@ the address it checked, so a client id cannot make the host reach into
 its own network. It keeps a document ten minutes.
 
 A public client holds no secret; a confidential one signs a client
-assertion with a key its metadata lists. A confidential client's grant
+assertion with a key its metadata lists, or one at its `jwks_uri`. The
+host keeps a key set from a `jwks_uri` ten minutes too, and fetches it
+again once when an assertion names a key it does not hold, so keys can
+rotate. A confidential client's grant
 lasts 90 days unrefreshed and a public one's 14, since nothing but its
 DPoP key ties a public client to its grant. Either must keep
 authenticating the same way, with the same key, for as long as the grant
@@ -175,13 +180,16 @@ fails `ScopeMissing`. The member's roles must allow it now, or it fails
 403 "may no longer write … as the group". For a repo write the roles
 need a repo grant for the collection, or the right to write it as the
 group in one of its open spaces. For a space write they need
-`group.configure` in the meta and members spaces, and otherwise what the
+`group.configure` in the meta and members spaces; in a space for chosen
+people, to be one of them and hold `repo:*`; and otherwise what the
 space's access record grants. Both are asked under the lock the commit
-is made under, so no change of roles slips in between.
+is made under, so no change of roles slips in between. An upload is
+asked the same way: the scope must take the file's type, and the roles
+must still let the member write something as the group.
 
 A member whose roles shrink therefore gives every app they signed in
 less at once, and a member who leaves or is put out ends every grant
-they approved. A group switched off refuses every write, but its tokens
+they approved. A group switched off refuses every write and upload, but its tokens
 still refresh and `getSession` answers `status: "deactivated"`, so its
 apps carry on when it is switched on again.
 
@@ -228,8 +236,10 @@ The console acts as a group too. Rather than run OAuth against the host
 it is part of, it asks `fyi.opensocial.getGroupAuth` for a group and one
 of its spaces, as the member, with a DPoP proof. The token's scope is,
 for each collection the member's roles may write in that space, a space
-scope and a repo scope, plus blob uploads; if they write nothing there,
-the request fails 403. The token lasts 15 minutes and is an ordinary
+scope and a repo scope, plus blob uploads. In a space for chosen people,
+that is every collection for those of them who hold `repo:*`, and
+nothing for anyone else. If they write nothing there, the request fails
+403. The token lasts 15 minutes and is an ordinary
 grant with source `getGroupAuth`, checked at each write as above.
 
 ## Listing and revoking
@@ -269,10 +279,12 @@ A privileged password adds `transition:chat.bsky`, though the host
 serves no chat.
 
 Its scope cannot be narrowed, so it follows its maker's roles more
-bluntly. A sign-in by a maker who no longer holds `repo:*` is refused.
-At each use and refresh the host asks whether the password still exists
-and its maker still holds `repo:*`; once they do not, every app password
-of theirs in the group is forgotten and every session from one ends.
+bluntly. At each use and refresh the host asks whether the password
+still exists. At each sign-in, use and refresh, and whenever the group's
+passwords are listed or one is made, it asks whether each maker still
+holds `repo:*`. Once one does not, every app password of theirs in
+the group is forgotten and every session from one ends, so none works
+again if they are given `repo:*` back.
 
 ## Provisioning
 

@@ -109,15 +109,32 @@ impl Host {
         {
             return Ok(true);
         }
-        let dropped = self
-            .store
-            .drop_members_app_passwords(&grant.group, &grant.member);
-        dropped.map_err(XrpcError::internal)?;
-        let ended = self
-            .store
-            .revoke_member_sessions(&grant.group, &grant.member);
-        ended.map_err(XrpcError::internal)?;
+        self.forget_app_passwords(&grant.group, &grant.member)?;
         Ok(false)
+    }
+
+    /// Forgets `member`'s app passwords for `group`, and every session
+    /// signed in with one of them.
+    fn forget_app_passwords(&self, group: &str, member: &str) -> Result<(), XrpcError> {
+        let dropped = self.store.drop_members_app_passwords(group, member);
+        dropped.map_err(XrpcError::internal)?;
+        let ended = self.store.revoke_member_sessions(group, member);
+        ended.map_err(XrpcError::internal)?;
+        Ok(())
+    }
+
+    /// The group's app passwords whose makers could still make them; the
+    /// rest are forgotten, so none comes back with its maker's roles.
+    fn app_passwords(&self, group: &str) -> Result<Vec<AppPassword>, XrpcError> {
+        let held = self.store.app_passwords(group);
+        let mut kept = Vec::new();
+        for p in held.map_err(XrpcError::internal)? {
+            match self.may_issue(group, &p.member)? {
+                true => kept.push(p),
+                false => self.forget_app_passwords(group, &p.member)?,
+            }
+        }
+        Ok(kept)
     }
 
     /// A JWT naming a session, as a PDS's are: an app may read when it
@@ -242,6 +259,7 @@ pub async fn create_session(State(host): State<Arc<Host>>, Json(body): Json<Valu
         .app_password(&group, None, Some(&hash_of(password)));
     let p = found.map_err(XrpcError::internal)?.ok_or_else(no)?;
     if !host.may_issue(&group, &p.member)? {
+        host.forget_app_passwords(&group, &p.member)?;
         return Err(no());
     }
     let now = now_millis();
@@ -336,10 +354,7 @@ pub async fn create_app_password(
             "a name of 1 to 64 characters",
         ));
     }
-    let held = host
-        .store
-        .app_passwords(group)
-        .map_err(XrpcError::internal)?;
+    let held = host.app_passwords(group)?;
     if held.len() >= APP_PASSWORDS_AT_MOST {
         let said = format!("a group holds {APP_PASSWORDS_AT_MOST} app passwords at most");
         return Err(XrpcError::new(
@@ -395,10 +410,7 @@ pub async fn list_app_passwords(
         .store
         .grants_of(group, now_millis())
         .map_err(XrpcError::internal)?;
-    let held = host
-        .store
-        .app_passwords(group)
-        .map_err(XrpcError::internal)?;
+    let held = host.app_passwords(group)?;
     let passwords: Vec<Value> = held
         .iter()
         .filter(|p| configures || p.member == me)

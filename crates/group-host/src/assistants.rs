@@ -373,9 +373,13 @@ pub async fn server_metadata(State(host): State<Arc<Host>>) -> Json<Value> {
 }
 
 /// Whether an assistant may be sent back to `uri`: over https, to a
-/// loopback address over http, or to an app's own scheme.
+/// loopback address over http, or to an app's own scheme; never with a
+/// fragment (RFC 6749 §3.1.2).
 fn may_return_to(uri: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(uri) else {
+    let Some(url) = reqwest::Url::parse(uri)
+        .ok()
+        .filter(|u| u.fragment().is_none())
+    else {
         return false;
     };
     let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
@@ -383,7 +387,7 @@ fn may_return_to(uri: &str) -> bool {
         "https" => true,
         "http" => loopback,
         "javascript" | "data" | "file" | "vbscript" => false,
-        _ => url.fragment().is_none(),
+        _ => true,
     }
 }
 

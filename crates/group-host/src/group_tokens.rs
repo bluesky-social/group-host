@@ -16,7 +16,7 @@ use crate::api::{Params, invalid, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
 use crate::oauth_resource::Refusal;
-use crate::oauth_scope::writes_for;
+use crate::oauth_scope::{writes_for, writes_in};
 use crate::oauth_store::{Grant, Tokens};
 use crate::rbac::{Access, NS};
 use crate::time::{iso, now_millis};
@@ -132,7 +132,8 @@ pub async fn get_group_auth(
     let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
     let access = host.group_record(group, uri, &format!("{NS}.access"), "self");
     let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-    let writes = writes_for(&access, &roles);
+    let everything = host.may_issue(group, &me)?;
+    let writes = writes_in(&access, &roles, &me, everything);
     if writes.is_empty() {
         return Err(forbidden("no role of yours may act as the group in this space").into());
     }

@@ -457,10 +457,12 @@ pub async fn callback(
         let why = "this browser did not start that sign-in, or it took too long";
         return Ok(failed(StatusCode::BAD_REQUEST, why));
     };
-    if q.get("iss").is_some_and(|iss| *iss != p.issuer) {
+    // Atproto's servers always say who answered: one that does not may
+    // be another, mixing its answer up with ours.
+    if q.get("iss") != Some(&p.issuer) {
         return Ok(failed(
             StatusCode::BAD_REQUEST,
-            "the answer came from another server",
+            "the answer came from another server, or did not say which server",
         ));
     }
     let Some(code) = q.get("code") else {

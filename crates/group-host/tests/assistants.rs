@@ -583,6 +583,9 @@ async fn refuses_a_request_it_cannot_trust() {
         json!([format!("https://app.test/{}", "a".repeat(2048))]),
         json!(["javascript:alert(1)"]),
         json!(["http://evil.test/cb"]),
+        json!(["https://app.test/cb#x"]),
+        json!(["http://127.0.0.1/cb#x"]),
+        json!(["cursor://anysphere.cursor-retrieval/oauth/callback#x"]),
         json!(["not a url"]),
         json!([]),
     ] {

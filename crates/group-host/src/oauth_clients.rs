@@ -17,7 +17,8 @@ use std::time::Duration;
 
 pub const CLIENT_ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
-/// How long a client's metadata is kept before it is fetched again.
+/// How long a client's metadata, or key set, is kept before it is fetched
+/// again.
 const KEEP_FOR: i64 = 10 * 60_000;
 /// How many clients' metadata is kept at once.
 const KEEP_AT_MOST: usize = 1000;
@@ -33,10 +34,33 @@ pub struct Client {
     pub metadata: Value,
 }
 
-/// The clients' metadata the host has read, and when.
+/// Documents the host has read, by URL, and when.
+#[derive(Default)]
+struct Kept(std::sync::Mutex<HashMap<String, (i64, Value)>>);
+
+impl Kept {
+    /// The document at `url`, if read in the last few minutes.
+    fn get(&self, url: &str, now: i64) -> Option<Value> {
+        let kept = self.0.lock().expect("not poisoned").get(url).cloned();
+        let (at, value) = kept.filter(|(at, _)| now - at < KEEP_FOR)?;
+        tracing::debug!(url, at, "kept");
+        Some(value)
+    }
+
+    fn keep(&self, url: &str, now: i64, value: &Value) {
+        let mut kept = self.0.lock().expect("not poisoned");
+        if kept.len() >= KEEP_AT_MOST {
+            kept.clear();
+        }
+        kept.insert(url.into(), (now, value.clone()));
+    }
+}
+
+/// The clients' metadata and key sets the host has read, and when.
 #[derive(Default)]
 pub struct Clients {
-    kept: std::sync::Mutex<HashMap<String, (i64, Value)>>,
+    metadata: Kept,
+    keys: Kept,
 }
 
 fn invalid_metadata(description: impl Into<String>) -> OAuthError {
@@ -219,19 +243,22 @@ pub fn registered(uris: &[&str], uri: &str) -> bool {
     uris.contains(&at.as_str())
 }
 
+/// The thumbprint of the key of `keys`, by `kid` if it names one, that
+/// signed `assertion`, and its claims.
+fn signed_by(keys: &Value, kid: &str, assertion: &str) -> Option<(String, Value)> {
+    let empty = Vec::new();
+    let keys = keys["keys"].as_array().unwrap_or(&empty);
+    keys.iter()
+        .filter(|k| kid.is_empty() || k["kid"] == kid)
+        .filter_map(|k| jose::from_jwk(k).ok())
+        .find_map(|k| Some((jose::thumbprint(&k), jose::verify(assertion, &k).ok()?.1)))
+}
+
 impl Host {
     /// The client `id` names, its metadata fetched and checked, or kept
     /// from a fetch in the last few minutes.
     pub async fn client(&self, id: &str, now: i64) -> Result<Client, OAuthError> {
-        let kept = self
-            .clients
-            .kept
-            .lock()
-            .expect("not poisoned")
-            .get(id)
-            .cloned();
-        if let Some((at, metadata)) = kept.filter(|(at, _)| now - at < KEEP_FOR) {
-            tracing::debug!(id, at, "client metadata kept");
+        if let Some(metadata) = self.clients.metadata.get(id, now) {
             return Ok(Client {
                 id: id.into(),
                 metadata,
@@ -242,11 +269,7 @@ impl Host {
         } else {
             validate(id, self.fetch_json(id, "client metadata").await?)?
         };
-        let mut kept = self.clients.kept.lock().expect("not poisoned");
-        if kept.len() >= KEEP_AT_MOST {
-            kept.clear();
-        }
-        kept.insert(id.into(), (now, metadata.clone()));
+        self.clients.metadata.keep(id, now, &metadata);
         Ok(Client {
             id: id.into(),
             metadata,
@@ -302,6 +325,22 @@ impl Host {
         self.public_json(url, what).await.map_err(invalid_metadata)
     }
 
+    /// The key set at `uri`, kept from a fetch in the last few minutes
+    /// unless asked `again`, and whether it was kept.
+    async fn client_keys(
+        &self,
+        uri: &str,
+        now: i64,
+        again: bool,
+    ) -> Result<(Value, bool), OAuthError> {
+        if let Some(keys) = self.clients.keys.get(uri, now).filter(|_| !again) {
+            return Ok((keys, true));
+        }
+        let keys = self.fetch_json(uri, "the client's keys").await?;
+        self.clients.keys.keep(uri, now, &keys);
+        Ok((keys, false))
+    }
+
     /// How `client` authenticates on a request whose form is `form`: as
     /// itself alone, if public; with an assertion signed by one of its
     /// keys, for this host, if confidential.
@@ -326,20 +365,17 @@ impl Host {
         };
         let (header, _) = jose::parts(assertion).map_err(|e| invalid_client(e.0))?;
         let kid = header["kid"].as_str().unwrap_or_default();
-        let keys = match client.metadata.get("jwks") {
-            Some(jwks) => jwks.clone(),
-            None => {
-                let uri = client.metadata["jwks_uri"].as_str().unwrap_or_default();
-                self.fetch_json(uri, "the client's keys").await?
-            }
+        let uri = client.metadata["jwks_uri"].as_str().unwrap_or_default();
+        let (keys, kept) = match client.metadata.get("jwks") {
+            Some(jwks) => (jwks.clone(), false),
+            None => self.client_keys(uri, now, false).await?,
         };
-        let empty = Vec::new();
-        let keys = keys["keys"].as_array().unwrap_or(&empty);
-        let verified = keys
-            .iter()
-            .filter(|k| kid.is_empty() || k["kid"] == kid)
-            .filter_map(|k| jose::from_jwk(k).ok())
-            .find_map(|k| Some((jose::thumbprint(&k), jose::verify(assertion, &k).ok()?.1)));
+        let mut verified = signed_by(&keys, kid, assertion);
+        if verified.is_none() && kept {
+            // Keys rotate: one not among those kept has them fetched again.
+            let (keys, _) = self.client_keys(uri, now, true).await?;
+            verified = signed_by(&keys, kid, assertion);
+        }
         let verified = verified.ok_or_else(|| invalid_client("no key of the client signed this"));
         let (jkt, claims) = verified?;
         let issuer = &self.config.public_url;

@@ -161,6 +161,50 @@ async fn a_confidential_client_signs_each_step_and_refreshes() {
     app.push(&h, &[]).await;
 }
 
+/// A confidential client at `name` whose keys are at `keys`, holding
+/// these.
+fn keys_at(docs: &Docs, url: &str, name: &str, keys: &str, held: &[(&str, &Keypair)]) {
+    let mut doc = confidential(&format!("{url}/{name}"), &[]);
+    doc.as_object_mut().unwrap().remove("jwks");
+    doc["jwks_uri"] = json!(format!("{url}/{keys}"));
+    let held: Vec<Json> = held
+        .iter()
+        .map(|(kid, k)| {
+            let mut jwk = jose::jwk(&k.public());
+            jwk["kid"] = json!(kid);
+            jwk
+        })
+        .collect();
+    let mut docs = docs.lock().unwrap();
+    docs.insert(name.into(), (200, doc.to_string()));
+    docs.insert(keys.into(), (200, json!({"keys": held}).to_string()));
+}
+
+#[tokio::test]
+async fn keeps_a_clients_keys_and_fetches_them_again_for_one_it_does_not_know() {
+    let h = start_reachable(&[]).await;
+    let (docs, url) = documents().await;
+    let id = format!("{url}/by-uri.json");
+    let [k1, k2, k3] = [(); 3].map(|_| Arc::new(Keypair::generate(Curve::P256)));
+    keys_at(&docs, &url, "by-uri.json", "jwks.json", &[("k1", &k1)]);
+    asserting(&id, "k1", k1.clone()).push(&h, &[]).await;
+    // Kept: its key host may be down a while.
+    docs.lock()
+        .unwrap()
+        .insert("jwks.json".into(), (500, String::new()));
+    asserting(&id, "k1", k1.clone()).push(&h, &[]).await;
+    // A key it does not know has it fetch them again, once.
+    keys_at(&docs, &url, "by-uri.json", "jwks.json", &[("k2", &k2)]);
+    asserting(&id, "k2", k2.clone()).push(&h, &[]).await;
+    let said = asserting(&id, "k3", k3.clone()).push_said(&h).await;
+    assert_eq!(said.error(), (400, "invalid_client"), "{}", said.body);
+    // As when they were just fetched, without another fetch.
+    let other = format!("{url}/other.json");
+    keys_at(&docs, &url, "other.json", "other-jwks.json", &[("k1", &k1)]);
+    let said = asserting(&other, "k3", k3).push_said(&h).await;
+    assert_eq!(said.error(), (400, "invalid_client"), "{}", said.body);
+}
+
 #[tokio::test]
 async fn refuses_an_assertion_that_is_not_the_clients_for_this_host() {
     let h = start_reachable(&[]).await;

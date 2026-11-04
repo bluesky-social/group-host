@@ -10,7 +10,7 @@
 
 use crate::Host;
 use crate::group::members_space;
-use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for};
+use crate::rbac::{self, Access, NS, actions_for, grants, listed, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -105,6 +105,27 @@ pub fn writes_for(access: &Value, roles: &[String]) -> BTreeMap<String, BTreeSet
     out
 }
 
+/// What a holder of `roles`, `member`, may write as the group in a space
+/// whose access record is `access`, by collection, `everything` being
+/// whether they may do anything as the group. A space for chosen people
+/// is written as the group by those of them who may do anything as it;
+/// any other, as its `credentialScopes` say.
+pub fn writes_in(
+    access: &Value,
+    roles: &[String],
+    member: &str,
+    everything: bool,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let rules = Access::of(access);
+    match rules.people {
+        Some(_) if everything && rules.can_read(roles, member) => {
+            BTreeMap::from([("*".into(), WRITES.map(String::from).into())])
+        }
+        Some(_) => BTreeMap::new(),
+        None => writes_for(access, roles),
+    }
+}
+
 /// Whether those writes include `action` on `collection`.
 pub(crate) fn may_write(
     writes: &BTreeMap<String, BTreeSet<String>>,
@@ -154,25 +175,31 @@ impl Host {
                 .group_record(group, uri, &format!("{NS}.access"), "self")
                 .map_err(XrpcError::internal)?
                 .unwrap_or_default();
-            let rules = Access::of(&access);
-            let readable = rules.can_read(roles, member);
-            // A space for chosen people is written as the group by those
-            // of them who may do anything as it.
-            let writable = match rules.people {
-                Some(_) if readable && everything => {
-                    BTreeMap::from([("*".into(), WRITES.map(String::from).into())])
-                }
-                Some(_) => BTreeMap::new(),
-                None => writes_for(&access, roles),
-            };
             rooms.push(Room {
                 kind: space.kind,
                 skey: space.skey,
-                readable,
-                writable,
+                readable: Access::of(&access).can_read(roles, member),
+                writable: writes_in(&access, roles, member, everything),
             });
         }
         Ok(rooms)
+    }
+
+    /// Whether a holder of `roles` under `grants`, `member`, may write
+    /// anything as `group` now: in its repo, its own spaces, or another.
+    pub fn writes_anything(
+        &self,
+        group: &str,
+        roles: &[String],
+        grants: &[rbac::Grant],
+        member: &str,
+    ) -> Result<bool, XrpcError> {
+        let repo = repo_collections_for(grants, roles);
+        if !repo.is_empty() || actions_for(grants, roles).contains("group.configure") {
+            return Ok(true);
+        }
+        let rooms = self.rooms(group, roles, member, false)?;
+        Ok(rooms.iter().any(|r| !r.writable.is_empty()))
     }
 
     /// The scopes of `requested` a holder of `roles` in `group`, `member`,

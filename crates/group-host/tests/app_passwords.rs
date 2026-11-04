@@ -439,7 +439,6 @@ async fn ends_once_its_maker_could_no_longer_make_it() {
     );
     // Bob is a publisher no more.
     put_membership(&h, &did, &bob.did, &["member"]).await;
-    assert_eq!(sign_in(&h, RIDERS, &password).await.0, 401);
     // Its refresh is refused, and that ends every session of his.
     let refresh = second["refreshJwt"].as_str().unwrap();
     assert_eq!(
@@ -453,6 +452,7 @@ async fn ends_once_its_maker_could_no_longer_make_it() {
         .0,
         401
     );
+    assert_eq!(sign_in(&h, RIDERS, &password).await.0, 401);
     let said = xrpc(
         &h,
         "com.atproto.repo.createRecord",
@@ -494,6 +494,26 @@ async fn ends_once_its_maker_could_no_longer_make_it() {
     .await;
     assert_eq!(said.0, 401);
     assert_eq!(names(&list(&h, &alice, &did).await.1), Vec::<&str>::new());
+}
+
+#[tokio::test]
+async fn is_forgotten_once_its_maker_could_no_longer_make_it_though_never_used() {
+    let h = start(&[], false).await;
+    let (did, [alice, bob, _]) = group(&h).await;
+    // Laptop is listed no more once Bob is a publisher no more, and does
+    // not come back with his role.
+    let laptop = make(&h, &bob, &did, "Laptop").await;
+    put_membership(&h, &did, &bob.did, &["member"]).await;
+    assert_eq!(names(&list(&h, &alice, &did).await.1), Vec::<&str>::new());
+    put_membership(&h, &did, &bob.did, &["member", "publisher"]).await;
+    assert_eq!(sign_in(&h, RIDERS, &laptop).await.0, 401);
+    // Nor does Tablet, refused while he was not one.
+    let tablet = make(&h, &bob, &did, "Tablet").await;
+    put_membership(&h, &did, &bob.did, &["member"]).await;
+    assert_eq!(sign_in(&h, RIDERS, &tablet).await.0, 401);
+    put_membership(&h, &did, &bob.did, &["member", "publisher"]).await;
+    assert_eq!(sign_in(&h, RIDERS, &tablet).await.0, 401);
+    assert_eq!(names(&list(&h, &bob, &did).await.1), Vec::<&str>::new());
 }
 
 #[tokio::test]
