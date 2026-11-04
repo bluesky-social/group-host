@@ -90,6 +90,17 @@ async fn document(
     })))
 }
 
+/// `did`'s last operation, as the directory's `/log/last` serves it.
+async fn last(
+    State(plc): State<Arc<Plc>>,
+    Path(did): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    let ops = plc.ops.lock().unwrap();
+    let last = ops.get(&did).and_then(|l| l.last());
+    last.map(|op| Json(op.to_json()))
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 /// Serves `router` on a free port, answering its address.
 pub async fn serve(router: Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -105,6 +116,7 @@ pub async fn start_plc(refuse: bool) -> (Arc<Plc>, String) {
     });
     let router = Router::new()
         .route("/{did}", get(document).post(publish))
+        .route("/{did}/log/last", get(last))
         .with_state(plc.clone());
     (plc, serve(router).await)
 }

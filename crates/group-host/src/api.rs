@@ -54,9 +54,12 @@ fn repo_not_found(repo: &str) -> XrpcError {
 }
 
 /// The DID of the account `repo` names, by DID or handle.
+/// Refused for an account switched off.
 fn did_of(host: &Host, repo: &str) -> Result<String, XrpcError> {
     let account = host.store.account(repo).map_err(XrpcError::internal)?;
-    account.map(|a| a.did).ok_or_else(|| repo_not_found(repo))
+    let did = account.map(|a| a.did).ok_or_else(|| repo_not_found(repo))?;
+    host.active(&did)?;
+    Ok(did)
 }
 
 fn view(did: &str, r: &Record) -> Value {
@@ -129,16 +132,15 @@ pub async fn get_repo(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
 ) -> Result<Response, XrpcError> {
-    let did = param(&p, "did")?;
+    let did = &did_of(&host, param(&p, "did")?)?;
     let car = host.export(did).map_err(XrpcError::internal)?;
-    let car = car.ok_or_else(|| repo_not_found(did))?;
     Ok(([(header::CONTENT_TYPE, "application/vnd.ipld.car")], car).into_response())
 }
 
 pub async fn get_latest_commit(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
-    let did = param(&p, "did")?;
+    let did = &did_of(&host, param(&p, "did")?)?;
     let head = host.store.head(did).map_err(XrpcError::internal)?;
-    let head = head.ok_or_else(|| repo_not_found(did))?;
+    let head = head.expect("an account has a repo");
     Ok(Json(json!({"cid": head.cid.to_string(), "rev": head.rev})))
 }
 
@@ -154,7 +156,15 @@ pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Query<Params>) 
         .map(|(did, _)| did.clone());
     let repos: Vec<Value> = repos
         .iter()
-        .map(|(did, head)| json!({"did": did, "head": head.cid.to_string(), "rev": head.rev, "active": true}))
+        .map(|(did, head)| {
+            let mut repo =
+                json!({"did": did, "head": head.cid.to_string(), "rev": head.rev, "active": true});
+            if host.deactivation(did).ok().flatten().is_some() {
+                repo["active"] = json!(false);
+                repo["status"] = json!("deactivated");
+            }
+            repo
+        })
         .collect();
     Ok(Json(json!({"repos": repos, "cursor": cursor})))
 }

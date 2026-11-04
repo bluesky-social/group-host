@@ -75,6 +75,7 @@ impl Host {
                 format!("no repo {did} here"),
             )
         })?;
+        self.active(&account.did)?;
         let uri = space.to_string();
         let head = self
             .store

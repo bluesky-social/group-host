@@ -154,6 +154,14 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX outbox_due ON outbox (next_at);
 ",
+    "
+    CREATE TABLE deactivation (
+        did TEXT PRIMARY KEY REFERENCES account (did),
+        at INTEGER NOT NULL,
+        by TEXT NOT NULL,
+        stewards TEXT NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -226,6 +234,27 @@ const DUE: &str = "SELECT repo, space, rev, data, attempts FROM outbox WHERE nex
 const DELIVERED: &str = "DELETE FROM outbox WHERE repo = ?1 AND space = ?2 AND rev = ?3";
 const RETRY: &str = "UPDATE outbox SET attempts = attempts + 1, next_at = ?4 WHERE repo = ?1 AND space = ?2 AND rev = ?3";
 const LAPSED: &str = "DELETE FROM outbox WHERE deliver_by <= ?1 RETURNING repo, space, rev";
+const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
+const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
+const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
+const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
+/// What goes with an account, in an order its references allow.
+const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM deactivation WHERE did = ?1",
+    "DELETE FROM outbox WHERE repo = ?1",
+    "DELETE FROM space_recipient WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM space_writer WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM space_grant WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM space WHERE authority = ?1",
+    "DELETE FROM space_record_blob WHERE did = ?1",
+    "DELETE FROM space_op WHERE did = ?1",
+    "DELETE FROM space_record WHERE did = ?1",
+    "DELETE FROM space_repo WHERE did = ?1",
+    "DELETE FROM record_blob WHERE did = ?1",
+    "DELETE FROM record WHERE did = ?1",
+    "DELETE FROM repo WHERE did = ?1",
+];
+const FORGET_BLOBS: &str = "DELETE FROM blob WHERE did = ?1 RETURNING cid";
 const COLLECTIONS: &str =
     "SELECT DISTINCT collection FROM record WHERE did = ?1 ORDER BY collection";
 
@@ -356,6 +385,15 @@ pub struct Notice {
     pub rev: String,
     pub data: Vec<u8>,
     pub attempts: i64,
+}
+
+/// An account switched off: when, by whom, and who may switch it back on,
+/// as they were when it was switched off.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Deactivation {
+    pub at: i64,
+    pub by: String,
+    pub stewards: Vec<String>,
 }
 
 /// A blob as kept: its type, its size, and whether it waits for a record
@@ -952,6 +990,15 @@ impl Store {
         Ok(found.optional()?)
     }
 
+    /// The spaces `authority` is the authority for.
+    pub fn spaces_of(&self, authority: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SPACES_OF)?;
+        let rows = q.query_map([authority], |r| r.get(0));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// Lets `did` read or write `space`, or both, as given.
     pub fn grant(&self, space: &str, did: &str, read: bool, write: bool) -> Result<()> {
         let conn = self.conn();
@@ -1112,6 +1159,74 @@ impl Store {
         let rows = q.query_map([now], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Switches `did` off, by `by` at `at`, `stewards` the ones who may
+    /// switch it back on, with `events`: `false` if it is off already.
+    pub fn deactivate(
+        &self,
+        did: &str,
+        at: i64,
+        by: &str,
+        stewards: &[String],
+        events: &[Event],
+    ) -> Result<bool> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let listed = serde_json::to_string(stewards)?;
+        if tx.execute(DEACTIVATE, params![did, at, by, listed])? == 0 {
+            return Ok(false);
+        }
+        sequence(&tx, did, events)?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    /// Switches `did` back on, with `events`: `false` if it was on.
+    pub fn activate(&self, did: &str, events: &[Event]) -> Result<bool> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        if tx.execute(ACTIVATE, [did])? == 0 {
+            return Ok(false);
+        }
+        sequence(&tx, did, events)?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    /// Whether `did` is switched off, and how.
+    pub fn deactivation(&self, did: &str) -> Result<Option<Deactivation>> {
+        let conn = self.conn();
+        let found = conn.query_row(DEACTIVATION, [did], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get::<_, String>(2)?))
+        });
+        Ok(found.optional()?.map(|(at, by, stewards)| Deactivation {
+            at,
+            by,
+            stewards: serde_json::from_str(&stewards).expect("stewards the host wrote"),
+        }))
+    }
+
+    /// Forgets `did`: its account, its repos, its spaces and what the host
+    /// keeps of them, with `events`. The blobs it had, for their files to
+    /// go.
+    pub fn delete_account(&self, did: &str, events: &[Event]) -> Result<Vec<Cid>> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        for sql in FORGET_ACCOUNT {
+            let gone = tx.execute(sql, [did]);
+            gone?;
+        }
+        let blobs = {
+            let mut q = tx.prepare(FORGET_BLOBS)?;
+            let rows = q.query_map([did], |r| Ok(cid(r.get(0)?)));
+            rows?.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let gone = tx.execute("DELETE FROM account WHERE did = ?1", [did]);
+        gone?;
+        sequence(&tx, did, events)?;
+        tx.commit()?;
+        Ok(blobs)
     }
 
     /// Up to `limit` events after `cursor`, in order.

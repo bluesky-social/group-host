@@ -78,6 +78,28 @@ so the host writes them for a caller holding `group.configure`:
   so a label citing it still does; a new one goes last unless it says
   where. `deleteRule` takes one away; a label citing it keeps the URI.
 
+## Switching off, on, and deleting
+
+- `deactivateGroup` switches a group off, for one holding
+  `group.configure`. Its account is deactivated, as a PDS deactivates
+  one, and the relays are told: its repo and its repos in spaces read as
+  `RepoDeactivated`, nothing is written as it, and its spaces issue no
+  credentials and admit no writes, so nobody, its admins included, reads
+  them. `getGroup` and `listGroups` show it as switched off and nothing
+  more. Since its memberships can't be read while it is off, the host
+  keeps who held `group.configure` then.
+- `activateGroup` switches it back on, for one of those.
+- `deleteGroup` deletes it, for one holding `group.configure` (or, while
+  it is off, one who did then): the services syncing its spaces are told
+  (`notifySpaceDeleted`, best effort, signed by the group while it still
+  has a key), its account, repos, spaces and blobs go, the relays are
+  told, and its DID is ended in the directory with a tombstone, as only
+  this host holds a key to it. What members wrote in its spaces is
+  theirs, at their own PDSes, and stays.
+
+A group whose setup fails partway is deleted the same way, so its handle
+is free again.
+
 ## From the prototype
 
 As `bootstrap.ts` and `methods/groups.ts`, with these changes:

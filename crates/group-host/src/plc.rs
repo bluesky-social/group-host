@@ -34,6 +34,20 @@ impl Directory {
         Ok(())
     }
 
+    /// `did`'s last operation, as the directory has it.
+    pub async fn last_op(&self, did: &str) -> Result<Signed> {
+        let res = self
+            .http
+            .get(format!("{}/{did}/log/last", self.url))
+            .send()
+            .await?;
+        let res = res
+            .error_for_status()
+            .context(format!("no operations for {did}"))?;
+        let op: Value = res.json().await?;
+        Ok(Signed::from_json(&op)?)
+    }
+
     /// `did`'s document, as the directory serves it.
     pub async fn document(&self, did: &str) -> Result<Value> {
         let res = self.http.get(format!("{}/{did}", self.url)).send().await?;

@@ -12,7 +12,9 @@ pub mod firehose;
 pub mod group;
 pub mod group_api;
 pub mod group_config;
+pub mod group_lifecycle;
 pub mod identity;
+pub mod lifecycle;
 pub mod plc;
 pub mod rbac;
 pub mod repo;
@@ -179,6 +181,18 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.deleteRule",
             post(group_config::delete_rule),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.deactivateGroup",
+            post(group_lifecycle::deactivate_group),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.activateGroup",
+            post(group_lifecycle::activate_group),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.deleteGroup",
+            post(group_lifecycle::delete_group),
         )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))

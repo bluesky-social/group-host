@@ -187,6 +187,13 @@ pub async fn get_group(
     let group = param(&p, "group")?;
     let handle = group_of(&host, group)?;
     let me = caller(&host, &headers, &format!("{NS}.getGroup")).await?;
+    // Switched off: nothing in it is read, by members either. Still
+    // answered, so a steward can find the switch.
+    if host.deactivation(group)?.is_some() {
+        let mut view = base(group, &handle);
+        view["deactivated"] = json!(true);
+        return Ok(Json(json!({ "group": view })));
+    }
     let record = |space: &str, collection: &str, rkey: &str| {
         host.group_record(group, space, &format!("{NS}.{collection}"), rkey)
             .map_err(XrpcError::internal)
@@ -315,6 +322,11 @@ pub async fn list_groups(State(host): State<Arc<Host>>) -> Answer {
                 continue;
             };
             let mut view = base(did, &handle);
+            if host.deactivation(did)?.is_some() {
+                view["deactivated"] = json!(true);
+                groups.push(view);
+                continue;
+            }
             let meta = meta_space(did);
             let access = host
                 .group_record(did, &meta, &format!("{NS}.access"), "self")

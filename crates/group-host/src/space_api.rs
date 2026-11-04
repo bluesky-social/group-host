@@ -116,6 +116,7 @@ async fn asked(host: &Host, p: &Params, headers: &HeaderMap) -> Result<Asked, Xr
             format!("no repo {repo} here"),
         )
     })?;
+    host.active(&account.did)?;
     Ok(Asked { account, space })
 }
 

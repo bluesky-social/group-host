@@ -202,6 +202,7 @@ impl Host {
                 format!("no repo {did} here"),
             )
         })?;
+        self.active(&account.did)?;
         let head = self
             .store
             .head(&account.did)
@@ -314,7 +315,7 @@ impl Host {
     /// `PDS_CRAWLERS` this host has news: at most every twenty minutes,
     /// and the first time after it starts, so a relay that marked it
     /// offline comes back.
-    fn announce(&self) {
+    pub(crate) fn announce(&self) {
         let _ = self.events.send(());
         let mut last = self.crawled.lock().expect("not poisoned");
         if last.is_some_and(|at| at.elapsed() < CRAWL_EVERY) {
@@ -347,10 +348,8 @@ impl Host {
     /// `did`'s whole repo as a CAR file: its commit, then each node of its
     /// tree, parents first, with the records it holds in the order it
     /// holds them.
-    pub fn export(&self, did: &str) -> Result<Option<Vec<u8>>> {
-        let Some(head) = self.store.head(did)? else {
-            return Ok(None);
-        };
+    pub fn export(&self, did: &str) -> Result<Vec<u8>> {
+        let head = self.store.head(did)?.context("an account has a repo")?;
         let records: BTreeMap<Cid, Vec<u8>> = self
             .store
             .records(did)?
@@ -360,10 +359,7 @@ impl Host {
         let tree = Tree::build(&self.store.paths(did)?);
         let mut blocks: Vec<(Cid, &[u8])> = vec![(head.cid, &head.block)];
         walk(tree.root_node(), &records, &mut blocks);
-        Ok(Some(car::write(
-            &[head.cid],
-            blocks.iter().map(|(c, b)| (c, *b)),
-        )))
+        Ok(car::write(&[head.cid], blocks.iter().map(|(c, b)| (c, *b))))
     }
 }
 
@@ -371,7 +367,7 @@ impl Host {
 const CRAWL_EVERY: std::time::Duration = std::time::Duration::from_secs(20 * 60);
 
 /// An event of `kind` with the fields given.
-fn event<const N: usize>(kind: &'static str, fields: [(&str, Value); N]) -> Event {
+pub(crate) fn event<const N: usize>(kind: &'static str, fields: [(&str, Value); N]) -> Event {
     let map = fields
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))

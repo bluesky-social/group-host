@@ -138,6 +138,24 @@ impl Host {
                 e
             }
         })?;
+        // A group half made is no group: its account goes, so its handle
+        // is free again.
+        let made = self.set_up(&did, new, join, &readers, &stewards).await;
+        if made.is_err() {
+            let _ = self.delete_account(&did).await;
+        }
+        made
+    }
+
+    async fn set_up(
+        &self,
+        did: &str,
+        new: &NewGroup,
+        join: &str,
+        readers: &[String],
+        stewards: &[String],
+    ) -> Result<Made, XrpcError> {
+        let did = did.to_string();
         let meta = self.create_space(&did, &format!("{NS}.meta"), "self", false)?;
         let members = self.create_space(&did, &format!("{NS}.members"), "self", false)?;
         let at = iso(now_millis());
@@ -160,7 +178,7 @@ impl Host {
                 "self",
                 json!({
                     "$type": c("access"),
-                    "readableBy": audience(&readers),
+                    "readableBy": audience(readers),
                     "credentialScopes": [{"role": "admin", "scopes": [{"collection": c("profile")}, {"collection": c("rule")}]}],
                     "createdAt": at,
                 }),
@@ -199,7 +217,7 @@ impl Host {
                 json!({"$type": c("space"), "space": space, "createdAt": at}),
             ));
         }
-        for steward in &stewards {
+        for steward in stewards {
             members_writes.push(put(
                 &c("membership"),
                 &did_rkey(steward),

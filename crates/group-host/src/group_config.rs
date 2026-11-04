@@ -8,7 +8,7 @@ use crate::Host;
 use crate::api::{Params, invalid, param};
 use crate::group::{join_policy, members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
-use crate::rbac::{NS, actions_for, grants};
+use crate::rbac::{NS, actions_for, grants, listed};
 use crate::repo::Write;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -32,7 +32,7 @@ const PLACES: [&str; 4] = [
     "community.lexicon.location.hthree",
 ];
 
-fn forbidden() -> XrpcError {
+pub(crate) fn forbidden() -> XrpcError {
     XrpcError::new(
         StatusCode::FORBIDDEN,
         "Forbidden",
@@ -50,20 +50,36 @@ async fn configurer(
 ) -> Result<String, XrpcError> {
     let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
     group_of(host, group)?;
-    let permissions = host
-        .group_record(
-            group,
-            &members_space(group),
-            &format!("{NS}.permissions"),
-            "self",
-        )
-        .map_err(XrpcError::internal)?;
-    let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
-    let granted = grants(&permissions.unwrap_or_default());
-    if !actions_for(&granted, &roles).contains("group.configure") {
+    if !host.may_configure(group, &me)? {
         return Err(forbidden());
     }
     Ok(group.to_string())
+}
+
+impl Host {
+    /// Whether `did` holds `group.configure` in `group`, by its records now.
+    pub fn may_configure(&self, group: &str, did: &str) -> Result<bool, XrpcError> {
+        Ok(self.configurers(group)?.iter().any(|c| c == did))
+    }
+
+    /// Everyone whose roles in `group` carry `group.configure`.
+    pub fn configurers(&self, group: &str) -> Result<Vec<String>, XrpcError> {
+        let members = members_space(group);
+        let permissions = self
+            .group_record(group, &members, &format!("{NS}.permissions"), "self")
+            .map_err(XrpcError::internal)?;
+        let granted = grants(&permissions.unwrap_or_default());
+        let memberships = self
+            .group_records(group, &members, &format!("{NS}.membership"))
+            .map_err(XrpcError::internal)?;
+        Ok(memberships
+            .iter()
+            .filter(|(_, m)| {
+                actions_for(&granted, &listed(m, "roles", "role")).contains("group.configure")
+            })
+            .filter_map(|(_, m)| m["member"].as_str().map(String::from))
+            .collect())
+    }
 }
 
 /// Puts the group's record at `collection/rkey` in meta, made or replaced:
