@@ -72,6 +72,11 @@ struct Authority {
     did: String,
     key: Keypair,
     told: Arc<Told>,
+    /// Its rotation key, its PDS, and its last operation, to change its
+    /// document with.
+    rotation: Keypair,
+    pds: String,
+    last: Option<Cid>,
 }
 
 async fn authority(h: &Running, refuse: bool, pds: bool) -> Authority {
@@ -104,7 +109,37 @@ async fn authority(h: &Running, refuse: bool, pds: bool) -> Authority {
         .await
         .unwrap();
     assert!(res.status().is_success());
-    Authority { did, key, told }
+    Authority {
+        did,
+        key,
+        told,
+        rotation,
+        pds: url,
+        last: Some(genesis.cid()),
+    }
+}
+
+impl Authority {
+    /// Signs with a new key from now on, its document saying so.
+    async fn rotate(&mut self, h: &Running) {
+        self.key = Keypair::generate(Curve::K256);
+        let op = Op::atproto(
+            &self.key.public().did_key(),
+            &[self.rotation.public().did_key()],
+            "authority.test",
+            &self.pds,
+        );
+        let signed = op.sign(self.last, &self.rotation);
+        let res = h
+            .http
+            .post(format!("{}/{}", plc_url(h), self.did))
+            .json(&signed.to_json())
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status().is_success());
+        self.last = Some(signed.cid());
+    }
 }
 
 fn plc_url(h: &Running) -> String {
@@ -837,6 +872,9 @@ async fn reads_only_with_a_credential_the_authority_issued() {
         did: f.authority.did.clone(),
         key: Keypair::generate(Curve::K256),
         told: Default::default(),
+        rotation: Keypair::generate(Curve::K256),
+        pds: String::new(),
+        last: None,
     };
     let expired = space_auth::create(
         Kind::Credential,
@@ -1206,4 +1244,109 @@ fn a_space_write_builds_on_the_revision_it_read() {
             .is_none()
     );
     assert_eq!(store.space_head("did:plc:a", "s").unwrap(), Some(head));
+}
+
+/// What `getLatestCommit` answers the fixture's syncer.
+async fn latest(f: &Fixture) -> u16 {
+    let (headers, _) = signed(&f.syncer, &f.group, &f.kem, COMMIT_MAC);
+    read(
+        &f.h,
+        "com.atproto.space.getLatestCommit",
+        &f.query(""),
+        &headers,
+    )
+    .await
+    .status
+}
+
+#[tokio::test]
+async fn reads_with_a_credential_signed_by_an_authoritys_new_key() {
+    let mut f = fixture().await;
+    f.h.host
+        .space_write(&f.group, &f.space, &[create(RULE, "a", rule("A"))])
+        .await
+        .unwrap();
+    // The host keeps the authority's key it read.
+    assert_eq!(latest(&f).await, 200);
+    // The authority moves to a new key: a credential it signs with that
+    // one is checked against its document read again.
+    f.authority.rotate(&f.h).await;
+    f.syncer = syncer(&f.authority, &f.space);
+    assert_eq!(latest(&f).await, 200);
+}
+
+/// A did:web authority's server: its document, and its PDS hearing of
+/// writes.
+async fn web_authority(told: Arc<Told>) -> (String, Keypair) {
+    let doc = Arc::new(Mutex::new(Json::Null));
+    let served = doc.clone();
+    let router = Router::new()
+        .route("/xrpc/com.atproto.space.notifyWrite", post(notify_write))
+        .with_state(told)
+        .route(
+            "/.well-known/did.json",
+            axum::routing::get(move || {
+                let doc = served.lock().unwrap().clone();
+                async move { axum::Json(doc) }
+            }),
+        );
+    let url = serve(router).await;
+    let did = format!(
+        "did:web:{}",
+        url.strip_prefix("http://").unwrap().replace(':', "%3A")
+    );
+    let key = Keypair::generate(Curve::K256);
+    *doc.lock().unwrap() = atproto::did::service_document(
+        &did,
+        &key.public(),
+        &[("#atproto_pds", "AtprotoPersonalDataServer", url.as_str())],
+    );
+    (did, key)
+}
+
+#[tokio::test]
+async fn a_space_of_a_did_web_authority() {
+    let h = start(&[("DID_WEB_SCHEME", "http")], false).await;
+    let group = h.host.create_account(RIDERS).await.unwrap();
+    let kem = h
+        .host
+        .store
+        .account(&group)
+        .unwrap()
+        .unwrap()
+        .kem
+        .public()
+        .did_key();
+    let told = Arc::new(Told::default());
+    let (did, key) = web_authority(told.clone()).await;
+    let authority = Authority {
+        did,
+        key,
+        told,
+        rotation: Keypair::generate(Curve::K256),
+        pds: String::new(),
+        last: None,
+    };
+    let space = format!("at://{}/space/fyi.opensocial.content/self", authority.did);
+    let commit = h
+        .host
+        .space_write(&group, &space, &[create(RULE, "a", rule("A"))])
+        .await
+        .unwrap();
+    // Told, at the PDS its document names.
+    assert_eq!(
+        authority.told.writes.lock().unwrap()[0].1["repoRev"],
+        commit.rev
+    );
+    // And its credential reads.
+    let syncer = syncer(&authority, &space);
+    let (headers, secret) = signed(&syncer, &group, &kem, COMMIT_MAC);
+    // A did:web's `%3A` is sent as it is, escaped.
+    let query = format!("space={}&repo={group}", space.replace('%', "%25"));
+    let got = read(&h, "com.atproto.space.getLatestCommit", &query, &headers).await;
+    assert_eq!(got.status, 200, "{}", String::from_utf8_lossy(&got.body));
+    assert_eq!(
+        got.mac(),
+        Some(mac_header(COMMIT_MAC, &commit.mac(&secret)).as_str())
+    );
 }

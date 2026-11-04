@@ -1,0 +1,133 @@
+//! Other accounts' DID documents, as the host reads them to check what
+//! they sign and to find their servers: a `did:plc`'s from the PLC
+//! directory, a `did:web`'s from its host, each kept a few minutes.
+
+use anyhow::{Context, Result, bail};
+use atproto::{PublicKey, did};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// How long a document read is taken as it stands.
+pub const KEPT_FOR: Duration = Duration::from_secs(300);
+
+/// The most bytes a document may be: a request names the host it is read
+/// from, so what that host sends is a caller's to choose.
+pub const DOCUMENT_AT_MOST: usize = 256 * 1024;
+
+/// A response's body, refused once it is past [`DOCUMENT_AT_MOST`].
+async fn body(mut res: reqwest::Response) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = res.chunk().await? {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() > DOCUMENT_AT_MOST {
+            bail!("a DID document past {DOCUMENT_AT_MOST} bytes");
+        }
+    }
+    Ok(bytes)
+}
+
+/// The most documents kept at once: a request names whose document is
+/// read, so how many is a caller's to choose.
+pub const KEPT_AT_MOST: usize = 10_000;
+
+pub struct Resolver {
+    plc_url: String,
+    did_web_scheme: String,
+    http: reqwest::Client,
+    kept: Mutex<HashMap<String, (Instant, Value)>>,
+    kept_for: Duration,
+    kept_at_most: usize,
+}
+
+impl Resolver {
+    pub fn new(plc_url: &str, did_web_scheme: &str) -> Resolver {
+        Resolver::keeping(plc_url, did_web_scheme, KEPT_FOR, KEPT_AT_MOST)
+    }
+
+    /// A resolver keeping documents `kept_for`, at most `kept_at_most` of
+    /// them at once.
+    pub fn keeping(
+        plc_url: &str,
+        did_web_scheme: &str,
+        kept_for: Duration,
+        kept_at_most: usize,
+    ) -> Resolver {
+        Resolver {
+            kept_for,
+            kept_at_most,
+            plc_url: plc_url.trim_end_matches('/').to_string(),
+            did_web_scheme: did_web_scheme.to_string(),
+            http: crate::client(),
+            kept: Mutex::default(),
+        }
+    }
+
+    /// Where `did`'s document is read.
+    fn url(&self, did: &str) -> Result<String> {
+        if let Some(host) = did.strip_prefix("did:web:") {
+            // A did:web of a host alone: one with a path names no host here.
+            if host.is_empty() || host.contains(':') {
+                bail!("{did} is not a did:web of a host");
+            }
+            let host = host.replace("%3A", ":");
+            Ok(format!(
+                "{}://{host}/.well-known/did.json",
+                self.did_web_scheme
+            ))
+        } else if did.starts_with("did:plc:") {
+            Ok(format!("{}/{did}", self.plc_url))
+        } else {
+            bail!("{did}: not a did:plc or a did:web");
+        }
+    }
+
+    /// `did`'s document, read now, and kept.
+    pub async fn document(&self, did: &str) -> Result<Value> {
+        let res = self.http.get(self.url(did)?).send().await?;
+        let res = res.error_for_status().context(format!("resolving {did}"))?;
+        let doc: Value = serde_json::from_slice(&body(res).await?)?;
+        if doc.get("id").and_then(Value::as_str) != Some(did) {
+            bail!("{did}'s document is another's");
+        }
+        let mut kept = self.kept.lock().expect("not poisoned");
+        // Full, the lapsed go; still full, all of them.
+        if kept.len() >= self.kept_at_most {
+            kept.retain(|_, (at, _)| at.elapsed() < self.kept_for);
+        }
+        if kept.len() >= self.kept_at_most {
+            kept.clear();
+        }
+        kept.insert(did.into(), (Instant::now(), doc.clone()));
+        Ok(doc)
+    }
+
+    /// `did`'s document as it was read in the last few minutes, if it
+    /// was. What it names may have changed since: a key that turns a
+    /// signature away is worth reading again with [`Resolver::document`].
+    pub fn kept(&self, did: &str) -> Option<Value> {
+        let kept = self.kept.lock().expect("not poisoned");
+        let (at, doc) = kept.get(did)?;
+        (at.elapsed() < self.kept_for).then(|| doc.clone())
+    }
+
+    /// What `check` makes of `did`'s signing key: with the key kept, and
+    /// if that one turns it away, the key read again; with no key kept, the
+    /// key read now. `None` if no key is to be had.
+    pub async fn with_key<T, E>(
+        &self,
+        did: &str,
+        check: impl Fn(&PublicKey) -> Result<T, E>,
+    ) -> Option<Result<T, E>> {
+        let key_in = |doc: &Value| did::signing_key(doc).ok();
+        if let Some(key) = self.kept(did).as_ref().and_then(key_in) {
+            let checked = check(&key);
+            if checked.is_ok() {
+                return Some(checked);
+            }
+        }
+        let doc = self.document(did).await.ok()?;
+        Some(check(&key_in(&doc)?))
+    }
+}

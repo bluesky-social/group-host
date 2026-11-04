@@ -39,8 +39,28 @@ authority keeps it, and tells the services syncing the space.
 The write stands whether the authority heard or not: it learns of the
 next write instead. The host waits on it ten seconds at most, as it
 waits on any server it asks. Trying again, as the reference PDS does for a day,
-is still to come. An authority is found on the PLC directory, so for
-now it is a `did:plc`.
+is still to come. An authority may be a `did:plc` or a `did:web`.
+
+## Others' identities
+
+The host reads other accounts' DID documents (a space's authority, an
+authority revoking a credential) from the PLC directory for a
+`did:plc`, and from `/.well-known/did.json` at its host for a `did:web`
+(`DID_WEB_SCHEME`, `https` unless it is a network of test servers). A
+document must be the DID's own, its `id` that DID. Each is kept five
+minutes, so the same authority's credentials are checked without a
+lookup each; a signature the kept key turns away is checked again with
+the document read afresh, so a key the authority moved to counts at
+once. A key it moved away from counts for those minutes still.
+
+Whose document is read is a caller's to say: the issuer of a credential
+or a service token is read before it is checked. So any caller can have
+the host GET `/.well-known/did.json` from a host of their choosing, as
+any server resolving a `did:web` can be made to. The host reads at most
+256 KiB of it, keeps at most 10,000 documents, and does not refuse
+private or loopback addresses: a host whose network reaches services
+that answer `/.well-known/did.json` to anyone inside it should keep its
+outgoing requests from reaching them.
 
 ## Reading
 

@@ -21,6 +21,9 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// The PLC directory groups' identities are published to, `PLC_URL`.
     pub plc_url: String,
+    /// How a `did:web`'s document is read, `DID_WEB_SCHEME`: `https`, or
+    /// `http` for a network of test servers.
+    pub did_web_scheme: String,
     /// The relays told of this host's news, `PDS_CRAWLERS`, comma-separated.
     pub crawlers: Vec<String>,
     /// The most bytes one blob may be, `BLOB_UPLOAD_LIMIT`.
@@ -54,6 +57,10 @@ impl Config {
         }
         let data_dir = var("DATA_DIR").unwrap_or_else(|| "data".into()).into();
         let plc_url = var("PLC_URL").unwrap_or_else(|| "https://plc.directory".into());
+        let did_web_scheme = var("DID_WEB_SCHEME").unwrap_or_else(|| "https".into());
+        if !["https", "http"].contains(&did_web_scheme.as_str()) {
+            bail!("DID_WEB_SCHEME is https or http, not {did_web_scheme}");
+        }
         let crawlers = var("PDS_CRAWLERS").unwrap_or_default();
         let crawlers = crawlers
             .split(',')
@@ -73,6 +80,7 @@ impl Config {
             handle_domain,
             data_dir,
             plc_url,
+            did_web_scheme,
             crawlers,
             blob_upload_limit,
         })

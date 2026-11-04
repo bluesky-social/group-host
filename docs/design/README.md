@@ -72,9 +72,9 @@ says otherwise.
    then the repos the host keeps in spaces, each group with its
    `#atproto_kem` key, read with an authority's credential and each write
    told to the authority (`space.rs`, `space_api.rs`; done, see
-   [spaces](spaces.md)); next, one resolver for `did:plc` and `did:web`
-   with a short cache of keys, so a space's authority may be either; then
-   being the authority for its groups' spaces, with a queue that tries a
+   [spaces](spaces.md)), others' DID documents read for a `did:plc` or a
+   `did:web` and kept a few minutes (`identity.rs`; done), then being the
+   authority for its groups' spaces, with a queue that tries a
    `notifyWrite` again for a day, as the reference PDS does.
    Then the
    groups: `createGroup`, `getGroup`, `listGroups`,

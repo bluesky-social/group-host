@@ -19,6 +19,7 @@ fn defaults_serve_localhost() {
     assert_eq!(c.service_did, "did:web:localhost%3A2600");
     assert_eq!(c.handle_domain, ".test");
     assert_eq!(c.data_dir, std::path::PathBuf::from("data"));
+    assert_eq!(c.did_web_scheme, "https");
 }
 
 #[test]
@@ -35,8 +36,13 @@ fn the_environment_names_the_host() {
     assert_eq!(c.service_did, "did:web:groups.example.com");
     assert_eq!(c.handle_domain, ".groups.example.com");
 
-    let c = config(&[("SERVICE_DID", "did:web:other.example")]).unwrap();
+    let c = config(&[
+        ("SERVICE_DID", "did:web:other.example"),
+        ("DID_WEB_SCHEME", "http"),
+    ])
+    .unwrap();
     assert_eq!(c.service_did, "did:web:other.example");
+    assert_eq!(c.did_web_scheme, "http");
 }
 
 #[test]
@@ -54,6 +60,10 @@ fn refuses_what_does_not_read() {
     assert_eq!(
         err(&[("BLOB_UPLOAD_LIMIT", "lots")]),
         "BLOB_UPLOAD_LIMIT is no number of bytes: lots"
+    );
+    assert_eq!(
+        err(&[("DID_WEB_SCHEME", "ftp")]),
+        "DID_WEB_SCHEME is https or http, not ftp"
     );
     assert_eq!(
         err(&[("HANDLE_DOMAIN", "example.com")]),

@@ -119,7 +119,11 @@ impl Host {
         space: &SpaceRef,
         commit: &Commit,
     ) -> Result<()> {
-        let doc = self.plc.document(&space.authority).await?;
+        let doc = self.identity.kept(&space.authority);
+        let doc = match doc {
+            Some(doc) => doc,
+            None => self.identity.document(&space.authority).await?,
+        };
         let pds = did::pds(&doc).context("the authority's document names no PDS")?;
         let now = now_millis() as u64 / 1000;
         let claims = Claims {

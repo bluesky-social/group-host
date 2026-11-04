@@ -7,6 +7,7 @@ pub mod api;
 pub mod blobs;
 pub mod config;
 pub mod firehose;
+pub mod identity;
 pub mod plc;
 pub mod repo;
 pub mod secrets;
@@ -31,6 +32,8 @@ pub struct Host {
     pub store: store::Store,
     pub secrets: secrets::Secrets,
     pub plc: plc::Directory,
+    /// Other accounts' documents.
+    pub identity: identity::Resolver,
     /// Each commit's revision, later than the last.
     pub clock: atproto::tid::TidClock,
     /// Held while a commit is made, so each builds on the one before.
@@ -49,6 +52,7 @@ impl Host {
         let store = store::Store::open(&config.data_dir.join("host.sqlite"))?;
         let secrets = secrets::Secrets::load(&config.data_dir)?;
         let plc = plc::Directory::new(&config.plc_url);
+        let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme);
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
         Ok(Host {
@@ -56,6 +60,7 @@ impl Host {
             store,
             secrets,
             plc,
+            identity,
             clock,
             writing: Default::default(),
             events: tokio::sync::broadcast::channel(16).0,

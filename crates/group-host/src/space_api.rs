@@ -14,7 +14,7 @@ use atproto::space::{
     record_mac, star,
 };
 use atproto::space_auth::{self, CLOCK_SKEW, CREDENTIAL_MAX_AGE, Expect, Kind, TokenError};
-use atproto::{Cid, did, drisl};
+use atproto::{Cid, drisl};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
@@ -38,12 +38,6 @@ fn refused(e: TokenError) -> XrpcError {
 
 fn now() -> u64 {
     now_millis() as u64 / 1000
-}
-
-/// The signing key of the account `did`, from its document.
-async fn key_of(host: &Host, did: &str) -> Option<atproto::PublicKey> {
-    let doc = host.plc.document(did).await.ok()?;
-    did::signing_key(&doc).ok()
 }
 
 /// What a read in a space asks of: the account whose repo it is, and the
@@ -78,14 +72,16 @@ async fn credential(
             "space credential issuer is not the space authority",
         ));
     }
-    let key = key_of(host, &token.iss).await;
-    let key =
-        key.ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", token.iss)))?;
     let expect = Expect {
         aud: None,
         sub: Some(space),
     };
-    space_auth::verify(Kind::Credential, jwt, &key, &expect, now()).map_err(refused)?;
+    let check =
+        |key: &atproto::PublicKey| space_auth::verify(Kind::Credential, jwt, key, &expect, now());
+    let checked = host.identity.with_key(&token.iss, check).await;
+    let checked = checked
+        .ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", token.iss)))?;
+    checked.map_err(refused)?;
     if text("atproto-space-audience") != Some(repo) {
         return Err(XrpcError::new(
             StatusCode::BAD_REQUEST,
@@ -434,10 +430,11 @@ async fn service_caller(host: &Host, headers: &HeaderMap, lxm: &str) -> Result<C
     let token = bearer.ok_or_else(|| unauthorized("AuthMissing", "service auth is required"))?;
     let bad = |e: service_auth::AuthError| unauthorized("BadJwt", e.0);
     let (_, claims) = service_auth::parts(token).map_err(bad)?;
-    let key = key_of(host, claims.account()).await;
-    let key =
-        key.ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", claims.iss)))?;
-    let claims = service_auth::verify(token, &key, now()).map_err(bad)?;
+    let check = |key: &atproto::PublicKey| service_auth::verify(token, key, now());
+    let checked = host.identity.with_key(claims.account(), check).await;
+    let checked = checked
+        .ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", claims.iss)))?;
+    let claims = checked.map_err(bad)?;
     if claims.lxm.as_deref() != Some(lxm) {
         return Err(unauthorized(
             "BadJwtLexiconMethod",
