@@ -17,7 +17,6 @@
 			Your handle
 			<input name="handle" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="you.bsky.social" />
 		</label>
-		<p class="mute small">Your server asks you to approve it, then sends you back here.</p>
 		<div class="actions">
 			<button class="quiet" type="button" popovertarget={SIGN_IN} popovertargetaction="hide">Cancel</button>
 			<button type="submit">Continue</button>

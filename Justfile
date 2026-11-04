@@ -53,8 +53,10 @@ web-dev:
 
 # The console to use yourself, over a world of its own (harness/dev.mjs):
 # the reference PDS with alice, bob and harbor, the host, and the console
-# at https://group-host.localtest.me, behind portless. Empty each time.
-dev: web
+# at https://group-host.localtest.me, behind portless, redrawn as its
+# source changes. Empty each time; the host is built again first.
+dev:
+    cd web && npm run lex
     {{cargo}} build -p group-host
     node harness/dev.mjs
 

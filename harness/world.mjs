@@ -53,9 +53,10 @@ const serviceAuth = async (pds, account, aud, lxm) => {
 
 /// Starts a world with `accounts` on the reference PDS, its console
 /// served at the port `front` is given and reached at the https address
-/// `front` answers with (`front(consolePort, net, children)`). `pdsEnv` is
-/// the PDS's environment beyond this one's. Its parts, and `stop`.
-export async function start({ accounts, front, pdsEnv = {} }) {
+/// `front` answers with (`front(consolePort, net, children)`): built, or
+/// with `live`, by the dev server, redrawn as its source changes. `pdsEnv`
+/// is the PDS's environment beyond this one's. Its parts, and `stop`.
+export async function start({ accounts, front, pdsEnv = {}, live = false }) {
   const children = []
   const stop = () => children.reverse().forEach((c) => c.kill('SIGTERM'))
   try {
@@ -88,7 +89,8 @@ export async function start({ accounts, front, pdsEnv = {} }) {
     children.push(server)
     await line(server, (l) => l.startsWith('listening on'))
 
-    const web = spawn('node', ['build'], {
+    const serve = live ? ['npx', ['vite', 'dev', '--port', String(consolePort), '--strictPort', '--host', '127.0.0.1']] : ['node', ['build']]
+    const web = spawn(serve[0], serve[1], {
       cwd: join(root, 'web'),
       stdio: ['ignore', 'inherit', 'inherit'],
       // A body as large as the host takes, past the Node adapter's 512K.

@@ -1,6 +1,7 @@
 // `just dev`: a world to use the console in (world.mjs), for a person to
 // look at: the reference PDS with alice, bob and harbor on it, the host, the
-// console at https://group-host.localtest.me, and a group of alice's.
+// console at https://group-host.localtest.me, served by the dev server so a
+// change to it shows at once, and a group of alice's.
 // Stops on ctrl-c, and forgets everything: the PDS, the directory and the
 // host start empty each time.
 //
@@ -49,6 +50,7 @@ const w = await start({
   accounts: ['alice', 'bob', 'harbor'],
   front,
   pdsEnv: { NODE_EXTRA_CA_CERTS: join(state, 'ca.pem') },
+  live: true,
 })
 
 const stop = () => {

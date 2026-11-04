@@ -16,7 +16,8 @@ just web-dev   # the console alone, asking that host
 `just dev` starts a world of its own (`harness/dev.mjs`): the reference
 PDS and a PLC directory with alice, bob and harbor on them, the host over
 them, and the console at https://group-host.localtest.me, with a group of
-alice's. It prints each one's password, where the codes the PDS emails
+alice's. The console is the dev server's, so a change to a page shows at
+once; a change to the host means starting it again. It prints each one's password, where the codes the PDS emails
 are read, and how to run the command against it. ctrl-c stops it all, and
 each start is empty again.
 
