@@ -63,7 +63,7 @@ group for someone or lets them read it themselves.
 - `fyi.opensocial.getActor` names a person, by their DID, as their DID
   document does, for someone signed in: themselves (with whether the host
   starts groups for them), or anyone the host shows, a member of one of
-  its groups or someone asking to join one; no one else.
+  its groups or someone asking to join one, switched on; no one else.
 
 ## Changing its face
 

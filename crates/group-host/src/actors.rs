@@ -74,9 +74,10 @@ impl Host {
 }
 
 impl Store {
-    /// Whether `did` is asking to join any group here.
+    /// Whether `did` is asking to join any group here that is switched on.
     pub fn asking_anywhere(&self, did: &str) -> anyhow::Result<bool> {
-        let sql = "SELECT 1 FROM join_request WHERE did = ?1 LIMIT 1";
+        let sql = "SELECT 1 FROM join_request j WHERE j.did = ?1
+                   AND NOT EXISTS (SELECT 1 FROM deactivation d WHERE d.did = j.grp) LIMIT 1";
         let found = self.conn().query_row(sql, [did], |_| Ok(()));
         Ok(rusqlite::OptionalExtension::optional(found)?.is_some())
     }

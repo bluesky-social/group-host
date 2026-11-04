@@ -247,6 +247,10 @@ async fn names_a_person_the_host_shows() {
         assert_eq!(view["did"], who.did.as_str());
         assert!(view.get("canCreateGroup").is_none());
     }
+    // Asking to join a group switched off is asking nowhere it shows.
+    h.host.deactivate_account(&group, &alice.did, &[]).unwrap();
+    let said = actor(&alice, &carol.did).await;
+    assert_eq!(said.1["error"], "ActorNotFound");
     let said = get(&h, &lxm, &format!("actor={}", bob.did), &[]).await;
     assert_eq!(said.0, 401);
 
