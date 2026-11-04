@@ -34,6 +34,9 @@ input,select,textarea,button{font:inherit;font-size:var(--text-field)}
 main.wrap{flex:1;padding-top:var(--space-6);padding-bottom:var(--space-16)}
 .foot{color:var(--faint);font:var(--text-xs) var(--font-mono);padding-top:var(--space-5);padding-bottom:var(--space-8);border-top:1px dashed var(--line)}
 
+.danger{color:var(--danger)}
+.field{display:flex;flex-direction:column;gap:var(--space-1)}
+
 /* ── Atoms ────────────────────────────────────────────────────────── */
 
 .av{display:inline-grid;place-items:center;flex:none;width:var(--avatar);height:var(--avatar);border-radius:50%;object-fit:cover;background:var(--soft)}

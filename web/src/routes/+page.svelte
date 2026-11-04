@@ -9,6 +9,7 @@
 
 {#if data.mine}
 	<Page title="Your groups">
+		<p><a href="/new">Start a group</a></p>
 		{#if data.mine.length}
 			<GroupList groups={data.mine} />
 		{:else}

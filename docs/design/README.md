@@ -109,10 +109,12 @@ says otherwise.
    (`console_login.rs`; done).
 7. **The console.** Signing in as oneself (step 6); who is looking
    (`getViewer`, as knotless's) and their groups (`getActorGroups`), on
-   home, and approving an app (`/authorize`; `actors.rs`; done); then
-   starting a group, a group's page (members, roles, invites, requests,
-   apps), a person's sessions and app passwords: the console's pages in
-   `apps/web/src/pages`.
+   home, and approving an app (`/authorize`; `actors.rs`; done);
+   starting a group (`/new`) and a group's page (`/g/<handle>`: its
+   profile and rules, joining and leaving, its members, and admitting
+   those asking; done); then running a group from its page (roles,
+   invites, its apps and app passwords): the console's pages in
+   `apps/web/src/pages`. Each is used end to end in `harness/e2e`.
 8. **Moderation, recovery and moving.** Reports, labels, subjects and
    history; recovery keys; importing an account; migrating a group to
    another host and moving the host itself:

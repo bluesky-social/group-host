@@ -3,18 +3,22 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, signIn, signedInAs, url, world } from './pages.mjs'
+import { App, signIn, signedInAs, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
 let page
+// Bob's browser, apart from alice's.
+let bob
 
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage()
+  bob = await (await browser.newContext()).newPage()
 })
 
 test.afterAll(async () => {
   await page.close()
+  await bob.context().close()
 })
 
 test('signing in at her own PDS', async () => {
@@ -29,11 +33,47 @@ test('seeing her groups', async () => {
   await expect(page.locator('.group-row', { hasText: 'Riders' }).first()).toBeVisible()
 })
 
+test('starting a group', async () => {
+  await page.getByRole('link', { name: 'Start a group' }).click()
+  await page.getByRole('textbox', { name: 'Handle' }).fill('hikers.groups.test')
+  await page.getByRole('textbox', { name: 'Name' }).fill('Hikers')
+  await page.getByRole('textbox', { name: 'What it is for' }).fill('Walks on Sundays.')
+  await page.getByRole('button', { name: 'Start the group' }).click()
+  await page.waitForURL(url('/g/hikers.groups.test'))
+  await expect(page.getByRole('heading', { name: 'Hikers' })).toBeVisible()
+  await expect(page.getByText('Walks on Sundays.')).toBeVisible()
+  await expect(page.getByText('You are a member.')).toBeVisible()
+  // A handle taken already is the form's to say.
+  await page.goto(url('/new'))
+  await page.getByRole('textbox', { name: 'Handle' }).fill('hikers.groups.test')
+  await page.getByRole('textbox', { name: 'Name' }).fill('Hikers again')
+  await page.getByRole('button', { name: 'Start the group' }).click()
+  await expect(page.locator('.danger')).toBeVisible()
+})
+
+test('asking to join, and being admitted', async () => {
+  await bob.goto(url('/g/hikers.groups.test'))
+  await signIn(bob, 'bob')
+  await bob.getByRole('button', { name: 'Ask to join' }).click()
+  await expect(bob.getByText('You have asked to join.')).toBeVisible()
+  await page.goto(url('/g/hikers.groups.test'))
+  const asking = page.locator('.requests li', { hasText: who.bob.did })
+  await asking.getByRole('button', { name: 'Admit' }).click()
+  await expect(page.locator('.members', { hasText: who.bob.did })).toBeVisible()
+  await bob.reload()
+  await expect(bob.getByText('You are a member.')).toBeVisible()
+})
+
+test('leaving a group', async () => {
+  await bob.getByRole('button', { name: 'Leave' }).click()
+  await expect(bob.getByRole('button', { name: 'Ask to join' })).toBeVisible()
+})
+
 test('signing an app in as her group', async () => {
   const app = await new App('atproto repo:app.bsky.feed.post').listen()
   await page.goto(await app.push())
   await expect(page.getByRole('heading', { name: 'Sign in an app' })).toBeVisible()
-  await expect(page.getByText('repo:app.bsky.feed.post')).toBeVisible()
+  await expect(page.getByText('repo:app.bsky.feed.post').first()).toBeVisible()
   await page.getByRole('button', { name: 'Sign it in as Riders' }).click()
   const back = await app.back
   app.close()
