@@ -30,7 +30,7 @@ fn invalid(description: impl Into<String>) -> OAuthError {
     OAuthError::bad("invalid_dpop_proof", description)
 }
 
-fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
+pub(crate) fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC takes a key of any length");
     mac.update(message);
     mac.finalize().into_bytes().to_vec()

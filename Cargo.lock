@@ -617,6 +617,7 @@ dependencies = [
  "axum",
  "futures",
  "hmac",
+ "rand_core 0.6.4",
  "reqwest",
  "rusqlite",
  "serde",

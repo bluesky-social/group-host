@@ -440,6 +440,8 @@ impl Host {
         // And the apps they signed in as the group.
         let ended = self.store.revoke_member_grants(group, member);
         ended.map_err(XrpcError::internal)?;
+        let dropped = self.store.drop_members_app_passwords(group, member);
+        dropped.map_err(XrpcError::internal)?;
         let gone = Write::Delete {
             collection: format!("{NS}.membership"),
             rkey: did_rkey(member),

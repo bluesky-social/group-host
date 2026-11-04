@@ -253,15 +253,17 @@ impl Host {
     /// and its member's roles still let them.
     fn may_repo(&self, acting: &Acting, writes: &[Write]) -> Result<(), XrpcError> {
         let (roles, grants) = self.standing(acting)?;
-        let mut repo = repo_collections_for(&grants, &roles);
-        // A role may publish what it may write as the group in a space.
-        repo.extend(self.publishable(&acting.grant.group, &roles)?);
+        let repo = repo_collections_for(&grants, &roles);
+        // A role may publish what it may write as the group in a space, as
+        // it may write it there.
+        let publishable = self.publishable(&acting.grant.group, &roles)?;
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.repo(collection, action(w)) {
                 return Err(missing(format!("repo:{collection}?action={}", action(w))));
             }
-            if !repo.contains("*") && !repo.contains(collection) {
+            let granted = repo.contains("*") || repo.contains(collection);
+            if !granted && !may_write(&publishable, collection, action(w)) {
                 return Err(no_longer(collection));
             }
         }
@@ -310,12 +312,13 @@ pub async fn create_record(
         allow: Some(&allow),
         ..Asked::default()
     };
-    let committed = host.write_asked(group, std::slice::from_ref(&write), &asked)?;
-    host.wrote(&acting, None, std::slice::from_ref(&write))?;
+    let made = host.write_asked(group, std::slice::from_ref(&write), &asked)?;
+    let (committed, made) = made.expect("a create makes a commit");
+    host.wrote(&acting, None, &made)?;
     Ok(Json(json!({
         "uri": repo_uri(group, &collection, &rkey),
         "cid": record_cid(&collection, &body["record"])?.to_string(),
-        "commit": committed.as_ref().map(commit_view),
+        "commit": commit_view(&committed),
         "validationStatus": "unknown",
     })))
 }
@@ -344,9 +347,9 @@ async fn put_or_delete(
     // A put of what is there, or a delete of what is not, makes no commit.
     let committed = host.write_asked(group, std::slice::from_ref(&write), &asked)?;
     let mut out = json!({});
-    if let Some(c) = &committed {
+    if let Some((c, made)) = &committed {
         out["commit"] = commit_view(c);
-        host.wrote(&acting, None, std::slice::from_ref(&write))?;
+        host.wrote(&acting, None, made)?;
     }
     if !delete {
         out["uri"] = json!(repo_uri(group, collection, rkey));
@@ -394,14 +397,15 @@ pub async fn apply_writes(
         allow: Some(&allow),
         ..Asked::default()
     };
-    let committed = host.write_asked(group, &writes, &asked)?;
-    host.wrote(&acting, None, &writes)?;
+    let made = host.write_asked(group, &writes, &asked)?;
+    let (committed, made) = made.expect("writes that are not puts make a commit");
+    host.wrote(&acting, None, &made)?;
     let results: Vec<Value> = writes
         .iter()
         .map(|w| result("repo", repo_uri(group, w.path().0, w.path().1), w))
         .collect::<Result<_, _>>()?;
     Ok(Json(
-        json!({"commit": committed.as_ref().map(commit_view), "results": results}),
+        json!({"commit": commit_view(&committed), "results": results}),
     ))
 }
 
@@ -500,8 +504,8 @@ async fn space_writes(
     let made = host
         .space_write_asked(&group, &uri, &writes, &asked)
         .await?;
-    if made.is_some() {
-        host.wrote(&acting, Some(&uri), &writes)?;
+    if let Some((_, made)) = &made {
+        host.wrote(&acting, Some(&uri), made)?;
     }
     Ok((uri, group, writes, made.is_some()))
 }

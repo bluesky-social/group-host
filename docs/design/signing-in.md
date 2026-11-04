@@ -148,10 +148,37 @@ writes as the group, as the access lexicon has it), and image files, or
 any file for a role that writes any kind. A member whose roles write
 nothing there gets no token.
 
+## App passwords
+
+An app that signs in with a handle and a password, as the Bluesky app
+does, signs in to a group with an app password (`app_passwords.rs`). A
+group has no password, and one does not give it one: a member who may do
+anything as the group (every repo collection) makes it in the console
+(`createAppPassword`), named for where it is used, and it stays theirs.
+It is shown once; the host keeps its SHA-256 alone, as it is 80 random
+bits, which no slow hash would make harder to guess. A group holds 25 at
+most. `listAppPasswords` shows every one to the group's configurers, and
+each maker their own; `revokeAppPassword` takes one away, its maker's or
+any for a configurer, and signs out every app signed in with it.
+
+`com.atproto.server.createSession` signs in with one, by the group's
+handle or DID; `refreshSession` gives a new pair and ends the old; and
+`deleteSession` signs out. A session is a grant like any other, listed
+among the group's, its tokens bearer ones and JWTs, as a PDS's are, so an
+app may read when they lapse; the host still finds them by their hash. A
+lapsed access token is a 400 `ExpiredToken`, the sign to refresh. Its
+scope is `atproto transition:generic`, the group's repo and blobs and
+never a space, with `transition:chat.bsky` for a privileged one.
+
+An app password works only while its maker could make it: at each use,
+sign-in and refresh, the host asks, and once they could not (they lost
+the role, or left), every app password of theirs is forgotten and every
+session from one signed out.
+
 ## Who acts as the group
 
 Every grant names the member who gave it, its app, how it was given
-(`oauth` or `getGroupAuth`), its scope, and when it was last used, to the
+(`oauth`, `getGroupAuth` or `appPassword`), its scope, and when it was last used, to the
 minute. `listGroupTokens` shows a group's configurers every grant that
 still lasts, and its log: each sign-in, each token taken, each record a
 grant wrote, and each grant ended, the latest twenty. `revokeGroupToken`

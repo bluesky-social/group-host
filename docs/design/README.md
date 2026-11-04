@@ -100,8 +100,9 @@ says otherwise.
    [signing in](signing-in.md)); writes as the group with its tokens,
    within their scope and the member's roles (`oauth_resource.rs`,
    `scopes.rs`, `token_writes.rs`; done); group tokens, and the grants
-   that act as a group with their log (`group_tokens.rs`; done); then app
-   passwords; then provisioning: `auth.ts`, `pds/auth.ts`, `pds/oauth/*`,
+   that act as a group with their log (`group_tokens.rs`; done); app
+   passwords and their sessions (`app_passwords.rs`; done); then
+   provisioning: `auth.ts`, `pds/auth.ts`, `pds/oauth/*`,
    `methods/{authorization,groupAuth,appPasswords,connectedApps,provision}.ts`.
    The console signs its people in at their own PDS here, as a
    confidential client, and keeps the session on the server, as knotless

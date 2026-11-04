@@ -105,6 +105,15 @@ async fn challenges_a_request_without_a_good_token() {
                 .header("authorization", format!("Bearer {access}")),
         )
         .await;
+    // As a bearer token it is no app password's session.
+    assert_eq!(said.error(), (401, "InvalidToken"));
+    let said = app
+        .said(
+            h.http
+                .get(&url)
+                .header("authorization", format!("Basic {access}")),
+        )
+        .await;
     assert_eq!(said.error(), (401, "invalid_token"));
     let challenge = said.headers["www-authenticate"].to_str().unwrap();
     assert!(

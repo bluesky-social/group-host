@@ -285,17 +285,18 @@ impl Host {
     /// Makes `writes` to `did`'s repo, as one commit.
     pub fn write(&self, did: &str, writes: &[Write]) -> Result<Committed, XrpcError> {
         let made = self.write_asked(did, writes, &Asked::default())?;
-        Ok(made.expect("writes that are not puts make a commit"))
+        Ok(made.expect("writes that are not puts make a commit").0)
     }
 
     /// Makes `writes` to `did`'s repo, as one commit, as `asked` has them:
-    /// none if, as puts, they change nothing.
+    /// its commit, and the writes as made, puts resolved; none if, as
+    /// puts, they change nothing.
     pub fn write_asked(
         &self,
         did: &str,
         writes: &[Write],
         asked: &Asked,
-    ) -> Result<Option<Committed>, XrpcError> {
+    ) -> Result<Option<(Committed, Vec<Write>)>, XrpcError> {
         let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
@@ -373,10 +374,11 @@ impl Host {
             .map_err(XrpcError::internal)?;
         self.remove_blobs(orphans.iter().map(|cid| (account.did.as_str(), cid)));
         self.announce();
-        Ok(Some(Committed {
+        let committed = Committed {
             cid: new.cid,
             rev: new.rev,
-        }))
+        };
+        Ok(Some((committed, writes.clone())))
     }
 
     /// `write` to `did`'s records, now at `paths`, checked: its path is a

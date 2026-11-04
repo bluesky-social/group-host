@@ -72,34 +72,42 @@ impl Permissions {
         }
     }
 
+    /// Whether it holds `transition:generic`, as an app password's session
+    /// does: the group's repo and blobs, whole, and never a space.
+    fn generic(&self) -> bool {
+        self.scopes.iter().any(|s| s == "transition:generic")
+    }
+
     /// May it `action` (`create`, `update`, `delete`) a `collection`
     /// record in the group's repo?
     pub fn repo(&self, collection: &str, action: &str) -> bool {
-        self.scopes.iter().any(|s| {
-            let Some(resource) = named(s, "repo") else {
-                return false;
-            };
-            let resource = match resource {
-                "" => query(s, "collection"),
-                r => vec![r],
-            };
-            let covers = resource.iter().any(|c| *c == "*" || *c == collection);
-            covers && actions(s, &REPO_ACTIONS, &REPO_ACTIONS).contains(&action)
-        })
+        self.generic()
+            || self.scopes.iter().any(|s| {
+                let Some(resource) = named(s, "repo") else {
+                    return false;
+                };
+                let resource = match resource {
+                    "" => query(s, "collection"),
+                    r => vec![r],
+                };
+                let covers = resource.iter().any(|c| *c == "*" || *c == collection);
+                covers && actions(s, &REPO_ACTIONS, &REPO_ACTIONS).contains(&action)
+            })
     }
 
     /// May it upload a blob of type `mime`?
     pub fn blob(&self, mime: &str) -> bool {
-        self.scopes.iter().any(|s| {
-            let Some(resource) = named(s, "blob") else {
-                return false;
-            };
-            let accept = match resource {
-                "" => query(s, "accept"),
-                r => r.split(',').collect(),
-            };
-            accept.iter().any(|p| mime_matches(p, mime))
-        })
+        self.generic()
+            || self.scopes.iter().any(|s| {
+                let Some(resource) = named(s, "blob") else {
+                    return false;
+                };
+                let accept = match resource {
+                    "" => query(s, "accept"),
+                    r => r.split(',').collect(),
+                };
+                accept.iter().any(|p| mime_matches(p, mime))
+            })
     }
 
     /// May it `action` (`read`, `read_self`, `create`, `update`,

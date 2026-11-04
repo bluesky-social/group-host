@@ -285,3 +285,58 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
     let said = revoke(&alice, json!({"group": other, "tokenId": theirs})).await;
     assert_eq!(said.1["error"], "NotFound");
 }
+
+#[tokio::test]
+async fn publishes_only_as_the_role_may_write_in_the_space() {
+    let h = start(&[], false).await;
+    let (did, calendar, [alice, bob, _]) = group(&h).await;
+    let access_of = |scopes: Json| {
+        json!({
+            "$type": format!("{NS}.access"),
+            "readableBy": [{"role": "member"}],
+            "credentialScopes": [{"role": "member", "scopes": scopes}],
+            "createdAt": "2026-11-03T00:00:00Z",
+        })
+    };
+    let set = async |access: Json| {
+        let write = Write::Update {
+            collection: format!("{NS}.access"),
+            rkey: "self".into(),
+            value: access,
+        };
+        h.host.space_write(&did, &calendar, &[write]).await.unwrap();
+    };
+    // Bob may write events every way, and takes a token while he may.
+    set(access_of(json!([{"collection": EVENT}]))).await;
+    let app = App::new("console");
+    let said = group_auth(&h, &app, &bob, &json!({"group": did, "space": calendar})).await;
+    let token = said.body["accessJwt"].as_str().unwrap().to_string();
+    let put = |text: &str| json!({"repo": did, "collection": EVENT, "rkey": "ride", "record": {"$type": EVENT, "text": text, "createdAt": "2026-11-03T00:00:00Z"}});
+    let said = app
+        .call(&h, "com.atproto.repo.putRecord", &token, Some(&put("one")))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    // Now only add them: in the repo too.
+    set(access_of(
+        json!([{"collection": format!("{EVENT}?action=create")}]),
+    ))
+    .await;
+    let said = app
+        .call(&h, "com.atproto.repo.putRecord", &token, Some(&put("two")))
+        .await;
+    assert_eq!(said.status, 403, "{}", said.body);
+    assert!(
+        said.body["message"]
+            .as_str()
+            .unwrap()
+            .contains("may no longer write")
+    );
+
+    // The log says what each write was, as it was made.
+    let lxm = format!("{NS}.listGroupTokens");
+    let (_, listed) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(
+        listed["activity"][0]["action"],
+        format!("created {EVENT}/ride")
+    );
+}

@@ -46,6 +46,39 @@ pub struct Grant {
     pub used_at: Option<i64>,
 }
 
+/// An app password of a group's: what it is called, whose it is, and
+/// whether its sessions may use chat. Never the password: the host keeps
+/// its hash alone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppPassword {
+    pub name: String,
+    pub member: String,
+    pub privileged: bool,
+    pub created_at: i64,
+}
+
+/// What a session signed in with app password `name` names as its client.
+pub fn app_password_client(name: &str) -> String {
+    format!("app-password:{name}")
+}
+
+const MAKE_PASSWORD: &str = "INSERT OR IGNORE INTO app_password (grp, name, member, hash, privileged, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+const PASSWORDS: &str =
+    "SELECT name, member, privileged, created_at FROM app_password WHERE grp = ?1";
+const DROP_PASSWORD: &str = "DELETE FROM app_password WHERE grp = ?1 AND name = ?2";
+const DROP_SESSIONS: &str =
+    "DELETE FROM oauth_token WHERE grp = ?1 AND client_id = ?2 AND source = 'appPassword'";
+const DROP_MEMBERS_PASSWORDS: &str = "DELETE FROM app_password WHERE grp = ?1 AND member = ?2";
+
+fn app_password(row: &Row) -> rusqlite::Result<AppPassword> {
+    Ok(AppPassword {
+        name: row.get(0)?,
+        member: row.get(1)?,
+        privileged: row.get(2)?,
+        created_at: row.get(3)?,
+    })
+}
+
 /// Something done as a group with a grant, or to one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Activity {
@@ -302,6 +335,64 @@ impl Store {
         let mut q = conn.prepare(ACTIVITY)?;
         let rows = q.query_map(params![group, limit], activity)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Keeps `group`'s new app password, by its hash: `false` if the
+    /// group has one by its name.
+    pub fn make_app_password(&self, group: &str, p: &AppPassword, hash: &str) -> Result<bool> {
+        let conn = self.conn();
+        let made = conn.execute(
+            MAKE_PASSWORD,
+            params![group, p.name, p.member, hash, p.privileged, p.created_at],
+        )?;
+        Ok(made > 0)
+    }
+
+    /// `group`'s app passwords, the newest first.
+    pub fn app_passwords(&self, group: &str) -> Result<Vec<AppPassword>> {
+        let conn = self.conn();
+        let sql = format!("{PASSWORDS} ORDER BY created_at DESC, name");
+        let mut q = conn.prepare(&sql)?;
+        let rows = q.query_map([group], app_password)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// `group`'s app password by its name, or by its hash.
+    pub fn app_password(
+        &self,
+        group: &str,
+        name: Option<&str>,
+        hash: Option<&str>,
+    ) -> Result<Option<AppPassword>> {
+        let conn = self.conn();
+        let sql = format!("{PASSWORDS} AND (name = ?2 OR hash = ?3)");
+        let found = conn.query_row(&sql, params![group, name, hash], app_password);
+        Ok(found.optional()?)
+    }
+
+    /// Forgets `group`'s app password `name`, and signs out every session
+    /// signed in with it.
+    pub fn drop_app_password(&self, group: &str, name: &str) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        tx.execute(DROP_PASSWORD, [group, name])?;
+        tx.execute(DROP_SESSIONS, [group, &app_password_client(name)])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Signs out every session `member`'s app passwords for `group` began.
+    pub fn revoke_member_sessions(&self, group: &str, member: &str) -> Result<usize> {
+        let sql =
+            "DELETE FROM oauth_token WHERE grp = ?1 AND member = ?2 AND source = 'appPassword'";
+        Ok(self.conn().execute(sql, [group, member])?)
+    }
+
+    /// Forgets every app password `member` made for `group`.
+    pub fn drop_members_app_passwords(&self, group: &str, member: &str) -> Result<usize> {
+        Ok(self
+            .conn()
+            .execute(DROP_MEMBERS_PASSWORDS, [group, member])?)
     }
 
     /// Ends every grant `member` approved for `group`: theirs to act with

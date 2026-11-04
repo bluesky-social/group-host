@@ -110,10 +110,13 @@ impl Host {
             )
             .into());
         };
-        if !scheme.eq_ignore_ascii_case("DPoP") {
-            return Err(self.refuse("invalid_token", "this host's tokens are DPoP-bound"));
-        }
         let now = now_millis();
+        if scheme.eq_ignore_ascii_case("Bearer") {
+            return self.session(token, now);
+        }
+        if !scheme.eq_ignore_ascii_case("DPoP") {
+            return Err(self.refuse("invalid_token", "a token is DPoP or Bearer"));
+        }
         let found = self.store.grant_by_access(&jose::sha256(token), now);
         let grant = found.map_err(XrpcError::internal)?;
         let grant =
@@ -122,6 +125,7 @@ impl Host {
         let proof = proof.map_err(|e: OAuthError| self.refuse(e.error, e.description))?;
         let proof =
             proof.ok_or_else(|| self.refuse("invalid_dpop_proof", "DPoP proof required"))?;
+        // A session from an app password has no key, and is no DPoP token.
         if proof.jkt != grant.dpop_jkt {
             return Err(self.refuse("invalid_token", "the DPoP key is not the token's"));
         }

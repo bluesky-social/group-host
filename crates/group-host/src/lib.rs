@@ -4,6 +4,7 @@
 //! says how it is built and what is still to come.
 
 pub mod api;
+pub mod app_passwords;
 pub mod authority;
 pub mod authority_api;
 pub mod authorization;
@@ -328,6 +329,18 @@ pub fn router(host: Arc<Host>) -> Router {
             post(authorization::decline_authorization),
         )
         .route(
+            "/xrpc/fyi.opensocial.createAppPassword",
+            post(app_passwords::create_app_password),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.listAppPasswords",
+            get(app_passwords::list_app_passwords),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.revokeAppPassword",
+            post(app_passwords::revoke_app_password),
+        )
+        .route(
             "/xrpc/fyi.opensocial.listGroupTokens",
             get(group_tokens::list_group_tokens),
         )
@@ -405,6 +418,18 @@ fn token_routes() -> Router<Arc<Host>> {
         .route(
             &x("com.atproto.server.getSession"),
             get(token_writes::get_session),
+        )
+        .route(
+            &x("com.atproto.server.createSession"),
+            post(app_passwords::create_session),
+        )
+        .route(
+            &x("com.atproto.server.refreshSession"),
+            post(app_passwords::refresh_session),
+        )
+        .route(
+            &x("com.atproto.server.deleteSession"),
+            post(app_passwords::delete_session),
         )
         .route(
             &x("fyi.opensocial.getGroupAuth"),

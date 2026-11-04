@@ -52,22 +52,25 @@ fn objects(field: &str, items: impl IntoIterator<Item = impl Into<String>>) -> V
 
 impl Host {
     /// The kinds of record a holder of `roles` may write as the group in
-    /// any of its spaces, and so publish in its repo: `*` for any.
+    /// any of its spaces, and so publish in its repo, each with the
+    /// writes they may make of it: `*` for any kind.
     pub fn publishable(
         &self,
         group: &str,
         roles: &[String],
-    ) -> Result<BTreeSet<String>, XrpcError> {
+    ) -> Result<BTreeMap<String, BTreeSet<String>>, XrpcError> {
         let entries = self
             .group_records(group, &members_space(group), &format!("{NS}.space"))
             .map_err(XrpcError::internal)?;
-        let mut out = BTreeSet::new();
+        let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (_, entry) in entries {
             let uri = entry["space"].as_str().unwrap_or_default();
             let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
             let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-            if Access::of(&access).people.is_none() {
-                out.extend(writes_for(&access, roles).into_keys());
+            // A space for chosen people is theirs, not the group's to publish.
+            let open = Access::of(&access).people.is_none();
+            for (collection, actions) in writes_for(&access, roles).into_iter().filter(|_| open) {
+                out.entry(collection).or_default().extend(actions);
             }
         }
         Ok(out)

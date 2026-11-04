@@ -33,26 +33,27 @@ impl Host {
         let made = self
             .space_write_asked(did, space, writes, &Asked::default())
             .await?;
-        Ok(made.expect("writes that are not puts make a revision"))
+        Ok(made.expect("writes that are not puts make a revision").0)
     }
 
     /// Makes `writes` to `did`'s repo in `space` as `asked` has them, and
-    /// tells the space's authority: none if, as puts, they change nothing.
+    /// tells the space's authority: its commit, and the writes as made,
+    /// puts resolved; none if, as puts, they change nothing.
     pub async fn space_write_asked(
         &self,
         did: &str,
         space: &str,
         writes: &[Write],
         asked: &Asked<'_>,
-    ) -> Result<Option<Commit>, XrpcError> {
+    ) -> Result<Option<(Commit, Vec<Write>)>, XrpcError> {
         let space = SpaceRef::parse(space).map_err(|e| invalid(e.to_string()))?;
-        let Some(commit) = self.space_commit(did, &space, writes, asked)? else {
+        let Some((commit, made)) = self.space_commit(did, &space, writes, asked)? else {
             return Ok(None);
         };
         if let Err(e) = self.tell_authority(&space, &commit).await {
             tracing::warn!(space = %space, repo = did, error = %format!("{e:#}"), "telling the authority failed");
         }
-        Ok(Some(commit))
+        Ok(Some((commit, made)))
     }
 
     async fn tell_authority(&self, space: &SpaceRef, commit: &Commit) -> Result<()> {
@@ -83,7 +84,7 @@ impl Host {
         space: &SpaceRef,
         writes: &[Write],
         asked: &Asked,
-    ) -> Result<Option<Commit>, XrpcError> {
+    ) -> Result<Option<(Commit, Vec<Write>)>, XrpcError> {
         let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
@@ -151,6 +152,6 @@ impl Host {
             rev: new.rev,
             data: hash.digest(),
         };
-        Ok(Some(commit))
+        Ok(Some((commit, writes)))
     }
 }
