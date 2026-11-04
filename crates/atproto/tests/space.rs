@@ -2,6 +2,7 @@
 //! `@atproto/space` (tests/reference/space-vectors.json, from pds.js).
 
 use atproto::cid::Cid;
+use atproto::drisl;
 use atproto::keys::{Curve, Keypair};
 use atproto::space::{
     COMMIT_MAC, Commit, LtHash, RECORD_MAC, STATE_BYTES, SpaceRef, decapsulate, element,
@@ -86,6 +87,24 @@ fn commits_records_and_archives_as_the_vectors_say() {
     let mac = commit.mac(&hex(&c["secretHex"]));
     assert_eq!(mac.to_vec(), hex(&c["macHex"]));
     assert_eq!(mac_header(COMMIT_MAC, &mac), s(&c["macHeader"]));
+    assert_eq!(
+        atproto::space::parse_mac_header(s(&c["macHeader"]), COMMIT_MAC).unwrap(),
+        mac.to_vec()
+    );
+    for bad in [
+        "type=\"atproto-space-record\", ver=1, mac=:AAAA:",
+        "type=\"atproto-space-repo\", ver=2, mac=:AAAA:",
+        "type=\"atproto-space-repo\", ver=1",
+        "type=\"atproto-space-repo\", ver=1, mac=:not base64!:",
+    ] {
+        assert_eq!(
+            atproto::space::parse_mac_header(bad, COMMIT_MAC)
+                .unwrap_err()
+                .to_string(),
+            "not a MAC header of atproto-space-repo",
+            "{bad}"
+        );
+    }
     assert_eq!(star(&commit, &records), hex(&c["starHex"]));
 
     let r = &v["record"];
@@ -188,4 +207,65 @@ fn refuses_keys_and_headers_it_cannot_use() {
             "{header}"
         );
     }
+}
+
+#[test]
+fn reads_a_star_archive_back() {
+    let v = vectors();
+    let c = &v["commit"];
+    let star_bytes = hex(&c["starHex"]);
+    let (commit, records) = atproto::space::read_star(&star_bytes).unwrap();
+    assert_eq!(commit.repo, s(&c["repo"]));
+    assert_eq!(commit.space, s(&c["space"]));
+    assert_eq!(commit.rev, s(&c["rev"]));
+    assert_eq!(commit.data.to_vec(), hex(&c["dataHex"]));
+    assert_eq!(star(&commit, &records), star_bytes);
+    assert_eq!(records.len(), c["records"].as_array().unwrap().len());
+
+    // An empty repo is its commit alone.
+    let (empty, none) = atproto::space::read_star(&star(&commit, &BTreeMap::new())).unwrap();
+    assert_eq!((empty, none.len()), (commit.clone(), 0));
+
+    let refused = |bytes: &[u8]| atproto::space::read_star(bytes).unwrap_err().to_string();
+    assert_eq!(refused(b"nope"), "not a STAR archive");
+    let magic = atproto::space::STAR_MAGIC.to_vec();
+    assert_eq!(
+        refused(&[magic.clone(), vec![0x05, 1]].concat()),
+        "a STAR archive cut short"
+    );
+    assert_eq!(
+        refused(&[magic.clone(), vec![0xff; 11]].concat()),
+        "a STAR archive cut short"
+    );
+    assert_eq!(
+        refused(&[magic.clone(), vec![1, 0x00]].concat()),
+        "STAR metadata that is not a DRISL map"
+    );
+    let not_a_commit = drisl::encode(&atproto::Value::Map(BTreeMap::from([(
+        "$type".into(),
+        atproto::Value::String("x".into()),
+    )])));
+    let framed = |b: &[u8]| [vec![b.len() as u8], b.to_vec()].concat();
+    assert_eq!(
+        refused(&[magic.clone(), framed(&not_a_commit)].concat()),
+        "not a repo's STAR archive"
+    );
+    let head = star(&commit, &BTreeMap::new());
+    let record = |path: &str| [framed(path.as_bytes()), framed(b"\xa0")].concat();
+    assert_eq!(
+        refused(&[head.clone(), record("b/1"), record("a/1")].concat()),
+        "a STAR archive's records out of order"
+    );
+    assert_eq!(
+        refused(&[head.clone(), record("a/1"), record("a/1")].concat()),
+        "a STAR archive's records out of order"
+    );
+    assert_eq!(
+        refused(&[head.clone(), framed(b"\xff"), framed(b"\xa0")].concat()),
+        "a STAR key that is not text"
+    );
+    assert_eq!(
+        refused(&[head, framed(b"a/1")].concat()),
+        "a STAR archive cut short"
+    );
 }

@@ -318,6 +318,18 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
     );
     assert_eq!(writers[0].did, alice.did);
 
+    // The index reads her repo from her PDS, as any syncer reads a space:
+    // with the group's own credential, its commit vouched for.
+    h.host.sync_space(&space).await.unwrap();
+    let indexed = h.host.store.indexed(&space, None, None, 10).unwrap();
+    assert_eq!(indexed.len(), 1, "the index did not read her repo");
+    assert_eq!(
+        (indexed[0].did.as_str(), indexed[0].rkey.as_str()),
+        (alice.did.as_str(), "one")
+    );
+    let value = atproto::drisl::decode(&indexed[0].value).unwrap().to_json();
+    assert_eq!(value, note);
+
     // Her PDS's delegation token buys a credential from the host.
     let (status, _, token) = get(
         &net.pds,

@@ -189,6 +189,7 @@ impl Host {
         let Some(prev) = kept else {
             return Ok(());
         };
+        self.reindex(space);
         let mut body = json!({
             "space": space,
             "repo": repo,

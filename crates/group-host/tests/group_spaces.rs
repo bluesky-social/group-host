@@ -343,6 +343,12 @@ async fn an_admin_changes_a_space() {
             json!({"group": did, "space": uri, "writableBy": "admin"}),
             (400, "InvalidRequest"),
         ),
+        // Nobody to read it is no change it takes.
+        (
+            &alice,
+            json!({"group": did, "space": uri, "readableBy": []}),
+            (400, "InvalidRequest"),
+        ),
     ] {
         let said = call(&h, who, "updateSpace", body.clone()).await;
         assert_eq!(error(&said), refused, "{body}");

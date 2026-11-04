@@ -92,7 +92,8 @@ pub async fn activate_group(
 /// keeps of them; the services syncing its spaces are told; its DID is
 /// ended. They are told first, while the group has a key to sign with:
 /// best effort, so a delete that then fails has told them of one that
-/// did not happen, and they find it again when they next read. What members wrote in its spaces is theirs, at their own PDSes.
+/// did not happen, and they find it again when they next read. What
+/// members wrote in its spaces is theirs, at their own PDSes.
 pub async fn delete_group(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,

@@ -168,6 +168,30 @@ const MIGRATIONS: &[&str] = &[
         address TEXT NOT NULL UNIQUE
     );
 ",
+    "
+    CREATE TABLE index_repo (
+        space TEXT NOT NULL,
+        did TEXT NOT NULL,
+        rev TEXT NOT NULL,
+        state BLOB NOT NULL,
+        PRIMARY KEY (space, did)
+    );
+    CREATE TABLE index_record (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        space TEXT NOT NULL,
+        did TEXT NOT NULL,
+        path TEXT NOT NULL,
+        cid TEXT NOT NULL,
+        value BLOB NOT NULL,
+        indexed_at INTEGER NOT NULL,
+        UNIQUE (space, did, path)
+    );
+    CREATE INDEX index_record_newest ON index_record (space, seq);
+",
+    // Accounts made before addresses were kept: each its handle then.
+    "
+    INSERT OR IGNORE INTO address (did, address) SELECT did, handle FROM account;
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -242,6 +266,8 @@ const RETRY: &str = "UPDATE outbox SET attempts = attempts + 1, next_at = ?4 WHE
 const LAPSED: &str = "DELETE FROM outbox WHERE deliver_by <= ?1 RETURNING repo, space, rev";
 /// What goes with a space whose authority is here.
 const FORGET_SPACE: &[&str] = &[
+    "DELETE FROM index_record WHERE space = ?1",
+    "DELETE FROM index_repo WHERE space = ?1",
     "DELETE FROM space_recipient WHERE space = ?1",
     "DELETE FROM space_writer WHERE space = ?1",
     "DELETE FROM space_grant WHERE space = ?1",
@@ -253,12 +279,21 @@ const FORGET_OWN_REPO: &[&str] = &[
     "DELETE FROM space_record WHERE space = ?1 AND did = ?2",
     "DELETE FROM space_repo WHERE space = ?1 AND did = ?2",
 ];
+const INDEXED_STATE: &str = "SELECT rev, state FROM index_repo WHERE space = ?1 AND did = ?2";
+const INDEX_STATE: &str = "INSERT INTO index_repo (space, did, rev, state) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (space, did) DO UPDATE SET rev = ?3, state = ?4";
+const UNINDEX_REPO: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2";
+const UNINDEX: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2 AND path = ?3";
+const INDEX: &str = "INSERT INTO index_record (space, did, path, cid, value, indexed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+const INDEXED: &str = "SELECT seq, did, path, cid, value, indexed_at FROM index_record WHERE space = ?1 AND (?2 IS NULL OR substr(path, 1, length(?2) + 1) = ?2 || '/') AND seq < ?3 ORDER BY seq DESC LIMIT ?4";
+const INDEXED_ONE: &str = "SELECT seq, did, path, cid, value, indexed_at FROM index_record WHERE space = ?1 AND did = ?2 AND path = ?3";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM index_record WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM index_repo WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM deactivation WHERE did = ?1",
     "DELETE FROM address WHERE did = ?1",
     "DELETE FROM outbox WHERE repo = ?1",
@@ -414,6 +449,32 @@ pub struct Deactivation {
     pub at: i64,
     pub by: String,
     pub stewards: Vec<String>,
+}
+
+/// A record in the host's index of a space: when it was indexed, in
+/// order, whose it is, where, and its CID and DRISL.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Indexed {
+    pub seq: i64,
+    pub did: String,
+    pub collection: String,
+    pub rkey: String,
+    pub cid: Cid,
+    pub value: Vec<u8>,
+    pub indexed_at: i64,
+}
+
+fn indexed(row: &rusqlite::Row) -> rusqlite::Result<Indexed> {
+    let (collection, rkey) = split(&row.get::<_, String>(2)?);
+    Ok(Indexed {
+        seq: row.get(0)?,
+        did: row.get(1)?,
+        collection,
+        rkey,
+        cid: cid(row.get(3)?),
+        value: row.get(4)?,
+        indexed_at: row.get(5)?,
+    })
 }
 
 /// A blob as kept: its type, its size, and whether it waits for a record
@@ -1046,6 +1107,77 @@ impl Store {
         }
         tx.commit()?;
         Ok(orphans)
+    }
+
+    /// How far the index has read `did`'s repo in `space`: its revision and
+    /// set hash state then.
+    pub fn index_state(&self, space: &str, did: &str) -> Result<Option<SpaceHead>> {
+        let conn = self.conn();
+        let found = conn.query_row(INDEXED_STATE, [space, did], |r| {
+            Ok(SpaceHead {
+                rev: r.get(0)?,
+                state: r.get(1)?,
+            })
+        });
+        Ok(found.optional()?)
+    }
+
+    /// Indexes `did`'s repo in `space` as at `head`: its records replaced
+    /// by `records`, by path, when it was read whole; or each path in
+    /// `changes` put (a CID and DRISL) or taken out, when it was read on.
+    pub fn index(
+        &self,
+        space: &str,
+        did: &str,
+        head: &SpaceHead,
+        whole: bool,
+        changes: &BTreeMap<String, Option<(Cid, Vec<u8>)>>,
+        now: i64,
+    ) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        if whole {
+            let cleared = tx.execute(UNINDEX_REPO, [space, did]);
+            cleared?;
+        }
+        for (path, put) in changes {
+            let gone = tx.execute(UNINDEX, [space, did, path]);
+            gone?;
+            if let Some((cid, value)) = put {
+                let kept = tx.execute(
+                    INDEX,
+                    params![space, did, path, cid.to_string(), value, now],
+                );
+                kept?;
+            }
+        }
+        let state = tx.execute(INDEX_STATE, params![space, did, head.rev, head.state]);
+        state?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The index's records in `space`, of `collection` or all, newest
+    /// first, before `before` (a sequence number), at most `limit`.
+    pub fn indexed(
+        &self,
+        space: &str,
+        collection: Option<&str>,
+        before: Option<i64>,
+        limit: u32,
+    ) -> Result<Vec<Indexed>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(INDEXED)?;
+        let asked = params![space, collection, before.unwrap_or(i64::MAX), limit];
+        let rows = q.query_map(asked, indexed)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// One record in the index of `space`: `did`'s at `path`.
+    pub fn indexed_one(&self, space: &str, did: &str, path: &str) -> Result<Option<Indexed>> {
+        let conn = self.conn();
+        let found = conn.query_row(INDEXED_ONE, [space, did, path], indexed);
+        Ok(found.optional()?)
     }
 
     /// The spaces `authority` is the authority for.

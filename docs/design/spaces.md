@@ -75,6 +75,33 @@ Not yet: deleting a space and telling its syncers, and revoking the
 credentials of one who loses their grant, which come with groups and
 membership.
 
+## The index
+
+The host keeps a copy of what is written in its groups' spaces, so it can
+answer for a space in one request where a reader would need a credential
+and a listing per writer. As each space's authority it knows the writer
+set: when a writer's digest is not the one the index came to, the index
+reads their repo, as knotless's syncer reads a space.
+
+- A writer here is read from the store.
+- A writer elsewhere is read from their PDS, with a credential the group
+  issues itself, bound to a key made for the read, and a secret agreed
+  against the writer's `#atproto_kem` key for each request. Read before,
+  their repo is read on from its oplog (`listRepoOps`), the set hash
+  moved by each write and checked against the commit their host vouches
+  for, each record checked against its write's CID. Not read before, or
+  if that does not check out, it is read whole (`getRepo`, a STAR
+  archive) and checked the same way. A record that is not a DRISL map is
+  hashed, as the commit covers it, and left out.
+
+The index reads a space as its writer set moves, in the background, and
+before it answers for it. `fyi.opensocial.listSpaceRecords` lists it,
+newest first, by collection, by a field's value, or one by URI;
+`fyi.opensocial.getSpaceBlob` serves a file in it, read from whoever
+wrote it (5 MB at most, and only the file asked for). Both answer only
+those the space's access record lets read, asked on every call: the
+index holds copies, and never decides who sees them.
+
 ## Others' identities
 
 The host reads other accounts' DID documents (a space's authority, an

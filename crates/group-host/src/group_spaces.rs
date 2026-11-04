@@ -161,7 +161,10 @@ pub async fn update_space(
     let (access_collection, space_collection) = (format!("{NS}.access"), format!("{NS}.space"));
     let (space, current) = own_space(&host, &group, &body)?;
     let (meta, members) = (meta_space(&group), members_space(&group));
-    let readers = audience(&body, "readableBy")?.filter(|r| !r.is_empty());
+    let readers = audience(&body, "readableBy")?;
+    if readers.as_ref().is_some_and(Vec::is_empty) {
+        return Err(invalid("readableBy names who reads the space"));
+    }
     let writers = audience(&body, "writableBy")?;
     let names = |list: &[Value]| -> Vec<String> {
         list.iter()
@@ -174,12 +177,6 @@ pub async fn update_space(
         if space == members && !names(readers).iter().any(|r| r == "member") {
             return Err(invalid("the members space stays readable by member"));
         }
-        // Meta's readers are the group's visibility: it is declared only
-        // while anyone may read it.
-        if space == meta {
-            host.declare(&group, names(readers).iter().any(|r| r == PUBLIC))
-                .await?;
-        }
     }
     // Writing in the members space in one's own name is joining: who may
     // stays as it is.
@@ -188,7 +185,7 @@ pub async fn update_space(
     }
     if readers.is_some() || writers.is_some() || body.get("credentialScopes").is_some() {
         let mut access = current.clone();
-        if let Some(readers) = readers {
+        if let Some(readers) = &readers {
             access["readableBy"] = json!(readers);
         }
         if let Some(writers) = writers {
@@ -203,6 +200,12 @@ pub async fn update_space(
         }
         let put = put_in(&host, &group, &space, &access_collection, "self", access);
         let _written = put.await?;
+    }
+    // Meta's readers are the group's visibility: it is declared only while
+    // anyone may read it, once the access record says so.
+    if let Some(readers) = readers.as_ref().filter(|_| space == meta) {
+        let declared = host.declare(&group, names(readers).iter().any(|r| r == PUBLIC));
+        declared.await?;
     }
     if let Some(name) = body["name"].as_str() {
         let (rkey, mut entry) = entry_of(&host, &group, &space)?;

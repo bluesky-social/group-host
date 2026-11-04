@@ -63,7 +63,13 @@ impl Resolver {
             kept_at_most,
             plc_url: plc_url.trim_end_matches('/').to_string(),
             did_web_scheme: did_web_scheme.to_string(),
-            http: crate::client(),
+            // A document or handle is at a host the caller names: one that
+            // redirects is not followed elsewhere.
+            http: reqwest::Client::builder()
+                .timeout(crate::OUTGOING_TIMEOUT)
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("a client builds"),
             kept: Mutex::default(),
         }
     }
@@ -118,7 +124,11 @@ impl Resolver {
                 }
                 None => {
                     let url = format!("{resolver}/xrpc/com.atproto.identity.resolveHandle");
-                    let asked = self.http.get(url).query(&[("handle", handle)]);
+                    let asked = self
+                        .http
+                        .get(url)
+                        .query(&[("handle", handle)])
+                        .timeout(LOOKUP);
                     let body = json(asked.send().await).await;
                     body.and_then(|b| b["did"].as_str().map(String::from))
                 }
@@ -160,12 +170,13 @@ impl Resolver {
     }
 }
 
-/// A response's text, if it answered with one.
+/// A response's text, if it answered with one no longer than a document
+/// may be.
 async fn text(res: reqwest::Result<reqwest::Response>) -> Option<String> {
-    res.ok()?.error_for_status().ok()?.text().await.ok()
+    String::from_utf8(body(res.ok()?.error_for_status().ok()?).await.ok()?).ok()
 }
 
-/// A response's JSON, if it answered with some.
+/// A response's JSON, as [`text`] reads it.
 async fn json(res: reqwest::Result<reqwest::Response>) -> Option<Value> {
-    res.ok()?.error_for_status().ok()?.json().await.ok()
+    serde_json::from_slice(&body(res.ok()?.error_for_status().ok()?).await.ok()?).ok()
 }

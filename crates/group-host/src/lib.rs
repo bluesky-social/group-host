@@ -16,6 +16,8 @@ pub mod group_handle;
 pub mod group_lifecycle;
 pub mod group_spaces;
 pub mod identity;
+pub mod index;
+pub mod index_api;
 pub mod lifecycle;
 pub mod plc;
 pub mod rbac;
@@ -53,6 +55,9 @@ pub struct Host {
     /// When the relays were last told of news.
     crawled: std::sync::Mutex<Option<std::time::Instant>>,
     pub(crate) http: reqwest::Client,
+    /// The spaces the index is to read, and its wake.
+    indexing: std::sync::Mutex<std::collections::BTreeSet<String>>,
+    index_wake: tokio::sync::Notify,
 }
 
 impl Host {
@@ -76,6 +81,8 @@ impl Host {
             events: tokio::sync::broadcast::channel(16).0,
             crawled: Default::default(),
             http: client(),
+            indexing: Default::default(),
+            index_wake: Default::default(),
         })
     }
 }
@@ -216,6 +223,14 @@ pub fn router(host: Arc<Host>) -> Router {
             "/xrpc/fyi.opensocial.deleteSpace",
             post(group_spaces::delete_space),
         )
+        .route(
+            "/xrpc/fyi.opensocial.listSpaceRecords",
+            get(index_api::list_space_records),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.getSpaceBlob",
+            get(index_api::get_space_blob),
+        )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
@@ -246,6 +261,17 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             let swept = sweeping.sweep_blobs(time::now_millis());
             tracing::info!(?swept, "swept the uploads no record took");
             tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+        }
+    });
+    // The index reads the spaces whose writers moved, as they move, and
+    // each minute, so a wake missed waits no longer.
+    let indexing = host.clone();
+    tokio::spawn(async move {
+        loop {
+            let woken = indexing.index_wake.notified();
+            indexing.index_pending().await;
+            let minute = std::time::Duration::from_secs(60);
+            let _ = tokio::time::timeout(minute, woken).await;
         }
     });
     // Word of writes owed to authorities elsewhere, tried as it falls due.

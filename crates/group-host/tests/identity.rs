@@ -121,3 +121,76 @@ async fn keeps_so_many_documents_and_no_more() {
     assert_eq!(keeping.kept(&dids[1]), None);
     assert!(keeping.kept(&dids[2]).is_some());
 }
+
+#[tokio::test]
+async fn follows_no_redirect_and_reads_no_more_than_a_document() {
+    let r = Resolver::new("http://127.0.0.1:9", "http");
+    // A did:web whose host sends it elsewhere is not followed there.
+    let target = webs(1).await.remove(0);
+    let target_url = format!(
+        "http://{}/.well-known/did.json",
+        target.strip_prefix("did:web:").unwrap().replace("%3A", ":")
+    );
+    let router = Router::new().route(
+        "/.well-known/did.json",
+        get(move || {
+            let to = target_url.clone();
+            async move { axum::response::Redirect::temporary(&to) }
+        }),
+    );
+    let url = serve(router).await;
+    let redirecting = format!(
+        "did:web:{}",
+        url.strip_prefix("http://").unwrap().replace(':', "%3A")
+    );
+    assert!(r.document(&redirecting).await.is_err());
+
+    // A resolver that answers more than a document may be names nobody.
+    let big = "x".repeat(group_host::identity::DOCUMENT_AT_MOST + 1);
+    let router = Router::new().route(
+        "/xrpc/com.atproto.identity.resolveHandle",
+        get(move || {
+            let big = big.clone();
+            async move { axum::Json(json!({"did": "did:plc:big", "padding": big})) }
+        }),
+    );
+    let service = serve(router).await;
+    assert_eq!(r.resolve_handle("riders.test", &[service]).await, None);
+}
+
+#[test]
+fn gives_an_account_made_before_addresses_its_handle_as_its_address() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("host.sqlite");
+    let store = group_host::store::Store::open(&path).unwrap();
+    let account = group_host::store::Account {
+        did: "did:plc:a".into(),
+        handle: "a.groups.test".into(),
+        signing: atproto::Keypair::generate(atproto::Curve::K256),
+        kem: atproto::Keypair::generate(atproto::Curve::P256),
+    };
+    let tree = atproto::mst::Tree::build(&Default::default());
+    let commit =
+        atproto::Commit::sign(&account.did, tree.root(), "3l5mz5mkbn22b", &account.signing);
+    let head = group_host::store::Head {
+        cid: commit.cid(),
+        rev: commit.rev.clone(),
+        block: commit.to_bytes(),
+    };
+    store.create_account(&account, &head, 0, &[]).unwrap();
+    drop(store);
+    // As a database from before: no address, its schema a version back.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute("DELETE FROM address", []).unwrap();
+    let version: i64 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    conn.pragma_update(None, "user_version", version - 1)
+        .unwrap();
+    drop(conn);
+    let store = group_host::store::Store::open(&path).unwrap();
+    assert_eq!(
+        store.address("did:plc:a").unwrap().as_deref(),
+        Some("a.groups.test")
+    );
+}

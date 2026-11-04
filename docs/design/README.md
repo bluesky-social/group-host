@@ -84,7 +84,8 @@ says otherwise.
    rules (`group_config.rs`; done), switching them off and on and
    deleting them (`lifecycle.rs`, `group_lifecycle.rs`; done), handles
    on their own domains (`group_handle.rs`; done), spaces made and
-   configured by members (`group_spaces.rs`; done), then the space index:
+   configured by members (`group_spaces.rs`; done), and the space index
+   (`index.rs`, `index_api.rs`; done, see [spaces](spaces.md)):
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,
    `spaceIndex.ts`. (`checkUserAccess`, for invite inboxes, comes with
    invites.)

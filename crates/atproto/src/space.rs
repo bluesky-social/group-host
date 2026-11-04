@@ -211,6 +211,17 @@ pub fn mac_header(kind: &str, mac: &[u8]) -> String {
     format!("type=\"{kind}\", ver=1, mac=:{}:", STANDARD.encode(mac))
 }
 
+/// The MAC a `mac_header` of `kind` carries.
+pub fn parse_mac_header(header: &str, kind: &str) -> Result<Vec<u8>, SpaceError> {
+    let ours = header.contains(&format!("type=\"{kind}\"")) && header.contains("ver=1");
+    let mac = header
+        .split("mac=:")
+        .nth(1)
+        .and_then(|m| m.split(':').next());
+    let mac = mac.filter(|_| ours).and_then(|m| STANDARD.decode(m).ok());
+    mac.ok_or_else(|| SpaceError(format!("not a MAC header of {kind}")))
+}
+
 /// The header asking for a MAC (`atproto-space-want-mac`), with the key
 /// share it is to be agreed from.
 pub fn want_mac_header(kind: &str, key_share: &str) -> String {
@@ -310,4 +321,79 @@ pub fn star(commit: &Commit, records: &BTreeMap<String, Vec<u8>>) -> Vec<u8> {
         out.extend(value);
     }
     out
+}
+
+/// A varint at the front of `bytes`, and what follows it.
+fn read_varint(bytes: &[u8]) -> Result<(usize, &[u8]), SpaceError> {
+    let mut n = 0usize;
+    for (i, b) in bytes.iter().enumerate().take(10) {
+        n |= usize::from(b & 0x7f) << (7 * i);
+        if b & 0x80 == 0 {
+            return Ok((n, &bytes[i + 1..]));
+        }
+    }
+    err("a STAR archive cut short")
+}
+
+/// A frame at the front of `bytes`: its length, then that many bytes.
+fn read_frame(bytes: &[u8]) -> Result<(&[u8], &[u8]), SpaceError> {
+    let (len, rest) = read_varint(bytes)?;
+    if rest.len() < len {
+        return err("a STAR archive cut short");
+    }
+    Ok(rest.split_at(len))
+}
+
+/// A repo's STAR archive read: its commit, and each record's DRISL by
+/// path. The records are not checked against the commit here: that is
+/// the reader's, as their CIDs are its set hash's elements.
+pub fn read_star(bytes: &[u8]) -> Result<(Commit, BTreeMap<String, Vec<u8>>), SpaceError> {
+    let Some(mut rest) = bytes.strip_prefix(&STAR_MAGIC[..]) else {
+        return err("not a STAR archive");
+    };
+    let (meta, after) = read_frame(rest)?;
+    rest = after;
+    let meta = drisl::decode(meta);
+    let Ok(Value::Map(meta)) = meta else {
+        return err("STAR metadata that is not a DRISL map");
+    };
+    let field = |key: &str| meta.get(key);
+    let text = |key: &str| match field(key) {
+        Some(Value::String(s)) => Some(s.clone()),
+        _ => None,
+    };
+    let data = match field("data") {
+        Some(Value::Bytes(b)) if b.len() == 32 => {
+            Some(<[u8; 32]>::try_from(b.as_slice()).expect("32 bytes"))
+        }
+        _ => None,
+    };
+    let ours = text("$type").as_deref() == Some(COMMIT_MAC)
+        && field("ver") == Some(&Value::Integer(COMMIT_VERSION));
+    let (Some(repo), Some(space), Some(rev), Some(data), true) =
+        (text("repo"), text("space"), text("rev"), data, ours)
+    else {
+        return err("not a repo's STAR archive");
+    };
+    let mut records = BTreeMap::new();
+    let mut last: Option<String> = None;
+    while !rest.is_empty() {
+        let (key, after) = read_frame(rest)?;
+        let (value, after) = read_frame(after)?;
+        rest = after;
+        let path = String::from_utf8(key.to_vec())
+            .map_err(|_| SpaceError("a STAR key that is not text".into()))?;
+        if last.as_deref().is_some_and(|l| l >= path.as_str()) {
+            return err("a STAR archive's records out of order");
+        }
+        last = Some(path.clone());
+        records.insert(path, value.to_vec());
+    }
+    let commit = Commit {
+        repo,
+        space,
+        rev,
+        data,
+    };
+    Ok((commit, records))
 }
