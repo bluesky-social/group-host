@@ -420,12 +420,12 @@ async fn exchange(host: &Host, headers: &HeaderMap, form: OAuthForm) -> Result<V
     let form = form_of(form)?;
     let now = now_millis();
     let (client, auth, jkt) = client_and_key(host, headers, &form, "/oauth/token", now).await?;
-    let (access, refresh) = (jose::random(32), jose::random(32));
+    let (access, refresh, access_expires, expires_at) = new_tokens(&auth, now);
     let tokens = Tokens {
         access_hash: &jose::sha256(&access),
-        access_expires: now + ACCESS_TTL,
+        access_expires,
         refresh_hash: &jose::sha256(&refresh),
-        expires_at: lasts(&auth, now),
+        expires_at,
     };
     let grant = match form.get("grant_type").map(String::as_str) {
         Some("authorization_code") => {
@@ -477,23 +477,7 @@ async fn exchange(host: &Host, headers: &HeaderMap, form: OAuthForm) -> Result<V
                 source: "oauth".into(),
                 used_at: None,
             };
-            host.store
-                .issue(&grant, &tokens)
-                .map_err(OAuthError::internal)?;
-            let signed_in = format!("signed in {}", grant.client_id);
-            host.record(
-                &grant.group,
-                &grant.member,
-                Some(&grant.client_id),
-                &signed_in,
-            )
-            .map_err(OAuthError::internal)?;
-            tracing::info!(
-                group = grant.group,
-                member = grant.member,
-                client = grant.client_id,
-                "signed in"
-            );
+            host.issue_grant(&grant, &tokens)?;
             grant
         }
         Some("refresh_token") => {
@@ -534,14 +518,55 @@ async fn exchange(host: &Host, headers: &HeaderMap, form: OAuthForm) -> Result<V
             ));
         }
     };
-    Ok(json!({
+    Ok(token_response(&access, &refresh, &grant))
+}
+
+/// A token response, as `/oauth/token` answers one.
+pub(crate) fn token_response(access: &str, refresh: &str, grant: &Grant) -> Value {
+    json!({
         "access_token": access,
         "token_type": "DPoP",
         "expires_in": ACCESS_TTL / 1000,
         "refresh_token": refresh,
         "scope": grant.scope,
         "sub": grant.group,
-    }))
+    })
+}
+
+/// New tokens for a grant made `now` with client authentication `auth`:
+/// the tokens, and their hashes and lapses to keep.
+pub(crate) fn new_tokens(auth: &Value, now: i64) -> (String, String, i64, i64) {
+    (
+        jose::random(32),
+        jose::random(32),
+        now + ACCESS_TTL,
+        lasts(auth, now),
+    )
+}
+
+impl Host {
+    /// Keeps a new grant with its first tokens, and logs its sign-in.
+    pub(crate) fn issue_grant(&self, grant: &Grant, tokens: &Tokens) -> Result<(), OAuthError> {
+        self.store
+            .issue(grant, tokens)
+            .map_err(OAuthError::internal)?;
+        let signed_in = format!("signed in {}", grant.client_id);
+        let logged = self.record(
+            &grant.group,
+            &grant.member,
+            Some(&grant.client_id),
+            &signed_in,
+        );
+        logged.map_err(OAuthError::internal)?;
+        tracing::info!(
+            group = grant.group,
+            member = grant.member,
+            client = grant.client_id,
+            source = grant.source,
+            "signed in"
+        );
+        Ok(())
+    }
 }
 
 /// Ends the grant an access or refresh token is of, as RFC 7009 lets a

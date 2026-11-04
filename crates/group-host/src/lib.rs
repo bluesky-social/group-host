@@ -32,6 +32,7 @@ pub mod oauth_resource;
 pub mod oauth_scope;
 pub mod oauth_store;
 pub mod plc;
+pub mod provision;
 pub mod rbac;
 pub mod repo;
 pub mod scopes;
@@ -430,6 +431,10 @@ fn token_routes() -> Router<Arc<Host>> {
         .route(
             &x("com.atproto.server.deleteSession"),
             post(app_passwords::delete_session),
+        )
+        .route(
+            &x("fyi.opensocial.provisionGroup"),
+            post(provision::provision_group),
         )
         .route(
             &x("fyi.opensocial.getGroupAuth"),

@@ -16,6 +16,7 @@ and refuses to start on a value that does not read, saying which.
 | `GROUP_FOUNDERS` | who the host starts groups for, comma-separated DIDs | anyone |
 | `BLOB_UPLOAD_LIMIT` | the most bytes one blob may be | 52428800 (50 MiB) |
 | `CONSOLE_URL` | where the console is: the host sends the browser of an app signing in as a group to its `/authorize`, for a member to approve | `PUBLIC_URL` |
+| `PROVISIONING_CLIENTS` | the apps the host makes groups for with `provisionGroup`, comma-separated OAuth client ids; `*` for any | none |
 | `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated: at most every 20 minutes, and the first time after a start | none |
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON | `info` |
 

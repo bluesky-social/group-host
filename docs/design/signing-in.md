@@ -175,10 +175,24 @@ sign-in and refresh, the host asks, and once they could not (they lost
 the role, or left), every app password of theirs is forgotten and every
 session from one signed out.
 
+## Provisioning
+
+An app makes a group for someone and leaves with its own session on it
+(`provision.rs`, `provisionGroup`). Two parties sign in: the person, with
+service auth from their own PDS, who becomes the founder; and the app, as
+at the token endpoint, its client id (and its assertion, if confidential)
+in the body and a DPoP proof in the header. It must be one the host makes
+groups for (`PROVISIONING_CLIENTS`), and its scope must hold `atproto`
+and nothing its metadata does not declare. All of that is checked before
+the group is made. The session is issued as a code exchange issues one,
+narrowed to the founder's roles as an approval is, and recorded as the
+founder's: from then on an ordinary grant, refreshed at `/oauth/token`,
+listed among the group's, revoked there.
+
 ## Who acts as the group
 
 Every grant names the member who gave it, its app, how it was given
-(`oauth`, `getGroupAuth` or `appPassword`), its scope, and when it was last used, to the
+(`oauth`, `getGroupAuth`, `appPassword` or `provisionGroup`), its scope, and when it was last used, to the
 minute. `listGroupTokens` shows a group's configurers every grant that
 still lasts, and its log: each sign-in, each token taken, each record a
 grant wrote, and each grant ended, the latest twenty. `revokeGroupToken`

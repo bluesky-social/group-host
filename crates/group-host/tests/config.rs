@@ -26,6 +26,7 @@ fn defaults_serve_localhost() {
         ["well-known:https", "https://public.api.bsky.app"]
     );
     assert_eq!(c.console_url, "http://localhost:2600");
+    assert!(c.provisioning_clients.is_empty());
 }
 
 #[test]
@@ -53,8 +54,16 @@ fn the_environment_names_the_host() {
     assert_eq!(c.group_founders, ["did:plc:a", "did:plc:b"]);
     assert_eq!(c.service_did, "did:web:other.example");
     assert_eq!(c.did_web_scheme, "http");
-    let c = config(&[("CONSOLE_URL", "https://console.example.com/")]).unwrap();
+    let c = config(&[
+        ("CONSOLE_URL", "https://console.example.com/"),
+        ("PROVISIONING_CLIENTS", "https://app.example/client.json, *"),
+    ])
+    .unwrap();
     assert_eq!(c.console_url, "https://console.example.com");
+    assert_eq!(
+        c.provisioning_clients,
+        ["https://app.example/client.json", "*"]
+    );
 }
 
 #[test]

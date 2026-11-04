@@ -58,6 +58,20 @@ fn strings(body: &Value, key: &str, field: &str) -> Option<Vec<String>> {
     body.get(key).map(|_| listed(body, key, field))
 }
 
+/// The group a `createGroup` body asks for, `founder`'s.
+pub(crate) fn new_group(body: &Value, founder: String) -> Result<NewGroup, XrpcError> {
+    let text = |k: &str| body[k].as_str().map(String::from);
+    Ok(NewGroup {
+        handle: text("handle").ok_or_else(|| invalid("handle is required"))?,
+        founder,
+        stewards: strings(body, "stewards", "did").unwrap_or_default(),
+        display_name: text("displayName").ok_or_else(|| invalid("displayName is required"))?,
+        description: text("description"),
+        join_policy: text("joinPolicy"),
+        meta_readable_by: strings(body, "metaReadableBy", "role"),
+    })
+}
+
 /// Starts a group, the caller its founder and first admin.
 pub async fn create_group(
     State(host): State<Arc<Host>>,
@@ -65,17 +79,7 @@ pub async fn create_group(
     Json(body): Json<Value>,
 ) -> Answer {
     let founder = signed_in(&host, &headers, &format!("{NS}.createGroup")).await?;
-    let text = |k: &str| body[k].as_str().map(String::from);
-    let new = NewGroup {
-        handle: text("handle").ok_or_else(|| invalid("handle is required"))?,
-        founder,
-        stewards: strings(&body, "stewards", "did").unwrap_or_default(),
-        display_name: text("displayName").ok_or_else(|| invalid("displayName is required"))?,
-        description: text("description"),
-        join_policy: text("joinPolicy"),
-        meta_readable_by: strings(&body, "metaReadableBy", "role"),
-    };
-    let Made { did, meta, members } = host.create_group(&new).await?;
+    let Made { did, meta, members } = host.create_group(&new_group(&body, founder)?).await?;
     Ok(Json(json!({"did": did, "meta": meta, "members": members})))
 }
 

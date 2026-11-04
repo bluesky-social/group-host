@@ -40,6 +40,10 @@ pub struct Config {
     /// a member approves an app signing in as their group. The public URL
     /// unless set, as when the console is served beside the host.
     pub console_url: String,
+    /// The OAuth clients this host makes groups for with
+    /// `provisionGroup`, `PROVISIONING_CLIENTS`, comma-separated client
+    /// ids, `*` for any: none unless set.
+    pub provisioning_clients: Vec<String>,
 }
 
 impl Config {
@@ -96,6 +100,7 @@ impl Config {
                 .with_context(|| format!("BLOB_UPLOAD_LIMIT is no number of bytes: {l}"))?,
             None => 50 * 1024 * 1024,
         };
+        let provisioning_clients = list("PROVISIONING_CLIENTS");
         let console_url = var("CONSOLE_URL").unwrap_or_else(|| public_url.clone());
         let console_url = console_url.trim_end_matches('/').to_string();
         if reqwest::Url::parse(&console_url).is_err() {
@@ -114,6 +119,7 @@ impl Config {
             crawlers,
             blob_upload_limit,
             console_url,
+            provisioning_clients,
         })
     }
 
