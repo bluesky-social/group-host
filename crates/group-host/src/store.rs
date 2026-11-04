@@ -226,6 +226,34 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX invite_to ON invite (invitee);
 ",
+    "
+    CREATE TABLE oauth_request (
+        id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        client_auth TEXT NOT NULL,
+        parameters TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        grp TEXT,
+        member TEXT,
+        scope TEXT,
+        code TEXT UNIQUE
+    );
+    CREATE TABLE oauth_token (
+        id TEXT PRIMARY KEY,
+        grp TEXT NOT NULL REFERENCES account (did),
+        member TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        client_auth TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        dpop_jkt TEXT NOT NULL,
+        access_hash TEXT NOT NULL UNIQUE,
+        access_expires INTEGER NOT NULL,
+        refresh_hash TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX oauth_token_member ON oauth_token (grp, member);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -343,6 +371,8 @@ const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did 
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM oauth_token WHERE grp = ?1",
+    "DELETE FROM oauth_request WHERE grp = ?1",
     "DELETE FROM invite WHERE grp = ?1",
     "DELETE FROM join_request WHERE grp = ?1",
     "DELETE FROM issued_credential WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
@@ -638,7 +668,7 @@ impl Store {
         })
     }
 
-    fn conn(&self) -> MutexGuard<'_, Connection> {
+    pub(crate) fn conn(&self) -> MutexGuard<'_, Connection> {
         self.conn.lock().expect("not poisoned")
     }
 

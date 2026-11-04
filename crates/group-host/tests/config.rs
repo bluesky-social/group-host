@@ -25,6 +25,7 @@ fn defaults_serve_localhost() {
         c.handle_resolvers,
         ["well-known:https", "https://public.api.bsky.app"]
     );
+    assert_eq!(c.console_url, "http://localhost:2600");
 }
 
 #[test]
@@ -52,6 +53,8 @@ fn the_environment_names_the_host() {
     assert_eq!(c.group_founders, ["did:plc:a", "did:plc:b"]);
     assert_eq!(c.service_did, "did:web:other.example");
     assert_eq!(c.did_web_scheme, "http");
+    let c = config(&[("CONSOLE_URL", "https://console.example.com/")]).unwrap();
+    assert_eq!(c.console_url, "https://console.example.com");
 }
 
 #[test]
@@ -77,5 +80,9 @@ fn refuses_what_does_not_read() {
     assert_eq!(
         err(&[("HANDLE_DOMAIN", "example.com")]),
         "HANDLE_DOMAIN starts with a dot: .example.com"
+    );
+    assert_eq!(
+        err(&[("CONSOLE_URL", "console")]),
+        "CONSOLE_URL is no URL: console"
     );
 }

@@ -26,7 +26,7 @@ they are published from here.
 
 | Crate or directory | What it is |
 | --- | --- |
-| `crates/atproto` | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth |
+| `crates/atproto` | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE |
 | `crates/group-host` | the server: accounts and repos, spaces, membership and roles, OAuth, moderation, and the console's queries |
 | `crates/group-host-mcp` | the core's methods as MCP tools, asked as the member who connected it |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command |
@@ -95,8 +95,11 @@ says otherwise.
    and join requests (`group_join.rs`; done); invites, with
    `checkUserAccess` for their inboxes (`group_invites.rs`; done): `rbac.ts`, `methods/{roles,membership,join,invites}.ts`.
 6. **Signing in.** Service auth for callers; the OAuth server an app signs
-   in to as a group (PAR, DPoP, consent, refresh), group tokens, app
-   passwords, connected apps, provisioning: `auth.ts`, `pds/auth.ts`,
+   in to as a group (PAR, DPoP, consent, refresh), with its JWKs and JWTs
+   in `atproto::jose` (`oauth*.rs`, `authorization.rs`; done, see
+   [signing in](signing-in.md)); then what its tokens do: writes as the
+   group within their scope, group tokens, app passwords and connected
+   apps; then provisioning: `auth.ts`, `pds/auth.ts`, `pds/oauth/*`,
    `methods/{authorization,groupAuth,appPasswords,connectedApps,provision}.ts`.
    The console signs its people in at their own PDS here, as a
    confidential client, and keeps the session on the server, as knotless

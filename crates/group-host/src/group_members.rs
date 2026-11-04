@@ -437,6 +437,9 @@ impl Host {
         // it may be asked again.
         let revoked = self.revoke_credentials(group, member).await;
         revoked.map_err(XrpcError::internal)?;
+        // And the apps they signed in as the group.
+        let ended = self.store.revoke_member_grants(group, member);
+        ended.map_err(XrpcError::internal)?;
         let gone = Write::Delete {
             collection: format!("{NS}.membership"),
             rkey: did_rkey(member),

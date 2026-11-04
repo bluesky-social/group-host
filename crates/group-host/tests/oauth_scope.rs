@@ -1,0 +1,416 @@
+//! What a token signing in as a group may do: the scope asked for,
+//! narrowed to the approving member's roles, and made concrete.
+
+mod common;
+
+use common::groups::*;
+use common::spaces::*;
+use common::{Running, start};
+use group_host::group::members_space;
+use group_host::oauth_scope::{SpaceScope, concrete, writes_for};
+use group_host::repo::Write;
+use serde_json::{Value as Json, json};
+
+const CALENDAR: &str = "com.example.calendar";
+const EVENT: &str = "com.example.event";
+
+/// Those of `scopes` for the calendar.
+fn calendar(scopes: Vec<String>) -> Vec<String> {
+    scopes
+        .into_iter()
+        .filter(|s| s.contains(CALENDAR))
+        .collect()
+}
+
+fn roles(r: &[&str]) -> Vec<String> {
+    r.iter().map(|r| r.to_string()).collect()
+}
+
+fn asked(scopes: &[&str]) -> Vec<String> {
+    roles(scopes)
+}
+
+async fn write(h: &Running, did: &str, space: &str, collection: &str, rkey: &str, value: Json) {
+    let write = Write::Update {
+        collection: collection.into(),
+        rkey: rkey.into(),
+        value,
+    };
+    h.host.space_write(did, space, &[write]).await.unwrap();
+}
+
+/// A group whose `poster` role may write posts in its repo, and a
+/// calendar members read, where members add events as the group and
+/// admins write anything.
+async fn group(h: &Running) -> (String, String, Authority) {
+    let [alice, ..] = people(h).await;
+    let did = start_group(
+        h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let lxm = format!("{NS}.createSpace");
+    let body = json!({
+        "group": did,
+        "spaceType": CALENDAR,
+        "skey": "rides",
+        "readableBy": [{"role": "member"}],
+        "credentialScopes": [
+            {"role": "member", "scopes": [{"collection": format!("{EVENT}?action=create")}]},
+            {"role": "admin", "scopes": [{"collection": "*"}]},
+        ],
+    });
+    let (status, made) = post(h, &lxm, &body, &[auth(h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{made}");
+    let mut permissions = h
+        .host
+        .group_record(
+            &did,
+            &members_space(&did),
+            &format!("{NS}.permissions"),
+            "self",
+        )
+        .unwrap()
+        .unwrap();
+    permissions["grants"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"role": "poster", "scopes": [{"scope": "repo:app.bsky.feed.post"}], "assignable": []}));
+    write(
+        h,
+        &did,
+        &members_space(&did),
+        &format!("{NS}.permissions"),
+        "self",
+        permissions,
+    )
+    .await;
+    (did, made["uri"].as_str().unwrap().to_string(), alice)
+}
+
+#[tokio::test]
+async fn keeps_for_each_role_what_its_grants_hold() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    let all = asked(&[
+        "atproto",
+        "include:fyi.opensocial.configure",
+        "include:com.example.other",
+        "repo:app.bsky.feed.post?action=create",
+        "repo:app.bsky.feed.like",
+        "rpc:app.bsky.feed.getTimeline?aud=*",
+        "rpc:fyi.opensocial.ejectMember?aud=*",
+        "rpc:*?aud=*",
+        "blob:*/*",
+        "transition:generic",
+    ]);
+    let admin = h
+        .host
+        .narrow(&did, &roles(&["admin"]), &alice.did, &all)
+        .unwrap();
+    assert_eq!(
+        admin,
+        asked(&[
+            "atproto",
+            "include:fyi.opensocial.configure",
+            "repo:app.bsky.feed.post?action=create",
+            "repo:app.bsky.feed.like",
+            "rpc:app.bsky.feed.getTimeline?aud=*",
+            "blob:*/*",
+        ])
+    );
+    let poster = h
+        .host
+        .narrow(&did, &roles(&["poster"]), &alice.did, &all)
+        .unwrap();
+    assert_eq!(
+        poster,
+        asked(&[
+            "atproto",
+            "repo:app.bsky.feed.post?action=create",
+            "blob:*/*"
+        ])
+    );
+    // A plain member writes nothing, so has no use for blobs.
+    let member = h
+        .host
+        .narrow(&did, &roles(&["member"]), &alice.did, &all)
+        .unwrap();
+    assert_eq!(member, asked(&["atproto"]));
+}
+
+#[tokio::test]
+async fn keeps_a_space_scope_a_spaces_access_record_grants() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    let member = |scopes: &[&str]| {
+        h.host
+            .narrow(&did, &roles(&["member"]), &alice.did, &asked(scopes))
+            .unwrap()
+    };
+    for (scope, kept) in [
+        (
+            format!("space:{CALENDAR}?collection={EVENT}&action=create"),
+            true,
+        ),
+        (
+            format!("space:{CALENDAR}?authority=self&skey=rides&collection={EVENT}&action=create"),
+            true,
+        ),
+        (
+            format!("space:{CALENDAR}?authority={did}&collection={EVENT}&action=create"),
+            true,
+        ),
+        (
+            format!("space:{CALENDAR}?collection={EVENT}&action=delete"),
+            false,
+        ),
+        (format!("space:{CALENDAR}?collection={EVENT}"), false),
+        (
+            format!("space:{CALENDAR}?collection=com.example.rsvp&action=create"),
+            false,
+        ),
+        (format!("space:{CALENDAR}?action=read"), true),
+        (
+            format!("space:{CALENDAR}?action=read&action=read_self"),
+            true,
+        ),
+        (format!("space:{CALENDAR}?skey=other&action=read"), false),
+        (
+            format!("space:{CALENDAR}?authority=did:plc:other&action=read"),
+            false,
+        ),
+        ("space:com.example.forum?action=read".to_string(), false),
+    ] {
+        let narrowed = member(&["atproto", &scope, "blob:*/*"]);
+        let expected = if !kept {
+            vec!["atproto".to_string()]
+        } else if scope.contains("action=read") && !scope.contains("create") {
+            vec!["atproto".to_string(), scope.clone()]
+        } else {
+            vec!["atproto".to_string(), scope.clone(), "blob:*/*".into()]
+        };
+        assert_eq!(narrowed, expected, "{scope}");
+    }
+    // Every collection, and every write, for a role granted `*`.
+    let admin = h
+        .host
+        .narrow(
+            &did,
+            &roles(&["admin"]),
+            &alice.did,
+            &asked(&[&format!("space:{CALENDAR}")]),
+        )
+        .unwrap();
+    assert_eq!(admin, [format!("space:{CALENDAR}")]);
+}
+
+#[tokio::test]
+async fn makes_a_scope_for_every_type_one_for_each_space_the_roles_read() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    // The group's own spaces are among them, read by members.
+    let all = h
+        .host
+        .narrow(
+            &did,
+            &roles(&["member"]),
+            &alice.did,
+            &asked(&["space:*?action=read"]),
+        )
+        .unwrap();
+    assert_eq!(
+        all,
+        [
+            format!("space:fyi.opensocial.meta?authority={did}&skey=self&action=read"),
+            format!("space:fyi.opensocial.members?authority={did}&skey=self&action=read"),
+            format!("space:{CALENDAR}?authority={did}&skey=rides&action=read"),
+        ]
+    );
+    let narrow = |r: &[&str], scope: &str| {
+        calendar(
+            h.host
+                .narrow(&did, &roles(r), &alice.did, &asked(&[scope]))
+                .unwrap(),
+        )
+    };
+    let at = format!("space:{CALENDAR}?authority={did}&skey=rides");
+    assert_eq!(
+        narrow(
+            &["member"],
+            &format!("space:*?collection={EVENT}&action=create")
+        ),
+        [format!("{at}&collection={EVENT}&action=read&action=create")]
+    );
+    // Asked for more than the role writes: only what it writes.
+    assert_eq!(
+        narrow(&["member"], "space:*"),
+        [format!("{at}&collection={EVENT}&action=read&action=create")]
+    );
+    assert_eq!(
+        narrow(&["member"], "space:*?action=read"),
+        [format!("{at}&action=read")]
+    );
+    // Asked for a write the role has not, it gets nothing there.
+    assert_eq!(
+        narrow(
+            &["member"],
+            &format!("space:*?collection={EVENT}&action=delete")
+        ),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        narrow(&["member"], "space:*?collection=com.example.rsvp"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        narrow(&["member"], "space:*?skey=other&action=read"),
+        Vec::<String>::new()
+    );
+    // A grant of every collection is as wide as what was asked, and of an
+    // app's records only in its own kind of space.
+    assert_eq!(
+        narrow(&["admin", "member"], "space:*"),
+        [
+            format!("{at}&collection=*&action=read&action=create&action=update&action=delete"),
+            format!("{at}&collection={EVENT}&action=read&action=create"),
+        ]
+    );
+    assert_eq!(
+        narrow(
+            &["admin", "member"],
+            &format!("space:*?collection={EVENT}&collection=dev.other.thing&action=update")
+        ),
+        [format!("{at}&collection={EVENT}&action=read&action=update")]
+    );
+    // Nothing where the roles read nothing.
+    assert_eq!(
+        narrow(&["poster"], "space:*?action=read"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        narrow(&["admin"], "space:*?authority=did:plc:other"),
+        Vec::<String>::new()
+    );
+}
+
+#[tokio::test]
+async fn in_a_space_for_chosen_people_reads_for_them_and_writes_for_those_who_may_do_anything() {
+    let h = start(&[], false).await;
+    let (did, uri, alice) = group(&h).await;
+    let access = json!({
+        "$type": format!("{NS}.access"),
+        "readableBy": [],
+        "people": [{"did": alice.did}],
+        "createdAt": "2026-11-03T00:00:00Z",
+    });
+    write(&h, &did, &uri, &format!("{NS}.access"), "self", access).await;
+    let narrow = |r: &[&str], who: &str, scope: &str| {
+        calendar(
+            h.host
+                .narrow(&did, &roles(r), who, &asked(&[scope]))
+                .unwrap(),
+        )
+    };
+    let at = format!("space:{CALENDAR}?authority={did}&skey=rides");
+    assert_eq!(
+        narrow(&["admin"], &alice.did, "space:*"),
+        [format!(
+            "{at}&collection=*&action=read&action=create&action=update&action=delete"
+        )]
+    );
+    assert_eq!(
+        narrow(&["member"], &alice.did, "space:*?action=read"),
+        [format!("{at}&action=read")]
+    );
+    assert_eq!(
+        narrow(&["member"], &alice.did, "space:*"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        narrow(&["admin"], "did:plc:someone", "space:*"),
+        Vec::<String>::new()
+    );
+}
+
+#[tokio::test]
+async fn gives_nothing_to_write_without_a_permissions_record() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    let gone = Write::Delete {
+        collection: format!("{NS}.permissions"),
+        rkey: "self".into(),
+    };
+    h.host
+        .space_write(&did, &members_space(&did), &[gone])
+        .await
+        .unwrap();
+    let narrowed = h
+        .host
+        .narrow(
+            &did,
+            &roles(&["admin"]),
+            &alice.did,
+            &asked(&["atproto", "include:fyi.opensocial.configure", "repo:x"]),
+        )
+        .unwrap();
+    assert_eq!(narrowed, asked(&["atproto"]));
+}
+
+#[test]
+fn makes_a_grant_concrete() {
+    let did = "did:plc:riders";
+    let scope = concrete(
+        &asked(&[
+            "atproto",
+            "include:fyi.opensocial.configure",
+            "space:com.example.calendar?authority=self&skey=rides",
+            "space:com.example.calendar",
+            "space:com.example.calendar?action=read",
+            "atproto",
+        ]),
+        did,
+    );
+    let scopes: Vec<&str> = scope.split(' ').collect();
+    assert_eq!(
+        scopes,
+        [
+            "atproto",
+            "space:fyi.opensocial.meta?authority=did:plc:riders&skey=self&collection=fyi.opensocial.profile&collection=fyi.opensocial.rule&collection=fyi.opensocial.labeler&action=read&action=create&action=update&action=delete",
+            "space:fyi.opensocial.members?authority=did:plc:riders&skey=self&collection=fyi.opensocial.role&collection=fyi.opensocial.permissions&action=read&action=create&action=update&action=delete",
+            "space:com.example.calendar?authority=did:plc:riders&skey=rides&collection=*",
+            "space:com.example.calendar?collection=*",
+            "space:com.example.calendar?action=read",
+        ]
+    );
+}
+
+#[test]
+fn reads_a_space_scope() {
+    let s = SpaceScope::parse("space:com.example.calendar?skey=rides&collection=a&collection=b&action=create&manage=create").unwrap();
+    assert_eq!(s.kind, "com.example.calendar");
+    assert_eq!((s.authority.as_str(), s.skey.as_str()), ("*", "rides"));
+    assert_eq!(s.collections, ["a", "b"]);
+    assert_eq!(s.writes, ["create"]);
+    assert!(!s.read_only);
+    let s = SpaceScope::parse("space:*").unwrap();
+    assert_eq!(s.writes, ["create", "update", "delete"]);
+    assert!(!s.read_only);
+    assert_eq!(SpaceScope::parse("repo:x"), None);
+}
+
+#[test]
+fn unions_a_roles_writes() {
+    let access = json!({"credentialScopes": [
+        {"role": "a", "scopes": [{"collection": "x?action=create"}, {"collection": "y"}]},
+        {"role": "b", "scopes": [{"collection": "x?action=delete&action=other"}]},
+        {"role": "c", "scopes": [{"collection": "z"}]},
+    ]});
+    let writes = writes_for(&access, &roles(&["a", "b"]));
+    let x: Vec<&str> = writes["x"].iter().map(String::as_str).collect();
+    assert_eq!(x, ["create", "delete"]);
+    assert_eq!(writes["y"].len(), 3);
+    assert!(!writes.contains_key("z"));
+    assert!(writes_for(&json!({}), &roles(&["a"])).is_empty());
+}

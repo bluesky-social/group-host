@@ -36,6 +36,10 @@ pub struct Config {
     pub crawlers: Vec<String>,
     /// The most bytes one blob may be, `BLOB_UPLOAD_LIMIT`.
     pub blob_upload_limit: u64,
+    /// Where the console is, `CONSOLE_URL`, with no trailing slash: where
+    /// a member approves an app signing in as their group. The public URL
+    /// unless set, as when the console is served beside the host.
+    pub console_url: String,
 }
 
 impl Config {
@@ -92,6 +96,11 @@ impl Config {
                 .with_context(|| format!("BLOB_UPLOAD_LIMIT is no number of bytes: {l}"))?,
             None => 50 * 1024 * 1024,
         };
+        let console_url = var("CONSOLE_URL").unwrap_or_else(|| public_url.clone());
+        let console_url = console_url.trim_end_matches('/').to_string();
+        if reqwest::Url::parse(&console_url).is_err() {
+            bail!("CONSOLE_URL is no URL: {console_url}");
+        }
         Ok(Config {
             port,
             public_url,
@@ -104,6 +113,7 @@ impl Config {
             group_founders,
             crawlers,
             blob_upload_limit,
+            console_url,
         })
     }
 

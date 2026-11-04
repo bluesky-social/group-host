@@ -6,6 +6,7 @@
 pub mod api;
 pub mod authority;
 pub mod authority_api;
+pub mod authorization;
 pub mod blobs;
 pub mod config;
 pub mod firehose;
@@ -22,6 +23,11 @@ pub mod identity;
 pub mod index;
 pub mod index_api;
 pub mod lifecycle;
+pub mod oauth;
+pub mod oauth_clients;
+pub mod oauth_dpop;
+pub mod oauth_scope;
+pub mod oauth_store;
 pub mod plc;
 pub mod rbac;
 pub mod repo;
@@ -61,6 +67,8 @@ pub struct Host {
     /// The spaces the index is to read, and its wake.
     indexing: std::sync::Mutex<std::collections::BTreeSet<String>>,
     index_wake: tokio::sync::Notify,
+    /// The OAuth clients' metadata, as read.
+    pub(crate) clients: oauth_clients::Clients,
 }
 
 impl Host {
@@ -86,6 +94,7 @@ impl Host {
             http: client(),
             indexing: Default::default(),
             index_wake: Default::default(),
+            clients: Default::default(),
         })
     }
 }
@@ -302,10 +311,41 @@ pub fn router(host: Arc<Host>) -> Router {
             "/xrpc/com.atproto.managedspace.checkUserAccess",
             get(group_invites::check_user_access),
         )
+        .route(
+            "/xrpc/fyi.opensocial.getAuthorization",
+            get(authorization::get_authorization),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.approveAuthorization",
+            post(authorization::approve_authorization),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.declineAuthorization",
+            post(authorization::decline_authorization),
+        )
+        .route("/oauth/authorize", get(oauth::authorize))
+        .merge(oauth_routes())
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
         .with_state(host)
+}
+
+/// The OAuth endpoints an app reaches from a browser, open to any origin.
+fn oauth_routes() -> Router<Arc<Host>> {
+    Router::new()
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(oauth::server_metadata),
+        )
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(oauth::resource_metadata),
+        )
+        .route("/oauth/par", post(oauth::par))
+        .route("/oauth/token", post(oauth::token))
+        .route("/oauth/revoke", post(oauth::revoke))
+        .layer(axum::middleware::from_fn(oauth::cors))
 }
 
 /// That the host is up, and which build it is.

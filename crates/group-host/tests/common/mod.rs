@@ -5,6 +5,7 @@
 
 pub mod groups;
 pub mod net;
+pub mod oauth;
 pub mod spaces;
 
 use atproto::plc::Signed;
@@ -131,6 +132,20 @@ pub struct Running {
 }
 
 impl Running {
+    /// What `GET <path>` answers: its status and JSON.
+    pub async fn get_path(&self, path: &str) -> (u16, Value) {
+        let res = self
+            .http
+            .get(format!("{}{path}", self.url))
+            .send()
+            .await
+            .unwrap();
+        (
+            res.status().as_u16(),
+            res.json().await.unwrap_or(Value::Null),
+        )
+    }
+
     /// What `GET /xrpc/<nsid>?<query>` answers: its status and JSON.
     pub async fn get(&self, nsid: &str, query: &str) -> (u16, Value) {
         let res = self
