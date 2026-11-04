@@ -107,16 +107,21 @@ impl<'a> Members<'a> {
         })
     }
 
-    /// Writes `did`'s membership, holding `roles`.
+    /// Writes `did`'s membership, holding `roles`, and `member` among them
+    /// whatever they name: everyone in the group holds it.
     pub(crate) async fn put_membership(
         &self,
         did: &str,
         roles: &[String],
     ) -> Result<(), XrpcError> {
+        let mut held = roles.to_vec();
+        if !held.iter().any(|r| r == "member") {
+            held.insert(0, "member".into());
+        }
         let membership = json!({
             "$type": format!("{NS}.membership"),
             "member": did,
-            "roles": objects("role", roles),
+            "roles": objects("role", &held),
             "createdAt": iso(now_millis()),
         });
         let (collection, key) = (format!("{NS}.membership"), did_rkey(did));
@@ -130,6 +135,13 @@ impl<'a> Members<'a> {
         );
         let _written = put.await?;
         Ok(())
+    }
+
+    /// Whether any member holds one of `roles`.
+    fn held(&self, roles: &BTreeSet<String>) -> Result<bool, XrpcError> {
+        let memberships = self.records("membership")?;
+        let holds = |m: &Value| listed(m, "roles", "role").iter().any(|r| roles.contains(r));
+        Ok(memberships.iter().any(|(_, m)| holds(m)))
     }
 
     /// Refuses a change that would leave nobody able to configure the
@@ -230,14 +242,14 @@ pub async fn put_role(
             return Err(invalid(format!("{flag} is true or false")));
         }
     }
-    // The last role able to configure the group keeps that, or nobody
-    // could run it again.
-    let configuring = members.configuring();
-    let last = configuring.len() == 1 && configuring.contains(role);
-    if last && !actions.iter().any(|a| a == "group.configure") {
+    // A role giving up configuring the group leaves someone who still
+    // may, or nobody could run it again.
+    let mut configuring = members.configuring();
+    let gives_up = !actions.iter().any(|a| a == "group.configure");
+    if gives_up && configuring.remove(role) && !members.held(&configuring)? {
         return Err(bad(
             "LastConfigurer",
-            "the only role that configures the group keeps that",
+            "nobody else holds a role that configures the group: give one to someone first",
         ));
     }
     let collection = format!("{NS}.role");

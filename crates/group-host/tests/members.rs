@@ -521,3 +521,38 @@ async fn members_leave_but_the_last_who_runs_it_stays() {
         (400, "InvalidRequest")
     );
 }
+
+#[tokio::test]
+async fn a_role_nobody_holds_keeps_nobody_running_it() {
+    let h = start(&[], false).await;
+    let (did, [alice, _, carol]) = group(&h).await;
+    // A second role that configures, which nobody holds.
+    let every: Vec<&str> = group_host::rbac::ACTIONS.to_vec();
+    call(
+        &h,
+        &alice,
+        "putRole",
+        json!({"group": did, "role": "owner", "name": "Owner", "actions": every}),
+    )
+    .await;
+    // Admin may not give it up then: nobody would be left who runs it.
+    let said = call(
+        &h,
+        &alice,
+        "putRole",
+        json!({"group": did, "role": "admin", "name": "Admin", "actions": ["invite"]}),
+    )
+    .await;
+    assert_eq!(error(&said), (400, "LastConfigurer"));
+    assert!(grant_of(&h, &did, "admin").unwrap().scopes.len() > 1);
+    // Once someone holds owner, it may.
+    join(&h, &did, &carol.did, &["member", "owner"]).await;
+    let said = call(
+        &h,
+        &alice,
+        "putRole",
+        json!({"group": did, "role": "admin", "name": "Admin", "actions": ["invite"]}),
+    )
+    .await;
+    assert_eq!(said.0, 200);
+}

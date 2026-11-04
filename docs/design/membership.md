@@ -46,7 +46,8 @@ Power over other members needs its own limit. A grant's `assignable` lists
 the roles its holders may give or take, and whose holders they may eject.
 It counts only through the grant that carries the action: whom a member
 may assign comes from their roles granting `role.assign`, whom they may
-eject from those granting `eject`.
+eject from those granting `eject`, and what they may admit someone with
+from those granting `admit`.
 
 A new group has two roles. `admin` grants every action and `repo:*`, and
 may assign only `member`. `member` is the default role and grants nothing.

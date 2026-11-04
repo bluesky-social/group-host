@@ -173,7 +173,8 @@ pub async fn admit_member(
     if roles.is_empty() {
         return Err(invalid("roles names the roles to give"));
     }
-    let assignable = members.assignable(&mine, "role.assign");
+    // The roles an admitter may give are those their `admit` grants may.
+    let assignable = members.assignable(&mine, "admit");
     let blocked: Vec<&String> = roles.iter().filter(|r| !assignable.contains(*r)).collect();
     if !blocked.is_empty() {
         return Err(bad(

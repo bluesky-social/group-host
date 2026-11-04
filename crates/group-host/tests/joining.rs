@@ -353,3 +353,63 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     let (_, members) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &bob, &lxm)]).await;
     assert_eq!(members["group"]["viewer"].get("request"), None);
 }
+
+#[tokio::test]
+async fn admitting_takes_admit_and_gives_member() {
+    let h = start(&[], false).await;
+    let [alice, bob, carol] = people(&h).await;
+    let did = group(&h, &alice, "approval").await;
+    // A gatekeeper may admit, and give member and rider, and nothing else.
+    call(
+        &h,
+        &alice,
+        "putRole",
+        json!({"group": did, "role": "rider", "name": "Rider", "actions": []}),
+    )
+    .await;
+    call(&h, &alice, "putRole", json!({"group": did, "role": "gatekeeper", "name": "Gatekeeper", "actions": ["admit"], "assignable": [{"role": "member"}, {"role": "rider"}]})).await;
+    h.host
+        .space_write(
+            &did,
+            &group_host::group::members_space(&did),
+            &[group_host::repo::Write::Create {
+                collection: format!("{NS}.membership"),
+                rkey: bob.did.clone(),
+                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": [{"role": "member"}, {"role": "gatekeeper"}], "createdAt": "2026-11-03T00:00:00Z"}),
+            }],
+        )
+        .await
+        .unwrap();
+    call(&h, &carol, "requestJoin", json!({"group": did})).await;
+    // Named roles that leave out member still give it.
+    let said = call(
+        &h,
+        &bob,
+        "admitMember",
+        json!({"group": did, "did": carol.did, "roles": [{"role": "rider"}]}),
+    )
+    .await;
+    assert_eq!(said, (200, json!({})));
+    assert_eq!(h.host.roles(&did, &carol.did).unwrap(), ["member", "rider"]);
+    // A newcomer gets member even when no role marked default is member.
+    for (role, default) in [("member", false), ("rider", true)] {
+        call(
+            &h,
+            &alice,
+            "putRole",
+            json!({"group": did, "role": role, "name": role, "actions": [], "default": default}),
+        )
+        .await;
+    }
+    let dave = authority(&h, false, true).await;
+    call(&h, &dave, "requestJoin", json!({"group": did})).await;
+    let said = call(
+        &h,
+        &bob,
+        "admitMember",
+        json!({"group": did, "did": dave.did}),
+    )
+    .await;
+    assert_eq!(said.0, 200);
+    assert_eq!(h.host.roles(&did, &dave.did).unwrap(), ["member", "rider"]);
+}
