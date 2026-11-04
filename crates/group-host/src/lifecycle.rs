@@ -80,6 +80,15 @@ impl Host {
         Ok(done)
     }
 
+    /// Switches on `did`, arrived from another server as `handle`: the
+    /// relays told who it is now, and that it is on.
+    pub fn activate_arrived(&self, did: &str, handle: &str) -> Result<bool> {
+        let told = [crate::repo::identity(did, handle), status(did, None)];
+        let done = self.store.activate(did, &told)?;
+        self.announce();
+        Ok(done)
+    }
+
     /// Deletes `did` from the host whole, and ends its DID in the
     /// directory, as only this host holds a key to it. Whether it was
     /// ended.

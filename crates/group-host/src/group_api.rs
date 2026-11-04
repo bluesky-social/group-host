@@ -18,6 +18,16 @@ use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
+/// Whether a token for `aud` is for this host: its DID, or one of its
+/// services, as an OAuth app's rpc scope names it.
+pub(crate) fn for_host(host: &Host, aud: &str) -> bool {
+    let ours = &host.config.service_did;
+    aud == ours
+        || aud
+            .strip_prefix(ours.as_str())
+            .is_some_and(|f| f.starts_with('#'))
+}
+
 /// Who calls `lxm`: by their service auth for this host, or else the
 /// console's session cookie; none without either.
 pub(crate) async fn caller(
@@ -30,13 +40,7 @@ pub(crate) async fn caller(
         return host.console_caller(headers).map_err(XrpcError::internal);
     }
     let claims = service_caller(host, headers, lxm).await?;
-    let ours = &host.config.service_did;
-    let for_us = claims.aud == *ours
-        || claims
-            .aud
-            .strip_prefix(ours.as_str())
-            .is_some_and(|f| f.starts_with('#'));
-    if !for_us {
+    if !for_host(host, &claims.aud) {
         return Err(unauthorized(
             "BadJwtAudience",
             format!("a token for {}, not this host", claims.aud),

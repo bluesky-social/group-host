@@ -343,7 +343,7 @@ async fn put_or_delete(
         swap_record,
         put: true,
         allow: Some(&allow),
-        off: false,
+        ..Asked::default()
     };
     // A put of what is there, or a delete of what is not, makes no commit.
     let committed = host.write_asked(group, std::slice::from_ref(&write), &asked)?;

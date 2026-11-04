@@ -99,6 +99,36 @@ fn audience(roles: &[String]) -> Value {
     roles.iter().map(|r| json!({ "role": r })).collect()
 }
 
+/// How a new group lets people in, who reads its meta, and who runs it.
+struct Shape {
+    join: &'static str,
+    readers: Vec<String>,
+    stewards: Vec<String>,
+}
+
+/// What `new` asks of a group's first day, checked.
+fn shape(new: &NewGroup) -> Result<Shape, XrpcError> {
+    let join = join_policy(new.join_policy.as_deref())?;
+    let readers = new
+        .meta_readable_by
+        .clone()
+        .unwrap_or_else(|| vec!["public".into()]);
+    let mut stewards = vec![new.founder.clone()];
+    for s in &new.stewards {
+        if !atproto::syntax::is_did(s) {
+            return Err(invalid(format!("steward {s} is no DID")));
+        }
+        if !stewards.contains(s) {
+            stewards.push(s.clone());
+        }
+    }
+    Ok(Shape {
+        join,
+        readers,
+        stewards,
+    })
+}
+
 impl Host {
     /// Whether this host starts groups for `did`: anyone, unless
     /// `GROUP_FOUNDERS` names who.
@@ -117,20 +147,7 @@ impl Host {
                 "this host is not starting groups for you",
             ));
         }
-        let join = join_policy(new.join_policy.as_deref())?;
-        let readers = new
-            .meta_readable_by
-            .clone()
-            .unwrap_or_else(|| vec!["public".into()]);
-        let mut stewards = vec![new.founder.clone()];
-        for s in &new.stewards {
-            if !atproto::syntax::is_did(s) {
-                return Err(invalid(format!("steward {s} is no DID")));
-            }
-            if !stewards.contains(s) {
-                stewards.push(s.clone());
-            }
-        }
+        let shape = shape(new)?;
         let did = self.create_account(&new.handle).await.map_err(|e| {
             if e.error == "HandleNotAvailable" {
                 XrpcError::new(e.status, "HandleTaken", e.message)
@@ -140,21 +157,27 @@ impl Host {
         })?;
         // A group half made is no group: its account goes, so its handle
         // is free again.
-        let made = self.set_up(&did, new, join, &readers, &stewards).await;
+        let made = self.set_up(&did, new, &shape).await;
         if made.is_err() {
             let _ = self.delete_account(&did).await;
         }
         made
     }
 
-    async fn set_up(
-        &self,
-        did: &str,
-        new: &NewGroup,
-        join: &str,
-        readers: &[String],
-        stewards: &[String],
-    ) -> Result<Made, XrpcError> {
+    /// Makes `did`, an account here already and switched on, the group
+    /// `new` asks for: its two spaces and what they hold from its first
+    /// day, and its declaration if anyone may read its meta.
+    pub async fn make_group(&self, did: &str, new: &NewGroup) -> Result<Made, XrpcError> {
+        let shape = shape(new)?;
+        self.set_up(did, new, &shape).await
+    }
+
+    async fn set_up(&self, did: &str, new: &NewGroup, shape: &Shape) -> Result<Made, XrpcError> {
+        let Shape {
+            join,
+            readers,
+            stewards,
+        } = shape;
         let did = did.to_string();
         let meta = self.create_space(&did, &format!("{NS}.meta"), "self", false)?;
         let members = self.create_space(&did, &format!("{NS}.members"), "self", false)?;

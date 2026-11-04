@@ -33,12 +33,14 @@ DID.
 
    Anything less and nothing of it stays. It is kept switched off, with
    keys of its own here, under a handle here (the same label, under this
-   host's domain; a domain of the group's own kept), and the answer is
-   what the PLC operation should name.
+   host's domain; a domain of the group's own kept while it still names
+   the group, as this host's resolvers say), and the answer is what the
+   PLC operation should name. Its address stays the same label
+   under this host's domain, kept or not as its handle.
 3. **`migrateComplete`**, at the host it leaves: the operation signed and
    sent, naming the new host, its keys and its handle; its stewards'
-   recovery keys kept ahead of the new host's; and the group switched off
-   there. Once handed over, it is that host's no more to hand.
+   recovery keys kept ahead of the new host's; the group switched off
+   there; and its export token ended. Once handed over, it is that host's no more to hand.
 4. **`migrateActivate`**, at the new host: once the directory names this
    host and the group's new key, the group switched on, and its spaces'
    index read again.
@@ -54,3 +56,52 @@ The `opensocial` command walks through the four (step 9).
   under the group's new key, rather than keeping the old commits.
 - Spaces the group writes in that another governs (an invite in a
   member's inbox) do not move: they are that space's authority's.
+
+# An account becoming a group
+
+An account that already exists on the network, on any server and made
+with any app, moves here to become a group, and keeps its DID (`import.rs`).
+This is atproto's account migration with the group made at the end. The
+person moving it signs in to the console as themselves, and to the
+account where it lives, and asks its server for two things: a
+`createAccount` service token for this host, the account's own word
+that it hands its DID over; and, once the copy is made, a PLC operation
+naming this host, which its server signs when the account's owner
+confirms it (an emailed code, on the reference PDS).
+
+1. **`checkImport`**: what a move would make of it, before anything
+   moves. Its handle comes along if it is a domain of the account's own,
+   one neither this host nor its server gives out (as bsky.social gives
+   out its own), that still names it; otherwise its handle is its
+   address here, its handle's first label (or one asked for) under this
+   host's domain. It says when that address, or that handle, is
+   another's here.
+2. **`importAccount`**, for someone this host starts groups for, never
+   the account itself, and only a did:plc account: the token checked
+   against the account's key in the directory, for this host or one of
+   its services, and for `createAccount`; the account made here switched
+   off, with keys of its own; its files and then its repo copied from
+   the server its DID names, the repo checked against its key and whole.
+   Its records keep their CIDs, so whatever points at them still does. A
+   record this host would not keep (not of its collection's type) is
+   left out, and a file that does not come, or is not what its CID says,
+   is left out while the records holding it still point at it, as at a
+   file deleted there. Anything less and nothing of it stays. The answer
+   is what the PLC operation should name. Starting again, the one who
+   started discards what the first start copied; nobody else may.
+3. **`completeImport`**, for whoever started: the signed operation sent
+   to the directory, once it gives the account to this host as step 2
+   said (this host its server, the keys made for it here, this host's
+   rotation key, and its handle); the account switched on, the relays
+   told who it is; and its group made, with its profile's name and
+   words, run by whoever moved it.
+
+The old server keeps its copy until its owner deletes it there; once the
+DID names this host, the network reads the account here.
+
+## From the prototype
+
+- `importAccountSpace`, which brings the spaces such an account governs
+  and its repos in others' in the space alpha's archives, is not here
+  yet: it waits for the alpha to publish its meta archive, which the
+  version the prototype builds against does not have.

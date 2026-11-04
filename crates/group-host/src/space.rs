@@ -116,7 +116,7 @@ impl Host {
         }
         let mut changes = Vec::new();
         for write in &writes {
-            let Checked { path, put, blobs } = self.check(&account.did, write, &paths)?;
+            let Checked { path, put, blobs } = self.check(&account.did, write, &paths, false)?;
             let (collection, rkey) = write.path();
             let prev = match &put {
                 Some((cid, _)) => paths.insert(path, *cid),

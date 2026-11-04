@@ -15,11 +15,10 @@ use crate::api::{Params, invalid, param};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::forbidden;
 use crate::rbac::NS;
-use crate::repo::event;
-use crate::time::{iso, now_millis};
+use crate::repo::identity;
 use crate::xrpc::XrpcError;
 use atproto::plc::Signed;
-use atproto::{Value as Drisl, syntax};
+use atproto::syntax;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -146,16 +145,10 @@ pub async fn update_group_handle(
         .publish(group, &signed)
         .await
         .map_err(XrpcError::internal)?;
-    let identity = event(
-        "#identity",
-        [
-            ("did", Drisl::String(group.into())),
-            ("handle", Drisl::String(handle.clone())),
-            ("time", Drisl::String(iso(now_millis()))),
-        ],
-    );
     // Taken here meanwhile, the database's unique handle refuses it.
-    let set = host.store.set_handle(group, &handle, &[identity]);
+    let set = host
+        .store
+        .set_handle(group, &handle, &[identity(group, &handle)]);
     set.map_err(XrpcError::internal)?;
     host.announce();
     Ok(Json(json!({ "handle": handle })))

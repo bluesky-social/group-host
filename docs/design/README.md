@@ -122,8 +122,10 @@ says otherwise.
    history, and the console's moderation page (`moderation.rs`; done, see
    [moderation](moderation.md)); recovery keys (`recovery.rs`; done, see
    [recovery](recovery.md)); moving a group to another host
-   (`migration.rs`; done, see [moving](moving.md)); then importing an
-   account, and moving the host itself:
+   (`migration.rs`; done, see [moving](moving.md)); an account on
+   another server becoming a group (`import.rs`; done, but for its
+   spaces, see [moving](moving.md#an-account-becoming-a-group)); then
+   moving the host itself:
    `methods/{moderation,recovery,importAccount,migration}.ts`,
    `hostLabels.ts`, `scripts/move-host.ts`.
 9. **MCP and the command.** The MCP tools over what steps 4 to 8 brought,

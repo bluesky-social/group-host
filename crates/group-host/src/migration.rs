@@ -77,6 +77,13 @@ impl Store {
         Ok(())
     }
 
+    /// `group`'s export token, ended.
+    pub fn end_export(&self, group: &str) -> Result<()> {
+        let sql = "DELETE FROM migration_export WHERE did = ?1";
+        self.conn().execute(sql, [group])?;
+        Ok(())
+    }
+
     /// Whether `hash` is `group`'s export token, unexpired at `now`.
     pub fn may_export(&self, group: &str, hash: &str, now: i64) -> Result<bool> {
         let sql =
@@ -292,7 +299,11 @@ fn create(path: &str, value: &[u8]) -> Option<Write> {
 
 /// The records of a repo's CAR, once its commit is `group`'s, signed by
 /// `key`, and its tree and records are whole.
-fn repo_writes(bytes: &[u8], group: &str, key: &atproto::PublicKey) -> Option<Vec<Write>> {
+pub(crate) fn repo_writes(
+    bytes: &[u8],
+    group: &str,
+    key: &atproto::PublicKey,
+) -> Option<Vec<Write>> {
     let repo = car::read(bytes).ok()?;
     let commit = atproto::Commit::from_bytes(repo.blocks.get(repo.roots.first()?)?).ok()?;
     (commit.did == group && commit.verify(key)).then_some(())?;
@@ -364,6 +375,79 @@ impl Host {
     }
 }
 
+/// A new account here for `did`, at `address`, known by `handle`, with
+/// keys of its own, as one arriving from another server is until the
+/// directory names this host: its records follow it in.
+pub(crate) async fn take_in(
+    host: &Host,
+    did: &str,
+    handle: &str,
+    address: &str,
+) -> Result<Account, XrpcError> {
+    let account = Account {
+        did: did.into(),
+        handle: address.into(),
+        signing: Keypair::generate(Curve::K256),
+        kem: Keypair::generate(Curve::P256),
+    };
+    let empty = host.sign(&account, &Tree::build(&BTreeMap::new()));
+    let made = host
+        .store
+        .create_account(&account, &empty, now_millis(), &[]);
+    if !made.map_err(XrpcError::internal)? {
+        return Err(refused(
+            "HandleNotAvailable",
+            format!("{address} is taken here"),
+        ));
+    }
+    if handle != address {
+        let named = host.store.set_handle(did, handle, &[]);
+        if named.is_err() {
+            host.forget(did);
+            return Err(refused(
+                "HandleNotAvailable",
+                format!("{handle} is taken here"),
+            ));
+        }
+    }
+    Ok(Account {
+        handle: handle.into(),
+        ..account
+    })
+}
+
+/// What an account's PLC operation should name for it to live here, as
+/// com.atproto.identity.getRecommendedDidCredentials answers it.
+pub(crate) fn creds(host: &Host, account: &Account) -> Value {
+    json!({
+        "rotationKeys": [host.secrets.rotation.public().did_key()],
+        "alsoKnownAs": [format!("at://{}", account.handle)],
+        "verificationMethods": {
+            "atproto": account.signing.public().did_key(),
+            "atproto_kem": account.kem.public().did_key(),
+        },
+        "services": {"atproto_pds": {"type": "AtprotoPersonalDataServer", "endpoint": host.config.public_url}},
+    })
+}
+
+impl Host {
+    /// Whether `handle` names `did`, as the resolvers this host asks say.
+    pub(crate) async fn names(&self, handle: &str, did: &str) -> bool {
+        let resolvers = &self.config.handle_resolvers;
+        let named = self.identity.resolve_handle(handle, resolvers).await;
+        named.as_deref() == Some(did)
+    }
+
+    /// An account taken in part way, and its files, gone.
+    pub(crate) fn forget(&self, did: &str) {
+        let gone = self.store.delete_account(did, &[]);
+        let forgotten = gone.is_ok();
+        tracing::info!(did, forgotten, "an account taken in part way");
+        let blobs = gone.unwrap_or_default();
+        self.remove_blobs(blobs.iter().map(|cid| (did, cid)));
+    }
+}
+
 /// Step 2, at the destination: the group taken in, switched off; what
 /// the PLC operation should name.
 pub async fn migrate_receive(
@@ -409,7 +493,14 @@ pub async fn migrate_receive(
         .as_str()
         .ok_or_else(|| invalid("snapshot.handle is required"))?;
     let domain = &host.config.handle_domain;
-    let (handle, _) = handle_here(handle, snapshot["address"].as_str(), domain);
+    let (handle, here) = handle_here(handle, snapshot["address"].as_str(), domain);
+    // A domain of its own comes along only while it still names the group:
+    // the snapshot's word for it is not enough.
+    let handle = if handle == here || host.names(&handle, group).await {
+        handle
+    } else {
+        here.clone()
+    };
 
     // Its public repo, checked against the group's key.
     let (pinned, at) = host
@@ -426,43 +517,19 @@ pub async fn migrate_receive(
     let writes = repo_writes(&bytes, group, &key);
     let writes = writes.ok_or(source("a repo that is not the group's, signed and whole"))?;
 
-    // The account, with keys of its own here, switched off.
-    let account = Account {
-        did: group.into(),
-        handle: handle.clone(),
-        signing: Keypair::generate(Curve::K256),
-        kem: Keypair::generate(Curve::P256),
-    };
-    let empty = host.sign(&account, &Tree::build(&BTreeMap::new()));
-    let made = host
-        .store
-        .create_account(&account, &empty, now_millis(), &[]);
-    if !made.map_err(XrpcError::internal)? {
-        return Err(refused(
-            "HandleNotAvailable",
-            format!("{handle} is taken here"),
-        ));
-    }
+    let account = take_in(&host, group, &handle, &here).await?;
     let received = receive(&host, group, &me, &pds, token, snapshot, writes).await;
     let counts = match received {
         Ok(counts) => counts,
         Err(e) => {
             // Nothing half taken in stays.
-            let gone = host.store.delete_account(group, &[]);
-            tracing::warn!(group, ?gone, error = ?e, "a group not taken in");
+            host.forget(group);
+            tracing::warn!(group, error = ?e, "a group not taken in");
             return Err(e);
         }
     };
     tracing::info!(group, from = pds, "a group taken in, switched off");
-    let creds = json!({
-        "rotationKeys": [host.secrets.rotation.public().did_key()],
-        "alsoKnownAs": [format!("at://{handle}")],
-        "verificationMethods": {
-            "atproto": account.signing.public().did_key(),
-            "atproto_kem": account.kem.public().did_key(),
-        },
-        "services": {"atproto_pds": {"type": "AtprotoPersonalDataServer", "endpoint": host.config.public_url}},
-    });
+    let creds = creds(&host, &account);
     Ok(Json(
         json!({"recommendedCreds": creds, "records": counts.0, "blobs": counts.1, "spaces": counts.2}),
     ))
@@ -644,6 +711,8 @@ pub async fn migrate_complete(
         .map_err(XrpcError::internal)?;
     let off = host.store.deactivate(&group, now_millis(), &me, &[], &[]);
     off.map_err(XrpcError::internal)?;
+    // Handed over, there is nothing more to pull.
+    host.store.end_export(&group).map_err(XrpcError::internal)?;
     host.record(&group, &me, None, &format!("moved the group to {endpoint}"))
         .map_err(XrpcError::internal)?;
     Ok(Json(json!({ "movedTo": endpoint })))
@@ -673,7 +742,8 @@ pub async fn migrate_activate(
             "the directory does not name this host for the group yet",
         ));
     }
-    host.activate_account(&group).map_err(XrpcError::internal)?;
+    let on = host.activate_arrived(&group, &account.handle);
+    on.map_err(XrpcError::internal)?;
     let spaces = host.store.spaces_of(&group).map_err(XrpcError::internal)?;
     for space in &spaces {
         host.reindex(space);

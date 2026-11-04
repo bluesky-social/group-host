@@ -88,6 +88,9 @@ pub struct Asked<'a> {
     /// Made while the account is switched off, as one received from
     /// another host is until the directory names this one.
     pub off: bool,
+    /// Copied whole from another server: a record may hold a file that did
+    /// not come with it, as one whose file was deleted does.
+    pub copied: bool,
 }
 
 fn invalid_swap(message: impl Into<String>) -> XrpcError {
@@ -234,14 +237,7 @@ impl Host {
         let head = self.sign(&account, &tree);
         let at = Value::String(iso(now_millis()));
         let events = [
-            event(
-                "#identity",
-                [
-                    ("did", Value::String(did.clone())),
-                    ("handle", Value::String(handle.into())),
-                    ("time", at.clone()),
-                ],
-            ),
+            identity(&did, handle),
             event(
                 "#account",
                 [
@@ -334,7 +330,8 @@ impl Host {
         let mut new_blobs = Vec::new();
         let mut blocks = BTreeMap::new();
         for write in writes {
-            let Checked { path, put, blobs } = self.check(&account.did, write, &paths)?;
+            let Checked { path, put, blobs } =
+                self.check(&account.did, write, &paths, asked.copied)?;
             new_blobs.extend(blobs.iter().copied());
             let prev = match &put {
                 Some((cid, bytes)) => {
@@ -389,12 +386,13 @@ impl Host {
     /// `write` to `did`'s records, now at `paths`, checked: its path is a
     /// record's, a create's free and an update's or delete's taken, its
     /// record one by the data model of its collection's `$type`, and each
-    /// blob it references uploaded to `did`.
+    /// blob it references uploaded to `did`, or, `copied`, left out.
     pub(crate) fn check(
         &self,
         did: &str,
         write: &Write,
         paths: &BTreeMap<String, Cid>,
+        copied: bool,
     ) -> Result<Checked, XrpcError> {
         let (collection, rkey) = write.path();
         let (value, exists) = match write {
@@ -418,11 +416,13 @@ impl Host {
         }
         let put = value.map(|v| record(collection, v)).transpose()?;
         // A record may reference only blobs uploaded to its account.
-        let blobs = value.map(blob_refs).unwrap_or_default();
-        for cid in &blobs {
-            let blob = self.store.blob(did, cid).map_err(XrpcError::internal)?;
-            if blob.is_none() {
-                return Err(invalid(format!("blob {cid} was not uploaded to {did}")));
+        let mut blobs = Vec::new();
+        for cid in value.map(blob_refs).unwrap_or_default() {
+            let blob = self.store.blob(did, &cid).map_err(XrpcError::internal)?;
+            match blob {
+                Some(_) => blobs.push(cid),
+                None if copied => {}
+                None => return Err(invalid(format!("blob {cid} was not uploaded to {did}"))),
             }
         }
         Ok(Checked { path, put, blobs })
@@ -482,6 +482,19 @@ impl Host {
 
 /// How long between telling the relays of news.
 const CRAWL_EVERY: std::time::Duration = std::time::Duration::from_secs(20 * 60);
+
+/// An `#identity` event: `did` known as `handle`, for the relays to
+/// read its document afresh.
+pub(crate) fn identity(did: &str, handle: &str) -> Event {
+    event(
+        "#identity",
+        [
+            ("did", Value::String(did.into())),
+            ("handle", Value::String(handle.into())),
+            ("time", Value::String(iso(now_millis()))),
+        ],
+    )
+}
 
 /// An event of `kind` with the fields given.
 pub(crate) fn event<const N: usize>(kind: &'static str, fields: [(&str, Value); N]) -> Event {

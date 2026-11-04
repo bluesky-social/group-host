@@ -29,13 +29,21 @@ const ACTIVATE: &str = "fyi.opensocial.migrateActivate";
 /// rule, a post, and a calendar Carol writes in and Bob may write in by a
 /// grant; and the host it goes to, on the same directory.
 async fn two_hosts() -> (Running, Running, String, String, [Authority; 3]) {
+    two_hosts_with(&[]).await
+}
+
+/// As `two_hosts`, the host it goes to with `vars` besides.
+async fn two_hosts_with(
+    vars: &[(&str, &str)],
+) -> (Running, Running, String, String, [Authority; 3]) {
     let a = start_reachable(&[]).await;
     let plc = plc_url(&a);
-    let b = start_reachable(&[
+    let mut b_vars = vec![
         ("PLC_URL", plc.as_str()),
         ("HANDLE_DOMAIN", ".groups.b.test"),
-    ])
-    .await;
+    ];
+    b_vars.extend_from_slice(vars);
+    let b = start_reachable(&b_vars).await;
     let [alice, bob, carol] = people(&a).await;
     let did = start_group(
         &a,
@@ -220,6 +228,15 @@ async fn moves_a_group_whole_to_another_host() {
     )
     .await;
     assert_eq!(error(&said), (400, "NotController"));
+    // Nor is there anything more to pull.
+    let token = prepared["exportToken"].as_str().unwrap();
+    let (status, _) = a
+        .get(
+            "fyi.opensocial.migrateExport",
+            &format!("group={did}&token={token}&part=blobs"),
+        )
+        .await;
+    assert_eq!(status, 401);
 
     let (status, on) = call(&b, &alice, ACTIVATE, json!({"did": did})).await;
     assert_eq!(status, 200, "{on}");
@@ -383,6 +400,93 @@ async fn takes_in_only_for_one_who_configures_by_the_groups_own_records() {
     assert_eq!(
         error(&call(&b, &alice, RECEIVE, receive).await),
         (400, "HandleNotAvailable")
+    );
+}
+
+/// A resolver answering for the handles in its map.
+async fn names(
+    State(names): State<Arc<Mutex<HashMap<String, String>>>>,
+    Query(q): Query<HashMap<String, String>>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match names.lock().unwrap().get(&q["handle"]) {
+        Some(did) => axum::Json(json!({ "did": did })).into_response(),
+        None => axum::http::StatusCode::BAD_REQUEST.into_response(),
+    }
+}
+
+/// Two hosts, the second asking a resolver of the test's own who a
+/// handle names; and Riders' snapshot saying it went by its own domain.
+async fn by_its_own_domain() -> (
+    [Running; 2],
+    Json,
+    String,
+    Arc<Mutex<HashMap<String, String>>>,
+    Authority,
+) {
+    let known = Arc::new(Mutex::new(HashMap::new()));
+    let router = Router::new()
+        .route("/xrpc/com.atproto.identity.resolveHandle", route(names))
+        .with_state(known.clone());
+    let resolver = serve(router).await;
+    let (a, b, did, _, [alice, ..]) = two_hosts_with(&[("HANDLE_RESOLVERS", &resolver)]).await;
+    let (_, prepared) = call(
+        &a,
+        &alice,
+        PREPARE,
+        json!({"group": did, "destDid": b.host.config.service_did}),
+    )
+    .await;
+    let mut snapshot = prepared["snapshot"].clone();
+    snapshot["handle"] = json!("riders.example.com");
+    snapshot["address"] = json!(RIDERS);
+    let receive = json!({"did": did, "serviceJwt": prepared["serviceJwt"], "snapshot": snapshot, "exportToken": prepared["exportToken"]});
+    ([a, b], receive, did, known, alice)
+}
+
+#[tokio::test]
+async fn takes_a_domain_of_its_own_along_only_while_it_names_the_group() {
+    let ([_a, b], receive, did, _, alice) = by_its_own_domain().await;
+    // The snapshot says so; nothing else does.
+    let (status, said) = call(&b, &alice, RECEIVE, receive).await;
+    assert_eq!(status, 200, "{said}");
+    let account = b.host.store.account(&did).unwrap().unwrap();
+    assert_eq!(account.handle, "riders.groups.b.test");
+}
+
+#[tokio::test]
+async fn takes_in_no_group_whose_own_domain_another_has_here() {
+    let ([_a, b], receive, did, known, alice) = by_its_own_domain().await;
+    known
+        .lock()
+        .unwrap()
+        .insert("riders.example.com".into(), did.clone());
+    // A group here has that domain now.
+    let here = start_group(
+        &b,
+        &alice,
+        json!({"handle": "others.groups.b.test", "displayName": "Others"}),
+    )
+    .await;
+    b.host
+        .store
+        .set_handle(&here, "riders.example.com", &[])
+        .unwrap();
+    let said = call(&b, &alice, RECEIVE, receive.clone()).await;
+    assert_eq!(error(&said), (400, "HandleNotAvailable"), "{}", said.1);
+    assert!(b.host.store.account(&did).unwrap().is_none());
+    // Free again, it comes along, with its address beside it.
+    b.host
+        .store
+        .set_handle(&here, "others.groups.b.test", &[])
+        .unwrap();
+    let (status, said) = call(&b, &alice, RECEIVE, receive).await;
+    assert_eq!(status, 200, "{said}");
+    let account = b.host.store.account(&did).unwrap().unwrap();
+    assert_eq!(account.handle, "riders.example.com");
+    assert_eq!(
+        b.host.store.address(&did).unwrap().as_deref(),
+        Some("riders.groups.b.test")
     );
 }
 
