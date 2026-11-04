@@ -163,6 +163,18 @@ pub async fn start_reachable(vars: &[(&str, &str)]) -> Running {
     start_on(listener, &vars, false).await
 }
 
+/// A host reachable by name, at `http://localhost:<port>`, its `did:web`
+/// of that name: for servers elsewhere that resolve its DID, as one
+/// resolves `localhost` over http. It listens on every address, IPv6 and
+/// IPv4, whichever `localhost` is.
+pub async fn start_reachable_by_name(vars: &[(&str, &str)]) -> Running {
+    let listener = tokio::net::TcpListener::bind("[::]:0").await.unwrap();
+    let url = format!("http://localhost:{}", listener.local_addr().unwrap().port());
+    let mut vars = vars.to_vec();
+    vars.push(("PUBLIC_URL", &url));
+    start_on(listener, &vars, false).await
+}
+
 async fn start_on(
     listener: tokio::net::TcpListener,
     vars: &[(&str, &str)],

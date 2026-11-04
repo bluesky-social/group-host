@@ -408,3 +408,104 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
     assert_eq!(status, 200, "{repos}");
     assert_eq!(repos["repos"][0]["did"], alice.did);
 }
+
+#[tokio::test]
+async fn an_invite_into_an_inbox_on_the_reference_pds() {
+    let net = net();
+    if !net.spaces {
+        eprintln!("the reference PDS has no spaces: GROUP_HOST_DEV_ENV names the alpha's build");
+        return;
+    }
+    let h = common::start_reachable_by_name(&[("PLC_URL", net.plc.as_str())]).await;
+    let service = h.host.config.service_did.clone();
+    assert!(service.starts_with("did:web:localhost"), "{service}");
+
+    // Alice's inbox, at her PDS, a space this host manages for her.
+    let alice = &net.accounts[0];
+    let session = call(
+        &net.pds,
+        "com.atproto.server.createSession",
+        "",
+        &json!({"identifier": alice.handle, "password": alice.password}),
+    )
+    .await;
+    let jwt = session["accessJwt"].as_str().unwrap();
+    let created = call(
+        &net.pds,
+        "com.atproto.space.createSpace",
+        jwt,
+        &json!({
+            "spaceType": "fyi.opensocial.inbox",
+            "skey": "self",
+            "policy": {"$type": "com.atproto.managedspace.policy", "managingApp": service},
+        }),
+    )
+    .await;
+    let inbox = created["uri"].as_str().unwrap().to_string();
+
+    // A group here invites her: its write is told to her PDS, which asks
+    // this host whether the group may write there.
+    let founder = common::spaces::authority(&h, false, true).await;
+    let group = common::groups::start_group(
+        &h,
+        &founder,
+        json!({"handle": "riders.groups.test", "displayName": "Riders"}),
+    )
+    .await;
+    let lxm = "fyi.opensocial.createInvite";
+    let (status, made) = common::groups::post(
+        &h,
+        lxm,
+        &json!({"group": group, "invitee": alice.did}),
+        &[common::groups::auth(&h, &founder, lxm)],
+    )
+    .await;
+    assert_eq!(status, 200, "{made}");
+    // Nothing is owed: her PDS took the write.
+    let later = group_host::time::now_millis() / 1000 + 3600;
+    assert_eq!(
+        h.host.store.due(later, 10).unwrap(),
+        vec![],
+        "her PDS refused the invite"
+    );
+
+    // And it keeps the group among her inbox's writers.
+    let (_, _, token) = get(
+        &net.pds,
+        "com.atproto.space.getDelegationToken",
+        &[("space", inbox.as_str())],
+        &[("authorization", format!("Bearer {jwt}"))],
+    )
+    .await;
+    let key = Keypair::generate(Curve::P256);
+    let issued = call(
+        &net.pds,
+        "com.atproto.space.getSpaceCredential",
+        "",
+        &json!({"space": inbox, "credentialKid": key.public().did_key(), "delegationToken": token["token"]}),
+    )
+    .await;
+    let authorization = format!(
+        "Atproto-Space-Credential {}",
+        issued["credential"].as_str().unwrap()
+    );
+    let headers: Vec<(&str, String)> = sign_request(&key, &authorization, &alice.did)
+        .unwrap()
+        .into_iter()
+        .collect();
+    let (status, _, repos) = get(
+        &net.pds,
+        "com.atproto.space.listRepos",
+        &[("space", inbox.as_str())],
+        &headers,
+    )
+    .await;
+    assert!(status.is_success(), "{status} {repos}");
+    let writers: Vec<&str> = repos["repos"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["did"].as_str().unwrap())
+        .collect();
+    assert!(writers.contains(&group.as_str()), "{repos}");
+}

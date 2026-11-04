@@ -92,8 +92,8 @@ says otherwise.
 5. **Membership and roles.** Roles and permissions, assigning, leaving
    and ejecting, with credentials revoked for whoever is out
    (`group_members.rs`; done, see [membership](membership.md)); joining
-   and join requests (`group_join.rs`; done); then invites with
-   `checkUserAccess` for their inboxes: `rbac.ts`, `methods/{roles,membership,join,invites}.ts`.
+   and join requests (`group_join.rs`; done); invites, with
+   `checkUserAccess` for their inboxes (`group_invites.rs`; done): `rbac.ts`, `methods/{roles,membership,join,invites}.ts`.
 6. **Signing in.** Service auth for callers; the OAuth server an app signs
    in to as a group (PAR, DPoP, consent, refresh), group tokens, app
    passwords, connected apps, provisioning: `auth.ts`, `pds/auth.ts`,

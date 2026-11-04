@@ -212,6 +212,20 @@ pub const MIGRATIONS: &[&str] = &[
         UNIQUE (grp, did)
     );
 ",
+    "
+    CREATE TABLE invite (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        grp TEXT NOT NULL REFERENCES account (did),
+        invitee TEXT NOT NULL,
+        by TEXT NOT NULL,
+        message TEXT,
+        rkey TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        UNIQUE (grp, invitee)
+    );
+    CREATE INDEX invite_to ON invite (invitee);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -318,12 +332,18 @@ const ASKED: &str =
     "SELECT seq, did, message, created_at FROM join_request WHERE grp = ?1 AND did = ?2";
 const ASKING: &str = "SELECT seq, did, message, created_at FROM join_request WHERE grp = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const DECIDE: &str = "DELETE FROM join_request WHERE grp = ?1 AND did = ?2";
+const INVITE: &str = "INSERT INTO invite (grp, invitee, by, message, rkey, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
+const INVITED: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE grp = ?1 AND invitee = ?2";
+const INVITES: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE grp = ?1 AND seq < ?2 AND (expires_at IS NULL OR expires_at > ?3) ORDER BY seq DESC LIMIT ?4";
+const INVITES_TO: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE invitee = ?1 AND (expires_at IS NULL OR expires_at > ?2) ORDER BY seq DESC";
+const UNINVITE: &str = "DELETE FROM invite WHERE grp = ?1 AND invitee = ?2";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM invite WHERE grp = ?1",
     "DELETE FROM join_request WHERE grp = ?1",
     "DELETE FROM issued_credential WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM index_record WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
@@ -527,6 +547,34 @@ fn join_request(row: &rusqlite::Row) -> rusqlite::Result<JoinRequest> {
         did: row.get(1)?,
         message: row.get(2)?,
         created_at: row.get(3)?,
+    })
+}
+
+/// An invite a group sent: in order, the group, whom, who in it sent it,
+/// what they said, its record's key in the invitee's inbox, when, and
+/// when it lapses, if it does.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Invite {
+    pub seq: i64,
+    pub group: String,
+    pub invitee: String,
+    pub by: String,
+    pub message: Option<String>,
+    pub rkey: String,
+    pub created_at: i64,
+    pub expires_at: Option<i64>,
+}
+
+fn invite(row: &rusqlite::Row) -> rusqlite::Result<Invite> {
+    Ok(Invite {
+        seq: row.get(0)?,
+        group: row.get(1)?,
+        invitee: row.get(2)?,
+        by: row.get(3)?,
+        message: row.get(4)?,
+        rkey: row.get(5)?,
+        created_at: row.get(6)?,
+        expires_at: row.get(7)?,
     })
 }
 
@@ -1310,6 +1358,61 @@ impl Store {
     pub fn decide(&self, group: &str, did: &str) -> Result<bool> {
         let conn = self.conn();
         Ok(conn.execute(DECIDE, [group, did])? > 0)
+    }
+
+    /// Keeps a group's invite.
+    pub fn invite(&self, invite: &Invite) -> Result<()> {
+        let conn = self.conn();
+        let i = invite;
+        let kept = params![
+            i.group,
+            i.invitee,
+            i.by,
+            i.message,
+            i.rkey,
+            i.created_at,
+            i.expires_at
+        ];
+        conn.execute(INVITE, kept)?;
+        Ok(())
+    }
+
+    /// `group`'s invite to `invitee`, lapsed or not.
+    pub fn invited(&self, group: &str, invitee: &str) -> Result<Option<Invite>> {
+        let conn = self.conn();
+        let found = conn.query_row(INVITED, [group, invitee], invite);
+        Ok(found.optional()?)
+    }
+
+    /// `group`'s invites not lapsed at `now`, newest first, before
+    /// `before`, at most `limit`.
+    pub fn invites(
+        &self,
+        group: &str,
+        before: Option<i64>,
+        now: i64,
+        limit: u32,
+    ) -> Result<Vec<Invite>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(INVITES)?;
+        let asked = params![group, before.unwrap_or(i64::MAX), now, limit];
+        let rows = q.query_map(asked, invite)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The invites to `invitee` not lapsed at `now`, newest first.
+    pub fn invites_to(&self, invitee: &str, now: i64) -> Result<Vec<Invite>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(INVITES_TO)?;
+        let rows = q.query_map(params![invitee, now], invite)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Forgets `group`'s invite to `invitee`.
+    pub fn uninvite(&self, group: &str, invitee: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(UNINVITE, [group, invitee])?;
+        Ok(())
     }
 
     /// The spaces `authority` is the authority for.

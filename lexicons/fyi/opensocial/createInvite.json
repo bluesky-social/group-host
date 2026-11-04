@@ -53,6 +53,10 @@
       "errors": [
         {
           "name": "NoInvitesSpace"
+        },
+        {
+          "name": "AlreadyMember",
+          "description": "The invitee is a member already."
         }
       ]
     }

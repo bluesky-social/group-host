@@ -32,7 +32,13 @@
           "type": "object",
           "properties": {}
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "InviteNotFound",
+          "description": "No invite to that account waits."
+        }
+      ]
     }
   }
 }

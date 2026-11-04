@@ -49,6 +49,10 @@
         {
           "name": "NotAssignable",
           "description": "A role asked for is not the caller's to give."
+        },
+        {
+          "name": "AlreadyMember",
+          "description": "The account is a member already."
         }
       ]
     }

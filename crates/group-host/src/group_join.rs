@@ -1,6 +1,7 @@
-//! Joining a group: at once for one whose profile says `open`; by a
-//! request someone holding `admit` decides on for one that says
-//! `approval`; not without an invite for one that says `invite`.
+//! Joining a group: at once for one whose profile says `open`, or for one
+//! holding its invite; by a request someone holding `admit` decides on
+//! for one that says `approval`; not without an invite for one that says
+//! `invite`.
 //!
 //! A request waits in the host, not in the group's records: who asks is
 //! no member, and the members space is for members. Decided, it goes: a
@@ -60,6 +61,13 @@ pub async fn request_join(
     let members = Members::of(&host, group)?;
     if members.membership(&me)?.is_some() {
         return Err(bad("AlreadyMember", "you are a member already"));
+    }
+    // An invite is pre-approval: redeemed, whatever the policy.
+    if host.redeem(group, &me).await? {
+        let roles = members.default_roles()?;
+        members.put_membership(&me, &roles).await?;
+        host.store.decide(group, &me).map_err(XrpcError::internal)?;
+        return Ok(Json(json!({"status": "admitted"})));
     }
     let profile = host
         .group_record(group, &meta_space(group), &format!("{NS}.profile"), "self")

@@ -47,13 +47,38 @@ How people get in is the group's profile's `joinPolicy`:
   is bound as giving them is); `denyJoinRequest` turns one down;
   `cancelJoinRequest` withdraws one's own; `getJoinRequest` is one's
   own, while it waits.
-- `invite`: not without an invite (`InviteRequired`), which comes with
-  invites.
+- `invite`: not without an invite (`InviteRequired`).
+
+An invite admits its invitee whatever the policy: asking to join
+redeems it, with the group's default roles.
 
 A request waits in the host, not in the group's records: who asks is no
 member, and the members space is for members. Decided, it goes: a
 request turned down looks the same as one never made, so its asker may
 ask again and the group need not say.
+
+## Invites
+
+A group invites someone by writing an invite in its own repo in their
+inbox: a space under their own DID (`fyi.opensocial.inbox`), at their
+PDS, whose policy lets this host say who reads and writes it. The host
+answers its authority (`com.atproto.managedspace.checkUserAccess`, with
+service auth from the authority): its owner reads it, and only groups on
+this host write in it. The group's write is told to the invitee's PDS as
+any write to a space elsewhere is, owed until it lands. The invitee's
+apps read the invite there; the host keeps its own list of what it sent,
+which is what redeems an invite, as the inbox is its owner's to read,
+not the group's.
+
+- `createInvite` (for `invite`) invites someone not yet a member, with
+  words and a lapse if it says; one already waiting is the one answered.
+- `listInvites` (for `invite`) lists those waiting, newest first, the
+  lapsed left out.
+- `revokeInvite` (for `invite`) takes one back by its URI; `declineInvite`
+  is its invitee's own say. Either takes the record out of the inbox and
+  the host's list; the group may invite them again.
+- `getActorInvites` is the caller's own invites waiting, from the groups
+  here, for a group's site, which can't read the caller's inbox.
 
 ## Out is out
 
@@ -78,5 +103,7 @@ As `methods/roles.ts`, `methods/membership.ts` and `leaveGroup`, with
 these changes: `assignRoles` refuses someone who is not a member, where
 the prototype would write them a membership and so admit them; roles
 given must be defined; `deleteRole` refuses a role someone holds, as
-the lexicon's `RoleInUse` says; and leaving or being put out revokes
-credentials, which the prototype left to lapse.
+the lexicon's `RoleInUse` says; leaving or being put out revokes
+credentials, which the prototype left to lapse; an inbox takes invites
+from groups here alone, where the prototype let anyone write in it; and
+an invite's `expiresAt` is kept to.

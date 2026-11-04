@@ -13,6 +13,7 @@ pub mod group;
 pub mod group_api;
 pub mod group_config;
 pub mod group_handle;
+pub mod group_invites;
 pub mod group_join;
 pub mod group_lifecycle;
 pub mod group_members;
@@ -276,6 +277,30 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.cancelJoinRequest",
             post(group_join::cancel_join_request),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.createInvite",
+            post(group_invites::create_invite),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.listInvites",
+            get(group_invites::list_invites),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.revokeInvite",
+            post(group_invites::revoke_invite),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.getActorInvites",
+            get(group_invites::get_actor_invites),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.declineInvite",
+            post(group_invites::decline_invite),
+        )
+        .route(
+            "/xrpc/com.atproto.managedspace.checkUserAccess",
+            get(group_invites::check_user_access),
         )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
