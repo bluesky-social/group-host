@@ -11,6 +11,7 @@
 use crate::Host;
 use crate::group::members_space;
 use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for};
+use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
 use serde_json::Value;
@@ -39,6 +40,7 @@ pub struct SpaceScope {
 
 impl SpaceScope {
     pub fn parse(scope: &str) -> Option<SpaceScope> {
+        let scope = decoded(scope);
         let rest = scope.strip_prefix("space:")?;
         let (kind, query) = rest.split_once('?').unwrap_or((rest, ""));
         let mut values: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -217,8 +219,9 @@ impl Host {
                 true
             } else if *s == configure() {
                 configures
-            } else if let Some(c) = s.strip_prefix("repo:") {
-                everything || repo.contains(c.split('?').next().unwrap_or_default())
+            } else if let Some(named) = repo_collections(s) {
+                let each = !named.is_empty() && named.iter().all(|c| repo.contains(c));
+                everything || each
             } else if let Some(m) = s.strip_prefix("rpc:") {
                 let method = m.split('?').next().unwrap_or_default();
                 everything && method != "*" && !method.starts_with(&format!("{NS}."))
@@ -236,13 +239,13 @@ impl Host {
         }
         let writes = |s: &String| {
             *s == configure()
-                || s.starts_with("repo:")
+                || repo_collections(s).is_some()
                 || SpaceScope::parse(s).is_some_and(|w| !w.read_only)
         };
         let any_write = kept.iter().chain(&made).any(writes);
         let mut out: Vec<String> = requested
             .iter()
-            .filter(|s| kept.contains(s) || (any_write && s.starts_with("blob:")))
+            .filter(|s| kept.contains(s) || (any_write && is_blob(s)))
             .cloned()
             .collect();
         for m in made {

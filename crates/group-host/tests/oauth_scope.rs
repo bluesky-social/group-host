@@ -141,6 +141,40 @@ async fn keeps_for_each_role_what_its_grants_hold() {
 }
 
 #[tokio::test]
+async fn reads_every_form_a_scope_may_take() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    // Collections named by query, files by type, and values escaped, as
+    // an app's URLSearchParams writes them.
+    let encoded = format!("space:{CALENDAR}?authority={}", did.replace(':', "%3A"));
+    let all = asked(&[
+        "atproto",
+        "repo?collection=app.bsky.feed.post&collection=app.bsky.feed.like",
+        "repo?collection=app.bsky.feed.post",
+        "blob?accept=image/*",
+        &encoded,
+    ]);
+    let admin = h
+        .host
+        .narrow(&did, &roles(&["admin"]), &alice.did, &all)
+        .unwrap();
+    assert_eq!(admin, all);
+    // Kept only when every collection it names is one the roles write.
+    let poster = h
+        .host
+        .narrow(&did, &roles(&["poster"]), &alice.did, &all)
+        .unwrap();
+    assert_eq!(
+        poster,
+        asked(&[
+            "atproto",
+            "repo?collection=app.bsky.feed.post",
+            "blob?accept=image/*"
+        ])
+    );
+}
+
+#[tokio::test]
 async fn keeps_a_space_scope_a_spaces_access_record_grants() {
     let h = start(&[], false).await;
     let (did, _, alice) = group(&h).await;

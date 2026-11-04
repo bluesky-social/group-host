@@ -745,6 +745,19 @@ fn reads_a_scope_as_atproto_has_it() {
     assert!(p.blob("video/mp4") && p.blob("IMAGE/png") && p.blob("text/plain"));
     assert!(!p.blob("text/html") && !p.blob("video/webm"));
     assert!(Permissions::new("blob:*/*", group).blob("application/zip"));
+    // Escaped values read as they are meant; an escape of what shapes a
+    // scope, or none at all, stays as written.
+    let ours = SpaceRef::parse("at://did:plc:riders/space/com.example.calendar/rides").unwrap();
+    let p = Permissions::new(
+        "space:com.example.calendar?authority=did%3Aplc%3Ariders&collection=a.b%2Ec",
+        group,
+    );
+    assert!(p.space(&ours, Some("a.b.c"), "create"));
+    let p = Permissions::new(
+        "repo?collection=a.b.c%26action%3Ddelete&action=create%zz%4",
+        group,
+    );
+    assert!(!p.repo("a.b.c", "delete") && !p.repo("a.b.c", "create"));
 
     let space = |uri: &str| SpaceRef::parse(uri).unwrap();
     let ours = space("at://did:plc:riders/space/com.example.calendar/rides");

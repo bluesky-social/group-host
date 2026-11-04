@@ -14,6 +14,41 @@ const REPO_ACTIONS: [&str; 3] = ["create", "update", "delete"];
 const SPACE_DEFAULT: [&str; 4] = ["read", "create", "update", "delete"];
 const SPACE_ACTIONS: [&str; 5] = ["read_self", "read", "create", "update", "delete"];
 
+/// `scope` with its percent-escapes read, as the permission spec reads a
+/// scope's values (`authority=did%3Aplc%3Aabc` names `did:plc:abc`), but
+/// for an escape of what shapes a scope (`%`, `&`, `=`, `?`), which stays
+/// as written so that it cannot split a value.
+pub fn decoded(scope: &str) -> String {
+    let bytes = scope.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = scope.get(i + 1..i + 3).filter(|_| bytes[i] == b'%');
+        let byte = hex.and_then(|h| u8::from_str_radix(h, 16).ok());
+        match byte.filter(|b| !b"%&=?".contains(b)) {
+            Some(b) => (out.push(b), i += 3),
+            None => (out.push(bytes[i]), i += 1),
+        };
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The collections a repo scope names, `repo:C` or `repo?collection=C…`,
+/// if it is one.
+pub fn repo_collections(scope: &str) -> Option<Vec<String>> {
+    let scope = decoded(scope);
+    let named = match named(&scope, "repo")? {
+        "" => query(&scope, "collection"),
+        r => vec![r],
+    };
+    Some(named.into_iter().map(String::from).collect())
+}
+
+/// Whether `scope` is a blob scope, `blob:…` or `blob?accept=…`.
+pub fn is_blob(scope: &str) -> bool {
+    named(scope, "blob").is_some()
+}
+
 /// The values of `name` in a scope's query.
 fn query<'a>(scope: &'a str, name: &str) -> Vec<&'a str> {
     let q = scope.split_once('?').map_or("", |(_, q)| q);
@@ -65,7 +100,7 @@ pub struct Permissions {
 
 impl Permissions {
     pub fn new(scope: &str, group: &str) -> Permissions {
-        let scopes = scope.split(' ').filter(|s| !s.is_empty()).map(String::from);
+        let scopes = scope.split(' ').filter(|s| !s.is_empty()).map(decoded);
         Permissions {
             scopes: scopes.collect(),
             group: group.into(),
