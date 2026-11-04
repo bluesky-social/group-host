@@ -3,6 +3,7 @@
 //! `fyi.opensocial.*` methods that run a group. `docs/design/README.md`
 //! says how it is built and what is still to come.
 
+pub mod actors;
 pub mod api;
 pub mod app_passwords;
 pub mod authority;
@@ -349,6 +350,11 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.revokeGroupToken",
             post(group_tokens::revoke_group_token),
+        )
+        .route("/xrpc/fyi.opensocial.getViewer", get(actors::get_viewer))
+        .route(
+            "/xrpc/fyi.opensocial.getActorGroups",
+            get(actors::get_actor_groups),
         )
         .route("/oauth/authorize", get(oauth::authorize))
         .route(

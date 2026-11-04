@@ -26,6 +26,20 @@ lines and functions, tests and the harness left out. A test that starts
 the host or the command as a binary stops it with SIGTERM, so it exits as
 it should and writes the coverage it counted.
 
+## The console, end to end
+
+`just e2e` uses the console as people use it, in Chromium, with Playwright
+(`harness/e2e/flows.spec.mjs`), as knotless's harness does its pages: it
+signs in through the reference PDS's own approval page, signs an app in as
+a group and has it write as the group, declines one, and signs out. Its
+setup (`harness/e2e/setup.mjs`) runs the reference PDS, the host over it,
+and the built console behind an https front at `console.group-host.internal`
+(`harness/tls-proxy.mjs`), as the PDS reaches an OAuth client only over
+https at a hostname; `harness/pds.mjs` makes that name's certificate and
+resolves it. Chromium comes with `cd harness && npx playwright install
+chromium`. A failed flow leaves its trace and a picture under
+`target/e2e/results`.
+
 ## The checks
 
 `just lint` is what `check` and `web` run: `cargo fmt --check`, clippy

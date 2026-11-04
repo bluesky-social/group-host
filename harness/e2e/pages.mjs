@@ -1,0 +1,145 @@
+// What the flows share: the world they run over, signing in as a person
+// does it, and an app signing in as a group, as an atproto client does.
+
+import { expect } from '@playwright/test'
+import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
+import { createServer } from 'node:http'
+
+export const world = JSON.parse(process.env.E2E_WORLD)
+export const who = Object.fromEntries(world.accounts.map((a) => [a.handle.split('.')[0], a]))
+export const url = (path) => world.base + path
+
+/// Signs in as `name` on the PDS's own page `page` has come to, and
+/// approves what was asked, as knotless's flows do.
+export const approve = async (page, name) => {
+  await page.waitForURL((u) => u.origin === new URL(world.pds).origin)
+  await page.getByRole('textbox', { name: 'Password' }).fill(who[name].password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: /^(accept|authorize|allow)$/i }).click()
+}
+
+/// Signs in to the console as `name` from the header's form: their
+/// handle, then their PDS's page, which sends the browser back.
+export const signIn = async (page, name) => {
+  const back = page.url()
+  await page.getByRole('textbox', { name: 'Your handle' }).fill(who[name].handle)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await approve(page, name)
+  await page.waitForURL(back)
+}
+
+/// Who the header says is signed in: nothing for no one.
+export const signedInAs = (page) =>
+  page
+    .locator('.sign-out .mono')
+    .textContent({ timeout: 1000 })
+    .then((t) => t.trim(), () => '')
+
+const b64 = (bytes) => Buffer.from(bytes).toString('base64url')
+const sha256 = (text) => b64(createHash('sha256').update(text).digest())
+
+/// An app on this machine, signing in as a group: the loopback client
+/// asking for `scope`, with a DPoP key, PKCE, and the nonce the host last
+/// gave, as atproto's OAuth clients do. It listens for the browser coming
+/// back on a port of its own (`listen`), as a native app does: the
+/// loopback client registers its redirect on any port.
+export class App {
+  static REDIRECT = 'http://127.0.0.1/callback'
+
+  /// Listens for the browser coming back; `back` is where it came to.
+  async listen() {
+    this.back = new Promise((done) => {
+      this.server = createServer((req, res) => {
+        res.end('back at the app')
+        done(`http://127.0.0.1:${this.server.address().port}${req.url}`)
+      })
+    })
+    await new Promise((r) => this.server.listen(0, '127.0.0.1', r))
+    this.redirect = `http://127.0.0.1:${this.server.address().port}/callback`
+    return this
+  }
+
+  close() {
+    this.server?.close()
+  }
+
+  constructor(scope) {
+    const id = new URL('http://localhost')
+    id.searchParams.set('redirect_uri', App.REDIRECT)
+    id.searchParams.set('scope', scope)
+    this.id = id.href
+    this.keys = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+    this.verifier = b64(randomBytes(32))
+    this.nonce = undefined
+  }
+
+  /// A DPoP proof of `method` to `url`, for `token` if it carries one.
+  proof(method, url, token) {
+    const jwk = this.keys.publicKey.export({ format: 'jwk' })
+    const header = { typ: 'dpop+jwt', alg: 'ES256', jwk }
+    const at = new URL(url)
+    const claims = { jti: b64(randomBytes(12)), htm: method, htu: `${at.origin}${at.pathname}`, iat: Math.floor(Date.now() / 1000) }
+    if (this.nonce) claims.nonce = this.nonce
+    if (token) claims.ath = sha256(token)
+    const body = `${b64(JSON.stringify(header))}.${b64(JSON.stringify(claims))}`
+    const sig = sign('sha256', Buffer.from(body), { key: this.keys.privateKey, dsaEncoding: 'ieee-p1363' })
+    return `${body}.${b64(sig)}`
+  }
+
+  /// `init` sent to `url` with a fresh proof, once more with the nonce the
+  /// host asks for: its status and JSON.
+  async send(url, init, token) {
+    for (let i = 0; i < 2; i++) {
+      const headers = { ...init.headers, dpop: this.proof(init.method ?? 'GET', url, token) }
+      if (token) headers.authorization = `DPoP ${token}`
+      const res = await fetch(url, { ...init, headers })
+      this.nonce = res.headers.get('dpop-nonce') ?? this.nonce
+      const body = await res.json().catch(() => null)
+      const stale = body?.error === 'use_dpop_nonce' || res.headers.get('www-authenticate')?.includes('use_dpop_nonce')
+      if (!stale) return { status: res.status, body }
+    }
+    throw new Error(`${url} asked for a nonce twice`)
+  }
+
+  form(path, fields) {
+    const body = new URLSearchParams({ client_id: this.id, ...fields })
+    const headers = { 'content-type': 'application/x-www-form-urlencoded' }
+    return this.send(`${world.host}${path}`, { method: 'POST', headers, body })
+  }
+
+  /// Pushes a request to sign in: where to send the browser.
+  async push(hint) {
+    const pushed = await this.form('/oauth/par', {
+      response_type: 'code',
+      code_challenge: sha256(this.verifier),
+      code_challenge_method: 'S256',
+      state: 'st4te',
+      redirect_uri: this.redirect,
+      ...(hint ? { login_hint: hint } : {}),
+    })
+    expect(pushed.status, JSON.stringify(pushed.body)).toBe(201)
+    const to = new URL(`${world.host}/oauth/authorize`)
+    to.searchParams.set('client_id', this.id)
+    to.searchParams.set('request_uri', pushed.body.request_uri)
+    return to.href
+  }
+
+  /// The tokens the code the browser came back with is worth.
+  async exchange(back) {
+    const code = new URL(back).searchParams.get('code')
+    const said = await this.form('/oauth/token', {
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: this.redirect,
+      code_verifier: this.verifier,
+    })
+    expect(said.status, JSON.stringify(said.body)).toBe(200)
+    return said.body
+  }
+
+  /// Calls the procedure `nsid` on the host with `token`.
+  call(nsid, token, input) {
+    const init = { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }
+    return this.send(`${world.host}/xrpc/${nsid}`, init, token)
+  }
+}

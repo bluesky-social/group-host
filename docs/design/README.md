@@ -107,9 +107,12 @@ says otherwise.
    The console signs its people in at their own PDS here, as a
    confidential client, as knotless does, keeping only a signed cookie
    (`console_login.rs`; done).
-7. **The console.** Home, starting a group, a group's page (members,
-   roles, invites, requests, apps), approving an app, a person's
-   sessions and app passwords: the console's pages in `apps/web/src/pages`.
+7. **The console.** Signing in as oneself (step 6); who is looking
+   (`getViewer`, as knotless's) and their groups (`getActorGroups`), on
+   home, and approving an app (`/authorize`; `actors.rs`; done); then
+   starting a group, a group's page (members, roles, invites, requests,
+   apps), a person's sessions and app passwords: the console's pages in
+   `apps/web/src/pages`.
 8. **Moderation, recovery and moving.** Reports, labels, subjects and
    history; recovery keys; importing an account; migrating a group to
    another host and moving the host itself:

@@ -66,7 +66,7 @@ impl Host {
     }
 
     /// The groups here, switched on, where `member` holds a role.
-    fn groups_of(&self, member: &str) -> Result<Vec<String>, XrpcError> {
+    pub(crate) fn groups_of(&self, member: &str) -> Result<Vec<String>, XrpcError> {
         let accounts = self.store.accounts(None, u32::MAX);
         let mut groups = Vec::new();
         for (did, _) in accounts.map_err(XrpcError::internal)? {

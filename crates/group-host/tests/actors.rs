@@ -1,0 +1,173 @@
+//! Who is asking, and the groups someone is in.
+
+mod common;
+
+use common::groups::*;
+use common::spaces::*;
+use common::{Running, start};
+use group_host::group::members_space;
+use group_host::repo::Write;
+use serde_json::{Value as Json, json};
+
+async fn join(h: &Running, did: &str, who: &str) {
+    let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"});
+    let write = Write::Create {
+        collection: format!("{NS}.membership"),
+        rkey: who.into(),
+        value,
+    };
+    h.host
+        .space_write(did, &members_space(did), &[write])
+        .await
+        .unwrap();
+}
+
+async fn viewer(h: &Running, who: Option<&Authority>) -> Json {
+    let lxm = format!("{NS}.getViewer");
+    let headers: Vec<(&str, String)> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
+    let (status, said) = get(h, &lxm, "", &headers).await;
+    assert_eq!(status, 200, "{said}");
+    said
+}
+
+async fn groups_of(h: &Running, who: &Authority, query: &str) -> (u16, Json) {
+    let lxm = format!("{NS}.getActorGroups");
+    get(h, &lxm, query, &[auth(h, who, &lxm)]).await
+}
+
+fn dids(said: &Json) -> Vec<&str> {
+    said["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g["did"].as_str().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn says_who_is_asking() {
+    let h = start(&[], false).await;
+    let [alice, ..] = people(&h).await;
+    assert_eq!(viewer(&h, None).await, json!({}));
+    let said = viewer(&h, Some(&alice)).await;
+    assert_eq!(said["actor"]["did"], alice.did.as_str());
+    assert_eq!(said["actor"]["handle"], "authority.test");
+    assert_eq!(said["actor"]["canCreateGroup"], true);
+    let h = start(&[("GROUP_FOUNDERS", "did:plc:someone")], false).await;
+    let [alice, ..] = people(&h).await;
+    assert_eq!(
+        viewer(&h, Some(&alice)).await["actor"]["canCreateGroup"],
+        false
+    );
+}
+
+#[tokio::test]
+async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
+    let h = start(&[], false).await;
+    let [alice, bob, carol] = people(&h).await;
+    let riders = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let hikers = start_group(
+        &h,
+        &alice,
+        json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
+    )
+    .await;
+    let quiet = start_group(&h, &alice, json!({"handle": "quiet.groups.test", "displayName": "Quiet", "metaReadableBy": [{"role": "admin"}]})).await;
+    join(&h, &riders, &bob.did).await;
+    join(&h, &quiet, &bob.did).await;
+
+    let (status, mine) = groups_of(&h, &alice, &format!("actor={}", alice.did)).await;
+    assert_eq!(status, 200, "{mine}");
+    let mut all = vec![riders.as_str(), hikers.as_str(), quiet.as_str()];
+    all.sort();
+    assert_eq!(dids(&mine), all);
+    let at_riders = mine["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["did"] == riders.as_str())
+        .unwrap();
+    assert_eq!(at_riders["handle"], RIDERS);
+    assert_eq!(at_riders["displayName"], "Riders");
+    assert_eq!(at_riders["memberCount"], 2);
+    assert!(at_riders["address"].is_string());
+
+    // Of Bob's, only those Alice is in too; of Alice's, only those Bob is.
+    let (_, bobs) = groups_of(&h, &alice, &format!("actor=@{}", bob.did)).await;
+    let mut both = vec![riders.as_str(), quiet.as_str()];
+    both.sort();
+    assert_eq!(dids(&bobs), both);
+    let (_, seen) = groups_of(&h, &bob, &format!("actor={}", alice.did)).await;
+    assert_eq!(dids(&seen), both);
+    // Whose profile Bob may not read shows him no name.
+    let at_quiet = seen["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["did"] == quiet.as_str())
+        .unwrap();
+    assert_eq!(at_quiet.get("displayName"), None);
+    let (_, none) = groups_of(&h, &carol, &format!("actor={}", alice.did)).await;
+    assert_eq!(none["groups"], json!([]));
+
+    // A page at a time.
+    let (_, first) = groups_of(&h, &alice, &format!("actor={}&limit=2", alice.did)).await;
+    assert_eq!(dids(&first), all[..2]);
+    let cursor = first["cursor"].as_str().unwrap();
+    let (_, rest) = groups_of(
+        &h,
+        &alice,
+        &format!("actor={}&limit=2&cursor={cursor}", alice.did),
+    )
+    .await;
+    assert_eq!(dids(&rest), all[2..]);
+    assert_eq!(rest.get("cursor"), None);
+
+    assert_eq!(
+        groups_of(&h, &alice, "actor=nobody.invalid").await.1["error"],
+        "ActorNotFound"
+    );
+    assert_eq!(groups_of(&h, &alice, "").await.0, 400);
+    let lxm = format!("{NS}.getActorGroups");
+    assert_eq!(
+        get(&h, &lxm, &format!("actor={}", alice.did), &[]).await.0,
+        401
+    );
+}
+
+#[tokio::test]
+async fn shows_a_groups_picture() {
+    let h = start(&[], false).await;
+    let [alice, ..] = people(&h).await;
+    let riders = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let lxm = format!("{NS}.uploadImage");
+    let (k, v) = auth(&h, &alice, &lxm);
+    let res = h
+        .http
+        .post(format!("{}/xrpc/{lxm}?group={riders}", h.url))
+        .header(k, v)
+        .header("content-type", "image/png")
+        .body(b"face".to_vec())
+        .send()
+        .await
+        .unwrap();
+    let image: Json = res.json().await.unwrap();
+    let lxm = format!("{NS}.updateProfile");
+    let body = json!({"group": riders, "displayName": "Riders", "avatar": image["blob"]});
+    assert_eq!(
+        post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await.0,
+        200
+    );
+    let (_, mine) = groups_of(&h, &alice, &format!("actor={}", alice.did)).await;
+    assert_eq!(mine["groups"][0]["avatar"], image["blob"]["ref"]["$link"]);
+}

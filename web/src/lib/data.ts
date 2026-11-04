@@ -38,3 +38,17 @@ export async function xrpc<Q extends Query>({ fetch }: Load, nsid: Q['nsid'], pa
 	}
 	return res.json();
 }
+
+/**
+ * What the XRPC procedure `nsid` answers for `input`, asked from the
+ * server (a form's action), as the person signed in. A failure is the
+ * page's, with the method's own words.
+ */
+export async function call<T>({ fetch }: Load, nsid: string, input: object): Promise<T> {
+	const res = await fetch(`/xrpc/${nsid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+	if (!res.ok) {
+		const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
+		error(res.status, failure?.message ?? res.statusText);
+	}
+	return res.json();
+}

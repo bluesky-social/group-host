@@ -1,0 +1,27 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.getViewer",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Who is asking: by the console's session cookie, or their service auth. Nothing, for no one. As knotless's getViewer, for the console to show who is signed in.",
+      "parameters": {
+        "type": "params",
+        "properties": {}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#actorView",
+              "description": "Who is asking, with the handle their DID document names and canCreateGroup; absent when no one is."
+            }
+          }
+        }
+      }
+    }
+  }
+}

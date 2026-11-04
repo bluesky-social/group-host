@@ -1,0 +1,78 @@
+# The console used as people use it, as `just e2e` runs it: in Chromium,
+# signed in to through the reference PDS's own approval page, an app
+# signed in as a group through it and writing as the group, an app
+# declined, and signing out (harness/e2e/flows.spec.mjs), over a world
+# seeded for the run (harness/e2e/setup.mjs). The tests show the host's
+# methods do what they say; this, that the console and the host and a PDS
+# do it together. Each flow that fails leaves the page as it was then
+# among the check's outputs, as a picture. As knotless's e2e.yml.
+#
+# Node, the packages, Chromium, the libraries it needs and the build are
+# kept between runs, as main's runs leave them: nothing is fetched again
+# until what it is made from changes.
+image: rust:1.98
+# Every push to main, and pulls into it or a feature/ branch that change
+# the console, the host it asks, the lexicons, the harness it runs over, or
+# this file. A pull changing none passes at once, noted as skipped.
+on:
+  push: {refs: [refs/heads/main]}
+  pull:
+    base: [refs/heads/main, refs/heads/feature/*]
+    paths: [web/**, lexicons/**, crates/**, Cargo.toml, Cargo.lock, harness/e2e/**, harness/pds.mjs, harness/tls-proxy.mjs, harness/package.json, harness/package-lock.json, .knotless/workflows/e2e.yml, .knotless/uses.lock]
+cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/node, /opt/browsers, /opt/chromium-debs, web/node_modules, harness/node_modules]
+env:
+  PLAYWRIGHT_BROWSERS_PATH: /opt/browsers
+steps:
+  - uses: chadtmiller.com/steps/node@1
+    with: {version: 24.22.1}
+  - uses: chadtmiller.com/steps/npm-ci@1
+    name: web
+    with: {dir: web}
+  - uses: chadtmiller.com/steps/npm-ci@1
+    name: harness
+    with: {dir: harness}
+  - name: chromium
+    run: |
+      export PATH=/opt/node/bin:$PATH
+      cd harness
+      # The browser, into /opt/browsers once for each Playwright version.
+      npx playwright install chromium
+      # The libraries it needs, which `install-deps` would fetch with apt on
+      # every run: their .debs are kept, fetched again only when this
+      # Playwright or this Debian asks for others, and installed offline.
+      pkgs=$(npx playwright install-deps --dry-run chromium | sed -n "s/.*--no-install-recommends \([^\"']*\).*/\1/p")
+      [ -n "$pkgs" ] || { echo "no packages in: $(npx playwright install-deps --dry-run chromium)"; exit 1; }
+      debs=/opt/chromium-debs
+      want="$(. /etc/os-release && echo "$VERSION_ID") $pkgs"
+      if [ "$(cat $debs/.want 2>/dev/null)" != "$want" ]; then
+        rm -rf "${debs:?}"/* && mkdir -p $debs/partial
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends --download-only -o Dir::Cache::archives=$debs $pkgs
+        echo "$want" > $debs/.want
+      fi
+      dpkg -i $debs/*.deb > /dev/null
+  - name: sqlite
+    run: |
+      # The stock PDS's SQLite module, which the install above skips building.
+      export PATH=/opt/node/bin:$PATH
+      dir="$(dirname "$(node -p "require.resolve('better-sqlite3/package.json', { paths: ['harness'] })")")"
+      [ -f "$dir/build/Release/better_sqlite3.node" ] || (cd "$dir" && npm run install)
+  - name: build
+    run: |
+      export PATH=/opt/node/bin:$PATH
+      # The host and the console side by side, as neither needs the other.
+      cargo build -p group-host & cargo=$!
+      (cd web && npm run build) || { kill $cargo; exit 1; }
+      wait $cargo
+  - name: flows
+    run: |
+      export PATH=/opt/node/bin:$PATH
+      status=0
+      (cd harness && npx playwright test -c e2e/playwright.config.mjs) || status=$?
+      # The page each failed flow ended on, named for the flow.
+      if [ -n "${KNOTLESS_RUN_OUTPUTS:-}" ] && [ -d target/e2e ]; then
+        for shot in target/e2e/*/*/test-failed-*.png; do
+          [ -f "$shot" ] && cp "$shot" "$KNOTLESS_RUN_OUTPUTS/$(basename "$(dirname "$shot")").png"
+        done
+      fi
+      exit $status

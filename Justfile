@@ -51,6 +51,13 @@ web:
 web-dev:
     cd web && npm run dev
 
+# The console used as people use it (harness/e2e/flows.spec.mjs): in
+# Chromium, signed in to through the reference PDS's own approval page,
+# and an app signed in as a group through it, over a world of its own.
+e2e *args: web
+    {{cargo}} build -p group-host
+    cd harness && npx playwright test -c e2e/playwright.config.mjs {{args}}
+
 # The opensocial command.
 opensocial *args:
     {{cargo}} run -q -p opensocial -- {{args}}

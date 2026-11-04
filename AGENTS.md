@@ -72,7 +72,8 @@ and its tests, for what it has to handle; then write it as it should be.
 - `web/`: the console, a SvelteKit app. Its TypeScript types are made from
   the lexicons by @atproto/lex (`npm run lex`, which `dev`, `build` and
   `check` run first) into `web/src/lib/lexicons`, not kept in git.
-- `harness/`: the checks beside the tests.
+- `harness/`: the checks beside the tests, and the console's flows end to
+  end (`harness/e2e`).
 
 ## The console
 
@@ -138,9 +139,10 @@ pulls into it or into a `feature/` branch:
 - `web`: the component layers, svelte-check (failing on any warning), and
   the build.
 - `lexicons`: `just lex`.
+- `e2e`: `just e2e`, the console in Chromium over the reference PDS.
 
-On a pull, `web` and `lexicons` run only when it changes what they read;
-otherwise each passes at once, noted as skipped.
+On a pull, `web`, `lexicons` and `e2e` run only when it changes what they
+read; otherwise each passes at once, noted as skipped.
 
 ## Landing a change
 

@@ -9,12 +9,21 @@
 // one: an atproto checkout's packages/dev-env on the spaces alpha, as CI
 // builds it (.knotless/workflows/test.yml). The alpha's PDS migrates an
 // account's database each time it opens it; here only the first time.
+//
+// The console is an OAuth client, which the PDS reaches only over https at a
+// hostname, as knotless's gateway is. So the harness makes a certificate for
+// CONSOLE_HOST, trusts it, and resolves that name to 127.0.0.1; the flows
+// put harness/tls-proxy.mjs in front of the console with it.
 
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
-import { readFileSync, realpathSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { execFileSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import dns from 'node:dns'
+import tls from 'node:tls'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The PDS's better-sqlite3 is built for the Node .node-version names.
@@ -52,6 +61,25 @@ async function migrateOnce(dir) {
   }
 }
 
+const CONSOLE_HOST = 'console.group-host.internal'
+const certs = mkdtempSync(join(tmpdir(), 'group-host-tls-'))
+const cert = join(certs, 'cert.pem')
+const key = join(certs, 'key.pem')
+execFileSync('openssl', [
+  'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1',
+  '-nodes', '-keyout', key, '-out', cert, '-days', '7',
+  '-subj', `/CN=${CONSOLE_HOST}`, '-addext', `subjectAltName=DNS:${CONSOLE_HOST}`,
+], { stdio: 'ignore' })
+tls.setDefaultCACertificates([...tls.getCACertificates('default'), readFileSync(cert, 'utf8')])
+const lookup = dns.lookup
+dns.lookup = (hostname, options, callback) => {
+  if (typeof options === 'function') [callback, options] = [options, {}]
+  if (hostname !== CONSOLE_HOST) return lookup(hostname, options, callback)
+  return options?.all
+    ? callback(null, [{ address: '127.0.0.1', family: 4 }])
+    : callback(null, '127.0.0.1', 4)
+}
+
 const at = process.argv.indexOf('--accounts')
 const names = (at === -1 ? 'alice,bob' : process.argv[at + 1]).split(',')
 
@@ -71,7 +99,13 @@ for (const name of names) {
 }
 
 const described = await fetch(`${net.pds.url}/xrpc/com.atproto.server.describeServer`).then((r) => r.json())
-console.log(JSON.stringify({ pds: net.pds.url, plc: net.plc.url, spaces: described.spacesAlpha === true, accounts }))
+console.log(JSON.stringify({
+  pds: net.pds.url,
+  plc: net.plc.url,
+  spaces: described.spacesAlpha === true,
+  console: { host: CONSOLE_HOST, cert, key },
+  accounts,
+}))
 
 const shutdown = async () => {
   await net.close()

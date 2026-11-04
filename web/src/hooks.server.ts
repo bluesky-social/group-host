@@ -24,10 +24,12 @@ export const handle: Handle = async ({ event, resolve }) => {
  * and with the global fetch: the host can share the console's origin, as
  * it does in production, which Kit's own fetch would answer itself.
  */
-export const handleFetch: HandleFetch = ({ event, request, fetch }) => {
+export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
 	const url = new URL(request.url);
 	if (url.origin === event.url.origin && url.pathname.startsWith('/xrpc/')) {
-		const asked = new Request(`${GROUP_HOST}${url.pathname}${url.search}`, request);
+		// A procedure's body read whole: Node's fetch sends no stream on.
+		const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
+		const asked = new Request(`${GROUP_HOST}${url.pathname}${url.search}`, { method: request.method, headers: request.headers, body });
 		asked.headers.set('x-forwarded-host', event.url.host);
 		asked.headers.set('x-forwarded-proto', event.url.protocol.slice(0, -1));
 		// Who asks, as the session cookie of someone signed in says: the

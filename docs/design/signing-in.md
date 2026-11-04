@@ -207,9 +207,7 @@ at the token endpoint, its client id (and its assertion, if confidential)
 in the body and a DPoP proof in the header. It must be one the host makes
 groups for (`PROVISIONING_CLIENTS`), and its scope must hold `atproto`
 and nothing its metadata does not declare. All of that is checked before
-the group is made. What follows it (narrowing the scope, issuing the
-grant) fails only on an internal error, which leaves the group made, and
-its founder's to run, with no session for the app: it asks again. The session is issued as a code exchange issues one,
+the group is made. The session is issued as a code exchange issues one,
 narrowed to the founder's roles as an approval is, and recorded as the
 founder's: from then on an ordinary grant, refreshed at `/oauth/token`,
 listed among the group's, revoked there.

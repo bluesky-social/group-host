@@ -20,4 +20,5 @@ arrive with the methods they call (see [the order](../design/README.md#the-order
 | `lex` | the lexicons' checks |
 | `serve` | the host |
 | `web`, `web-dev` | the console built, or served as its source changes |
+| `e2e <args>` | the console's flows in Chromium over the reference PDS, as the `e2e` check runs them |
 | `opensocial <args>` | the command |
