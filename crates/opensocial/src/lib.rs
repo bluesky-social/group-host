@@ -465,7 +465,15 @@ async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<Str
     let group = me.resolve(from, group).await?;
     let mut out = format!("moving {group}\n  from {}\n  to   {}\n", from.url, to.url);
     let body = json!({"group": group, "destDid": to.did});
-    let prepared = me.call(from, &m("migratePrepare"), &body).await?;
+    let prepared = match me.call(from, &m("migratePrepare"), &body).await {
+        Ok(prepared) => prepared,
+        // Handed over by a run that stopped before switching it on: that
+        // is the step left.
+        Err(e) if e.to_string().contains("NotController") => {
+            return activate(me, to, &group, out + "handed over already\n").await;
+        }
+        Err(e) => return Err(e),
+    };
     let spaces = prepared["snapshot"]["spaces"]
         .as_array()
         .map_or(0, Vec::len);
@@ -484,8 +492,16 @@ async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<Str
     let body = json!({"group": group, "recommendedCreds": received["recommendedCreds"]});
     let done = me.call(from, &m("migrateComplete"), &body).await?;
     out += &format!("handed over to {}\n", text(&done["movedTo"]));
+    activate(me, to, &group, out).await
+}
+
+/// Switches `group` on at `to`, once handed over: what was done, or, if it
+/// could not be yet, that the same command run again does it.
+async fn activate(me: &Client, to: &Host, group: &str, mut out: String) -> Result<String> {
     let body = json!({"did": group});
-    me.call(to, &m("migrateActivate"), &body).await?;
+    if let Err(e) = me.call(to, &m("migrateActivate"), &body).await {
+        bail!("{out}not switched on yet: {e}\nrun the same command again to switch it on");
+    }
     out += "switched on\n";
     Ok(out)
 }
@@ -510,7 +526,10 @@ async fn import(
     let mut asked = vec![("did", did.as_str())];
     asked.extend(a.flags.get("address").map(|l| ("address", *l)));
     let plan = me.query(host, &m("checkImport"), &asked).await?;
-    if let Some(no) = plan.get("refused") {
+    // A move of yours already pending is finished, whatever the address
+    // would be now.
+    let pending = plan.get("recommendedCreds").is_some();
+    if let Some(no) = plan.get("refused").filter(|_| !pending) {
         bail!("{} can't move here: {}", account, text(&no["message"]));
     }
     let Some(password) = &env.import_password else {

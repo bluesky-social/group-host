@@ -116,7 +116,8 @@ the host it leaves controls it, and a failed receive left nothing at the
 new one. After it, the new host holds it, switched off until activated.
 
 The `opensocial migrate` command makes the four calls in order
-([cli](../reference/cli.md)). The console has no page for this move.
+([cli](../reference/cli.md)). Run again after it handed the group over
+but could not switch it on, it does only that. The console has no page for this move.
 
 ## Bringing an account here as a group
 

@@ -23,9 +23,9 @@ any PDS may run it against any host.
 | `membership assign <group> <member> <role,role…>` | gives a member these roles, in place of theirs (`member` among them) |
 | `membership eject <group> <member> [--reason]` | puts a member out |
 | `membership invite <group> <person> [--message]` | invites someone in |
-| `migrate <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
+| `migrate <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; run again after a run that handed it over but could not switch it on, it switches it on; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
 | `import <account> [--address <label>]` | moves an account from its server here, its spaces with it, to become a group run by you; its server emails a code ([moving](../design/moving.md#bringing-an-account-here-as-a-group)) |
-| `import <account> --code <code>` | with that code, has its server sign its identity over, and finishes |
+| `import <account> --code <code>` | with that code, has its server sign its identity over, and finishes, whatever `--address` the start was given |
 | `seed <handle>` | a group to try things on, joined by approval: two rules, a moderator role (`mod.read`, `mod.resolve`, `label`), and an invite for each of `OPENSOCIAL_SEED_INVITE` |
 
 A group or person is a handle or a DID, resolved by the host's

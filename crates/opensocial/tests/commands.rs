@@ -174,6 +174,11 @@ async fn moves_a_group_to_another_host() {
     let (a, b) = (host().await, host().await);
     let alice = env(&a, 0);
     ok(&alice, &["create-group", "riders.groups.test"]).await;
+    // Only one who runs it may move it.
+    let bob = env(&a, 1);
+    let to = format!("{}/", b.url);
+    let said = fails(&bob, &["migrate", "riders.groups.test", "--to", &to]).await;
+    assert!(said.contains("fyi.opensocial.migratePrepare"), "{said}");
     let said = ok(
         &alice,
         &[
@@ -194,7 +199,16 @@ async fn moves_a_group_to_another_host() {
         .unwrap()
         .did;
     assert!(b.host.deactivation(&did).unwrap().is_none());
-    // Named by its DID, to a host that is not there.
+    // Run again, it picks up at switching it on, which is done.
+    let again = ["migrate", "riders.groups.test", "--to", &b.url];
+    let said = ok(&alice, &again).await;
+    assert_eq!(said.lines().nth(3), Some("handed over already"), "{said}");
+    assert!(said.ends_with("switched on\n"), "{said}");
+    // Towards a host that never took it in, it says it is not on yet.
+    let c = host().await;
+    let said = fails(&alice, &["migrate", "riders.groups.test", "--to", &c.url]).await;
+    assert!(said.contains("not switched on yet"), "{said}");
+    // Named by its DID, to a host that is not there: not on yet.
     let said = fails(
         &alice,
         &[
@@ -207,7 +221,7 @@ async fn moves_a_group_to_another_host() {
         ],
     )
     .await;
-    assert!(said.contains("fyi.opensocial.migratePrepare"), "{said}");
+    assert!(said.contains("reaching http://127.0.0.1:1"), "{said}");
 }
 
 /// `nsid` of the reference PDS, as `bearer`: a query with `query`, or a
@@ -314,6 +328,11 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
     assert!(said.contains("can't move here"), "{said}");
     let said = fails(&mover, &["import", &handle, "--code", "nothing-sent"]).await;
     assert!(said.contains("no move of"), "{said}");
+    // Its own label taken here, it is brought under another, and finished
+    // with the code alone.
+    ok(&plain, &["create-group", &format!("{name}.groups.test")]).await;
+    let said = fails(&mover, &["import", &handle]).await;
+    assert!(said.contains("can't move here"), "{said}");
     let club = format!("{name}-club");
     let said = ok(&mover, &["import", &handle, "--address", &club]).await;
     assert!(said.contains(&format!("as   {club}.groups.test")), "{said}");
