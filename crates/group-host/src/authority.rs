@@ -15,13 +15,14 @@ use crate::Host;
 use crate::rbac::{self, NS};
 use crate::repo::invalid;
 use crate::space::NOTIFY_WRITE;
+use crate::space_api::NOTIFY_REVOKED;
 use crate::store::{Notice, Space};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use anyhow::{Context, Result};
 use atproto::service_auth::{self, Claims};
 use atproto::space::SpaceRef;
-use atproto::space_auth::space_host_aud;
+use atproto::space_auth::{self, space_host_aud};
 use atproto::{Value, did, syntax};
 use axum::http::StatusCode;
 use serde_json::json;
@@ -258,6 +259,65 @@ impl Host {
                 }
             });
         }
+        Ok(())
+    }
+
+    /// Revokes the credentials `did` holds to `authority`'s spaces: at
+    /// once for the repos here, and told to the host of each writer
+    /// elsewhere in those spaces, best effort, as the authority.
+    pub async fn revoke_credentials(&self, authority: &str, did: &str) -> Result<()> {
+        let mut by_space: std::collections::BTreeMap<String, (Vec<String>, i64)> =
+            Default::default();
+        for (space, jti, expires_at) in self.store.issued_to(authority, did, now())? {
+            let (jtis, until) = by_space.entry(space).or_default();
+            jtis.push(jti);
+            *until = (*until).max(expires_at + 2 * space_auth::CLOCK_SKEW as i64);
+        }
+        let signing = self
+            .store
+            .account(authority)?
+            .context("the authority is here")?
+            .signing;
+        for (space, (jtis, until)) in by_space {
+            self.store.revoke(&space, &jtis, until, now())?;
+            for writer in self.store.writers(&space, None, u32::MAX)? {
+                let here = self
+                    .store
+                    .account(&writer.did)?
+                    .is_some_and(|a| a.did == writer.did);
+                if here {
+                    continue;
+                }
+                let told = self
+                    .tell_revoked(&signing, authority, &writer.did, &space, &jtis)
+                    .await;
+                if let Err(e) = told {
+                    tracing::warn!(space, repo = writer.did, error = %format!("{e:#}"), "notifyCredentialRevoked failed");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn tell_revoked(
+        &self,
+        signing: &atproto::Keypair,
+        authority: &str,
+        writer: &str,
+        space: &str,
+        jtis: &[String],
+    ) -> Result<()> {
+        let doc = self.identity.document(writer).await?;
+        let pds = did::pds(&doc).context("the writer's document names no PDS")?;
+        let claims = self.claims(authority, writer, NOTIFY_REVOKED);
+        let res = self
+            .http
+            .post(format!("{pds}/xrpc/{NOTIFY_REVOKED}"))
+            .bearer_auth(service_auth::sign(signing, &claims))
+            .json(&json!({ "space": space, "credentials": jtis }))
+            .send()
+            .await?;
+        res.error_for_status()?;
         Ok(())
     }
 

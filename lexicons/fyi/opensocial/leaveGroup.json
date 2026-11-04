@@ -27,7 +27,17 @@
           "type": "object",
           "properties": {}
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "NotAMember",
+          "description": "The account is not a member of the group."
+        },
+        {
+          "name": "LastConfigurer",
+          "description": "It would leave the group with nobody able to configure it."
+        }
+      ]
     }
   }
 }

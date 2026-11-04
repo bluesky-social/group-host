@@ -89,7 +89,13 @@
             }
           }
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "LastConfigurer",
+          "description": "It would leave the group with nobody able to configure it."
+        }
+      ]
     }
   }
 }

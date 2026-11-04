@@ -14,6 +14,7 @@ pub mod group_api;
 pub mod group_config;
 pub mod group_handle;
 pub mod group_lifecycle;
+pub mod group_members;
 pub mod group_spaces;
 pub mod identity;
 pub mod index;
@@ -230,6 +231,26 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.getSpaceBlob",
             get(index_api::get_space_blob),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.putRole",
+            post(group_members::put_role),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.deleteRole",
+            post(group_members::delete_role),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.assignRoles",
+            post(group_members::assign_roles),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.ejectMember",
+            post(group_members::eject_member),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.leaveGroup",
+            post(group_members::leave_group),
         )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))

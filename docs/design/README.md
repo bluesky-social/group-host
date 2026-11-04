@@ -89,9 +89,11 @@ says otherwise.
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,
    `spaceIndex.ts`. (`checkUserAccess`, for invite inboxes, comes with
    invites.)
-5. **Membership and roles.** Roles and permissions, assigning, joining
-   and join requests, invites, leaving and ejecting: `rbac.ts`,
-   `methods/{roles,membership,join,invites}.ts`.
+5. **Membership and roles.** Roles and permissions, assigning, leaving
+   and ejecting, with credentials revoked for whoever is out
+   (`group_members.rs`; done, see [membership](membership.md)); then
+   joining and join requests, and invites with `checkUserAccess` for
+   their inboxes: `rbac.ts`, `methods/{roles,membership,join,invites}.ts`.
 6. **Signing in.** Service auth for callers; the OAuth server an app signs
    in to as a group (PAR, DPoP, consent, refresh), group tokens, app
    passwords, connected apps, provisioning: `auth.ts`, `pds/auth.ts`,

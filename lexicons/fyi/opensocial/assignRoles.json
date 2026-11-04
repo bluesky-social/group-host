@@ -37,6 +37,14 @@
       "errors": [
         {
           "name": "NotAssignable"
+        },
+        {
+          "name": "NotAMember",
+          "description": "The account is not a member of the group."
+        },
+        {
+          "name": "MemberRole",
+          "description": "Everyone in the group holds member: it goes only by ejecting or leaving."
         }
       ],
       "output": {

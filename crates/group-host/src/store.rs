@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
 /// Each version of the schema, applied in order to a database below it.
-const MIGRATIONS: &[&str] = &[
+pub const MIGRATIONS: &[&str] = &[
     "
     CREATE TABLE account (
         did TEXT PRIMARY KEY,
@@ -192,6 +192,16 @@ const MIGRATIONS: &[&str] = &[
     "
     INSERT OR IGNORE INTO address (did, address) SELECT did, handle FROM account;
 ",
+    "
+    CREATE TABLE issued_credential (
+        space TEXT NOT NULL,
+        did TEXT NOT NULL,
+        jti TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (space, jti)
+    );
+    CREATE INDEX issued_credential_to ON issued_credential (did);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -271,6 +281,7 @@ const FORGET_SPACE: &[&str] = &[
     "DELETE FROM space_recipient WHERE space = ?1",
     "DELETE FROM space_writer WHERE space = ?1",
     "DELETE FROM space_grant WHERE space = ?1",
+    "DELETE FROM issued_credential WHERE space = ?1",
     "DELETE FROM space WHERE uri = ?1",
 ];
 /// And the authority's own repo in it.
@@ -286,12 +297,19 @@ const UNINDEX: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2 AN
 const INDEX: &str = "INSERT INTO index_record (space, did, path, cid, value, indexed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 const INDEXED: &str = "SELECT seq, did, path, cid, value, indexed_at FROM index_record WHERE space = ?1 AND (?2 IS NULL OR substr(path, 1, length(?2) + 1) = ?2 || '/') AND seq < ?3 ORDER BY seq DESC LIMIT ?4";
 const INDEXED_ONE: &str = "SELECT seq, did, path, cid, value, indexed_at FROM index_record WHERE space = ?1 AND did = ?2 AND path = ?3";
+const ISSUE: &str =
+    "INSERT INTO issued_credential (space, did, jti, expires_at) VALUES (?1, ?2, ?3, ?4)";
+const FORGET_ISSUED: &str = "DELETE FROM issued_credential WHERE expires_at <= ?1";
+const ISSUED_TO: &str = "SELECT space, jti, expires_at FROM issued_credential WHERE did = ?1 AND expires_at > ?2 AND space IN (SELECT uri FROM space WHERE authority = ?3) ORDER BY space";
+const UNINDEX_WRITER: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2";
+const UNINDEX_STATE: &str = "DELETE FROM index_repo WHERE space = ?1 AND did = ?2";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM issued_credential WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM index_record WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM index_repo WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM deactivation WHERE did = ?1",
@@ -1178,6 +1196,55 @@ impl Store {
         let conn = self.conn();
         let found = conn.query_row(INDEXED_ONE, [space, did, path], indexed);
         Ok(found.optional()?)
+    }
+
+    /// Keeps that the credential `jti` to `space` went to `did`, until it
+    /// lapses at `expires_at`; those lapsed by `now` are forgotten.
+    pub fn issued(
+        &self,
+        space: &str,
+        did: &str,
+        jti: &str,
+        expires_at: i64,
+        now: i64,
+    ) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let forgot = tx.execute(FORGET_ISSUED, [now]);
+        forgot?;
+        let kept = tx.execute(ISSUE, params![space, did, jti, expires_at]);
+        kept?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The credentials to `authority`'s spaces still good at `now` that
+    /// went to `did`: each space, jti and lapse.
+    pub fn issued_to(
+        &self,
+        authority: &str,
+        did: &str,
+        now: i64,
+    ) -> Result<Vec<(String, String, i64)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(ISSUED_TO)?;
+        let rows = q.query_map(params![did, now, authority], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Forgets what the index read of `did`'s repo in `space`.
+    pub fn unindex(&self, space: &str, did: &str) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let gone = tx.execute(UNINDEX_WRITER, [space, did]);
+        gone?;
+        let gone = tx.execute(UNINDEX_STATE, [space, did]);
+        gone?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// The spaces `authority` is the authority for.

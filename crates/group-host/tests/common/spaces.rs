@@ -88,6 +88,10 @@ pub async fn authority(h: &Running, refuse: bool, pds: bool) -> Authority {
             "/xrpc/com.atproto.space.notifySpaceDeleted",
             post(notify_write),
         )
+        .route(
+            "/xrpc/com.atproto.space.notifyCredentialRevoked",
+            post(notify_write),
+        )
         .with_state(told.clone());
     let url = serve(router).await;
     let key = Keypair::generate(Curve::K256);

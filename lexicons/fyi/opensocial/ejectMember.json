@@ -34,6 +34,10 @@
       "errors": [
         {
           "name": "NotAssignable"
+        },
+        {
+          "name": "NotAMember",
+          "description": "The account is not a member of the group."
         }
       ],
       "output": {

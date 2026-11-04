@@ -5,7 +5,8 @@ guides show how, the reference lists what.
 
 - [Design](design/README.md): what the host is, how it is put together,
   and what is still to come; [spaces](design/spaces.md), a group's repos
-  in them; [groups](design/groups.md).
+  in them; [groups](design/groups.md);
+  [membership](design/membership.md).
 - [Development](development.md): building, testing, and the checks a pull
   runs.
 - Reference: [configuration](reference/config.md), [the command and the

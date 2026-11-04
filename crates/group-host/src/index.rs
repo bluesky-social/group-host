@@ -17,6 +17,7 @@
 //! prototype's `spaceIndex.ts` keeps what it reads.
 
 use crate::Host;
+use crate::authority::Access;
 use crate::store::SpaceHead;
 use crate::time::now_millis;
 use anyhow::{Context, Result, bail, ensure};
@@ -152,6 +153,11 @@ impl Host {
             return Ok(());
         };
         for writer in self.store.writers(space, None, u32::MAX)? {
+            // One the space no longer lets write is no longer kept.
+            if !self.may(space, &hosted, Some(&writer.did), Access::Write)? {
+                self.store.unindex(space, &writer.did)?;
+                continue;
+            }
             let indexed = self.store.index_state(space, &writer.did)?;
             let at = indexed
                 .as_ref()

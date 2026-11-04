@@ -6,7 +6,7 @@ use crate::Host;
 use crate::api::{Params, invalid, page, param};
 use crate::authority::Access;
 use crate::space::NOTIFY_WRITE;
-use crate::space_api::{credential, forbidden, now, service_caller};
+use crate::space_api::{credential, forbidden, now, refused, service_caller};
 use crate::store::Space;
 use crate::time::iso;
 use crate::xrpc::XrpcError;
@@ -93,6 +93,13 @@ pub async fn get_space_credential(
     };
     let credential = space_auth::create(Kind::Credential, &make, &authority.signing, now())
         .map_err(XrpcError::internal)?;
+    // Kept, so a member who loses the space has theirs revoked.
+    if let Some(user) = user {
+        let (_, issued) = space_auth::parse(Kind::Credential, &credential).map_err(refused)?;
+        host.store
+            .issued(uri, user, &issued.jti, issued.exp as i64, now() as i64)
+            .map_err(XrpcError::internal)?;
+    }
     Ok(Json(json!({ "credential": credential })))
 }
 
