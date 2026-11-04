@@ -3,6 +3,7 @@
 
 #![allow(dead_code)]
 
+pub mod groups;
 pub mod net;
 pub mod spaces;
 

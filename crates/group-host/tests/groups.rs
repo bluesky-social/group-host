@@ -4,82 +4,15 @@
 
 mod common;
 
-use atproto::service_auth::{self, Claims};
 use atproto::{Curve, Keypair};
+use common::groups::*;
 use common::spaces::*;
-use common::{Running, start};
+use common::start;
 use group_host::authority::Access;
 use group_host::group::{members_space, meta_space};
 use group_host::rbac::ACTIONS;
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
-
-const NS: &str = "fyi.opensocial";
-
-/// Service auth from `who` for this host and `lxm`.
-fn auth(h: &Running, who: &Authority, lxm: &str) -> (&'static str, String) {
-    auth_for(who, &h.host.config.service_did, lxm)
-}
-
-fn auth_for(who: &Authority, aud: &str, lxm: &str) -> (&'static str, String) {
-    let claims = Claims {
-        iss: who.did.clone(),
-        aud: aud.into(),
-        exp: now() + 60,
-        iat: Some(now()),
-        lxm: Some(lxm.into()),
-        jti: None,
-    };
-    (
-        "authorization",
-        format!("Bearer {}", service_auth::sign(&who.key, &claims)),
-    )
-}
-
-async fn post(h: &Running, nsid: &str, body: &Json, headers: &[(&str, String)]) -> (u16, Json) {
-    let mut req = h.http.post(format!("{}/xrpc/{nsid}", h.url)).json(body);
-    for (k, v) in headers {
-        req = req.header(*k, v);
-    }
-    let res = req.send().await.unwrap();
-    (
-        res.status().as_u16(),
-        res.json().await.unwrap_or(Json::Null),
-    )
-}
-
-async fn get(h: &Running, nsid: &str, query: &str, headers: &[(&str, String)]) -> (u16, Json) {
-    let got = read(h, nsid, query, headers).await;
-    (
-        got.status,
-        serde_json::from_slice(&got.body).unwrap_or(Json::Null),
-    )
-}
-
-/// A group started by `founder` with `body`: its DID.
-async fn start_group(h: &Running, founder: &Authority, body: Json) -> String {
-    let lxm = format!("{NS}.createGroup");
-    let (status, made) = post(h, &lxm, &body, &[auth(h, founder, &lxm)]).await;
-    assert_eq!(status, 200, "{made}");
-    made["did"].as_str().unwrap().to_string()
-}
-
-/// Three people elsewhere.
-async fn people(h: &Running) -> [Authority; 3] {
-    [
-        authority(h, false, true).await,
-        authority(h, false, true).await,
-        authority(h, false, true).await,
-    ]
-}
-
-async fn view(h: &Running, group: &str, who: Option<&Authority>) -> Json {
-    let lxm = format!("{NS}.getGroup");
-    let headers: Vec<_> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
-    let (status, view) = get(h, &lxm, &format!("group={group}"), &headers).await;
-    assert_eq!(status, 200, "{view}");
-    view
-}
 
 #[tokio::test]
 async fn starts_a_group_with_its_spaces() {

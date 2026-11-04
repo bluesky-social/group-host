@@ -45,7 +45,11 @@ pub(crate) async fn caller(
 }
 
 /// Who calls `lxm`, who must say.
-async fn signed_in(host: &Host, headers: &HeaderMap, lxm: &str) -> Result<String, XrpcError> {
+pub(crate) async fn signed_in(
+    host: &Host,
+    headers: &HeaderMap,
+    lxm: &str,
+) -> Result<String, XrpcError> {
     let who = caller(host, headers, lxm).await?;
     who.ok_or_else(|| unauthorized("AuthMissing", "service auth is required"))
 }
@@ -75,7 +79,7 @@ pub async fn create_group(
     Ok(Json(json!({"did": did, "meta": meta, "members": members})))
 }
 
-fn not_found() -> XrpcError {
+pub(crate) fn not_found() -> XrpcError {
     XrpcError::new(
         StatusCode::BAD_REQUEST,
         "GroupNotFound",
@@ -84,7 +88,7 @@ fn not_found() -> XrpcError {
 }
 
 /// A group here: its handle, if `did` is one.
-fn group_of(host: &Host, did: &str) -> Result<String, XrpcError> {
+pub(crate) fn group_of(host: &Host, did: &str) -> Result<String, XrpcError> {
     let account = host.store.account(did).map_err(XrpcError::internal)?;
     let account = account.filter(|a| a.did == did).ok_or_else(not_found)?;
     let space = host

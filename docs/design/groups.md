@@ -61,6 +61,23 @@ group for someone or lets them read it themselves.
 - `fyi.opensocial.listGroups` is every group here, unauthenticated: by
   handle, and for one whose meta anyone may read, its profile and rules.
 
+## Changing its face
+
+Its profile, images and rules are records in meta written by the group,
+so the host writes them for a caller holding `group.configure`:
+
+- `updateProfile` replaces the profile. Where it meets, whether online,
+  its topics and languages are as given, none when left out (topics
+  trimmed, each once, ten at most, 64 characters each; languages BCP 47
+  tags, five at most). Its site and images are kept when left out, and
+  `null` clears an image. Its first `createdAt` is kept.
+- `uploadImage` keeps an image (1 MB at most) as the group's blob, for
+  the profile to reference: a blob in anyone else's repo would not
+  resolve for it.
+- `putRule` makes or changes a rule. A rule keeps its key when changed,
+  so a label citing it still does; a new one goes last unless it says
+  where. `deleteRule` takes one away; a label citing it keeps the URI.
+
 ## From the prototype
 
 As `bootstrap.ts` and `methods/groups.ts`, with these changes:

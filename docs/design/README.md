@@ -80,8 +80,8 @@ says otherwise.
    Then the
    groups: `createGroup`, `getGroup`, `listGroups`, with their meta and
    members spaces, access records and roles (`group.rs`, `group_api.rs`,
-   `rbac.rs`; done, see [groups](groups.md)), then
-   handles, profile, rules, activating and deleting; spaces made and
+   `rbac.rs`; done, see [groups](groups.md)), their profile, images and
+   rules (`group_config.rs`; done), then handles, activating and deleting; spaces made and
    configured by members, `checkUserAccess`, and the space index:
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,
    `spaceIndex.ts`, `methods/checkUserAccess.ts`.
