@@ -121,8 +121,8 @@ async fn an_admin_changes_the_profile() {
     assert_eq!(p["createdAt"], created);
     assert_eq!(put["cid"].as_str().map(str::len), Some(59));
 
-    // A replace: what finds it, left out, is none; the images and site
-    // are kept; a policy named is taken.
+    // A replace: what finds it and its site, left out, are none; the
+    // images are kept; a policy named is taken.
     let (status, _) = call(
         &h,
         &alice,
@@ -135,7 +135,7 @@ async fn an_admin_changes_the_profile() {
     assert_eq!(p.get("topics"), None);
     assert_eq!(p.get("location"), None);
     assert_eq!(p.get("description"), None);
-    assert_eq!(p["url"], "https://riders.example");
+    assert_eq!(p.get("url"), None);
     assert_eq!(p["avatar"]["ref"], avatar["ref"]);
     assert_eq!(p["joinPolicy"], "invite");
     // And `null` clears an image.

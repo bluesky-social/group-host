@@ -40,7 +40,7 @@
             "url": {
               "type": "string",
               "format": "uri",
-              "description": "The group's own site."
+              "description": "The group's own site; left out, it is taken off."
             },
             "location": {
               "type": "union",

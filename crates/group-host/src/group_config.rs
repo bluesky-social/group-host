@@ -203,15 +203,9 @@ pub async fn update_profile(
     if let Some(d) = text("description") {
         profile["description"] = json!(d);
     }
-    // The site is kept, like the images: an edit of the name says nothing
-    // of it.
-    match text("url") {
-        Some(url) => profile["url"] = json!(url),
-        None => {
-            if let Some(url) = current.get("url") {
-                profile["url"] = url.clone();
-            }
-        }
+    // The site is replaced, as the description is: left out, it goes.
+    if let Some(url) = text("url") {
+        profile["url"] = json!(url);
     }
     if let Some(place) = body.get("location").filter(|l| !l.is_null()) {
         let kind = place["$type"].as_str().unwrap_or_default();

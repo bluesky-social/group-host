@@ -135,8 +135,8 @@ anyone whose roles hold `group.configure`. `updateProfile`, `uploadImage`,
 switched-off group.
 
 `updateProfile` replaces the profile. A display name is required. The
-description, location, online flag, topics and languages are as given,
-and removed when left out. The join policy, site, avatar and banner are
+description, site, location, online flag, topics and languages are as
+given, and removed when left out. The join policy, avatar and banner are
 kept when left out; `null` clears an avatar or banner.
 
 A picture must be a blob in the group's own repo, because a blob in
