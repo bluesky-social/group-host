@@ -26,7 +26,7 @@
 				Its address here
 				<input name="address" value={plan.label} maxlength="63" pattern="[A-Za-z0-9\-]+" />
 			</label>
-			<button type="submit">Check that address</button>
+			<button class="quiet" type="submit">Check that address</button>
 		</form>
 		<form class="stack" method="post" action="?/start">
 			<input type="hidden" name="address" value={plan.label} />
@@ -41,6 +41,6 @@
 		</form>
 	{/if}
 	<form method="post" action="?/cancel">
-		<button type="submit">Stop, and sign out of it</button>
+		<button class="quiet" type="submit">Stop, and sign out of it</button>
 	</form>
 </div>

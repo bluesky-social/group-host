@@ -59,6 +59,6 @@
 	{/if}
 	<form method="post" action={action('decline')}>
 		<input type="hidden" name="requestUri" value={requestUri} />
-		<button type="submit">Decline</button>
+		<button class="quiet" type="submit">Decline</button>
 	</form>
 </div>

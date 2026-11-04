@@ -16,7 +16,7 @@
 			<li>
 				<strong>{r.name ?? r.key}</strong> <span class="mute mono">{r.key}</span>
 				<p class="mute">{may(r.key).join(', ') || 'Nothing beyond being a member'}</p>
-				<form method="post" action="?/unrole"><input type="hidden" name="role" value={r.key} /><button type="submit">Take away {r.name ?? r.key}</button></form>
+				<form method="post" action="?/unrole"><input type="hidden" name="role" value={r.key} /><button class="quiet" type="submit">Take away {r.name ?? r.key}</button></form>
 			</li>
 		{/each}
 	</ul>

@@ -18,12 +18,14 @@ export const approve = async (page, name) => {
   await page.getByRole('button', { name: /^(accept|authorize|allow)$/i }).click()
 }
 
-/// Signs in to the console as `name` from the header's form: their
+/// Signs in to the console as `name` from the header's dialog: their
 /// handle, then their PDS's page, which sends the browser back.
 export const signIn = async (page, name) => {
   const back = page.url()
-  await page.getByRole('textbox', { name: 'Your handle' }).fill(who[name].handle)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Sign in with your Atmosphere account' })
+  await dialog.getByRole('textbox', { name: 'Your handle' }).fill(who[name].handle)
+  await dialog.getByRole('button', { name: 'Continue' }).click()
   await approve(page, name)
   await page.waitForURL(back)
 }

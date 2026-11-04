@@ -14,9 +14,9 @@
 
 <div class="standing">
 	{#if member}
-		<form method="post" action="?/leave"><span class="mute">You are a member.</span> <button type="submit">Leave</button></form>
+		<form method="post" action="?/leave"><span class="mute">You are a member.</span> <button class="quiet" type="submit">Leave</button></form>
 	{:else if asked}
-		<form method="post" action="?/cancel"><span class="mute">You have asked to join.</span> <button type="submit">Take back the request</button></form>
+		<form method="post" action="?/cancel"><span class="mute">You have asked to join.</span> <button class="quiet" type="submit">Take back the request</button></form>
 	{:else if invited}
 		<p class="mute">This group takes people by invitation.</p>
 	{:else}

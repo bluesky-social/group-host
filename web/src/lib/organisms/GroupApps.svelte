@@ -11,7 +11,7 @@
 			{#each sessions as s (s.tokenId)}
 				<li>
 					<span class="mono">{s.clientId}</span> <span class="mute">{s.source}, by {s.member}{s.lastUsedAt ? `, last used ${s.lastUsedAt}` : ''}</span>
-					<form method="post" action="?/revoke"><input type="hidden" name="tokenId" value={s.tokenId} /><button type="submit">End {s.clientId}'s access</button></form>
+					<form method="post" action="?/revoke"><input type="hidden" name="tokenId" value={s.tokenId} /><button class="quiet" type="submit">End {s.clientId}'s access</button></form>
 				</li>
 			{/each}
 		</ul>

@@ -16,7 +16,7 @@
 			<li>
 				<code>{k.key}</code> <span class="mute">{k.holder === 'host' ? 'this host' : `a steward's${k.addedBy ? `, added by ${k.addedBy}` : ''}`}</span>
 				{#if k.holder === 'steward' && hostHolds}
-					<form method="post" action="?/unkey"><input type="hidden" name="key" value={k.key} /><button type="submit">Take off</button></form>
+					<form method="post" action="?/unkey"><input type="hidden" name="key" value={k.key} /><button class="quiet" type="submit">Take off</button></form>
 				{/if}
 			</li>
 		{/each}

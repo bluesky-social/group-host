@@ -11,7 +11,7 @@
 <Page title="Move an account here">
 	{#if !data.actor}
 		<p>Sign in first, as yourself: you will run the group it becomes.</p>
-		<SignIn back="/move" />
+		<p><SignIn /></p>
 	{:else if !data.actor.canCreateGroup}
 		<p>This host starts groups only for the people it names.</p>
 	{:else if !data.moving}

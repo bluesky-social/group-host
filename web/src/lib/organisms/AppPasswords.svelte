@@ -17,7 +17,7 @@
 			{#each passwords as p (p.name)}
 				<li>
 					<strong>{p.name}</strong> <span class="mute">by {p.member}{p.privileged ? ', with chat' : ''}{p.lastUsedAt ? `, last used ${p.lastUsedAt}` : ''}</span>
-					<form method="post" action="?/unpassword"><input type="hidden" name="name" value={p.name} /><button type="submit">Revoke “{p.name}”</button></form>
+					<form method="post" action="?/unpassword"><input type="hidden" name="name" value={p.name} /><button class="quiet" type="submit">Revoke “{p.name}”</button></form>
 				</li>
 			{/each}
 		</ul>

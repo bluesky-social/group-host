@@ -2,49 +2,127 @@
 
 /* Every value here is a token from tokens.css; a new one goes there first.
    Rules come in the order the pages are built up: the document, the page's
-   frame, then the parts any page uses. The components are unstyled beyond
-   this for now: the console's look comes once its pages do. */
+   frame, then the parts any page uses, from what acts (fields and buttons)
+   to what is shown (cards, lists, pictures). */
 
 /* ── Document ─────────────────────────────────────────────────────── */
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:var(--text-base)/var(--leading) var(--font-sans);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
-a{color:inherit;text-decoration:underline;text-decoration-color:var(--link-line);text-underline-offset:2px}
-a:hover{text-decoration-color:currentColor}
+a{color:var(--primary);text-decoration:underline;text-decoration-color:var(--link-line);text-underline-offset:3px;transition:color var(--speed)}
+a:hover{color:var(--primary-hover);text-decoration-color:currentColor}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-h1,h2,h3{letter-spacing:var(--tracking-tight);margin:0;font-weight:var(--weight-semibold)}
+h1,h2,h3{font-family:var(--font-round);letter-spacing:var(--tracking-tight);line-height:var(--leading-tight);margin:0;font-weight:var(--weight-bold)}
 h1{font-size:var(--text-2xl)}
 h2{font-size:var(--text-lg)}
 p{margin:0}
 code,.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
-input,select,textarea,button{font:inherit;font-size:var(--text-field)}
+strong{font-weight:var(--weight-semibold)}
+img{max-width:100%}
 
 /* ── Utilities ────────────────────────────────────────────────────── */
 
 .mute{color:var(--mute)}
+.small{font-size:var(--text-sm)}
 .stack{display:flex;flex-direction:column;gap:var(--space-4)}
 
 /* ── Frame: header, footer, the column between ────────────────────── */
 
 .wrap{width:100%;max-width:var(--page);margin:0 auto;padding:0 var(--space-4)}
-.top{border-bottom:var(--border)}
-.top .wrap{display:flex;align-items:center;gap:var(--space-6);height:var(--header)}
-.brand{font:var(--weight-semibold) var(--text-base) var(--font-mono);text-decoration:none}
-main.wrap{flex:1;padding-top:var(--space-6);padding-bottom:var(--space-16)}
-.foot{color:var(--faint);font:var(--text-xs) var(--font-mono);padding-top:var(--space-5);padding-bottom:var(--space-8);border-top:1px dashed var(--line)}
+.top{position:sticky;top:0;z-index:1;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:var(--border)}
+.top .wrap{display:flex;align-items:center;gap:var(--space-4);min-height:var(--header);flex-wrap:wrap}
+.brand{font:var(--weight-bold) var(--text-xl) var(--font-round);letter-spacing:var(--tracking-tight);color:var(--fg);text-decoration:none}
+.brand:hover{color:var(--fg)}
+.sign-in,.sign-out{margin-left:auto;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+main.wrap{flex:1;padding-top:var(--space-8);padding-bottom:var(--space-16);display:flex;flex-direction:column;gap:var(--space-10)}
+.foot{color:var(--faint);font:var(--text-xs) var(--font-mono);padding-top:var(--space-5);padding-bottom:var(--space-8);border-top:var(--border)}
 
+/* ── What acts: fields and buttons ────────────────────────────────── */
+
+input,select,textarea,button{font:inherit;font-size:var(--text-field);color:inherit}
+input:not([type='checkbox'],[type='radio'],[type='file'],[type='hidden']),select,textarea{min-height:var(--control);padding:var(--space-2) var(--space-3);background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--radius-sm);transition:border-color var(--speed),box-shadow var(--speed)}
+textarea{min-height:calc(var(--control) * 2.5);resize:vertical}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 var(--ring) var(--primary-soft)}
+input[type='checkbox'],input[type='radio']{accent-color:var(--primary);width:1rem;height:1rem;margin:0}
+input[type='file']{font-size:var(--text-sm);color:var(--mute)}
+input[type='file']::file-selector-button{font:inherit;margin-right:var(--space-3);padding:var(--space-2) var(--space-3);border:1px solid var(--line-strong);border-radius:var(--radius-pill);background:var(--panel);color:var(--fg);cursor:pointer}
+.field{display:flex;flex-direction:column;gap:var(--space-1);font-weight:var(--weight-medium)}
+.field input,.field select,.field textarea{font-weight:var(--weight-normal)}
+label:has(> input[type='checkbox']),label:has(> input[type='radio']){display:inline-flex;align-items:center;gap:var(--space-2);cursor:pointer}
+fieldset{border:var(--border);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4) var(--space-4);margin:0;display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-5)}
+legend{padding:0 var(--space-2);font-weight:var(--weight-medium);color:var(--mute)}
+
+button{min-height:var(--control);padding:0 var(--space-5);border:1px solid var(--primary);border-radius:var(--radius-pill);background:var(--primary);color:var(--on-primary);font-weight:var(--weight-semibold);cursor:pointer;transition:background var(--speed),border-color var(--speed),color var(--speed)}
+button:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+button:disabled{opacity:.5;cursor:not-allowed}
+/* What undoes, removes or turns down: there, but never the thing to press. */
+button.quiet{background:transparent;border-color:var(--line-strong);color:var(--fg);font-weight:var(--weight-medium)}
+button.quiet:hover{background:var(--soft);border-color:var(--line-strong)}
+form.stack > button,form.stack > .field + button{align-self:flex-start}
+
+/* ── What is shown: cards, lists, notices ─────────────────────────── */
+
+.card{background:var(--panel);border:var(--border);border-radius:var(--radius-lg);padding:var(--space-6);box-shadow:var(--shadow)}
+.card > h2{margin-bottom:var(--space-1)}
 .danger{color:var(--danger)}
-.field{display:flex;flex-direction:column;gap:var(--space-1)}
+p.danger{background:var(--danger-soft);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4)}
+.made{background:var(--primary-soft);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4)}
+.made code{user-select:all}
+
+/* A component's list: its things in rows, each with what may be done to it. */
+ul[class]{list-style:none;margin:0;padding:0}
+ul[class] > li{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);padding:var(--space-3) 0;border-top:var(--border)}
+ul[class] > li:first-child{border-top:0;padding-top:0}
+ul[class] > li:last-child{padding-bottom:0}
+ul[class] > li.stack{flex-direction:column;align-items:flex-start}
+ul[class] > li > p{flex-basis:100%}
+ul[class] > li form{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+ol{margin:0;padding-left:var(--space-6);display:flex;flex-direction:column;gap:var(--space-3)}
+ol > li::marker{color:var(--primary);font-weight:var(--weight-bold);font-family:var(--font-round)}
+
+.empty{border:1px dashed var(--line-strong);border-radius:var(--radius-lg);background:var(--soft);padding:var(--space-10) var(--space-4);text-align:center;color:var(--mute);display:flex;flex-direction:column;gap:var(--space-2)}
+.empty-title{color:var(--fg);font:var(--weight-bold) var(--text-lg) var(--font-round)}
+/* Within a card, said quietly: the card is frame enough. */
+.card .empty{border:0;background:transparent;padding:var(--space-2) 0;text-align:left}
+.card .empty-title{font:var(--weight-medium) var(--text-base) var(--font-sans);color:var(--mute)}
+
+/* A dialog over the dimmed page. */
+.dialog{position:fixed;width:min(var(--dialog),calc(100vw - 2 * var(--space-4)));margin:12vh auto auto;padding:var(--space-6);border:var(--border);border-radius:var(--radius-lg);background:var(--panel);color:var(--fg);box-shadow:var(--shadow-pop)}
+.dialog::backdrop{background:var(--scrim);backdrop-filter:blur(2px)}
+.dialog > * + *{margin-top:var(--space-3)}
+.dialog-title{font-size:var(--text-xl);padding-right:var(--space-8)}
+.dialog .close{position:absolute;top:var(--space-4);right:var(--space-4);width:var(--control);padding:0;border:0;background:transparent;color:var(--mute);font-size:var(--text-xl);font-weight:var(--weight-normal)}
+.dialog .close:hover{background:var(--soft);color:var(--fg)}
+.dialog .field input{width:100%}
+.actions{display:flex;justify-content:flex-end;gap:var(--space-2)}
 
 /* ── Atoms ────────────────────────────────────────────────────────── */
 
-.av{display:inline-grid;place-items:center;flex:none;width:var(--avatar);height:var(--avatar);border-radius:50%;object-fit:cover;background:var(--soft)}
+.av{display:inline-grid;place-items:center;flex:none;width:var(--avatar);height:var(--avatar);border-radius:50%;object-fit:cover;background:linear-gradient(135deg,var(--primary-soft),var(--soft));border:1px solid var(--line)}
 .av.md{width:var(--avatar-md);height:var(--avatar-md)}
 
 /* ── Molecules ────────────────────────────────────────────────────── */
 
-.empty{border:1px dashed var(--line);border-radius:var(--radius-md);padding:var(--space-8) var(--space-4);text-align:center;color:var(--mute);display:flex;flex-direction:column;gap:var(--space-2)}
-.empty-title{color:var(--fg);font-weight:var(--weight-semibold)}
-.group-row{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;border-bottom:var(--border)}
+.group-list{background:var(--panel);border:var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden}
+.group-row{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-4) var(--space-5);border-bottom:var(--border);transition:background var(--speed)}
+.group-row:hover{background:var(--soft)}
 .group-row:last-child{border-bottom:0}
+.group-row a{color:var(--fg);font:var(--weight-bold) var(--text-lg) var(--font-round);text-decoration:none}
+.group-row a:hover{color:var(--primary)}
+.standing form{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+
+/* ── A group's own page ───────────────────────────────────────────── */
+
+/* Its banner above its name, wherever the page puts it. */
+.banner{order:-1;width:100%;aspect-ratio:3 / 1;object-fit:cover;border-radius:var(--radius-lg);border:var(--border);background:var(--soft)}
+/* Its picture above its name, over the banner's foot when it has one;
+   its handle below; then where its members go next. */
+.identity{order:-1;display:flex}
+.identity .av{width:var(--avatar-lg);height:var(--avatar-lg);border:var(--ring) solid var(--panel);box-shadow:var(--shadow)}
+.banner ~ .identity{margin-top:calc(var(--avatar-lg) / -2 - var(--space-4));padding-left:var(--space-5)}
+.card .banner{order:0}
+h1 + .mono{margin-top:calc(var(--space-3) * -1)}
+.links{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.links a{padding:var(--space-1) var(--space-3);border:var(--border);border-radius:var(--radius-pill);background:var(--panel);font-weight:var(--weight-medium);text-decoration:none}
+.links a:hover{border-color:var(--primary)}

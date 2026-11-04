@@ -1,38 +1,54 @@
 /* The design tokens every rule in app.css draws from: a value the pages
    use goes here once, named for what it is for, and rules take it by name.
    Colours change with the colour scheme; the scales do not.
-   The one breakpoint, which a custom property cannot name: 640px. */
+   The one breakpoint, which a custom property cannot name: 640px.
+
+   The look: warm paper rather than a white sheet, cards lifted softly off
+   it, and one colour that acts, terracotta, so what to press is never in
+   doubt. Headings take the system's rounded face where it has one: the
+   console loads no fonts of its own. */
 
 :root,
 [data-theme='light'] {
 	color-scheme: light;
 
 	/* Hues, each meaning one thing wherever it shows. */
-	--green: #1a7f37;
-	--red: #cf222e;
-	--purple: #7048b5;
-	--yellow: #9a6700;
-	--gray: #636363;
+	--green: #2f7a4b;
+	--red: #b9382c;
+	--purple: #6a4bb0;
+	--yellow: #94620a;
+	--gray: #6f6458;
 
-	/* Surfaces, from the page up. */
-	--bg: #fff;
-	--panel: #fafafa;
-	--soft: #f4f4f4;
-	--line: #e8e8e8;
+	/* Surfaces, from the page up: the paper, a card on it, a well in a card, its edges. */
+	--bg: #f6f1ea;
+	--panel: #fffdfa;
+	--soft: #f1e9df;
+	--line: #e7ddd0;
+	--line-strong: #d6c8b7;
 
 	/* Text: the body, then quieter for what is said about it, then quieter still. */
-	--fg: #171717;
-	--mute: #525252;
-	--faint: #6e6e6e;
+	--fg: #2a2119;
+	--mute: #5c5045;
+	--faint: #6f6153;
 
-	/* What acts: a primary button's fill and the text on it, and the edge of what has focus. */
-	--primary: #2563eb;
+	/* What acts: a button's fill and the text on it, its hover, a soft
+	   wash of it behind what it marks, and the edge of what has focus. */
+	--primary: #b8482b;
+	--primary-hover: #9c3b22;
 	--on-primary: #fff;
-	--link-line: #b4b4b4;
+	--primary-soft: #f8e3da;
+	--link-line: #d9a593;
+
+	/* A card lifted off the paper, and a dialog lifted off the page. */
+	--shadow: 0 1px 2px rgb(72 48 24 / 6%), 0 6px 20px rgb(72 48 24 / 6%);
+	--shadow-pop: 0 2px 6px rgb(72 48 24 / 10%), 0 24px 64px rgb(72 48 24 / 22%);
+	/* What dims the page behind a dialog. */
+	--scrim: rgb(42 33 25 / 35%);
 
 	/* What a colour is for, over the hues above: the pages take these, never a hue. */
 	--success: var(--green);
 	--danger: var(--red);
+	--danger-soft: #f9e2df;
 	--attention: var(--yellow);
 	--done: var(--purple);
 	--neutral: var(--gray);
@@ -41,59 +57,78 @@
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
 		color-scheme: dark;
-		--green: #3fb950;
-		--red: #f85149;
-		--purple: #a371f7;
-		--yellow: #d29922;
-		--gray: #8b8b8b;
-		--bg: #0d0d0d;
-		--panel: #141414;
-		--soft: #1c1c1c;
-		--line: #2a2a2a;
-		--fg: #ededed;
-		--mute: #a3a3a3;
-		--faint: #8f8f8f;
-		--primary: #3b82f6;
-		--on-primary: #fff;
-		--link-line: #525252;
+		--green: #5cc483;
+		--red: #ff7b6b;
+		--purple: #b39dff;
+		--yellow: #e0a83a;
+		--gray: #a59886;
+		--bg: #17120e;
+		--panel: #201a15;
+		--soft: #2a221b;
+		--line: #362c23;
+		--line-strong: #4a3d31;
+		--fg: #f4ece2;
+		--mute: #b7a796;
+		--faint: #918271;
+		--primary: #f08a63;
+		--primary-hover: #ffa07c;
+		--on-primary: #23120a;
+		--primary-soft: #3b2219;
+		--link-line: #7a4a38;
+		--shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 6px 20px rgb(0 0 0 / 25%);
+		--shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
+		--scrim: rgb(0 0 0 / 55%);
+		--danger-soft: #3d1d19;
 	}
 }
 
 [data-theme='dark'] {
 	color-scheme: dark;
-	--green: #3fb950;
-	--red: #f85149;
-	--purple: #a371f7;
-	--yellow: #d29922;
-	--gray: #8b8b8b;
-	--bg: #0d0d0d;
-	--panel: #141414;
-	--soft: #1c1c1c;
-	--line: #2a2a2a;
-	--fg: #ededed;
-	--mute: #a3a3a3;
-	--faint: #8f8f8f;
-	--primary: #3b82f6;
-	--on-primary: #fff;
-	--link-line: #525252;
+	--green: #5cc483;
+	--red: #ff7b6b;
+	--purple: #b39dff;
+	--yellow: #e0a83a;
+	--gray: #a59886;
+	--bg: #17120e;
+	--panel: #201a15;
+	--soft: #2a221b;
+	--line: #362c23;
+	--line-strong: #4a3d31;
+	--fg: #f4ece2;
+	--mute: #b7a796;
+	--faint: #918271;
+	--primary: #f08a63;
+	--primary-hover: #ffa07c;
+	--on-primary: #23120a;
+	--primary-soft: #3b2219;
+	--link-line: #7a4a38;
+	--shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 6px 20px rgb(0 0 0 / 25%);
+	--shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
+	--scrim: rgb(0 0 0 / 55%);
+	--danger-soft: #3d1d19;
 }
 
 :root {
 	--border: 1px solid var(--line);
 
 	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+	--font-round: ui-rounded, 'SF Pro Rounded', 'Nunito', 'Varela Round', system-ui, -apple-system, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 	--text-xs: 12px;
 	--text-sm: 13px;
-	--text-base: 14px;
-	--text-lg: 16px;
-	--text-2xl: 20px;
+	--text-base: 15px;
+	--text-lg: 17px;
+	--text-xl: 20px;
+	--text-2xl: 28px;
 	/* What is typed into a field: 16px on a phone, so Safari does not zoom to it. */
 	--text-field: var(--text-base);
-	--leading: 1.55;
+	--leading: 1.6;
+	--leading-tight: 1.2;
 	--weight-normal: 400;
+	--weight-medium: 500;
 	--weight-semibold: 600;
-	--tracking-tight: -0.015em;
+	--weight-bold: 700;
+	--tracking-tight: -0.02em;
 
 	--space-1: 0.25rem;
 	--space-2: 0.5rem;
@@ -102,20 +137,29 @@
 	--space-5: 1.25rem;
 	--space-6: 1.5rem;
 	--space-8: 2rem;
+	--space-10: 2.5rem;
 	--space-16: 4rem;
 
-	--radius-sm: 4px;
-	--radius-md: 6px;
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 18px;
+	--radius-pill: 999px;
 
-	--control: 32px;
-	--avatar: 20px;
-	--avatar-md: 32px;
-	--header: 3.25rem;
-	--page: 58rem;
+	--control: 40px;
+	--avatar: 24px;
+	--avatar-md: 44px;
+	--avatar-lg: 88px;
+	--header: 4rem;
+	--page: 46rem;
+	--dialog: 26rem;
+	--ring: 3px;
+	--speed: 120ms;
 }
 
 @media (max-width: 640px) {
 	:root {
 		--text-field: var(--text-lg);
+		--text-2xl: 24px;
+		--avatar-lg: 72px;
 	}
 }

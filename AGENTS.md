@@ -78,9 +78,12 @@ and its tests, for what it has to handle; then write it as it should be.
 
 ## The console
 
-- The pages are deliberately plain for now: the components work and are
-  laid out, and the look comes later. Keep them so, rather than styling
-  one page ahead of the rest.
+- The look is the console's own, all of it in `web/src/app.css` over the
+  tokens: warm paper, sections as cards (`Section.svelte`), one colour
+  that acts (`--primary`), and rounded headings. A page takes the look
+  from the shared rules, never from styles of its own: a new kind of
+  thing on a page gets a rule there, written for every page that shows
+  it. A button that undoes, removes or turns down is `class="quiet"`.
 - The components in `web/src/lib` are layered, atomic design's way:
   `atoms` (one element: an avatar), `molecules` (a few atoms that mean
   something together: a group's row), `organisms` (a part of a page: a

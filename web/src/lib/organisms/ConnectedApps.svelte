@@ -11,7 +11,7 @@
 			{#each apps as a (a.clientId)}
 				<li>
 					<strong>{a.name}</strong> <span class="mute">connected {a.connectedAt}, last used {a.usedAt}</span>
-					<form method="post" action="?/disconnect"><input type="hidden" name="clientId" value={a.clientId} /><button type="submit">Disconnect {a.name}</button></form>
+					<form method="post" action="?/disconnect"><input type="hidden" name="clientId" value={a.clientId} /><button class="quiet" type="submit">Disconnect {a.name}</button></form>
 				</li>
 			{/each}
 		</ul>

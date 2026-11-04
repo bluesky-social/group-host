@@ -21,7 +21,7 @@
 			<button type="submit">Upload the {s.name.toLowerCase()}</button>
 		</form>
 		{#if s.src}
-			<form method="post" action="?/unpicture"><input type="hidden" name="slot" value={s.slot} /><button type="submit">Take the {s.name.toLowerCase()} away</button></form>
+			<form method="post" action="?/unpicture"><input type="hidden" name="slot" value={s.slot} /><button class="quiet" type="submit">Take the {s.name.toLowerCase()} away</button></form>
 		{/if}
 	{/each}
 </div>

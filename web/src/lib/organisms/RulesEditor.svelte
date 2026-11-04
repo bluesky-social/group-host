@@ -10,7 +10,7 @@
 			{#each rules as r (r.rkey)}
 				<li>
 					<strong>{r.title}</strong>{#if r.text}<p class="mute">{r.text}</p>{/if}
-					<form method="post" action="?/unrule"><input type="hidden" name="rkey" value={r.rkey} /><button type="submit">Take away “{r.title}”</button></form>
+					<form method="post" action="?/unrule"><input type="hidden" name="rkey" value={r.rkey} /><button class="quiet" type="submit">Take away “{r.title}”</button></form>
 				</li>
 			{/each}
 		</ol>

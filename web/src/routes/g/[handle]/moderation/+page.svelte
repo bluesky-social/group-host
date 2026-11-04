@@ -2,6 +2,7 @@
 	import LabelForm from '#lib/organisms/LabelForm.svelte';
 	import ModerationQueue from '#lib/organisms/ModerationQueue.svelte';
 	import Page from '#lib/templates/Page.svelte';
+	import Section from '#lib/molecules/Section.svelte';
 	let { data, form } = $props();
 	const g = $derived(data.group);
 </script>
@@ -21,7 +22,8 @@
 		<p>Nothing here is yours to see.</p>
 	{/if}
 	{#if data.actions.includes('label')}
-		<h2>Label someone</h2>
-		<LabelForm />
+		<Section title="Label someone">
+			<LabelForm />
+		</Section>
 	{/if}
 </Page>

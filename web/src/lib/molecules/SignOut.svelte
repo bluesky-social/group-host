@@ -5,5 +5,5 @@
 
 <form class="sign-out" method="post" action="/console/logout">
 	<span class="mute">Signed in as <span class="mono">{handle ? `@${handle}` : did}</span></span>
-	<button type="submit">Sign out</button>
+	<button class="quiet" type="submit">Sign out</button>
 </form>

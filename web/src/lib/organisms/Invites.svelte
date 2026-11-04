@@ -14,7 +14,7 @@
 			{#each invites as i (i.uri)}
 				<li>
 					<span class="mono">{i.invitee}</span>
-					<form method="post" action="?/uninvite"><input type="hidden" name="uri" value={i.uri} /><button type="submit">Take back</button></form>
+					<form method="post" action="?/uninvite"><input type="hidden" name="uri" value={i.uri} /><button class="quiet" type="submit">Take back</button></form>
 				</li>
 			{/each}
 		</ul>

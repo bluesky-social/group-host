@@ -30,13 +30,13 @@
 						{#each assignable as role (role)}
 							<label><input type="checkbox" name="role" value={role} checked={m.roles.some((r) => r.role === role)} /> {role}</label>
 						{/each}
-						<button type="submit">Save {named(m)}'s roles</button>
+						<button class="quiet" type="submit">Save {named(m)}'s roles</button>
 					</form>
 				{/if}
 				{#if m.actor.did !== me && canEject}
 					<form method="post" action="?/eject">
 						<input type="hidden" name="did" value={m.actor.did} />
-						<button type="submit">Put {named(m)} out</button>
+						<button class="quiet" type="submit">Put {named(m)} out</button>
 					</form>
 				{/if}
 			</li>

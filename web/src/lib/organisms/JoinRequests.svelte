@@ -11,7 +11,7 @@
 				<span class="mono">{r.actor?.handle ? `@${r.actor.handle}` : r.did}</span>
 				{#if r.message}<p>{r.message}</p>{/if}
 				<form method="post" action="?/admit"><input type="hidden" name="did" value={r.did} /><button type="submit">Admit</button></form>
-				<form method="post" action="?/deny"><input type="hidden" name="did" value={r.did} /><button type="submit">Turn down</button></form>
+				<form method="post" action="?/deny"><input type="hidden" name="did" value={r.did} /><button class="quiet" type="submit">Turn down</button></form>
 			</li>
 		{/each}
 	</ul>
