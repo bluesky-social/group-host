@@ -413,6 +413,10 @@ async fn serves_its_own_did_document() {
         atproto::did::pds(&doc).as_deref(),
         Some("https://host.test")
     );
+    assert_eq!(
+        atproto::did::service(&doc, "#opensocial").as_deref(),
+        Some("https://host.test")
+    );
 
     let missing = h.host.plc.document("did:plc:nobody").await.unwrap_err();
     assert_eq!(missing.to_string(), "no document for did:plc:nobody");

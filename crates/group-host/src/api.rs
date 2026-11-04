@@ -256,11 +256,13 @@ pub async fn did_json(State(host): State<Arc<Host>>) -> Result<Json<Value>, Stat
     if !did.starts_with("did:web:") {
         return Err(StatusCode::NOT_FOUND);
     }
-    let services = [(
-        "#atproto_pds",
-        "AtprotoPersonalDataServer",
-        host.config.public_url.as_str(),
-    )];
+    // Its groups' PDS, and the service an app reaches through a person's
+    // PDS, by `atproto-proxy: <did>#opensocial`, to act as them here.
+    let url = host.config.public_url.as_str();
+    let services = [
+        ("#atproto_pds", "AtprotoPersonalDataServer", url),
+        ("#opensocial", "OpensocialGroupHost", url),
+    ];
     Ok(Json(atproto::did::service_document(
         did,
         &host.secrets.signing.public(),

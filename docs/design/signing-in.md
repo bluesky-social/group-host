@@ -29,6 +29,20 @@ refuses every cookie signed before. Every server a handle leads to is
 reached only at a public address, as a client's metadata is. The console
 forwards `/console/*` to the host, cookies and all.
 
+## Apps acting as a person
+
+An app acting as a person, not as a group (the `opensocial` command, an
+assistant's MCP server), calls the host's methods as that person, and the
+host answers them by the person's roles, as it answers the console. It
+signs in at the person's own PDS, never here, and either asks that PDS for
+a service token for each call (`com.atproto.server.getServiceAuth`), as
+the command does, or sends each call through it, with `atproto-proxy:
+<host DID>#opensocial`: the PDS signs it as the person and forwards it to
+the address the host's DID document names for `#opensocial`. An OAuth app
+asks the person's PDS for `include:fyi.opensocial.basePermissions` with
+the host's service as its audience, and the person sees, there, what it
+may do.
+
 ## The server
 
 The host is a standard atproto authorization server (`oauth.rs`):

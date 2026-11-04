@@ -282,6 +282,37 @@ async fn says_what_is_wrong_with_what_it_is_asked() {
     }
 }
 
+/// An app acting as a person reaches the host through the person's own
+/// PDS, as `atproto-proxy` names the host's `#opensocial` service: the
+/// PDS signs the call for them, and the host answers it as theirs.
+#[tokio::test]
+async fn answers_a_call_a_persons_pds_proxies() {
+    let h = host().await;
+    let n = net();
+    let alice = &n.accounts[0];
+    let http = reqwest::Client::new();
+    let session: serde_json::Value = http
+        .post(format!("{}/xrpc/com.atproto.server.createSession", n.pds))
+        .json(&serde_json::json!({"identifier": alice.handle, "password": alice.password}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let res = http
+        .get(format!("{}/xrpc/fyi.opensocial.getViewer", n.pds))
+        .header("atproto-proxy", format!("{}#opensocial", did_web(&h.url)))
+        .bearer_auth(session["accessJwt"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap();
+    let status = res.status();
+    let said: serde_json::Value = res.json().await.unwrap_or_default();
+    assert!(status.is_success(), "{status} {said}");
+    assert_eq!(said["actor"]["did"], alice.did.as_str(), "{said}");
+}
+
 #[test]
 fn reads_its_environment() {
     let env = Env::from(|_| None);
