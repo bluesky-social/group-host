@@ -20,7 +20,7 @@ use crate::group::{join_policy, members_space, meta_space};
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{may_write, writes_for};
 use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
-use crate::repo::{Write, record_cid};
+use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
 use axum::Json;
@@ -81,32 +81,6 @@ impl Host {
         Ok(acting)
     }
 
-    /// The write a body asks for at `collection`/`rkey`: a create where
-    /// there is no record, else an update; `None` for a put of what is
-    /// there already.
-    fn put(
-        &self,
-        current: Option<atproto::Cid>,
-        collection: &str,
-        rkey: &str,
-        value: &Value,
-    ) -> Result<Option<Write>, XrpcError> {
-        let (collection, rkey, value) = (collection.to_string(), rkey.to_string(), value.clone());
-        Ok(match current {
-            None => Some(Write::Create {
-                collection,
-                rkey,
-                value,
-            }),
-            Some(cid) if cid == record_cid(&collection, &value)? => None,
-            Some(_) => Some(Write::Update {
-                collection,
-                rkey,
-                value,
-            }),
-        })
-    }
-
     /// Refuses a write to the group's own meta or members space that the
     /// host would not make itself, and to any space's access record.
     fn guard(&self, group: &str, space: &str, writes: &[Write]) -> Result<(), XrpcError> {
@@ -160,6 +134,32 @@ impl Host {
                     ));
                 }
             }
+        }
+        Ok(())
+    }
+}
+
+impl Host {
+    /// Keeps word in the group's log of each of `writes`, made with
+    /// `acting`'s grant, in `space` if one.
+    fn wrote(
+        &self,
+        acting: &Acting,
+        space: Option<&str>,
+        writes: &[Write],
+    ) -> Result<(), XrpcError> {
+        let g = &acting.grant;
+        for w in writes {
+            let (collection, rkey) = w.path();
+            let at = space.map(|s| format!(" in {s}")).unwrap_or_default();
+            let done = match w {
+                Write::Create { .. } => "created",
+                Write::Update { .. } => "updated",
+                Write::Delete { .. } => "deleted",
+            };
+            let action = format!("{done} {collection}/{rkey}{at}");
+            let recorded = self.record(&g.group, &g.member, Some(&g.client_id), &action);
+            recorded.map_err(XrpcError::internal)?;
         }
         Ok(())
     }
@@ -253,7 +253,9 @@ impl Host {
     /// and its member's roles still let them.
     fn may_repo(&self, acting: &Acting, writes: &[Write]) -> Result<(), XrpcError> {
         let (roles, grants) = self.standing(acting)?;
-        let repo = repo_collections_for(&grants, &roles);
+        let mut repo = repo_collections_for(&grants, &roles);
+        // A role may publish what it may write as the group in a space.
+        repo.extend(self.publishable(&acting.grant.group, &roles)?);
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.repo(collection, action(w)) {
@@ -265,49 +267,19 @@ impl Host {
         }
         Ok(())
     }
-
-    fn repo_record(
-        &self,
-        group: &str,
-        collection: &str,
-        rkey: &str,
-    ) -> Result<Option<atproto::Cid>, XrpcError> {
-        let found = self
-            .store
-            .record(group, collection, rkey)
-            .map_err(XrpcError::internal)?;
-        Ok(found.map(|r| r.cid))
-    }
 }
 
-fn invalid_swap(message: impl Into<String>) -> XrpcError {
-    XrpcError::new(StatusCode::BAD_REQUEST, "InvalidSwap", message)
-}
-
-impl Host {
-    /// Refuses a write whose `swapCommit` is not the repo's head.
-    fn swap_commit(&self, group: &str, body: &Value) -> Result<(), XrpcError> {
-        let Some(swap) = body["swapCommit"].as_str() else {
-            return Ok(());
-        };
-        let head = self.store.head(group).map_err(XrpcError::internal)?;
-        if head.is_none_or(|h| h.cid.to_string() != swap) {
-            return Err(invalid_swap(format!("the repo is not at {swap}")));
-        }
-        Ok(())
-    }
-}
-
-/// Refuses a write whose `swapRecord` is not the record there now: a CID,
-/// or null for none.
-fn swap_record(body: &Value, current: Option<atproto::Cid>) -> Result<(), XrpcError> {
-    let Some(swap) = body.get("swapRecord") else {
-        return Ok(());
+/// What a body asks of the repo as it stands when the write is made.
+fn swaps(body: &Value) -> Result<(Option<&str>, Option<Option<&str>>), XrpcError> {
+    let record = match body.get("swapRecord") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(v) => Some(Some(
+            v.as_str()
+                .ok_or_else(|| invalid("swapRecord is a CID, or null"))?,
+        )),
     };
-    if swap.as_str() != current.map(|c| c.to_string()).as_deref() {
-        return Err(invalid_swap("the record is not the one swapped"));
-    }
-    Ok(())
+    Ok((body["swapCommit"].as_str(), record))
 }
 
 /// `at://` of a record in the group's repo.
@@ -331,15 +303,57 @@ pub async fn create_record(
         rkey: rkey.clone(),
         value: body["record"].clone(),
     };
-    host.may_repo(&acting, std::slice::from_ref(&write))?;
-    host.swap_commit(group, &body)?;
-    let committed = host.write(group, std::slice::from_ref(&write))?;
+    let (swap_commit, _) = swaps(&body)?;
+    let allow = |w: &[Write]| host.may_repo(&acting, w);
+    let asked = Asked {
+        swap_commit,
+        allow: Some(&allow),
+        ..Asked::default()
+    };
+    let committed = host.write_asked(group, std::slice::from_ref(&write), &asked)?;
+    host.wrote(&acting, None, std::slice::from_ref(&write))?;
     Ok(Json(json!({
         "uri": repo_uri(group, &collection, &rkey),
         "cid": record_cid(&collection, &body["record"])?.to_string(),
-        "commit": commit_view(&committed),
+        "commit": committed.as_ref().map(commit_view),
         "validationStatus": "unknown",
     })))
+}
+
+/// Puts a record, or deletes one, as one write whose create or update is
+/// whichever the repo makes it as it is written.
+async fn put_or_delete(
+    host: &Host,
+    nsid: &str,
+    headers: &HeaderMap,
+    body: &Value,
+    delete: bool,
+) -> Answer {
+    let acting = host.writer(headers, nsid, body)?;
+    let group = &acting.grant.group;
+    let write = one(body, delete)?;
+    let (collection, rkey) = write.path();
+    let (swap_commit, swap_record) = swaps(body)?;
+    let allow = |w: &[Write]| host.may_repo(&acting, w);
+    let asked = Asked {
+        swap_commit,
+        swap_record,
+        put: true,
+        allow: Some(&allow),
+    };
+    // A put of what is there, or a delete of what is not, makes no commit.
+    let committed = host.write_asked(group, std::slice::from_ref(&write), &asked)?;
+    let mut out = json!({});
+    if let Some(c) = &committed {
+        out["commit"] = commit_view(c);
+        host.wrote(&acting, None, std::slice::from_ref(&write))?;
+    }
+    if !delete {
+        out["uri"] = json!(repo_uri(group, collection, rkey));
+        out["cid"] = json!(record_cid(collection, &body["record"])?.to_string());
+        out["validationStatus"] = json!("unknown");
+    }
+    Ok(Json(out))
 }
 
 pub async fn put_record(
@@ -347,23 +361,7 @@ pub async fn put_record(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let acting = host.writer(&headers, "com.atproto.repo.putRecord", &body)?;
-    let group = &acting.grant.group;
-    let (collection, rkey) = (text(&body, "collection")?, text(&body, "rkey")?);
-    let current = host.repo_record(group, collection, rkey)?;
-    swap_record(&body, current)?;
-    host.swap_commit(group, &body)?;
-    let mut out = json!({
-        "uri": repo_uri(group, collection, rkey),
-        "cid": record_cid(collection, &body["record"])?.to_string(),
-        "validationStatus": "unknown",
-    });
-    // A put of what is there already changes nothing, and makes no commit.
-    if let Some(write) = host.put(current, collection, rkey, &body["record"])? {
-        host.may_repo(&acting, std::slice::from_ref(&write))?;
-        out["commit"] = commit_view(&host.write(group, &[write])?);
-    }
-    Ok(Json(out))
+    put_or_delete(&host, "com.atproto.repo.putRecord", &headers, &body, false).await
 }
 
 pub async fn delete_record(
@@ -371,26 +369,14 @@ pub async fn delete_record(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let acting = host.writer(&headers, "com.atproto.repo.deleteRecord", &body)?;
-    let group = &acting.grant.group;
-    let (collection, rkey) = (
-        text(&body, "collection")?.to_string(),
-        text(&body, "rkey")?.to_string(),
-    );
-    let write = Write::Delete {
-        collection: collection.clone(),
-        rkey: rkey.clone(),
-    };
-    host.may_repo(&acting, std::slice::from_ref(&write))?;
-    let current = host.repo_record(group, &collection, &rkey)?;
-    swap_record(&body, current)?;
-    host.swap_commit(group, &body)?;
-    // Gone already is gone, as a PDS has it.
-    if current.is_none() {
-        return Ok(Json(json!({})));
-    }
-    let committed = host.write(group, &[write])?;
-    Ok(Json(json!({"commit": commit_view(&committed)})))
+    put_or_delete(
+        &host,
+        "com.atproto.repo.deleteRecord",
+        &headers,
+        &body,
+        true,
+    )
+    .await
 }
 
 pub async fn apply_writes(
@@ -401,15 +387,21 @@ pub async fn apply_writes(
     let acting = host.writer(&headers, "com.atproto.repo.applyWrites", &body)?;
     let group = &acting.grant.group;
     let writes = listed(&host, "repo", &body)?;
-    host.may_repo(&acting, &writes)?;
-    host.swap_commit(group, &body)?;
-    let committed = host.write(group, &writes)?;
+    let (swap_commit, _) = swaps(&body)?;
+    let allow = |w: &[Write]| host.may_repo(&acting, w);
+    let asked = Asked {
+        swap_commit,
+        allow: Some(&allow),
+        ..Asked::default()
+    };
+    let committed = host.write_asked(group, &writes, &asked)?;
+    host.wrote(&acting, None, &writes)?;
     let results: Vec<Value> = writes
         .iter()
         .map(|w| result("repo", repo_uri(group, w.path().0, w.path().1), w))
         .collect::<Result<_, _>>()?;
     Ok(Json(
-        json!({"commit": commit_view(&committed), "results": results}),
+        json!({"commit": committed.as_ref().map(commit_view), "results": results}),
     ))
 }
 
@@ -479,24 +471,70 @@ impl Host {
         }
         self.guard(group, uri, writes)
     }
-
-    fn space_record_cid(
-        &self,
-        group: &str,
-        space: &str,
-        collection: &str,
-        rkey: &str,
-    ) -> Result<Option<atproto::Cid>, XrpcError> {
-        let found = self
-            .store
-            .space_record(group, space, collection, rkey)
-            .map_err(XrpcError::internal)?;
-        Ok(found.map(|r| r.cid))
-    }
 }
 
 fn space_uri(space: &str, group: &str, collection: &str, rkey: &str) -> String {
     format!("{space}/{group}/{collection}/{rkey}")
+}
+
+/// Makes `writes` in the space a body names, as `put` has them: its
+/// commit, if any.
+async fn space_writes(
+    host: &Host,
+    nsid: &str,
+    headers: &HeaderMap,
+    body: &Value,
+    writes: impl FnOnce(&Host) -> Result<Vec<Write>, XrpcError>,
+    put: bool,
+) -> Result<(String, String, Vec<Write>, bool), Refusal> {
+    let acting = host.writer(headers, nsid, body)?;
+    let (uri, space) = space_of(body)?;
+    let group = acting.grant.group.clone();
+    let writes = writes(host)?;
+    let allow = |w: &[Write]| host.may_space(&acting, &uri, &space, w);
+    let asked = Asked {
+        put,
+        allow: Some(&allow),
+        ..Asked::default()
+    };
+    let made = host
+        .space_write_asked(&group, &uri, &writes, &asked)
+        .await?;
+    if made.is_some() {
+        host.wrote(&acting, Some(&uri), &writes)?;
+    }
+    Ok((uri, group, writes, made.is_some()))
+}
+
+/// The one write a put or delete body asks for.
+fn one(body: &Value, delete: bool) -> Result<Write, XrpcError> {
+    let (collection, rkey) = (
+        text(body, "collection")?.to_string(),
+        text(body, "rkey")?.to_string(),
+    );
+    Ok(match delete {
+        true => Write::Delete { collection, rkey },
+        false => Write::Update {
+            collection,
+            rkey,
+            value: body["record"].clone(),
+        },
+    })
+}
+
+/// A record view of a space write: its URI, CID and validation.
+fn space_record_view(
+    uri: &str,
+    group: &str,
+    write: &Write,
+    body: &Value,
+) -> Result<Value, XrpcError> {
+    let (collection, rkey) = write.path();
+    Ok(json!({
+        "uri": space_uri(uri, group, collection, rkey),
+        "cid": record_cid(collection, &body["record"])?.to_string(),
+        "validationStatus": "unknown",
+    }))
 }
 
 pub async fn space_create_record(
@@ -504,25 +542,20 @@ pub async fn space_create_record(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let acting = host.writer(&headers, "com.atproto.space.createRecord", &body)?;
-    let (uri, space) = space_of(&body)?;
-    let group = acting.grant.group.clone();
-    let collection = text(&body, "collection")?.to_string();
     let rkey = body["rkey"]
         .as_str()
         .map_or_else(|| host.clock.next(), String::from);
-    let write = Write::Create {
-        collection: collection.clone(),
-        rkey: rkey.clone(),
-        value: body["record"].clone(),
+    let make = |_: &Host| {
+        let collection = text(&body, "collection")?.to_string();
+        Ok(vec![Write::Create {
+            collection,
+            rkey: rkey.clone(),
+            value: body["record"].clone(),
+        }])
     };
-    host.may_space(&acting, &uri, &space, std::slice::from_ref(&write))?;
-    host.space_write(&group, &uri, &[write]).await?;
-    Ok(Json(json!({
-        "uri": space_uri(&uri, &group, &collection, &rkey),
-        "cid": record_cid(&collection, &body["record"])?.to_string(),
-        "validationStatus": "unknown",
-    })))
+    let nsid = "com.atproto.space.createRecord";
+    let (uri, group, writes, _) = space_writes(&host, nsid, &headers, &body, make, false).await?;
+    Ok(Json(space_record_view(&uri, &group, &writes[0], &body)?))
 }
 
 pub async fn space_put_record(
@@ -530,20 +563,10 @@ pub async fn space_put_record(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let acting = host.writer(&headers, "com.atproto.space.putRecord", &body)?;
-    let (uri, space) = space_of(&body)?;
-    let group = acting.grant.group.clone();
-    let (collection, rkey) = (text(&body, "collection")?, text(&body, "rkey")?);
-    let current = host.space_record_cid(&group, &uri, collection, rkey)?;
-    if let Some(write) = host.put(current, collection, rkey, &body["record"])? {
-        host.may_space(&acting, &uri, &space, std::slice::from_ref(&write))?;
-        host.space_write(&group, &uri, &[write]).await?;
-    }
-    Ok(Json(json!({
-        "uri": space_uri(&uri, &group, collection, rkey),
-        "cid": record_cid(collection, &body["record"])?.to_string(),
-        "validationStatus": "unknown",
-    })))
+    let make = |_: &Host| Ok(vec![one(&body, false)?]);
+    let nsid = "com.atproto.space.putRecord";
+    let (uri, group, writes, _) = space_writes(&host, nsid, &headers, &body, make, true).await?;
+    Ok(Json(space_record_view(&uri, &group, &writes[0], &body)?))
 }
 
 pub async fn space_delete_record(
@@ -551,24 +574,9 @@ pub async fn space_delete_record(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let acting = host.writer(&headers, "com.atproto.space.deleteRecord", &body)?;
-    let (uri, space) = space_of(&body)?;
-    let group = acting.grant.group.clone();
-    let (collection, rkey) = (
-        text(&body, "collection")?.to_string(),
-        text(&body, "rkey")?.to_string(),
-    );
-    let write = Write::Delete {
-        collection: collection.clone(),
-        rkey: rkey.clone(),
-    };
-    host.may_space(&acting, &uri, &space, std::slice::from_ref(&write))?;
-    if host
-        .space_record_cid(&group, &uri, &collection, &rkey)?
-        .is_some()
-    {
-        host.space_write(&group, &uri, &[write]).await?;
-    }
+    let make = |_: &Host| Ok(vec![one(&body, true)?]);
+    let nsid = "com.atproto.space.deleteRecord";
+    space_writes(&host, nsid, &headers, &body, make, true).await?;
     Ok(Json(json!({})))
 }
 
@@ -577,12 +585,9 @@ pub async fn space_apply_writes(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let acting = host.writer(&headers, "com.atproto.space.applyWrites", &body)?;
-    let (uri, space) = space_of(&body)?;
-    let group = acting.grant.group.clone();
-    let writes = listed(&host, "space", &body)?;
-    host.may_space(&acting, &uri, &space, &writes)?;
-    host.space_write(&group, &uri, &writes).await?;
+    let make = |h: &Host| listed(h, "space", &body);
+    let nsid = "com.atproto.space.applyWrites";
+    let (uri, group, writes, _) = space_writes(&host, nsid, &headers, &body, make, false).await?;
     let results: Vec<Value> = writes
         .iter()
         .map(|w| result("space", space_uri(&uri, &group, w.path().0, w.path().1), w))

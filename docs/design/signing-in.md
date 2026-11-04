@@ -111,10 +111,14 @@ With it, an app writes as the group (`token_writes.rs`):
 - and `com.atproto.server.getSession` says which group it is for, and
   whether it is switched on.
 
-A put of what is there already changes nothing; a delete of what is not
-there is done. A repo write's `swapCommit` must be the repo's head, and
-a put's or delete's `swapRecord` the record there (null for none), or it
-is refused as `InvalidSwap`. The scope is read as atproto's permission spec reads one
+Everything a write asks of the repo is asked as it is written, under the
+lock its commit is made under, so no other write comes between
+(`repo::resolve`): a repo write's `swapCommit` must be the repo's head,
+and a put's or delete's `swapRecord` the record there (null for none),
+or it is `InvalidSwap`; a put is a create or an update by what is there
+then, and is asked of the token's scope and the member's roles as that;
+and a put of what is there already, or a delete of what is not, is
+asked as any other, then changes nothing and makes no commit. The scope is read as atproto's permission spec reads one
 (`scopes.rs`): a space scope's authority is the group unless it names
 one, and one naming no action grants every one but `read_self`.
 
@@ -130,6 +134,28 @@ configure set names, and only as the host's methods would: the profile
 grant names it. Memberships, permissions, and any space's access record
 change only through the host's methods, which check that nobody gives
 themselves more than they hold.
+
+## Group tokens
+
+The console acts as the group without OAuth's dance (`group_tokens.rs`):
+`getGroupAuth` takes the member's own service auth and a DPoP proof, and
+gives a token for the group, good for fifteen minutes and never
+refreshed, bound to that proof's key. Its scope is what the member's
+roles may write as the group in the one space asked for, by its access
+record's `credentialScopes`: those collections there, with those writes,
+the same kinds of record in the group's repo (a role may publish what it
+writes as the group, as the access lexicon has it), and image files, or
+any file for a role that writes any kind. A member whose roles write
+nothing there gets no token.
+
+## Who acts as the group
+
+Every grant names the member who gave it, its app, how it was given
+(`oauth` or `getGroupAuth`), its scope, and when it was last used, to the
+minute. `listGroupTokens` shows a group's configurers every grant that
+still lasts, and its log: each sign-in, each token taken, each record a
+grant wrote, and each grant ended, the latest twenty. `revokeGroupToken`
+ends one.
 
 ## From the prototype
 

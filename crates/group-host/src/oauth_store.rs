@@ -40,6 +40,19 @@ pub struct Grant {
     /// When its refresh token lapses.
     pub expires_at: i64,
     pub created_at: i64,
+    /// How it was given: `oauth`, or `getGroupAuth`.
+    pub source: String,
+    /// When it was last used, to the minute.
+    pub used_at: Option<i64>,
+}
+
+/// Something done as a group with a grant, or to one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Activity {
+    pub member: String,
+    pub client_id: Option<String>,
+    pub action: String,
+    pub at: i64,
 }
 
 const PUSH: &str = "INSERT INTO oauth_request (id, client_id, client_auth, parameters, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)";
@@ -48,8 +61,13 @@ const REQUEST: &str = "SELECT id, client_id, client_auth, parameters, expires_at
 const APPROVE: &str = "UPDATE oauth_request SET grp = ?2, member = ?3, scope = ?4, code = ?5, expires_at = ?6 WHERE id = ?1 AND code IS NULL AND expires_at > ?7";
 const DROP: &str = "DELETE FROM oauth_request WHERE id = ?1 AND code IS NULL AND expires_at > ?2";
 const REDEEM: &str = "DELETE FROM oauth_request WHERE code = ?1 RETURNING id, client_id, client_auth, parameters, expires_at, grp, member, scope";
-const ISSUE: &str = "INSERT INTO oauth_token (id, grp, member, client_id, client_auth, scope, dpop_jkt, access_hash, access_expires, refresh_hash, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)";
-const GRANT_COLUMNS: &str = "id, grp, member, client_id, client_auth, scope, dpop_jkt, access_expires, expires_at, created_at";
+const ISSUE: &str = "INSERT INTO oauth_token (id, grp, member, client_id, client_auth, scope, dpop_jkt, access_hash, access_expires, refresh_hash, expires_at, created_at, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)";
+const GRANT_COLUMNS: &str = "id, grp, member, client_id, client_auth, scope, dpop_jkt, access_expires, expires_at, created_at, source, used_at";
+const TOUCH: &str = "UPDATE oauth_token SET used_at = ?2 WHERE id = ?1 AND (used_at IS NULL OR used_at <= ?2 - 60000)";
+const END_GRANT: &str = "DELETE FROM oauth_token WHERE id = ?1";
+const RECORD: &str =
+    "INSERT INTO group_activity (grp, member, client_id, action, at) VALUES (?1, ?2, ?3, ?4, ?5)";
+const ACTIVITY: &str = "SELECT member, client_id, action, at FROM group_activity WHERE grp = ?1 ORDER BY seq DESC LIMIT ?2";
 const ROTATE: &str = "UPDATE oauth_token SET access_hash = ?2, access_expires = ?3, refresh_hash = ?4, expires_at = ?5 WHERE refresh_hash = ?1 AND expires_at > ?6";
 const REVOKE: &str = "DELETE FROM oauth_token WHERE access_hash = ?1 OR refresh_hash = ?1";
 const REVOKE_MEMBER: &str = "DELETE FROM oauth_token WHERE grp = ?1 AND member = ?2";
@@ -83,6 +101,17 @@ fn grant(row: &Row) -> rusqlite::Result<Grant> {
         access_expires: row.get(7)?,
         expires_at: row.get(8)?,
         created_at: row.get(9)?,
+        source: row.get(10)?,
+        used_at: row.get(11)?,
+    })
+}
+
+fn activity(row: &Row) -> rusqlite::Result<Activity> {
+    Ok(Activity {
+        member: row.get(0)?,
+        client_id: row.get(1)?,
+        action: row.get(2)?,
+        at: row.get(3)?,
     })
 }
 
@@ -178,6 +207,7 @@ impl Store {
                 tokens.refresh_hash,
                 tokens.expires_at,
                 grant.created_at,
+                grant.source,
             ],
         )?;
         Ok(())
@@ -225,6 +255,53 @@ impl Store {
     pub fn revoke_token(&self, hash: &str) -> Result<bool> {
         let conn = self.conn();
         Ok(conn.execute(REVOKE, [hash])? > 0)
+    }
+
+    /// The grant `id`, of any group.
+    pub fn grant_by_id(&self, id: &str) -> Result<Option<Grant>> {
+        let conn = self.conn();
+        let sql = format!("SELECT {GRANT_COLUMNS} FROM oauth_token WHERE id = ?1");
+        let found = conn.query_row(&sql, [id], grant);
+        Ok(found.optional()?)
+    }
+
+    /// `group`'s grants that last past `now`, the newest first.
+    pub fn grants_of(&self, group: &str, now: i64) -> Result<Vec<Grant>> {
+        let conn = self.conn();
+        let sql = format!(
+            "SELECT {GRANT_COLUMNS} FROM oauth_token WHERE grp = ?1 AND expires_at > ?2 ORDER BY created_at DESC, id"
+        );
+        let mut q = conn.prepare(&sql)?;
+        let rows = q.query_map(params![group, now], grant)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Notes that grant `id` was used `now`, at most once a minute.
+    pub fn touch(&self, id: &str, now: i64) -> Result<()> {
+        self.conn().execute(TOUCH, params![id, now])?;
+        Ok(())
+    }
+
+    /// Ends the grant `id`.
+    pub fn end_grant(&self, id: &str) -> Result<bool> {
+        Ok(self.conn().execute(END_GRANT, [id])? > 0)
+    }
+
+    /// Keeps `activity` in `group`'s log.
+    pub fn record_activity(&self, group: &str, activity: &Activity) -> Result<()> {
+        let a = activity;
+        let values = params![group, a.member, a.client_id, a.action, a.at];
+        let recorded = self.conn().execute(RECORD, values);
+        recorded?;
+        Ok(())
+    }
+
+    /// The latest `limit` of `group`'s log, the newest first.
+    pub fn activity(&self, group: &str, limit: u32) -> Result<Vec<Activity>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(ACTIVITY)?;
+        let rows = q.query_map(params![group, limit], activity)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Ends every grant `member` approved for `group`: theirs to act with

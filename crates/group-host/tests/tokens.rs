@@ -742,3 +742,82 @@ fn reads_a_scope_as_atproto_has_it() {
     assert!(p.space(&theirs, Some("x.y.z"), "delete") && !p.space(&ours, Some("x.y.z"), "delete"));
     assert!(!Permissions::new("space?authority=*", group).space(&ours, None, "read"));
 }
+
+#[tokio::test]
+async fn asks_everything_of_the_repo_as_it_is_when_written() {
+    let h = start(&[], false).await;
+    let (did, calendar, [alice, bob, _]) = group(&h).await;
+    let app = App::loopback(&format!("atproto repo:{POST}?action=create"));
+    let access = token(&h, &app, &alice, &did).await;
+    let call = async |nsid: &str, body: Json| {
+        app.call(
+            &h,
+            &format!("com.atproto.repo.{nsid}"),
+            &access,
+            Some(&body),
+        )
+        .await
+    };
+    let made = call(
+        "createRecord",
+        json!({"repo": did, "collection": POST, "rkey": "one", "record": record(POST, "a")}),
+    )
+    .await;
+    assert_eq!(made.status, 200, "{}", made.body);
+    // A put of what is there is still an update, and a delete of nothing a
+    // delete: neither is this token's.
+    let same = json!({"repo": did, "collection": POST, "rkey": "one", "record": record(POST, "a")});
+    assert_eq!(call("putRecord", same).await.error(), (403, "ScopeMissing"));
+    let none = json!({"repo": did, "collection": POST, "rkey": "none"});
+    assert_eq!(
+        call("deleteRecord", none).await.error(),
+        (403, "ScopeMissing")
+    );
+    let bad = json!({"repo": did, "collection": POST, "rkey": "two", "record": record(POST, "b"), "swapRecord": 5});
+    assert_eq!(
+        call("putRecord", bad).await.error(),
+        (400, "InvalidRequest")
+    );
+
+    // Of two writes that swap the same commit, one lands.
+    let app = App::loopback(&format!("atproto repo:{POST}"));
+    let access = token(&h, &app, &alice, &did).await;
+    let head = h.host.store.head(&did).unwrap().unwrap().cid.to_string();
+    let put = |rkey: &str| json!({"repo": did, "collection": POST, "rkey": rkey, "record": record(POST, rkey), "swapCommit": head});
+    let (x, y) = (put("x"), put("y"));
+    let (a, b) = tokio::join!(
+        app.call(&h, "com.atproto.repo.putRecord", &access, Some(&x)),
+        app.call(&h, "com.atproto.repo.putRecord", &access, Some(&y)),
+    );
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [200, 400], "{} {}", a.body, b.body);
+    // A put that changes nothing still swaps: the repo has moved on.
+    let same = json!({"repo": did, "collection": POST, "rkey": "one", "record": record(POST, "a"), "swapCommit": head});
+    let said = app
+        .call(&h, "com.atproto.repo.putRecord", &access, Some(&same))
+        .await;
+    assert_eq!(said.error(), (400, "InvalidSwap"));
+    let gone = json!({"repo": did, "collection": POST, "rkey": "none", "swapCommit": head});
+    let said = app
+        .call(&h, "com.atproto.repo.deleteRecord", &access, Some(&gone))
+        .await;
+    assert_eq!(said.error(), (400, "InvalidSwap"));
+
+    // In a space too, a put of what is there is an update.
+    let app = App::loopback(&format!(
+        "atproto space:{CALENDAR}?collection={EVENT}&action=create"
+    ));
+    let access = token(&h, &app, &bob, &did).await;
+    let event = json!({"repo": did, "space": calendar, "collection": EVENT, "rkey": "ride", "record": record(EVENT, "ride")});
+    assert_eq!(
+        app.call(&h, "com.atproto.space.putRecord", &access, Some(&event))
+            .await
+            .status,
+        200
+    );
+    let said = app
+        .call(&h, "com.atproto.space.putRecord", &access, Some(&event))
+        .await;
+    assert_eq!(said.error(), (403, "ScopeMissing"));
+}

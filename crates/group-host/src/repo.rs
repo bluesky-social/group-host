@@ -35,6 +35,14 @@ pub enum Write {
 }
 
 impl Write {
+    /// The record it puts: none for a delete.
+    pub fn value(&self) -> Option<&serde_json::Value> {
+        match self {
+            Write::Create { value, .. } | Write::Update { value, .. } => Some(value),
+            Write::Delete { .. } => None,
+        }
+    }
+
     /// Where it writes: its collection and record key.
     pub fn path(&self) -> (&str, &str) {
         match self {
@@ -56,6 +64,89 @@ pub(crate) struct Checked {
     pub path: String,
     pub put: Option<(Cid, Vec<u8>)>,
     pub blobs: Vec<Cid>,
+}
+
+/// A check of a write before it is made, by the writes as resolved.
+pub type Allow<'a> = &'a (dyn Fn(&[Write]) -> Result<(), XrpcError> + Sync);
+
+/// What a write asks of the repo as it is when the write is made, all
+/// asked under the write lock, so no other write comes between the asking
+/// and the commit.
+#[derive(Default, Clone, Copy)]
+pub struct Asked<'a> {
+    /// The commit the repo must be at.
+    pub swap_commit: Option<&'a str>,
+    /// The CID of the record the first write's path must hold, or
+    /// `Some(None)` for none there.
+    pub swap_record: Option<Option<&'a str>>,
+    /// The writes put records: each create or update is whichever what is
+    /// there makes it, and a put of the record there already, or a delete
+    /// where there is none, changes nothing and is left out.
+    pub put: bool,
+    /// Asked of the writes as resolved, before any is made.
+    pub allow: Option<Allow<'a>>,
+}
+
+fn invalid_swap(message: impl Into<String>) -> XrpcError {
+    XrpcError::new(StatusCode::BAD_REQUEST, "InvalidSwap", message)
+}
+
+/// `writes` against the records at `paths`, as `asked` has them: swaps
+/// checked, puts resolved, allowed, and only those that change something.
+pub(crate) fn resolve(
+    writes: &[Write],
+    paths: &BTreeMap<String, Cid>,
+    asked: &Asked,
+) -> Result<Vec<Write>, XrpcError> {
+    let current = |w: &Write| {
+        let (collection, rkey) = w.path();
+        paths.get(&format!("{collection}/{rkey}")).copied()
+    };
+    if let (Some(swap), Some(first)) = (asked.swap_record, writes.first())
+        && swap != current(first).map(|c| c.to_string()).as_deref()
+    {
+        return Err(invalid_swap("the record is not the one swapped"));
+    }
+    let resolved: Vec<Write> = writes
+        .iter()
+        .map(|w| match (asked.put, w.value()) {
+            (true, Some(value)) => {
+                let (collection, rkey) = w.path();
+                let (collection, rkey, value) = (collection.into(), rkey.into(), value.clone());
+                match current(w) {
+                    Some(_) => Write::Update {
+                        collection,
+                        rkey,
+                        value,
+                    },
+                    None => Write::Create {
+                        collection,
+                        rkey,
+                        value,
+                    },
+                }
+            }
+            _ => w.clone(),
+        })
+        .collect();
+    if let Some(allow) = asked.allow {
+        allow(&resolved)?;
+    }
+    let mut changing = Vec::new();
+    for w in resolved {
+        let unchanged = asked.put
+            && match &w {
+                Write::Delete { .. } => current(&w).is_none(),
+                Write::Update {
+                    collection, value, ..
+                } => current(&w) == Some(record(collection, value)?.0),
+                Write::Create { .. } => false,
+            };
+        if !unchanged {
+            changing.push(w);
+        }
+    }
+    Ok(changing)
 }
 
 /// A commit made: its CID and revision.
@@ -193,6 +284,18 @@ impl Host {
 
     /// Makes `writes` to `did`'s repo, as one commit.
     pub fn write(&self, did: &str, writes: &[Write]) -> Result<Committed, XrpcError> {
+        let made = self.write_asked(did, writes, &Asked::default())?;
+        Ok(made.expect("writes that are not puts make a commit"))
+    }
+
+    /// Makes `writes` to `did`'s repo, as one commit, as `asked` has them:
+    /// none if, as puts, they change nothing.
+    pub fn write_asked(
+        &self,
+        did: &str,
+        writes: &[Write],
+        asked: &Asked,
+    ) -> Result<Option<Committed>, XrpcError> {
         let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
@@ -208,10 +311,17 @@ impl Host {
             .head(&account.did)
             .map_err(XrpcError::internal)?
             .expect("an account has a repo");
+        if let Some(swap) = asked.swap_commit.filter(|s| *s != head.cid.to_string()) {
+            return Err(invalid_swap(format!("the repo is not at {swap}")));
+        }
         let mut paths = self
             .store
             .paths(&account.did)
             .map_err(XrpcError::internal)?;
+        let writes = &resolve(writes, &paths, asked)?;
+        if asked.put && writes.is_empty() {
+            return Ok(None);
+        }
         let before = Tree::build(&paths);
         let mut changes: Vec<Change> = Vec::new();
         let mut ops = Vec::new();
@@ -263,10 +373,10 @@ impl Host {
             .map_err(XrpcError::internal)?;
         self.remove_blobs(orphans.iter().map(|cid| (account.did.as_str(), cid)));
         self.announce();
-        Ok(Committed {
+        Ok(Some(Committed {
             cid: new.cid,
             rev: new.rev,
-        })
+        }))
     }
 
     /// `write` to `did`'s records, now at `paths`, checked: its path is a

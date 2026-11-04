@@ -254,6 +254,19 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX oauth_token_member ON oauth_token (grp, member);
 ",
+    "
+    ALTER TABLE oauth_token ADD COLUMN source TEXT NOT NULL DEFAULT 'oauth';
+    ALTER TABLE oauth_token ADD COLUMN used_at INTEGER;
+    CREATE TABLE group_activity (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        grp TEXT NOT NULL REFERENCES account (did),
+        member TEXT NOT NULL,
+        client_id TEXT,
+        action TEXT NOT NULL,
+        at INTEGER NOT NULL
+    );
+    CREATE INDEX group_activity_grp ON group_activity (grp, seq);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -371,6 +384,7 @@ const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did 
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM group_activity WHERE grp = ?1",
     "DELETE FROM oauth_token WHERE grp = ?1",
     "DELETE FROM oauth_request WHERE grp = ?1",
     "DELETE FROM invite WHERE grp = ?1",

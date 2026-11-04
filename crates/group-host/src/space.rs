@@ -7,7 +7,7 @@
 
 use crate::Host;
 use crate::authority::{Access, DELIVER_FOR};
-use crate::repo::{Checked, Write, invalid};
+use crate::repo::{Asked, Checked, Write, invalid, resolve};
 use crate::store::{Change, Notice, SpaceHead};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
@@ -30,12 +30,29 @@ impl Host {
         space: &str,
         writes: &[Write],
     ) -> Result<Commit, XrpcError> {
+        let made = self
+            .space_write_asked(did, space, writes, &Asked::default())
+            .await?;
+        Ok(made.expect("writes that are not puts make a revision"))
+    }
+
+    /// Makes `writes` to `did`'s repo in `space` as `asked` has them, and
+    /// tells the space's authority: none if, as puts, they change nothing.
+    pub async fn space_write_asked(
+        &self,
+        did: &str,
+        space: &str,
+        writes: &[Write],
+        asked: &Asked<'_>,
+    ) -> Result<Option<Commit>, XrpcError> {
         let space = SpaceRef::parse(space).map_err(|e| invalid(e.to_string()))?;
-        let commit = self.space_commit(did, &space, writes)?;
+        let Some(commit) = self.space_commit(did, &space, writes, asked)? else {
+            return Ok(None);
+        };
         if let Err(e) = self.tell_authority(&space, &commit).await {
             tracing::warn!(space = %space, repo = did, error = %format!("{e:#}"), "telling the authority failed");
         }
-        Ok(commit)
+        Ok(Some(commit))
     }
 
     async fn tell_authority(&self, space: &SpaceRef, commit: &Commit) -> Result<()> {
@@ -65,7 +82,8 @@ impl Host {
         did: &str,
         space: &SpaceRef,
         writes: &[Write],
-    ) -> Result<Commit, XrpcError> {
+        asked: &Asked,
+    ) -> Result<Option<Commit>, XrpcError> {
         let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
@@ -89,8 +107,12 @@ impl Host {
             .store
             .space_paths(&account.did, &uri)
             .map_err(XrpcError::internal)?;
+        let writes = resolve(writes, &paths, asked)?;
+        if asked.put && writes.is_empty() {
+            return Ok(None);
+        }
         let mut changes = Vec::new();
-        for write in writes {
+        for write in &writes {
             let Checked { path, put, blobs } = self.check(&account.did, write, &paths)?;
             let (collection, rkey) = write.path();
             let prev = match &put {
@@ -129,6 +151,6 @@ impl Host {
             rev: new.rev,
             data: hash.digest(),
         };
-        Ok(commit)
+        Ok(Some(commit))
     }
 }

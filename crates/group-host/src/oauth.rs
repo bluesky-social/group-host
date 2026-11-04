@@ -474,10 +474,20 @@ async fn exchange(host: &Host, headers: &HeaderMap, form: OAuthForm) -> Result<V
                 access_expires: tokens.access_expires,
                 expires_at: tokens.expires_at,
                 created_at: now,
+                source: "oauth".into(),
+                used_at: None,
             };
             host.store
                 .issue(&grant, &tokens)
                 .map_err(OAuthError::internal)?;
+            let signed_in = format!("signed in {}", grant.client_id);
+            host.record(
+                &grant.group,
+                &grant.member,
+                Some(&grant.client_id),
+                &signed_in,
+            )
+            .map_err(OAuthError::internal)?;
             tracing::info!(
                 group = grant.group,
                 member = grant.member,

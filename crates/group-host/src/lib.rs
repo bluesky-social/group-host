@@ -19,6 +19,7 @@ pub mod group_join;
 pub mod group_lifecycle;
 pub mod group_members;
 pub mod group_spaces;
+pub mod group_tokens;
 pub mod identity;
 pub mod index;
 pub mod index_api;
@@ -326,6 +327,14 @@ pub fn router(host: Arc<Host>) -> Router {
             "/xrpc/fyi.opensocial.declineAuthorization",
             post(authorization::decline_authorization),
         )
+        .route(
+            "/xrpc/fyi.opensocial.listGroupTokens",
+            get(group_tokens::list_group_tokens),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.revokeGroupToken",
+            post(group_tokens::revoke_group_token),
+        )
         .route("/oauth/authorize", get(oauth::authorize))
         .merge(token_routes())
         .merge(oauth_routes())
@@ -396,6 +405,10 @@ fn token_routes() -> Router<Arc<Host>> {
         .route(
             &x("com.atproto.server.getSession"),
             get(token_writes::get_session),
+        )
+        .route(
+            &x("fyi.opensocial.getGroupAuth"),
+            post(group_tokens::get_group_auth),
         )
         .layer(axum::middleware::from_fn(oauth::cors))
 }

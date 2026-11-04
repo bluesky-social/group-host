@@ -71,7 +71,24 @@ impl IntoResponse for Refusal {
 }
 
 impl Host {
-    fn refuse(&self, error: &'static str, description: impl Into<String>) -> Refusal {
+    /// Keeps word in `group`'s log of what was done as it.
+    pub fn record(
+        &self,
+        group: &str,
+        member: &str,
+        client: Option<&str>,
+        action: &str,
+    ) -> anyhow::Result<()> {
+        let activity = crate::oauth_store::Activity {
+            member: member.into(),
+            client_id: client.map(String::from),
+            action: action.into(),
+            at: now_millis(),
+        };
+        self.store.record_activity(group, &activity)
+    }
+
+    pub(crate) fn refuse(&self, error: &'static str, description: impl Into<String>) -> Refusal {
         Refusal::Token {
             error,
             description: description.into(),
@@ -108,6 +125,9 @@ impl Host {
         if proof.jkt != grant.dpop_jkt {
             return Err(self.refuse("invalid_token", "the DPoP key is not the token's"));
         }
+        self.store
+            .touch(&grant.id, now)
+            .map_err(XrpcError::internal)?;
         let permissions = Permissions::new(&grant.scope, &grant.group);
         Ok(Acting { grant, permissions })
     }
