@@ -31,6 +31,11 @@ pub fn b64(bytes: impl AsRef<[u8]>) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// The bytes `text` holds, base64url without padding.
+pub fn unb64(text: &str) -> Option<Vec<u8>> {
+    URL_SAFE_NO_PAD.decode(text).ok()
+}
+
 /// The JSON object `part` holds, base64url: a JWT's header or claims.
 pub fn json_of(part: &str) -> Option<Value> {
     let bytes = URL_SAFE_NO_PAD.decode(part).ok()?;

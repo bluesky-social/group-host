@@ -107,5 +107,7 @@ fn hashes_and_draws_as_oauth_wants() {
         "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
     );
     assert_eq!(random(32).len(), 43);
+    assert_eq!(jose::unb64(&jose::b64(b"bytes")).unwrap(), b"bytes");
+    assert_eq!(jose::unb64("!!"), None);
     assert_ne!(random(16), random(16));
 }

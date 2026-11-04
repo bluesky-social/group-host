@@ -328,6 +328,13 @@ pub const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (grp, key)
     );
 ",
+    "
+    CREATE TABLE migration_export (
+        did TEXT PRIMARY KEY REFERENCES account (did),
+        token_hash TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -445,6 +452,7 @@ const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did 
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM migration_export WHERE did = ?1",
     "DELETE FROM recovery_key WHERE grp = ?1",
     "DELETE FROM mod_event WHERE grp = ?1",
     "DELETE FROM mod_subject WHERE grp = ?1",

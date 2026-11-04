@@ -27,6 +27,7 @@ pub mod identity;
 pub mod index;
 pub mod index_api;
 pub mod lifecycle;
+pub mod migration;
 pub mod moderation;
 pub mod oauth;
 pub mod oauth_clients;
@@ -393,6 +394,26 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.removeRecoveryKey",
             post(recovery::remove_recovery_key),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.migratePrepare",
+            post(migration::migrate_prepare),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.migrateExport",
+            get(migration::migrate_export),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.migrateReceive",
+            post(migration::migrate_receive),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.migrateComplete",
+            post(migration::migrate_complete),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.migrateActivate",
+            post(migration::migrate_activate),
         )
         .route("/oauth/authorize", get(oauth::authorize))
         .route(

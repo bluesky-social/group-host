@@ -85,6 +85,9 @@ pub struct Asked<'a> {
     pub put: bool,
     /// Asked of the writes as resolved, before any is made.
     pub allow: Option<Allow<'a>>,
+    /// Made while the account is switched off, as one received from
+    /// another host is until the directory names this one.
+    pub off: bool,
 }
 
 fn invalid_swap(message: impl Into<String>) -> XrpcError {
@@ -268,7 +271,7 @@ impl Host {
     }
 
     /// `account`'s commit of `tree`, at the next revision.
-    fn sign(&self, account: &Account, tree: &Tree) -> Head {
+    pub(crate) fn sign(&self, account: &Account, tree: &Tree) -> Head {
         let commit = Commit::sign(
             &account.did,
             tree.root(),
@@ -306,7 +309,9 @@ impl Host {
                 format!("no repo {did} here"),
             )
         })?;
-        self.active(&account.did)?;
+        if !asked.off {
+            self.active(&account.did)?;
+        }
         let head = self
             .store
             .head(&account.did)

@@ -175,7 +175,7 @@ impl Host {
 
     /// A write to `space`, of a group here, by `repo`: kept in the writer
     /// set unless it knows a later one, and told to the space's syncers.
-    pub(crate) fn record_writer(
+    pub fn record_writer(
         &self,
         space: &str,
         authority: &str,
