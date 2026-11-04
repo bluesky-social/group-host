@@ -64,8 +64,9 @@ and its tests, for what it has to handle; then write it as it should be.
   server, and answers the `fyi.opensocial.*` methods. It serves the
   console's pages' queries as XRPC, each with its lexicon under
   `lexicons/`.
-- `crates/group-host-mcp`: an MCP server whose tools are the core's
-  methods, asked as the member who connected it.
+- `crates/group-host-mcp`: the MCP protocol and tools, the core's
+  methods asked as the member who connected an assistant; the host serves
+  them at `/mcp`.
 - `crates/opensocial`: a client for group hosts, and the `opensocial`
   command (creating, inspecting and running groups; seeding; moving a group
   or a host), as `packages/cli` and the host's scripts were.

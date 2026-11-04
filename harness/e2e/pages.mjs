@@ -159,3 +159,78 @@ export const didKey = () => {
   }
   return `did:key:z${out}`
 }
+
+/// An assistant on this machine, as an MCP client signs in: it finds the
+/// host's authorization server from the MCP server's metadata, registers
+/// itself, and sends the browser to say yes, with PKCE; then calls tools
+/// with the Bearer token it is given.
+export class Assistant {
+  async listen() {
+    this.back = new Promise((done) => {
+      this.server = createServer((req, res) => {
+        res.end('back at the assistant')
+        done(`http://127.0.0.1:${this.server.address().port}${req.url}`)
+      })
+    })
+    await new Promise((r) => this.server.listen(0, '127.0.0.1', r))
+    this.redirect = `http://127.0.0.1:${this.server.address().port}/callback`
+    this.verifier = b64(randomBytes(32))
+    return this
+  }
+
+  close() {
+    this.server?.close()
+  }
+
+  /// Registers, and answers where to send the browser.
+  async authorize(name) {
+    const resource = await (await fetch(`${world.host}/.well-known/oauth-protected-resource/mcp`)).json()
+    this.mcp = resource.resource
+    const issuer = new URL(resource.authorization_servers[0])
+    const meta = await (await fetch(`${issuer.origin}/.well-known/oauth-authorization-server${issuer.pathname}`)).json()
+    this.token = meta.token_endpoint
+    const registered = await fetch(meta.registration_endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ client_name: name, redirect_uris: [this.redirect] }),
+    })
+    expect(registered.status).toBe(201)
+    this.id = (await registered.json()).client_id
+    const to = new URL(meta.authorization_endpoint)
+    for (const [k, v] of Object.entries({
+      response_type: 'code',
+      client_id: this.id,
+      redirect_uri: this.redirect,
+      code_challenge: sha256(this.verifier),
+      code_challenge_method: 'S256',
+      state: 'st4te',
+      resource: this.mcp,
+    }))
+      to.searchParams.set(k, v)
+    return to.href
+  }
+
+  /// The tokens the code the browser came back with is worth.
+  async exchange(back) {
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: new URL(back).searchParams.get('code'),
+      redirect_uri: this.redirect,
+      code_verifier: this.verifier,
+      client_id: this.id,
+    })
+    const res = await fetch(this.token, { method: 'POST', body })
+    expect(res.status).toBe(200)
+    return res.json()
+  }
+
+  /// Calls the tool `name` with `args`: the status, and its result.
+  async tool(token, name, args) {
+    const res = await fetch(this.mcp, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+    })
+    return { status: res.status, result: (await res.json().catch(() => null))?.result }
+  }
+}

@@ -58,6 +58,10 @@
                 "ref": "#group"
               },
               "description": "The groups the caller may sign in as: the one the app named, or every group on this host where the caller holds a role."
+            },
+            "assistant": {
+              "type": "boolean",
+              "description": "Whether the app is an assistant, an MCP client, asking to act as the caller in a group rather than to sign in as one. It asks for no scope: it may do what the caller's roles in the group allow."
             }
           }
         }

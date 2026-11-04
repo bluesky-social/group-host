@@ -3,7 +3,7 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, didKey, signIn, signedInAs, url, who, world } from './pages.mjs'
+import { App, Assistant, didKey, signIn, signedInAs, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -217,6 +217,29 @@ test('signing an app in as her group', async () => {
   const rkey = made.body.uri.split('/').pop()
   const read = await fetch(`${world.host}/xrpc/com.atproto.repo.getRecord?repo=${world.riders}&collection=app.bsky.feed.post&rkey=${rkey}`)
   expect((await read.json()).value.text).toBe('Ride on Saturday')
+})
+
+test('connecting an assistant, and disconnecting it', async () => {
+  const assistant = await new Assistant().listen()
+  await page.goto(await assistant.authorize('Pocket assistant'))
+  await expect(page.getByText('wants to act as you in one of your groups')).toBeVisible()
+  await expect(page.getByText('That name is its own word for itself')).toBeVisible()
+  await page.getByRole('button', { name: 'Connect it to Riders' }).click()
+  const back = await assistant.back
+  assistant.close()
+  expect(new URL(back).searchParams.get('state')).toBe('st4te')
+  const tokens = await assistant.exchange(back)
+
+  // It acts as her, in Riders, without saying which.
+  const got = await assistant.tool(tokens.access_token, 'getGroup', {})
+  expect(got.status).toBe(200)
+  expect(got.result.structuredContent.group.did).toBe(world.riders)
+
+  await page.goto(url('/g/riders.groups.test'))
+  await expect(page.locator('.assistants', { hasText: 'Pocket assistant' })).toBeVisible()
+  await page.getByRole('button', { name: 'Disconnect Pocket assistant' }).click()
+  await expect(page.getByText('No assistants connected')).toBeVisible()
+  expect((await assistant.tool(tokens.access_token, 'getGroup', {})).status).toBe(401)
 })
 
 test('declining an app', async () => {

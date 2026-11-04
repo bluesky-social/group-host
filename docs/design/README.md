@@ -133,8 +133,9 @@ says otherwise.
    `inspect`, `membership`, `migrate` and `seed`, signed in as a person on
    their own PDS (done, see [the commands](../reference/cli.md); moving
    the host is `group-host move-host`, as it needs the host's own
-   database and keys); then the MCP tools over what steps 4 to 8 brought,
-   with the OAuth an assistant signs in by and `listConnectedApps`.
+   database and keys); and the MCP tools over what steps 4 to 8 brought,
+   at `/mcp`, with the OAuth an assistant signs in by and
+   `listConnectedApps` (done, see [assistants](assistants.md)).
 
 The MCP tools and the command's subcommands may come in with each step
 instead, beside the methods they call, where that is the smaller pull.

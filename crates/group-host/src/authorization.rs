@@ -8,6 +8,7 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
+use crate::assistants;
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
 use crate::oauth_scope::{concrete, configure};
@@ -80,7 +81,7 @@ impl Host {
 
     /// A group as the approval page shows it to `member`: what of its
     /// profile they may read, their roles, and what the app would get.
-    fn offered(&self, group: &str, member: &str, requested: &[String]) -> Answer {
+    pub(crate) fn offered(&self, group: &str, member: &str, requested: &[String]) -> Answer {
         let handle = group_of(self, group)?;
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
         let granted = match roles.is_empty() {
@@ -146,7 +147,11 @@ pub async fn get_authorization(
     headers: HeaderMap,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.getAuthorization")).await?;
-    let request = pending(&host, param(&p, "requestUri")?)?;
+    let uri = param(&p, "requestUri")?;
+    if uri.starts_with(assistants::PREFIX) {
+        return Ok(Json(assistants::assistant_view(&host, uri, &me)?));
+    }
+    let request = pending(&host, uri)?;
     let requested = requested(&request);
     let metadata = host.client(&request.client_id, now_millis()).await;
     let metadata = metadata.map(|c| c.metadata).unwrap_or_default();
@@ -189,9 +194,14 @@ pub async fn approve_authorization(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.approveAuthorization")).await?;
     let uri = body["requestUri"].as_str();
-    let request = pending(&host, uri.ok_or_else(|| invalid("requestUri is required"))?)?;
+    let uri = uri.ok_or_else(|| invalid("requestUri is required"))?;
     let group = body["group"].as_str();
     let group = group.ok_or_else(|| invalid("group is required"))?;
+    if uri.starts_with(assistants::PREFIX) {
+        let redirect = assistants::approve(&host, uri, &me, group)?;
+        return Ok(Json(json!({ "redirectUrl": redirect })));
+    }
+    let request = pending(&host, uri)?;
     group_of(&host, group)?;
     host.active(group)?;
     let named = host.named_group(&request)?;
@@ -226,7 +236,12 @@ pub async fn decline_authorization(
 ) -> Answer {
     signed_in(&host, &headers, &format!("{NS}.declineAuthorization")).await?;
     let uri = body["requestUri"].as_str();
-    let request = pending(&host, uri.ok_or_else(|| invalid("requestUri is required"))?)?;
+    let uri = uri.ok_or_else(|| invalid("requestUri is required"))?;
+    if uri.starts_with(assistants::PREFIX) {
+        let redirect = assistants::decline(&host, uri)?;
+        return Ok(Json(json!({ "redirectUrl": redirect })));
+    }
+    let request = pending(&host, uri)?;
     let declined = host.decline_request(&request);
     let redirect = declined.map_err(XrpcError::internal)?.ok_or_else(expired)?;
     Ok(Json(json!({ "redirectUrl": redirect })))

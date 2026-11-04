@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "The AI apps you've connected to the group, the most lately used first: each by the name it gave, to disconnect with revokeAssistant.",
+      "description": "The AI apps, MCP clients, you've connected to the group to act as you there, the most lately used first: each by the name it gave, to disconnect with revokeConnectedApp.",
       "parameters": {
         "type": "params",
         "required": [

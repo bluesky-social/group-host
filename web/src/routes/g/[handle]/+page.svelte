@@ -1,5 +1,6 @@
 <script lang="ts">
 	import GroupProfile from '#lib/organisms/GroupProfile.svelte';
+	import ConnectedApps from '#lib/organisms/ConnectedApps.svelte';
 	import Invites from '#lib/organisms/Invites.svelte';
 	import JoinRequests from '#lib/organisms/JoinRequests.svelte';
 	import MemberList from '#lib/organisms/MemberList.svelte';
@@ -44,6 +45,10 @@
 		{#if data.joinRequests}
 			<h2>Asking to join</h2>
 			<JoinRequests requests={data.joinRequests} />
+		{/if}
+		{#if data.apps}
+			<h2>Your assistants</h2>
+			<ConnectedApps apps={data.apps} mcp={data.mcp} />
 		{/if}
 	{/if}
 </Page>

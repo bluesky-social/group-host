@@ -6,6 +6,7 @@
 pub mod actors;
 pub mod api;
 pub mod app_passwords;
+pub mod assistants;
 pub mod authority;
 pub mod authority_api;
 pub mod authorization;
@@ -459,6 +460,26 @@ fn oauth_routes() -> Router<Arc<Host>> {
         .route("/oauth/par", post(oauth::par))
         .route("/oauth/token", post(oauth::token))
         .route("/oauth/revoke", post(oauth::revoke))
+        .route(
+            "/.well-known/oauth-protected-resource/mcp",
+            get(assistants::resource_metadata),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server/mcp",
+            get(assistants::server_metadata),
+        )
+        .route("/mcp", post(assistants::mcp))
+        .route("/mcp/register", post(assistants::register))
+        .route("/mcp/authorize", get(assistants::authorize))
+        .route("/mcp/token", post(assistants::token))
+        .route(
+            "/xrpc/fyi.opensocial.listConnectedApps",
+            get(assistants::list_connected_apps),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.revokeConnectedApp",
+            post(assistants::revoke_connected_app),
+        )
         .layer(axum::middleware::from_fn(oauth::cors))
 }
 

@@ -11,6 +11,7 @@ rust-version = "1.89"
 [workspace.dependencies]
 atproto = { path = "crates/atproto" }
 group-host = { path = "crates/group-host" }
+group-host-mcp = { path = "crates/group-host-mcp" }
 opensocial = { path = "crates/opensocial" }
 anyhow = "1"
 axum = { version = "0.8", features = ["ws"] }
@@ -31,6 +32,7 @@ serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
 tokio-tungstenite = "0.29"
+tower = { version = "0.5", features = ["util"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util", "time", "sync", "net", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "json", "env-filter", "registry"] }

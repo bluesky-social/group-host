@@ -344,6 +344,40 @@ pub const MIGRATIONS: &[&str] = &[
         created_at INTEGER NOT NULL
     );
 ",
+    "
+    CREATE TABLE assistant_client (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        redirect_uris TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE assistant_request (
+        id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        state TEXT,
+        code_challenge TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        grp TEXT REFERENCES account (did),
+        member TEXT,
+        code_hash TEXT UNIQUE
+    );
+    CREATE TABLE assistant_grant (
+        id TEXT PRIMARY KEY,
+        grp TEXT NOT NULL REFERENCES account (did),
+        member TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        access_hash TEXT NOT NULL UNIQUE,
+        access_expires INTEGER NOT NULL,
+        refresh_hash TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        used_at INTEGER NOT NULL
+    );
+    CREATE INDEX assistant_grant_member ON assistant_grant (grp, member);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -461,6 +495,8 @@ const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did 
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM assistant_grant WHERE grp = ?1",
+    "DELETE FROM assistant_request WHERE grp = ?1",
     "DELETE FROM account_import WHERE did = ?1",
     "DELETE FROM migration_export WHERE did = ?1",
     "DELETE FROM recovery_key WHERE grp = ?1",

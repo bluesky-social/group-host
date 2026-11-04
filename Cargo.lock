@@ -616,6 +616,7 @@ dependencies = [
  "atproto",
  "axum",
  "futures",
+ "group-host-mcp",
  "hmac",
  "rand_core 0.6.4",
  "reqwest",
@@ -626,6 +627,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]
@@ -634,7 +636,8 @@ dependencies = [
 name = "group-host-mcp"
 version = "0.1.0"
 dependencies = [
- "opensocial",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

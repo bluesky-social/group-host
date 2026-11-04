@@ -1,5 +1,6 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
 import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
+import type * as listConnectedApps from '#lib/lexicons/fyi/opensocial/listConnectedApps.ts';
 import type * as listInvites from '#lib/lexicons/fyi/opensocial/listInvites.ts';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -24,7 +25,9 @@ export const load: PageServerLoad = async (event) => {
 	const invites = view.group.viewer?.actions?.includes('invite')
 		? (await xrpc<typeof listInvites.main>(event, 'fyi.opensocial.listInvites', { group })).invites
 		: null;
-	return { ...view, invites };
+	// The assistants a member connected here, and where they connect one.
+	const apps = view.group.viewer?.member ? (await xrpc<typeof listConnectedApps.main>(event, 'fyi.opensocial.listConnectedApps', { group })).apps : null;
+	return { ...view, invites, apps, mcp: `${event.url.origin}/mcp` };
 };
 
 /** The group a form on its page is about, and the DID a form names. */
@@ -71,6 +74,10 @@ export const actions: Actions = {
 		if (!found.ok) return fail(400, { failed: `We cannot find ${handle}.` });
 		const { did } = await found.json();
 		return act(event, 'fyi.opensocial.createInvite', { group, invitee: did });
+	},
+	disconnect: async (event) => {
+		const { group, form } = await asked(event);
+		return act(event, 'fyi.opensocial.revokeConnectedApp', { group, clientId: String(form.get('clientId')) });
 	},
 	uninvite: async (event) => {
 		const { group, form } = await asked(event);
