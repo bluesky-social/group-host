@@ -63,12 +63,14 @@ impl Host {
     }
 
     /// The DPoP proof on a request of `method` to `path` here, checked:
-    /// none if it carries none.
+    /// none if it carries none. `token` is the access token a request to
+    /// a resource sends, which the proof must hash.
     pub fn dpop_proof(
         &self,
         headers: &HeaderMap,
         method: &str,
         path: &str,
+        token: Option<&str>,
         now: i64,
     ) -> Result<Option<Proof>, OAuthError> {
         let mut sent = headers.get_all("dpop").iter();
@@ -105,6 +107,9 @@ impl Host {
                 "use_dpop_nonce",
                 "the authorization server requires a nonce in the DPoP proof",
             ));
+        }
+        if token.is_some_and(|t| claims["ath"] != jose::sha256(t)) {
+            return Err(invalid("the DPoP proof's ath is not this token's"));
         }
         let jkt = jose::thumbprint(&key);
         let until = (iat + PROOF_MAX_AGE + CLOCK_SKEW) * 1000;

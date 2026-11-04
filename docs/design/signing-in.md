@@ -86,16 +86,50 @@ The scope an app asks for is narrowed to the member's roles
 Everything else is withheld: other permission sets, and the old
 `transition:` scopes.
 
-A grant keeps the scope it was approved with through its refreshes, so
-what it may do is asked again of the member's roles at each use: one
-whose roles shrink gives the app less at once. (That is the resource
-side, which comes next.)
-
 The scope is then made concrete, so a token never depends on how a scope
 is read later: the configure set becomes the space scopes its lexicon
 lists, `authority=self` becomes the group, and a space scope naming no
 collection names every one, which narrowing let through only for roles
 that may write every one.
+
+## Using a token
+
+An app calls the group's PDS methods with `Authorization: DPoP <token>`
+and a proof of the request that hashes the token (its `ath`), signed by
+the key the token is bound to (`oauth_resource.rs`). A token refused is
+401 with a `WWW-Authenticate: DPoP error=…` challenge and the nonce for
+the next proof, as RFC 9449 has a resource server answer; an app whose
+nonce is stale sends the request again with the one it was given.
+
+With it, an app writes as the group (`token_writes.rs`):
+
+- in its repo: `com.atproto.repo.createRecord`, `putRecord`,
+  `deleteRecord` and `applyWrites`, each write as its `repo:` scope
+  allows, and `uploadBlob`, a type its `blob:` scope takes;
+- in its spaces: `com.atproto.space.createRecord`, `putRecord`,
+  `deleteRecord` and `applyWrites`, each as its `space:` scope allows;
+- and `com.atproto.server.getSession` says which group it is for, and
+  whether it is switched on.
+
+A put of what is there already changes nothing; a delete of what is not
+there is done. A repo write's `swapCommit` must be the repo's head, and
+a put's or delete's `swapRecord` the record there (null for none), or it
+is refused as `InvalidSwap`. The scope is read as atproto's permission spec reads one
+(`scopes.rs`): a space scope's authority is the group unless it names
+one, and one naming no action grants every one but `read_self`.
+
+A grant keeps the scope it was approved with through its refreshes, so
+what each write may do is asked again of the member's roles as they are
+now, as narrowing asked them: one whose roles shrink gives the app less
+at once.
+
+In the group's own meta and members spaces, a token writes only what the
+configure set names, and only as the host's methods would: the profile
+(with a name, and a join policy it knows) and the labeler, kept at
+`self` and never deleted; rules; and roles, one taken away only once no
+grant names it. Memberships, permissions, and any space's access record
+change only through the host's methods, which check that nobody gives
+themselves more than they hold.
 
 ## From the prototype
 
@@ -110,3 +144,8 @@ that may write every one.
 - A grant records the member who approved it, not one of their roles.
 - The token and revoke endpoints take a form, as OAuth has them, not
   JSON.
+- What a token may write is asked of the member's roles at each use; the
+  prototype asked only at approval.
+- Records are checked against the data model and their collection's
+  `$type`, not against their lexicons, so `validationStatus` is
+  `unknown`, as a PDS answers for a lexicon it does not know.

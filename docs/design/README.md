@@ -97,9 +97,10 @@ says otherwise.
 6. **Signing in.** Service auth for callers; the OAuth server an app signs
    in to as a group (PAR, DPoP, consent, refresh), with its JWKs and JWTs
    in `atproto::jose` (`oauth*.rs`, `authorization.rs`; done, see
-   [signing in](signing-in.md)); then what its tokens do: writes as the
-   group within their scope, group tokens, app passwords and connected
-   apps; then provisioning: `auth.ts`, `pds/auth.ts`, `pds/oauth/*`,
+   [signing in](signing-in.md)); writes as the group with its tokens,
+   within their scope and the member's roles (`oauth_resource.rs`,
+   `scopes.rs`, `token_writes.rs`; done); then group tokens, app
+   passwords and connected apps; then provisioning: `auth.ts`, `pds/auth.ts`, `pds/oauth/*`,
    `methods/{authorization,groupAuth,appPasswords,connectedApps,provision}.ts`.
    The console signs its people in at their own PDS here, as a
    confidential client, and keeps the session on the server, as knotless

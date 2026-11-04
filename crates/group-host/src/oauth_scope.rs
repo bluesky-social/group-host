@@ -105,7 +105,11 @@ pub fn writes_for(access: &Value, roles: &[String]) -> BTreeMap<String, BTreeSet
 }
 
 /// Whether those writes include `action` on `collection`.
-fn may_write(writes: &BTreeMap<String, BTreeSet<String>>, collection: &str, action: &str) -> bool {
+pub(crate) fn may_write(
+    writes: &BTreeMap<String, BTreeSet<String>>,
+    collection: &str,
+    action: &str,
+) -> bool {
     ["*", collection]
         .iter()
         .any(|c| writes.get(*c).is_some_and(|w| w.contains(action)))

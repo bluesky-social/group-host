@@ -453,6 +453,12 @@ fn walk<'a>(
     }
 }
 
+/// The CID a record's JSON is kept under, once it is a record of
+/// `collection`.
+pub(crate) fn record_cid(collection: &str, value: &serde_json::Value) -> Result<Cid, XrpcError> {
+    Ok(record(collection, value)?.0)
+}
+
 /// A record's JSON as kept: its CID and DRISL. It must be a record by the
 /// data model, of its collection's `$type`.
 fn record(collection: &str, value: &serde_json::Value) -> Result<(Cid, Vec<u8>), XrpcError> {

@@ -200,7 +200,7 @@ async fn client_and_key(
     now: i64,
 ) -> Result<(crate::oauth_clients::Client, Value, String), OAuthError> {
     let client_id = need(form, "client_id")?;
-    let proof = host.dpop_proof(headers, "POST", path, now)?;
+    let proof = host.dpop_proof(headers, "POST", path, None, now)?;
     let proof =
         proof.ok_or_else(|| OAuthError::bad("invalid_dpop_proof", "DPoP proof required"))?;
     let client = host.client(client_id, now).await?;

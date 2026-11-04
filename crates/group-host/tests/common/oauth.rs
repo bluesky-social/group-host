@@ -213,6 +213,56 @@ impl App {
     }
 }
 
+impl App {
+    /// A proof of a request to a resource, hashing `token`.
+    pub fn resource_proof(&self, h: &Running, method: &str, nsid: &str, token: &str) -> String {
+        self.proof_with(h, method, &format!("/xrpc/{nsid}"), |c| {
+            c["ath"] = json!(jose::sha256(token));
+        })
+    }
+
+    /// Calls `nsid` with `token` and a fresh proof, `body` as JSON (a POST)
+    /// or none (a GET), once more with the server's nonce if it asks.
+    pub async fn call(&self, h: &Running, nsid: &str, token: &str, body: Option<&Json>) -> Said {
+        let said = self.call_once(h, nsid, token, body).await;
+        let stale = said
+            .headers
+            .get("www-authenticate")
+            .is_some_and(|v| v.to_str().unwrap().contains("use_dpop_nonce"));
+        if !stale {
+            return said;
+        }
+        self.call_once(h, nsid, token, body).await
+    }
+
+    async fn call_once(&self, h: &Running, nsid: &str, token: &str, body: Option<&Json>) -> Said {
+        let url = format!("{}/xrpc/{nsid}", h.url);
+        let (method, req) = match body {
+            Some(b) => ("POST", h.http.post(url).json(b)),
+            None => ("GET", h.http.get(url)),
+        };
+        let req = req
+            .header("authorization", format!("DPoP {token}"))
+            .header("dpop", self.resource_proof(h, method, nsid, token));
+        self.said(req).await
+    }
+
+    /// What the server said to `req`, its nonce kept.
+    pub async fn said(&self, req: reqwest::RequestBuilder) -> Said {
+        let res = req.send().await.unwrap();
+        let (status, headers) = (res.status().as_u16(), res.headers().clone());
+        if let Some(nonce) = headers.get("dpop-nonce") {
+            *self.nonce.lock().unwrap() = Some(nonce.to_str().unwrap().into());
+        }
+        let body = res.json().await.unwrap_or(Json::Null);
+        Said {
+            status,
+            body,
+            headers,
+        }
+    }
+}
+
 /// `member` approves `request_uri` for `group`.
 pub async fn approve(
     h: &Running,

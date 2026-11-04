@@ -193,6 +193,16 @@ impl Store {
         Ok(found.optional()?)
     }
 
+    /// The grant whose access token hashes to `hash`, while that lasts.
+    pub fn grant_by_access(&self, hash: &str, now: i64) -> Result<Option<Grant>> {
+        let conn = self.conn();
+        let sql = format!(
+            "SELECT {GRANT_COLUMNS} FROM oauth_token WHERE access_hash = ?1 AND access_expires > ?2"
+        );
+        let found = conn.query_row(&sql, params![hash, now], grant);
+        Ok(found.optional()?)
+    }
+
     /// Gives the grant whose refresh token hashes to `old` new tokens: the
     /// old ones stop working. `false` if it was refreshed or revoked first.
     pub fn rotate(&self, old: &str, tokens: &Tokens, now: i64) -> Result<bool> {

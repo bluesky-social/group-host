@@ -26,16 +26,19 @@ pub mod lifecycle;
 pub mod oauth;
 pub mod oauth_clients;
 pub mod oauth_dpop;
+pub mod oauth_resource;
 pub mod oauth_scope;
 pub mod oauth_store;
 pub mod plc;
 pub mod rbac;
 pub mod repo;
+pub mod scopes;
 pub mod secrets;
 pub mod space;
 pub mod space_api;
 pub mod store;
 pub mod time;
+pub mod token_writes;
 pub mod xrpc;
 
 use axum::extract::Path;
@@ -324,6 +327,7 @@ pub fn router(host: Arc<Host>) -> Router {
             post(authorization::decline_authorization),
         )
         .route("/oauth/authorize", get(oauth::authorize))
+        .merge(token_routes())
         .merge(oauth_routes())
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
@@ -345,6 +349,54 @@ fn oauth_routes() -> Router<Arc<Host>> {
         .route("/oauth/par", post(oauth::par))
         .route("/oauth/token", post(oauth::token))
         .route("/oauth/revoke", post(oauth::revoke))
+        .layer(axum::middleware::from_fn(oauth::cors))
+}
+
+/// The methods an app calls with a token, as the group: open to any
+/// origin, as the OAuth endpoints are.
+fn token_routes() -> Router<Arc<Host>> {
+    let x = |nsid: &str| format!("/xrpc/{nsid}");
+    Router::new()
+        .route(
+            &x("com.atproto.repo.createRecord"),
+            post(token_writes::create_record),
+        )
+        .route(
+            &x("com.atproto.repo.putRecord"),
+            post(token_writes::put_record),
+        )
+        .route(
+            &x("com.atproto.repo.deleteRecord"),
+            post(token_writes::delete_record),
+        )
+        .route(
+            &x("com.atproto.repo.applyWrites"),
+            post(token_writes::apply_writes),
+        )
+        .route(
+            &x("com.atproto.repo.uploadBlob"),
+            post(token_writes::upload_blob),
+        )
+        .route(
+            &x("com.atproto.space.createRecord"),
+            post(token_writes::space_create_record),
+        )
+        .route(
+            &x("com.atproto.space.putRecord"),
+            post(token_writes::space_put_record),
+        )
+        .route(
+            &x("com.atproto.space.deleteRecord"),
+            post(token_writes::space_delete_record),
+        )
+        .route(
+            &x("com.atproto.space.applyWrites"),
+            post(token_writes::space_apply_writes),
+        )
+        .route(
+            &x("com.atproto.server.getSession"),
+            get(token_writes::get_session),
+        )
         .layer(axum::middleware::from_fn(oauth::cors))
 }
 
