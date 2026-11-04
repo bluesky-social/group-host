@@ -50,8 +50,8 @@ async fn answers_health_and_refuses_unknown_methods() {
     assert_eq!(health["version"], env!("CARGO_PKG_VERSION"));
 
     for req in [
-        http.get(format!("{}/xrpc/fyi.opensocial.listSubjects", host.1)),
-        http.post(format!("{}/xrpc/fyi.opensocial.applyLabel", host.1)),
+        http.get(format!("{}/xrpc/fyi.opensocial.noSuchQuery", host.1)),
+        http.post(format!("{}/xrpc/fyi.opensocial.noSuchProcedure", host.1)),
     ] {
         let res = req.send().await.unwrap();
         assert_eq!(res.status(), 501);

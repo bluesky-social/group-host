@@ -295,6 +295,30 @@ pub const MIGRATIONS: &[&str] = &[
         at INTEGER NOT NULL
     );
 ",
+    "
+    CREATE TABLE mod_subject (
+        grp TEXT NOT NULL REFERENCES account (did),
+        subject TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (grp, subject)
+    );
+    CREATE INDEX mod_subject_updated ON mod_subject (grp, updated_at);
+    CREATE TABLE mod_event (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        grp TEXT NOT NULL REFERENCES account (did),
+        subject TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        actor TEXT,
+        reason_type TEXT,
+        reason TEXT,
+        val TEXT,
+        note TEXT,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX mod_event_subject ON mod_event (grp, subject, seq);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -412,6 +436,8 @@ const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did 
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM mod_event WHERE grp = ?1",
+    "DELETE FROM mod_subject WHERE grp = ?1",
     "DELETE FROM app_password WHERE grp = ?1",
     "DELETE FROM group_activity WHERE grp = ?1",
     "DELETE FROM oauth_token WHERE grp = ?1",

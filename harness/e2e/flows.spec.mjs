@@ -157,6 +157,26 @@ test('making an app password, and ending what it signed in', async () => {
   expect((await signIn()).status).toBe(401)
 })
 
+test('moderating: a label, and the queue', async () => {
+  await page.goto(url('/g/hikers.groups.test'))
+  await page.getByRole('link', { name: 'Moderation' }).click()
+  await expect(page.getByText('Nothing to look at')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Their handle' }).fill('bob.test')
+  await page.getByRole('textbox', { name: 'Label' }).fill('troll')
+  await page.getByRole('button', { name: 'Label them' }).click()
+  const subject = page.locator('.subject', { hasText: who.bob.did })
+  await expect(subject.locator('.status')).toHaveText('open')
+  await expect(subject.locator('.events')).toContainText('label: troll')
+  await subject.getByRole('button', { name: 'Escalate' }).click()
+  await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.status')).toHaveText('escalated')
+  await page.locator('.subject', { hasText: who.bob.did }).getByRole('textbox', { name: 'Note' }).fill('Asked him to stop')
+  await page.locator('.subject', { hasText: who.bob.did }).getByRole('button', { name: 'Add the note' }).click()
+  await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.events')).toContainText('note: Asked him to stop')
+  await page.locator('.subject', { hasText: who.bob.did }).getByRole('button', { name: 'Resolve' }).click()
+  await page.goto(url('/g/hikers.groups.test/moderation?status=resolved'))
+  await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.status')).toHaveText('resolved')
+})
+
 test('signing an app in as her group', async () => {
   const app = await new App('atproto repo:app.bsky.feed.post').listen()
   await page.goto(await app.push())

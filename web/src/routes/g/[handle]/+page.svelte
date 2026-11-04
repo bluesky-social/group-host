@@ -20,7 +20,11 @@
 
 <Page title={g.displayName ?? g.handle}>
 	<p class="mute mono">@{g.handle}</p>
-	{#if g.viewer?.member}<p><a href={`/g/${g.handle}/settings`}>Settings</a></p>{/if}
+	{#if g.viewer?.member}
+		<p>
+			<a href={`/g/${g.handle}/settings`}>Settings</a>{#if g.viewer.actions?.includes('mod.read')} · <a href={`/g/${g.handle}/moderation`}>Moderation</a>{/if}
+		</p>
+	{/if}
 	{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 	{#if g.deactivated}
 		<p>This group is switched off.</p>

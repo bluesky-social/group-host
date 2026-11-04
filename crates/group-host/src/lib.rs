@@ -27,6 +27,7 @@ pub mod identity;
 pub mod index;
 pub mod index_api;
 pub mod lifecycle;
+pub mod moderation;
 pub mod oauth;
 pub mod oauth_clients;
 pub mod oauth_dpop;
@@ -355,6 +356,30 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.getActorGroups",
             get(actors::get_actor_groups),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.applyLabel",
+            post(moderation::apply_label),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.negateLabel",
+            post(moderation::negate_label),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.listSubjects",
+            get(moderation::list_subjects),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.getSubjectHistory",
+            get(moderation::get_subject_history),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.resolveSubject",
+            post(moderation::resolve_subject),
+        )
+        .route(
+            "/xrpc/com.atproto.moderation.createReport",
+            post(moderation::create_report),
         )
         .route("/oauth/authorize", get(oauth::authorize))
         .route(
