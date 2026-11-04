@@ -217,7 +217,7 @@
         },
         "avatar": {
           "type": "string",
-          "description": "CID of the avatar blob; the host serves it at /img/{did}/avatar."
+          "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
         },
         "rules": {
           "type": "array",
@@ -232,7 +232,7 @@
         },
         "banner": {
           "type": "string",
-          "description": "CID of the banner blob; the host serves it at /img/{did}/banner."
+          "description": "CID of the banner blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
         },
         "createdAt": {
           "type": "string",
@@ -319,7 +319,7 @@
         },
         "avatar": {
           "type": "string",
-          "description": "CID of the avatar blob; the host serves it at /img/{did}/avatar."
+          "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
         },
         "deactivated": {
           "type": "boolean",
@@ -327,7 +327,7 @@
         },
         "banner": {
           "type": "string",
-          "description": "CID of the banner blob; the host serves it at /img/{did}/banner."
+          "description": "CID of the banner blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
         },
         "rules": {
           "type": "array",

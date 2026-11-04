@@ -78,6 +78,20 @@ so the host writes them for a caller holding `group.configure`:
 - `uploadImage` keeps an image (1 MB at most) as the group's blob, for
   the profile to reference: a blob in anyone else's repo would not
   resolve for it.
+
+Any image of a group's is served for a page to draw at
+`/img/{did}/{cid}` (`blobs.rs`), to whoever may see a record that holds
+it: anyone, for a record in its public repo, or in its profile while it is
+declared (as `listGroups` shows that profile to anyone); for a record in a
+space, whoever that space lets read, as the console's session cookie says.
+Only a PNG, JPEG, WebP, GIF or AVIF is served, as an image and nothing
+more (`nosniff`, and a sandbox for any document), and kept in the browser
+for good, as a CID names its bytes. A group switched off shows none.
+
+The console's settings set its pictures, and who sees its profile:
+anyone, when it is declared too, or its members alone. The host still
+lists every group of its own (`listGroups`), a hidden one by its handle
+alone.
 - `putRule` makes or changes a rule. A rule keeps its key when changed,
   so a label citing it still does; a new one goes last unless it says
   where. `deleteRule` takes one away; a label citing it keeps the URI.

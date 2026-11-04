@@ -358,3 +358,105 @@ async fn an_admin_keeps_the_rules() {
         );
     }
 }
+
+/// An image of `did`'s, `cid`, as a page asks for it, as `who` if anyone:
+/// its status, its headers, and its bytes.
+async fn image(
+    h: &common::Running,
+    did: &str,
+    cid: &str,
+    who: Option<&Authority>,
+) -> (u16, reqwest::header::HeaderMap, Vec<u8>) {
+    let mut req = h.http.get(format!("{}/img/{did}/{cid}", h.url));
+    if let Some(who) = who {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        let cookie = h.host.session_cookie(&who.did, now);
+        req = req.header(
+            "cookie",
+            format!("{}={cookie}", group_host::console_login::COOKIE),
+        );
+    }
+    let res = req.send().await.unwrap();
+    let status = res.status().as_u16();
+    let headers = res.headers().clone();
+    (status, headers, res.bytes().await.unwrap().to_vec())
+}
+
+/// A record holding `blob`, of a collection of its own.
+fn holding(rkey: &str, blob: &Json) -> Write {
+    Write::Create {
+        collection: "com.example.photo".into(),
+        rkey: rkey.into(),
+        value: json!({"$type": "com.example.photo", "image": blob, "createdAt": "2026-11-04T00:00:00Z"}),
+    }
+}
+
+#[tokio::test]
+async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
+    let (h, did, [alice, bob, carol]) = group().await;
+    let cid = |b: &Json| b["ref"]["$link"].as_str().unwrap().to_string();
+
+    // The avatar of a group listed on the network: anyone's to see, as an
+    // image and nothing more, kept for good.
+    let (_, up) = upload(&h, &alice, &did, b"face".to_vec(), "image/png").await;
+    let avatar = up["blob"].clone();
+    let body = json!({"group": did, "displayName": "Riders", "avatar": avatar});
+    assert_eq!(call(&h, &alice, "updateProfile", body).await.0, 200);
+    let (status, headers, bytes) = image(&h, &did, &cid(&avatar), None).await;
+    assert_eq!((status, bytes.as_slice()), (200, &b"face"[..]));
+    assert_eq!(headers["content-type"], "image/png");
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert_eq!(
+        headers["content-security-policy"],
+        "default-src 'none'; sandbox"
+    );
+    assert_eq!(
+        headers["cache-control"],
+        "private, max-age=31536000, immutable"
+    );
+
+    // Unlisted, its profile is its readers' alone: a member's, not a
+    // stranger's, nor anyone's not signed in.
+    let meta = meta_space(&did);
+    let hide = json!({"group": did, "space": meta, "readableBy": [{"role": "member"}]});
+    assert_eq!(call(&h, &alice, "updateSpace", hide).await.0, 200);
+    assert_eq!(image(&h, &did, &cid(&avatar), None).await.0, 404);
+    assert_eq!(image(&h, &did, &cid(&avatar), Some(&carol)).await.0, 404);
+    assert_eq!(image(&h, &did, &cid(&avatar), Some(&bob)).await.0, 200);
+
+    // In its public repo: anyone's.
+    let (_, up) = upload(&h, &alice, &did, b"ride".to_vec(), "image/jpeg").await;
+    let photo = up["blob"].clone();
+    h.host.write(&did, &[holding("ride", &photo)]).unwrap();
+    assert_eq!(image(&h, &did, &cid(&photo), None).await.0, 200);
+
+    // A file that is no image is not served as one, wherever it is held.
+    let text = h.host.upload_blob(&did, b"words", "text/plain").unwrap();
+    h.host.write(&did, &[holding("words", &text)]).unwrap();
+    assert_eq!(image(&h, &did, &cid(&text), None).await.0, 404);
+
+    // Nothing of its held by no record, and no CID at all.
+    let loose = h.host.upload_blob(&did, b"loose", "image/png").unwrap();
+    assert_eq!(image(&h, &did, &cid(&loose), None).await.0, 404);
+    assert_eq!(image(&h, &did, "not-a-cid", None).await.0, 404);
+
+    // In a space of another's, which this host does not govern: no one's.
+    let elsewhere = "at://did:plc:elsewhere/space/com.example.forum/main";
+    let (_, up) = upload(&h, &alice, &did, b"away".to_vec(), "image/png").await;
+    let away = up["blob"].clone();
+    h.host
+        .space_write(&did, elsewhere, &[holding("away", &away)])
+        .await
+        .unwrap();
+    assert_eq!(image(&h, &did, &cid(&away), Some(&bob)).await.0, 404);
+
+    // Switched off, it shows nothing.
+    h.host
+        .store
+        .deactivate(&did, 0, &alice.did, &[], &[])
+        .unwrap();
+    assert_eq!(image(&h, &did, &cid(&photo), None).await.0, 404);
+}

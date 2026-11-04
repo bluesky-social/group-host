@@ -5,6 +5,8 @@
 	import JoinRequests from '#lib/organisms/JoinRequests.svelte';
 	import MemberList from '#lib/organisms/MemberList.svelte';
 	import Standing from '#lib/molecules/Standing.svelte';
+	import Avatar from '#lib/atoms/Avatar.svelte';
+	import { image } from '#lib/images.ts';
 	import Page from '#lib/templates/Page.svelte';
 	let { data, form } = $props();
 	const g = $derived(data.group);
@@ -20,7 +22,8 @@
 <svelte:head><title>{g.displayName ?? g.handle} · opensocial</title></svelte:head>
 
 <Page title={g.displayName ?? g.handle}>
-	<p class="mute mono">@{g.handle}</p>
+	{#if g.banner}<img class="banner" src={image(g.did, g.banner)} alt="" />{/if}
+	<p class="identity"><Avatar src={image(g.did, g.avatar)} size="md" /> <span class="mute mono">@{g.handle}</span></p>
 	{#if g.viewer?.member}
 		<p>
 			<a href={`/g/${g.handle}/settings`}>Settings</a>{#if g.viewer.actions?.includes('mod.read')} · <a href={`/g/${g.handle}/moderation`}>Moderation</a>{/if}

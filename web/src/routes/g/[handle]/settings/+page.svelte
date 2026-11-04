@@ -2,6 +2,9 @@
 	import AppPasswords from '#lib/organisms/AppPasswords.svelte';
 	import GroupApps from '#lib/organisms/GroupApps.svelte';
 	import ProfileForm from '#lib/organisms/ProfileForm.svelte';
+	import ProfilePictures from '#lib/organisms/ProfilePictures.svelte';
+	import Visibility from '#lib/organisms/Visibility.svelte';
+	import { image } from '#lib/images.ts';
 	import RecoveryKeys from '#lib/organisms/RecoveryKeys.svelte';
 	import RolesEditor from '#lib/organisms/RolesEditor.svelte';
 	import RulesEditor from '#lib/organisms/RulesEditor.svelte';
@@ -19,6 +22,10 @@
 	{#if data.configures}
 		<h2>Profile</h2>
 		<ProfileForm displayName={g.displayName} description={g.description} joinPolicy={g.joinPolicy} url={g.url} />
+		<h2>Pictures</h2>
+		<ProfilePictures avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} />
+		<h2>Who sees it</h2>
+		<Visibility listed={data.listed} />
 		<h2>Rules</h2>
 		<RulesEditor rules={g.rules} />
 		<h2>Roles</h2>

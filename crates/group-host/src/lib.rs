@@ -442,6 +442,7 @@ pub fn router(host: Arc<Host>) -> Router {
             "/console/client-metadata.json",
             get(console_login::client_metadata),
         )
+        .route("/img/{did}/{cid}", get(blobs::image))
         .route("/console/login", get(console_login::login))
         .route("/console/move/login", get(account_move::login))
         .route(

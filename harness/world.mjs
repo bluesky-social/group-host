@@ -91,7 +91,8 @@ export async function start({ accounts, front, pdsEnv = {} }) {
     const web = spawn('node', ['build'], {
       cwd: join(root, 'web'),
       stdio: ['ignore', 'inherit', 'inherit'],
-      env: { ...process.env, PORT: String(consolePort), HOST: '127.0.0.1', GROUP_HOST: `http://127.0.0.1:${hostPort}`, ORIGIN: base },
+      // A body as large as the host takes, past the Node adapter's 512K.
+      env: { ...process.env, PORT: String(consolePort), HOST: '127.0.0.1', GROUP_HOST: `http://127.0.0.1:${hostPort}`, ORIGIN: base, BODY_SIZE_LIMIT: '64M' },
     })
     children.push(web)
     await up(`http://127.0.0.1:${consolePort}/`)

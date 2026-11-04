@@ -28,7 +28,10 @@ export const load: PageServerLoad = async (event) => {
 	const tokens = configures ? await xrpc<typeof listGroupTokens.main>(event, 'fyi.opensocial.listGroupTokens', { group }) : null;
 	const recovery = configures ? await xrpc<typeof listRecoveryKeys.main>(event, 'fyi.opensocial.listRecoveryKeys', { group }).catch(() => null) : null;
 	const passwords = await xrpc<typeof listAppPasswords.main>(event, 'fyi.opensocial.listAppPasswords', { group }).catch(() => null);
-	return { ...view, configures, tokens, recovery, passwords: passwords?.passwords ?? null };
+	// Listed while anyone may read its profile: its meta space's readers.
+	const meta = view.spaces?.find((s) => s.uri === view.group.meta);
+	const listed = meta?.readableBy?.some((a) => a.role === 'public') ?? false;
+	return { ...view, configures, tokens, recovery, passwords: passwords?.passwords ?? null, listed };
 };
 
 async function asked(event: Event & { request: Request }) {
@@ -37,8 +40,42 @@ async function asked(event: Event & { request: Request }) {
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
+/**
+ * The profile as it is now, to put back whole with one thing changed: what
+ * the profile form does not show is kept as it is.
+ */
+async function profileNow(event: Event, group: string) {
+	const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as `did:${string}:${string}` });
+	const kept = Object.fromEntries(['description', 'url', 'location', 'online', 'topics', 'languages'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : [])));
+	return { ...kept, group, displayName: now.displayName ?? now.handle };
+}
+
 /** What a group's settings change: each drawn again after, or the host's refusal said. */
 export const actions: Actions = {
+	picture: async (event) => {
+		const { group, form } = await asked(event);
+		const slot = text(form, 'slot');
+		const file = form.get('file');
+		if (!(file instanceof File) || file.size === 0) return fail(400, { failed: 'Choose a picture to upload.' });
+		const res = await event.fetch(`/xrpc/fyi.opensocial.uploadImage?group=${encodeURIComponent(group)}`, {
+			method: 'POST',
+			headers: { 'content-type': file.type || 'application/octet-stream' },
+			body: await file.arrayBuffer()
+		});
+		const answer = await res.json().catch(() => null);
+		if (!res.ok) return fail(res.status, { failed: answer?.message ?? res.statusText });
+		return act(event, 'fyi.opensocial.updateProfile', { ...(await profileNow(event, group)), [slot]: answer.blob });
+	},
+	unpicture: async (event) => {
+		const { group, form } = await asked(event);
+		return act(event, 'fyi.opensocial.updateProfile', { ...(await profileNow(event, group)), [text(form, 'slot')]: null });
+	},
+	visibility: async (event) => {
+		const { group, form } = await asked(event);
+		const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
+		const readableBy = [{ role: text(form, 'seen') === 'public' ? 'public' : 'member' }];
+		return act(event, 'fyi.opensocial.updateSpace', { group, space: now.meta, readableBy });
+	},
 	profile: async (event) => {
 		const { group, form } = await asked(event);
 		// Replaced whole: what the form does not show is kept as it is.

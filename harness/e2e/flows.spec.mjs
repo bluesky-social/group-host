@@ -123,6 +123,50 @@ test("changing a group's profile", async () => {
   await expect(page.getByText('Walks on Sundays.')).toBeVisible()
 })
 
+// A one-pixel PNG.
+const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+
+test("giving a group a picture, and taking it away", async () => {
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  await page.getByLabel('Avatar').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PIXEL })
+  await page.getByRole('button', { name: 'Upload the avatar' }).click()
+  // Drawn on its page, from the host, as the image it is: one pixel wide.
+  await page.goto(url('/g/hikers.groups.test'))
+  const avatar = page.locator('.identity img.av')
+  await expect(avatar).toBeVisible()
+  await expect.poll(() => avatar.evaluate((img) => img.naturalWidth)).toBe(1)
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  await page.getByRole('button', { name: 'Take the avatar away' }).click()
+  await page.goto(url('/g/hikers.groups.test'))
+  await expect(page.locator('.identity img.av')).toHaveCount(0)
+})
+
+test("hiding a group's profile, and showing it again", async () => {
+  // The host lists every group of its own; a hidden one by its handle alone.
+  const listed = async () => {
+    const { groups } = await fetch(`${world.host}/xrpc/fyi.opensocial.listGroups`).then((r) => r.json())
+    return groups.find((g) => g.handle === 'hikers.groups.test')?.displayName !== undefined
+  }
+  expect(await listed()).toBe(true)
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  // Saved, and the page opened afresh as the host has it: not reloaded,
+  // which would send the form's post again.
+  const settings = url('/g/hikers.groups.test/settings')
+  const save = async (label) => {
+    await page.goto(settings)
+    await page.getByLabel(label).check()
+    const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/visibility'))
+    await page.getByRole('button', { name: 'Save who sees it' }).click()
+    await saved
+    await page.goto(settings)
+    await expect(page.getByLabel(label)).toBeChecked()
+  }
+  await save('Its members alone: to others, just its handle')
+  await expect.poll(listed).toBe(false)
+  await save('Anyone, and found on the network')
+  await expect.poll(listed).toBe(true)
+})
+
 test('adding a rule, and taking it away', async () => {
   await page.goto(url('/g/hikers.groups.test/settings'))
   await page.getByRole('textbox', { name: 'Rule' }).fill('Leave no trace')

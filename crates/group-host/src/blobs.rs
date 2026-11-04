@@ -3,15 +3,30 @@
 //! references it makes it permanent, and one that drops the last reference
 //! deletes it. Temporary blobs no record took within a day are swept. Only
 //! a blob a record references is served.
+//!
+//! An image of an account's is also served for a page to draw, at
+//! `/img/{did}/{cid}`, to whoever may see a record that holds it: anyone,
+//! for a record in its public repo or in the profile of a group listed on
+//! the network; for one in a space, whoever that space lets read, as the
+//! console's session says. Served as an image and nothing more, and kept
+//! for good, as a CID names its bytes.
 
 use crate::Host;
-use crate::store::Blob;
+use crate::authority::Access;
+use crate::group::meta_space;
+use crate::rbac::NS;
+use crate::store::{Blob, Store};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
+use anyhow::Result;
 use atproto::Cid;
-use axum::http::StatusCode;
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// How long an upload waits for a record to reference it.
 pub const TEMPORARY_FOR: i64 = 24 * 60 * 60 * 1000;
@@ -129,4 +144,99 @@ fn collect(value: &Value, found: &mut Vec<Cid>) {
         }
         _ => {}
     }
+}
+
+/// The kinds of image a page may be given.
+const IMAGES: [&str; 5] = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/avif",
+];
+
+impl Store {
+    /// Whether a record in `did`'s public repo holds the blob `cid`.
+    pub fn held_publicly(&self, did: &str, cid: &Cid) -> anyhow::Result<bool> {
+        let sql = "SELECT 1 FROM record_blob WHERE did = ?1 AND cid = ?2 LIMIT 1";
+        let found = self
+            .conn()
+            .query_row(sql, [did, &cid.to_string()], |_| Ok(()));
+        Ok(found.optional()?.is_some())
+    }
+
+    /// The spaces in which a record of `did`'s holds the blob `cid`.
+    pub fn holding_spaces(&self, did: &str, cid: &Cid) -> anyhow::Result<Vec<String>> {
+        let conn = self.conn();
+        let sql = "SELECT DISTINCT space FROM space_record_blob WHERE did = ?1 AND cid = ?2";
+        let mut q = conn.prepare(sql)?;
+        let rows = q.query_map([did, &cid.to_string()], |r| r.get(0));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+}
+
+impl Host {
+    /// Whether `who` (none, for someone not signed in) may see `did`'s blob
+    /// `cid`: a record holding it is one they may read.
+    pub fn may_see(&self, did: &str, cid: &Cid, who: Option<&str>) -> Result<bool> {
+        if self.store.deactivation(did)?.is_some() {
+            return Ok(false);
+        }
+        if self.store.held_publicly(did, cid)? {
+            return Ok(true);
+        }
+        // A listed group's profile is anyone's to see, as listGroups shows it.
+        let listed = self
+            .store
+            .record(did, &format!("{NS}.declaration"), "self")?
+            .is_some();
+        for space in self.store.holding_spaces(did, cid)? {
+            if listed && space == meta_space(did) {
+                return Ok(true);
+            }
+            let hosted = self.store.space(&space)?;
+            let may = hosted.map(|h| self.may(&space, &h, who, Access::Read));
+            if may.transpose()?.unwrap_or(false) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
+/// An image of `did`'s, `cid`, for whoever may see it: nothing for anyone
+/// else, or for a blob that is not an image.
+pub async fn image(
+    State(host): State<Arc<Host>>,
+    Path((did, cid)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    let gone = || StatusCode::NOT_FOUND.into_response();
+    let Ok(cid) = Cid::parse(&cid) else {
+        return gone();
+    };
+    let who = host.console_caller(&headers).ok().flatten();
+    if !host.may_see(&did, &cid, who.as_deref()).unwrap_or(false) {
+        return gone();
+    }
+    let read = host.read_blob(&did, &cid).ok().flatten();
+    let Some((blob, bytes)) = read.filter(|(b, _)| IMAGES.contains(&b.mime_type.as_str())) else {
+        return gone();
+    };
+    let headers = [
+        (header::CONTENT_TYPE, blob.mime_type),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff".into()),
+        (
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; sandbox".into(),
+        ),
+        // Whoever else may see it, a CID's bytes never change: kept in a
+        // browser, not in a cache between.
+        (
+            header::CACHE_CONTROL,
+            "private, max-age=31536000, immutable".into(),
+        ),
+    ];
+    (headers, bytes).into_response()
 }

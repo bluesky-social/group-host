@@ -7,7 +7,7 @@ const host = process.env.GROUP_HOST ?? 'http://127.0.0.1:2600';
 
 export default defineConfig({
 	server: {
-		proxy: { '^/xrpc/': host, '^/oauth/': host, '^/\\.well-known/': host }
+		proxy: { '^/xrpc/': host, '^/oauth/': host, '^/\\.well-known/': host, '^/img/': host }
 	},
 	plugins: [
 		sveltekit({

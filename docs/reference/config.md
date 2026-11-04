@@ -22,8 +22,12 @@ and refuses to start on a value that does not read, saying which.
 
 It stops on SIGTERM or ctrl-c, answering the requests under way first.
 
-The console reads one: `GROUP_HOST`, the host it asks (default
-`http://127.0.0.1:2600`).
+The console reads `GROUP_HOST`, the host it asks (default
+`http://127.0.0.1:2600`), and, built (`node build`), what SvelteKit's
+Node adapter reads: `ORIGIN`, the address people reach it at, and
+`BODY_SIZE_LIMIT`, the most a request it hands on may carry (by default
+512K): set it to at least `BLOB_UPLOAD_LIMIT`, or an upload larger than
+that is refused before the host sees it.
 
 The `opensocial` command reads its own: `OPENSOCIAL_AS` and
 `OPENSOCIAL_PASSWORD` (who it signs in as), `PDS_URL` (where),

@@ -6,9 +6,10 @@ import { GROUP_HOST } from '$app/env/private';
  * cookies and all, and its answer, its redirects and the cookies it sets
  * among it, is the browser's: signing in and out (`/console/*`), and its
  * methods and OAuth, which a page asks from the browser once it is there,
- * as `vite dev` hands them on.
+ * and the images it serves for a page to draw, as `vite dev` hands them
+ * on.
  */
-const HOSTS = ['/console/', '/xrpc/', '/oauth/', '/.well-known/'];
+const HOSTS = ['/console/', '/xrpc/', '/oauth/', '/.well-known/', '/img/'];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!HOSTS.some((p) => event.url.pathname.startsWith(p))) return resolve(event);

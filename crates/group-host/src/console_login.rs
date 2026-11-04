@@ -196,7 +196,7 @@ impl Host {
     }
 
     /// A session cookie's value, naming `did`, signed `now`.
-    pub(crate) fn session_cookie(&self, did: &str, now: i64) -> String {
+    pub fn session_cookie(&self, did: &str, now: i64) -> String {
         let claims = jose::b64(json!({"did": did, "iat": now, "exp": now + LASTS}).to_string());
         format!(
             "{claims}.{}",
