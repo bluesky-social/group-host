@@ -162,6 +162,12 @@ const MIGRATIONS: &[&str] = &[
         stewards TEXT NOT NULL
     );
 ",
+    "
+    CREATE TABLE address (
+        did TEXT PRIMARY KEY REFERENCES account (did),
+        address TEXT NOT NULL UNIQUE
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -241,6 +247,7 @@ const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
     "DELETE FROM deactivation WHERE did = ?1",
+    "DELETE FROM address WHERE did = ?1",
     "DELETE FROM outbox WHERE repo = ?1",
     "DELETE FROM space_recipient WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM space_writer WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
@@ -489,6 +496,13 @@ impl Store {
             params![account.did, head.cid.to_string(), head.rev, head.block],
         );
         kept?;
+        // Its first handle is its address, which stays when it takes
+        // another.
+        let addressed = tx.execute(
+            "INSERT INTO address (did, address) VALUES (?1, ?2)",
+            params![account.did, account.handle],
+        );
+        addressed?;
         sequence(&tx, &account.did, events)?;
         tx.commit()?;
         Ok(true)
@@ -1159,6 +1173,31 @@ impl Store {
         let rows = q.query_map([now], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// `did`'s address: the handle it was made at, under the host's
+    /// domain.
+    pub fn address(&self, did: &str) -> Result<Option<String>> {
+        let conn = self.conn();
+        let found = conn.query_row("SELECT address FROM address WHERE did = ?1", [did], |r| {
+            r.get(0)
+        });
+        Ok(found.optional()?)
+    }
+
+    /// Gives `did` the handle `handle`, with `events`; refused if another
+    /// account has it.
+    pub fn set_handle(&self, did: &str, handle: &str, events: &[Event]) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let set = tx.execute(
+            "UPDATE account SET handle = ?1 WHERE did = ?2",
+            [handle, did],
+        );
+        set?;
+        sequence(&tx, did, events)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Switches `did` off, by `by` at `at`, `stewards` the ones who may

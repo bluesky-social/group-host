@@ -24,6 +24,11 @@ pub struct Config {
     /// How a `did:web`'s document is read, `DID_WEB_SCHEME`: `https`, or
     /// `http` for a network of test servers.
     pub did_web_scheme: String,
+    /// How a handle is resolved, `HANDLE_RESOLVERS`, comma-separated, each
+    /// tried in turn: `well-known:<scheme>` for the handle's own
+    /// `/.well-known/atproto-did`, or a service answering
+    /// `com.atproto.identity.resolveHandle`, which reads its DNS record.
+    pub handle_resolvers: Vec<String>,
     /// Who this host starts groups for, `GROUP_FOUNDERS`, comma-separated
     /// DIDs: anyone when it names none.
     pub group_founders: Vec<String>,
@@ -73,6 +78,13 @@ impl Config {
                 .collect()
         };
         let group_founders = list("GROUP_FOUNDERS");
+        let mut handle_resolvers = list("HANDLE_RESOLVERS");
+        if handle_resolvers.is_empty() {
+            handle_resolvers = vec![
+                "well-known:https".into(),
+                "https://public.api.bsky.app".into(),
+            ];
+        }
         let crawlers = list("PDS_CRAWLERS");
         let blob_upload_limit = match var("BLOB_UPLOAD_LIMIT") {
             Some(l) => l
@@ -88,6 +100,7 @@ impl Config {
             data_dir,
             plc_url,
             did_web_scheme,
+            handle_resolvers,
             group_founders,
             crawlers,
             blob_upload_limit,

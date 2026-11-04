@@ -78,6 +78,26 @@ so the host writes them for a caller holding `group.configure`:
   so a label citing it still does; a new one goes last unless it says
   where. `deleteRule` takes one away; a label citing it keeps the URI.
 
+## Its handle
+
+A group starts with a handle one label under `HANDLE_DOMAIN`, which is
+also its address, kept apart from its handle: where its site is served,
+which never changes here. It may take a handle on a domain of its own
+instead, once the domain names it, as any handle is resolved
+(`HANDLE_RESOLVERS`: the domain's `/.well-known/atproto-did`, then a
+service answering `resolveHandle`, which reads its `_atproto` DNS
+record). Under `HANDLE_DOMAIN` it may take only its own address back, so
+no group takes another's, and going back is always possible.
+
+- `checkGroupHandle` says whether a domain is ready, and whose it names
+  now. It changes nothing.
+- `updateGroupHandle` takes it: the group's `did:plc` first, signed with
+  the host's rotation key (refused, `NotController`, once the host holds
+  none for it), then the host, then the relays with an `#identity`
+  event.
+
+Both are for a caller holding `group.configure`.
+
 ## Switching off, on, and deleting
 
 - `deactivateGroup` switches a group off, for one holding

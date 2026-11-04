@@ -21,6 +21,10 @@ fn defaults_serve_localhost() {
     assert_eq!(c.data_dir, std::path::PathBuf::from("data"));
     assert_eq!(c.did_web_scheme, "https");
     assert!(c.group_founders.is_empty());
+    assert_eq!(
+        c.handle_resolvers,
+        ["well-known:https", "https://public.api.bsky.app"]
+    );
 }
 
 #[test]
@@ -41,8 +45,10 @@ fn the_environment_names_the_host() {
         ("SERVICE_DID", "did:web:other.example"),
         ("DID_WEB_SCHEME", "http"),
         ("GROUP_FOUNDERS", "did:plc:a, did:plc:b,"),
+        ("HANDLE_RESOLVERS", "https://resolver.example"),
     ])
     .unwrap();
+    assert_eq!(c.handle_resolvers, ["https://resolver.example"]);
     assert_eq!(c.group_founders, ["did:plc:a", "did:plc:b"]);
     assert_eq!(c.service_did, "did:web:other.example");
     assert_eq!(c.did_web_scheme, "http");

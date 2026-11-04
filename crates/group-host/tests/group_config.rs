@@ -341,6 +341,11 @@ async fn an_admin_keeps_the_rules() {
             "putRule",
             json!({"group": did, "title": "Odd", "order": -1}),
         ),
+        // A key no record could have.
+        (
+            "putRule",
+            json!({"group": did, "rkey": "a/b", "title": "Odd"}),
+        ),
         ("putRule", json!({"title": "Odd"})),
         ("deleteRule", json!({"group": did})),
         ("deleteRule", json!({"rkey": "x"})),

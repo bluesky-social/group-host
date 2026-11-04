@@ -32,6 +32,10 @@ async fn body(mut res: reqwest::Response) -> Result<Vec<u8>> {
 /// read, so how many is a caller's to choose.
 pub const KEPT_AT_MOST: usize = 10_000;
 
+/// How long a lookup at a host a name alone points to may take: a
+/// handle's `/.well-known/atproto-did` may be anyone's, and never answer.
+pub const LOOKUP: Duration = Duration::from_secs(3);
+
 pub struct Resolver {
     plc_url: String,
     did_web_scheme: String,
@@ -103,6 +107,30 @@ impl Resolver {
         Ok(doc)
     }
 
+    /// The DID `handle` names, asked of each of `resolvers` in turn
+    /// (`HANDLE_RESOLVERS`): none if none of them says.
+    pub async fn resolve_handle(&self, handle: &str, resolvers: &[String]) -> Option<String> {
+        for resolver in resolvers {
+            let named = match resolver.strip_prefix("well-known:") {
+                Some(scheme) => {
+                    let url = format!("{scheme}://{handle}/.well-known/atproto-did");
+                    text(self.http.get(url).timeout(LOOKUP).send().await).await
+                }
+                None => {
+                    let url = format!("{resolver}/xrpc/com.atproto.identity.resolveHandle");
+                    let asked = self.http.get(url).query(&[("handle", handle)]);
+                    let body = json(asked.send().await).await;
+                    body.and_then(|b| b["did"].as_str().map(String::from))
+                }
+            };
+            let named = named.map(|d| d.trim().to_string());
+            if let Some(did) = named.filter(|d| d.starts_with("did:")) {
+                return Some(did);
+            }
+        }
+        None
+    }
+
     /// `did`'s document as it was read in the last few minutes, if it
     /// was. What it names may have changed since: a key that turns a
     /// signature away is worth reading again with [`Resolver::document`].
@@ -130,4 +158,14 @@ impl Resolver {
         let doc = self.document(did).await.ok()?;
         Some(check(&key_in(&doc)?))
     }
+}
+
+/// A response's text, if it answered with one.
+async fn text(res: reqwest::Result<reqwest::Response>) -> Option<String> {
+    res.ok()?.error_for_status().ok()?.text().await.ok()
+}
+
+/// A response's JSON, if it answered with some.
+async fn json(res: reqwest::Result<reqwest::Response>) -> Option<Value> {
+    res.ok()?.error_for_status().ok()?.json().await.ok()
 }

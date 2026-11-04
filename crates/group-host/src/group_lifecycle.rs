@@ -59,18 +59,18 @@ pub async fn deactivate_group(
     Json(body): Json<Value>,
 ) -> Answer {
     let (group, me) = asked(&host, &headers, &body, "deactivateGroup").await?;
-    if host.deactivation(&group)?.is_some() {
-        return Err(bad(
-            "AlreadyDeactivated",
-            "the group is switched off already",
-        ));
-    }
     steward(&host, &group, &me)?;
     // Read before it goes dark: afterwards nothing can read them.
     let stewards = host.configurers(&group)?;
-    host.deactivate_account(&group, &me, &stewards)
-        .map_err(XrpcError::internal)?;
-    Ok(Json(json!({})))
+    // Off already, or off by another meanwhile: the store says.
+    let done = host.deactivate_account(&group, &me, &stewards);
+    match done.map_err(XrpcError::internal)? {
+        true => Ok(Json(json!({}))),
+        false => Err(bad(
+            "AlreadyDeactivated",
+            "the group is switched off already",
+        )),
+    }
 }
 
 /// Switches a group back on, for one who could switch it off.
@@ -80,17 +80,19 @@ pub async fn activate_group(
     Json(body): Json<Value>,
 ) -> Answer {
     let (group, me) = asked(&host, &headers, &body, "activateGroup").await?;
-    if host.deactivation(&group)?.is_none() {
-        return Err(bad("NotDeactivated", "the group is not switched off"));
-    }
     steward(&host, &group, &me)?;
-    host.activate_account(&group).map_err(XrpcError::internal)?;
-    Ok(Json(json!({})))
+    // On already, or on by another meanwhile: the store says.
+    match host.activate_account(&group).map_err(XrpcError::internal)? {
+        true => Ok(Json(json!({}))),
+        false => Err(bad("NotDeactivated", "the group is not switched off")),
+    }
 }
 
 /// Deletes a group: its account, repos and spaces here, and what the host
 /// keeps of them; the services syncing its spaces are told; its DID is
-/// ended. What members wrote in its spaces is theirs, at their own PDSes.
+/// ended. They are told first, while the group has a key to sign with:
+/// best effort, so a delete that then fails has told them of one that
+/// did not happen, and they find it again when they next read. What members wrote in its spaces is theirs, at their own PDSes.
 pub async fn delete_group(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,

@@ -153,14 +153,15 @@ fn rules(host: &Host, group: &str) -> Result<Vec<Value>, XrpcError> {
         .collect())
 }
 
-fn base(did: &str, handle: &str) -> Value {
-    json!({
+fn base(host: &Host, did: &str, handle: &str) -> Result<Value, XrpcError> {
+    let address = host.store.address(did).map_err(XrpcError::internal)?;
+    Ok(json!({
         "did": did,
         "handle": handle,
-        "address": handle,
+        "address": address,
         "meta": meta_space(did),
         "members": members_space(did),
-    })
+    }))
 }
 
 fn merge(into: &mut Value, from: Value) {
@@ -190,7 +191,7 @@ pub async fn get_group(
     // Switched off: nothing in it is read, by members either. Still
     // answered, so a steward can find the switch.
     if host.deactivation(group)?.is_some() {
-        let mut view = base(group, &handle);
+        let mut view = base(&host, group, &handle)?;
         view["deactivated"] = json!(true);
         return Ok(Json(json!({ "group": view })));
     }
@@ -214,7 +215,7 @@ pub async fn get_group(
     let granted = grants(&permissions);
     let actions = actions_for(&granted, &roles);
 
-    let mut view = base(group, &handle);
+    let mut view = base(&host, group, &handle)?;
     if reads_meta {
         if let Some(profile) = record(&meta, "profile", "self")? {
             merge(&mut view, profile_view(&profile));
@@ -321,7 +322,7 @@ pub async fn list_groups(State(host): State<Arc<Host>>) -> Answer {
             let Ok(handle) = group_of(&host, did) else {
                 continue;
             };
-            let mut view = base(did, &handle);
+            let mut view = base(&host, did, &handle)?;
             if host.deactivation(did)?.is_some() {
                 view["deactivated"] = json!(true);
                 groups.push(view);

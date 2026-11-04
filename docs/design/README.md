@@ -82,8 +82,8 @@ says otherwise.
    members spaces, access records and roles (`group.rs`, `group_api.rs`,
    `rbac.rs`; done, see [groups](groups.md)), their profile, images and
    rules (`group_config.rs`; done), switching them off and on and
-   deleting them (`lifecycle.rs`, `group_lifecycle.rs`; done), then
-   handles; spaces made and
+   deleting them (`lifecycle.rs`, `group_lifecycle.rs`; done), handles
+   on their own domains (`group_handle.rs`; done), then spaces made and
    configured by members, `checkUserAccess`, and the space index:
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,
    `spaceIndex.ts`, `methods/checkUserAccess.ts`.
