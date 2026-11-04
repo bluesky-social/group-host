@@ -95,7 +95,9 @@ right, and come before the code they test.
 ## Lexicons
 
 The schemas under `lexicons/` are this host's to change until they are
-published from here.
+published from here. Until then, `just lex` lets a schema, def or field
+go when nothing here refers to it; `PUBLISHED` in `harness/lexicons.mjs`
+turns that off once the first is published.
 Once one is published, it is evolved, never changed, with new fields
 optional and nothing removed, renamed, retyped, made required or narrowed.
 Every schema of ours (`fyi.opensocial.*`) follows the Lexicon Style Guide

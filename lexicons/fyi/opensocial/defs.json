@@ -614,25 +614,6 @@
         }
       }
     },
-    "file": {
-      "type": "object",
-      "description": "One file, by its path among the rest: a page, a script, a stylesheet, JSON (a lexicon), an image or a font. What it is served as follows its path's extension.",
-      "required": [
-        "path",
-        "file"
-      ],
-      "properties": {
-        "path": {
-          "type": "string",
-          "maxLength": 256,
-          "description": "Where it is among the rest: `events/calendar.html`."
-        },
-        "file": {
-          "type": "blob",
-          "maxSize": 5000000
-        }
-      }
-    },
     "action": {
       "type": "string",
       "knownValues": [

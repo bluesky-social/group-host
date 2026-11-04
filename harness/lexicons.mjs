@@ -165,7 +165,9 @@ const loosened = (before, after, path) => {
   const was = new Set(before.required ?? [])
   for (const r of after.required ?? []) if (!was.has(r)) say(path, `${r} is required now: only new optional fields`)
   for (const [k, v] of Object.entries(before.properties ?? {})) {
-    if (!after.properties?.[k]) say(`${path}.${k}`, 'a field is never removed or renamed')
+    if (!after.properties?.[k]) {
+      if (!mayGo(path, k)) say(`${path}.${k}`, 'a field is never removed or renamed')
+    }
     else loosened(v, after.properties[k], `${path}.${k}`)
   }
   loosened(before.items, after.items, `${path}[]`)
@@ -182,19 +184,49 @@ const loosened = (before, after, path) => {
 // change may remove: what is said of each is why.
 const RETIRED = new Set([])
 
+// None of ours is published yet, so nothing out there was written to it.
+// Until one is, a schema, a def or a field may go when nothing here refers
+// to it: no lexicon refs it, and the code never names it. One still used
+// stays, as it would once published. Set this once the first is published.
+const PUBLISHED = false
+
+/// What the code reads: the host, the command, the console and the harness.
+const code = git('ls-files', '--', 'crates', 'web/src', 'harness')
+  .split('\n')
+  .filter((f) => /\.(rs|ts|svelte|mjs|js)$/.test(f) && !f.startsWith('web/src/lib/lexicons') && f !== 'harness/lexicons.mjs')
+  .map((f) => readFileSync(join(root, f), 'utf8'))
+  .join('\n')
+
+/// Whether a def (`nsid#name`, or a schema's `nsid`) is referred to: by a
+/// ref in any lexicon, `#name` within its own, or by name in the code.
+const referred = (id) => {
+  const [nsid, name] = id.split('#')
+  for (const doc of now.values()) {
+    const text = JSON.stringify(doc)
+    if (doc.id === nsid ? name && text.includes(`"#${name}"`) : text.includes(`"${id}`)) return true
+  }
+  return code.includes(id)
+}
+
+/// Whether a removal goes unremarked: of one of ours, nothing published,
+/// and nothing referring to it. A field is referred to by its name, quoted.
+const mayGo = (id, field) => ours(id.split('#')[0]) && !PUBLISHED && (field ? !code.includes(`"${field}"`) : !referred(id))
+
 if (base) {
   const listed = git('ls-tree', '-r', '--name-only', base, '--', 'lexicons').split('\n').filter((f) => f.endsWith('.json'))
   for (const file of listed) {
     const before = JSON.parse(git('show', `${base}:${file}`))
     const after = now.get(file)
-    if (!after && RETIRED.has(before.id)) continue
+    if (!after && (RETIRED.has(before.id) || mayGo(before.id))) continue
     if (!after) {
       say(before.id, `removed since ${base}`)
       continue
     }
     for (const [name, def] of Object.entries(before.defs ?? {})) {
       const at = `${before.id}#${name}`
-      if (!after.defs?.[name]) say(at, `removed since ${base}`)
+      if (!after.defs?.[name]) {
+        if (!mayGo(at)) say(at, `removed since ${base}`)
+      }
       else loosened(def, after.defs[name], at)
       // A scope naming a space type alone is granted the collections its
       // lexicon lists, so taking one out takes writes from those logins.

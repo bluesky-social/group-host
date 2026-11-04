@@ -27,10 +27,6 @@
           "cid": {
             "type": "string",
             "format": "cid"
-          },
-          "leaving": {
-            "type": "boolean",
-            "description": "For a move to a plain PDS: a space's meta archive as a memberspace whose member list is who may use it now, read and write as their roles allow, so that PDS keeps them in without asking this host."
           }
         }
       },
