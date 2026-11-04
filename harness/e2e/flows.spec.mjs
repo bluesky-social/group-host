@@ -3,7 +3,7 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, Assistant, didKey, signIn, signedInAs, url, who, world } from './pages.mjs'
+import { App, Assistant, approve, didKey, signIn, signedInAs, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -254,6 +254,27 @@ test('declining an app', async () => {
 test('coming to a request that has lapsed', async () => {
   await page.goto(url('/authorize?request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Areq-gone'))
   await expect(page.getByText('This sign-in request has expired')).toBeVisible()
+})
+
+test('moving an account here to become a group', async () => {
+  await page.goto(url('/new'))
+  await page.getByRole('link', { name: 'move an account you already have' }).click()
+  await page.getByRole('textbox', { name: 'The account to move' }).fill(who.harbor.handle)
+  await page.getByRole('button', { name: 'Sign in to it' }).click()
+  // At its own server, as itself; then back, still alice.
+  await approve(page, 'harbor')
+  await page.waitForURL(url('/move'))
+  await expect.poll(() => signedInAs(page)).toBe('@alice.test')
+  await expect(page.getByText('Here it will be')).toContainText('@harbor.groups.test')
+  await page.getByRole('button', { name: 'Copy it here' }).click()
+  const code = page.getByRole('textbox', { name: 'The code' })
+  await expect(code).toBeVisible()
+  // The code its server emailed, from its inbox.
+  const mail = await fetch(`${world.mail}?to=harbor@test.com`).then((r) => r.json())
+  await code.fill(mail.code)
+  await page.getByRole('button', { name: 'Finish moving it' }).click()
+  await page.waitForURL(url('/g/harbor.groups.test'))
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 })
 
 test('signing out', async () => {

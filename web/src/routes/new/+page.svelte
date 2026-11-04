@@ -15,5 +15,6 @@
 		<p>This host starts groups only for the people it names.</p>
 	{:else}
 		<NewGroupForm failed={form?.failed} />
+		<p>Or <a href="/move">move an account you already have</a> here, to become a group.</p>
 	{/if}
 </Page>

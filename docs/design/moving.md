@@ -106,7 +106,7 @@ DID names this host, the network reads the account here.
 ## Moving one from the console
 
 `account_move.rs` walks through the same steps for someone signed in to
-the console. They sign in to the account at its own server too
+the console, on its page `/move` (linked from starting a group). They sign in to the account at its own server too
 ([signing in](signing-in.md#signing-in-to-an-account-being-moved)), and
 the host, holding its tokens for them, does each step itself:
 

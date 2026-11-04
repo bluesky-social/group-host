@@ -54,7 +54,8 @@ export default async function setup() {
   const children = []
   const stop = () => children.reverse().forEach((c) => c.kill('SIGTERM'))
   try {
-    const pds = spawn('node', [join(root, 'harness/pds.mjs'), '--accounts', 'alice,bob'], { stdio: ['pipe', 'pipe', 'inherit'] })
+    // harbor is an account of its own, which alice moves here to become a group.
+    const pds = spawn('node', [join(root, 'harness/pds.mjs'), '--accounts', 'alice,bob,harbor'], { stdio: ['pipe', 'pipe', 'inherit'] })
     children.push(pds)
     const net = JSON.parse(await line(pds, (l) => l.startsWith('{"pds"')))
 
@@ -103,7 +104,7 @@ export default async function setup() {
     if (!made.ok) throw new Error(`createGroup: ${await made.text()}`)
     const riders = await made.json()
 
-    process.env.E2E_WORLD = JSON.stringify({ base, host, pds: net.pds, accounts: net.accounts, riders: riders.did })
+    process.env.E2E_WORLD = JSON.stringify({ base, host, pds: net.pds, mail: net.mail, accounts: net.accounts, riders: riders.did })
     return stop
   } catch (e) {
     stop()
