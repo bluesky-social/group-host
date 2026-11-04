@@ -121,9 +121,12 @@ impl Store {
         now: i64,
     ) -> Result<()> {
         // Registering is anyone's: one never connected goes after a day.
-        let stale = "DELETE FROM assistant_client WHERE created_at < ?1
-                     AND id NOT IN (SELECT client_id FROM assistant_grant)";
+        // One a member connected stays, to connect again; its connections
+        // go once their refresh tokens lapse.
+        let stale = "DELETE FROM assistant_client WHERE created_at < ?1 AND connected = 0";
         self.conn().execute(stale, [now - UNUSED_FOR])?;
+        let lapsed = "DELETE FROM assistant_grant WHERE expires_at <= ?1";
+        self.conn().execute(lapsed, [now])?;
         let sql = "INSERT INTO assistant_client (id, name, redirect_uris, created_at) VALUES (?1, ?2, ?3, ?4)";
         let redirects = serde_json::to_string(redirects)?;
         self.conn()
@@ -223,6 +226,8 @@ impl Store {
             now
         ];
         self.conn().execute(sql, row)?;
+        let connected = "UPDATE assistant_client SET connected = 1 WHERE id = ?1";
+        self.conn().execute(connected, [&c.client_id])?;
         Ok(())
     }
 

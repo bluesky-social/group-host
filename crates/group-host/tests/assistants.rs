@@ -715,3 +715,48 @@ async fn forgets_a_client_that_never_connected() {
     assert!(store.registered_assistant("old").unwrap().is_none());
     assert!(store.registered_assistant("new").unwrap().is_some());
 }
+
+#[tokio::test]
+async fn keeps_a_client_once_connected_and_forgets_a_lapsed_connection() {
+    use group_host::assistants::Connected;
+    let h = start(&[], false).await;
+    let [alice, ..] = people(&h).await;
+    let group = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let store = &h.host.store;
+    let day = 24 * 60 * 60_000;
+    let now = 100 * day;
+    let back = vec![BACK.to_string()];
+    let connect = |id: &str, client: &str, at: i64| {
+        let c = Connected {
+            id: id.into(),
+            group: group.clone(),
+            member: alice.did.clone(),
+            client_id: client.into(),
+            client_name: "Kept".into(),
+            created_at: at,
+            used_at: at,
+        };
+        store
+            .connect_assistant(&c, &format!("a-{id}"), &format!("r-{id}"), at)
+            .unwrap();
+    };
+    // Connected, then disconnected: kept, to connect again.
+    store
+        .register_assistant("kept", "Kept", &back, now - 2 * day)
+        .unwrap();
+    connect("one", "kept", now - 2 * day);
+    store
+        .disconnect_assistant(&group, &alice.did, "kept")
+        .unwrap();
+    // A connection whose refresh token lapsed long ago.
+    connect("two", "lapsed", now - 40 * day);
+    store.register_assistant("new", "New", &back, now).unwrap();
+    assert!(store.registered_assistant("kept").unwrap().is_some());
+    let lapsed = store.disconnect_assistant(&group, &alice.did, "lapsed");
+    assert_eq!(lapsed.unwrap(), 0);
+}

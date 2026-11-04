@@ -395,6 +395,11 @@ pub const MIGRATIONS: &[&str] = &[
         started INTEGER NOT NULL
     );
 ",
+    "
+    ALTER TABLE assistant_client ADD COLUMN connected INTEGER NOT NULL DEFAULT 0;
+    UPDATE assistant_client SET connected = 1
+        WHERE id IN (SELECT client_id FROM assistant_grant);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";

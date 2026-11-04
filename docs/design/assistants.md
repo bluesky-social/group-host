@@ -40,8 +40,9 @@ An assistant names itself in one of two ways. It can give the https URL
 of a client metadata document, a JSON file that describes it; the host
 fetches that document at each sign-in and stores nothing. Or it can
 register at `/mcp/register` as a public client, with no secret;
-registration is open, and a registered client with no connection is
-forgotten after a day.
+registration is open, and a registered client never connected is
+forgotten after a day. One a member has connected is kept, to connect
+again, and its connections are forgotten once they lapse.
 
 The member approves on the console. The assistant sends the member's
 browser to `/mcp/authorize`, and the host passes them to the console's
