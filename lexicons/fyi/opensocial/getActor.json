@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Get a person as a view names them: handle, name and avatar. Requires auth. Answers for the caller themselves, or for anyone the host shows \u2014 a member of a group it runs, or someone asking to join one.",
+      "description": "Get a person as a view names them. Requires auth. Answers for the caller themselves, or for anyone the host shows \u2014 a member of a group it runs, or someone asking to join one.",
       "parameters": {
         "type": "params",
         "required": ["actor"],

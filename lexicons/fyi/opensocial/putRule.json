@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Create or update a rule. Requires group.configure. Fields are inlined rather than referencing fyi.opensocial.rule, because a record def cannot be used as an input object \u2014 same fix as updateProfile.",
+      "description": "Create or update a rule. Requires group.configure. Fields are inlined rather than referencing fyi.opensocial.rule, because a record def cannot be used as an input object.",
       "input": {
         "encoding": "application/json",
         "schema": {

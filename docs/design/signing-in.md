@@ -1,277 +1,292 @@
 # Signing in
 
-An app signs in to a group as it signs in to any account: with atproto
-OAuth, at the group's PDS, which is this host. What is different is who
-says yes. A group has no password, so whoever signs an app in as a group
-is one of its members, acting with their roles, and the app gets what
-those roles allow and nothing more.
+A group is an atproto account with no password and no single owner. Apps
+still need to sign in as it, to write its records and act in its spaces.
+Whatever an app gets must never exceed what the member who let it in may
+do, both when they approve it and at every write after. This page
+explains how the host signs people, apps and assistants in, and how it
+keeps each token inside its member's roles. Roles are in
+[membership](membership.md), spaces in [spaces](spaces.md), and exact
+methods and parameters in [the API reference](../reference/api.md).
 
-## Signing in to the console
+## Who signs in to what
 
-People sign in to the console as themselves, at their own PDS
-(`console_login.rs`). The host is a confidential OAuth client of it, as
-knotless-serve is of its accounts', its client id
-`<CONSOLE_URL>/console/client-metadata.json`, its key derived from the
-host's secret. It asks for `atproto` alone: the console's methods act as
-the group, never as the person, so the host needs only to know who they
-are. `/console/login` resolves their handle or DID to their PDS and its
-authorization server, pushes the request (PKCE, DPoP, a client assertion,
-their handle as the hint) and sends the browser there to approve;
-`/console/callback` checks that the browser coming back is the one that
-started, and the answer is from that server, exchanges the code, checks
-the token is for the person who started, revokes it at once, and signs
-them in. The host keeps nothing of theirs.
+| Who | Signs in as | How | Holds |
+| --- | --- | --- | --- |
+| A person, in the console | themselves | OAuth at their own PDS | a session cookie |
+| An app | a group | OAuth at this host, or an app password | a group grant |
+| The console | a group | `fyi.opensocial.getGroupAuth` | a 15-minute group token |
+| An assistant | a member | OAuth at `/mcp` | an assistant grant |
 
-The browser holds a cookie the host signed, naming the person, HttpOnly
-and SameSite=Lax, good for thirty days; with it, the host's methods know
-who calls as service auth would say. `/console/logout` signs out, and
-refuses every cookie signed before. Every server a handle leads to is
-reached only at a public address, as a client's metadata is. The console
-forwards `/console/*` to the host, cookies and all.
+Members keep their accounts on their own PDSes, so the host only needs
+to learn who a person is. A group's repo is here, so this host is its
+PDS and its OAuth authorization server, the server an app signs in at.
 
-## Signing in to an account being moved
+An assistant, an AI client speaking MCP, acts as a member, not as the
+group. The host runs a separate OAuth server for it, with issuer
+`<PUBLIC_URL>/mcp`, whose Bearer tokens are good only at `/mcp` and are
+kept apart from group grants. A member approves an assistant on the same
+console page as an app. [assistants](assistants.md) covers the rest.
 
-Moving an account here from the console takes a second sign-in, to that
-account at its own server, by someone already signed in to the console
-(`/console/move/login`, `account_move.rs`). The host asks it for what a
-move needs and no more: `atproto`, a `createAccount` service token for
-this host's `#opensocial` service, `identity:*`, and reading its own
-repos and files in spaces (`space:*?authority=*&action=read_self`).
-The browser stays signed in as the person moving it, and a sign-in that
-comes back to a browser no longer signed in as them is refused.
+## Signing people in to the console
 
-Unlike their own sign-in, the host keeps these tokens: one account per
-person, for a day at most, while it does the move's steps itself
-([moving](moving.md#moving-one-from-the-console)). Its calls to the account's
-server are DPoP-bound to a key it made for the sign-in, take the nonce
-the server asks for, and refresh the token before it lapses or once it
-is refused as lapsed; one with no refresh token asks them to sign in to
-the account again. The tokens are given back to the server, and
-forgotten here, when the move finishes, when it is cancelled, when the
-person signs in to another account to move, and, by the host's hourly
-sweep, once a day has passed.
+The console's methods act as the group, so the host has no use for a
+person's own tokens. It needs to know who is at the browser, and keeps
+nothing else.
 
-## Apps acting as a person
+The host is a confidential OAuth client of each person's PDS, with
+client id `<CONSOLE_URL>/console/client-metadata.json`. Its client key
+is derived from the host's rotation secret, so it needs no storage. The
+sign-in asks for `atproto` alone, which proves the account and grants
+nothing.
 
-An app acting as a person, not as a group (the `opensocial` command, an
-assistant's MCP server), calls the host's methods as that person, and the
-host answers them by the person's roles, as it answers the console. It
-signs in at the person's own PDS, never here, and either asks that PDS for
-a service token for each call (`com.atproto.server.getServiceAuth`), as
-the command does, or sends each call through it, with `atproto-proxy:
-<host DID>#opensocial`: the PDS signs it as the person and forwards it to
-the address the host's DID document names for `#opensocial`. An OAuth app
-asks the person's PDS for `include:fyi.opensocial.basePermissions` with
-the host's service as its audience, and the person sees, there, what it
-may do.
+A person types their handle or DID. The host finds their PDS and its
+authorization server, pushes the request with PKCE and a fresh DPoP key,
+and sends the browser there. On return it exchanges the code, checks the
+token names the DID that started, and revokes the access token at once.
 
-## The server
+What it keeps is a cookie, `group_host_session`: the DID and its times,
+signed with an HMAC under another key derived from the rotation secret,
+good for 30 days. Signing out records the time in `console_logout`, and
+a cookie signed before a person's last sign-out names no one, in any
+browser.
 
-The host is a standard atproto authorization server (`oauth.rs`):
+Details:
 
-- `/.well-known/oauth-authorization-server` and
-  `/.well-known/oauth-protected-resource` say what it is.
-- A client pushes its request to `/oauth/par` first (pushed requests are
-  required), with PKCE (`S256`) and a DPoP proof, and gets a
-  `request_uri` good for five minutes.
-- `/oauth/authorize` sends the browser on to the console's `/authorize`
-  (`CONSOLE_URL`), where the member approves.
-- `/oauth/token` exchanges the code, once, within a minute, for an
-  access token (an hour) and a refresh token, both bound to the client's
-  DPoP key. A refresh gives a new pair and ends the old one. A grant
-  lasts two weeks without a refresh for a public client, three months
-  for a confidential one.
-- `/oauth/revoke` ends a grant by either of its tokens.
+- The sign-in under way is kept by its `state` for 15 minutes, and the
+  browser holds the same `state` in a cookie; the callback requires
+  both.
+- The authorization server's `issuer` must equal the URL its metadata
+  came from, and the callback's `iss` must equal that issuer.
+- Every server reached is fetched only at a public address, as client
+  metadata is (below). `back` is kept only as a path on the console.
 
-Every endpoint answers any origin, as an app in a browser reaches them.
+Moving an account onto this host needs more: the host must act at the
+old PDS. That sign-in asks a wider scope, needs a console session
+already, and keeps its tokens at most 24 hours. [moving](moving.md)
+explains it.
 
-Clients are known by their metadata documents, or are the loopback
-client `http://localhost`, a native app on the member's own machine,
-whose redirects are at a loopback address on any port
-(`oauth_clients.rs`). A document, and a confidential client's key set, is
-fetched over https from a public address only (never loopback, private,
-link-local or reserved), the connection pinned to the address checked,
-with no redirects, at most 64 KiB, and kept ten minutes. A confidential
-client signs each request with a key its metadata lists
-(`private_key_jwt`), and must keep signing with the same key, known by
-its thumbprint, whatever `kid` it names.
+## Calling the host's own methods
 
-DPoP proofs are ES256 or ES256K, the curves atproto keys are on
-(`oauth_dpop.rs`). A nonce is an HMAC of the time, under a key derived
-from the host's secret for nonces alone, good for its three
-minutes and those either side, so the host checks one without keeping it;
-a proof's `jti`, like a client assertion's, is spent once. The JWKs,
-thumbprints and JWTs are `atproto::jose`, checked against what jose, the
-reference provider's library, makes of the same keys.
+The `fyi.opensocial.*` methods are asked as a person. A caller sends
+service auth, a short-lived JWT their own PDS signs with `aud` the
+host's `SERVICE_DID` and `lxm` the method called. With no
+`Authorization` header at all, the console's cookie names the caller
+instead. The host's DID document names a `#opensocial` service, so a PDS
+can proxy these calls.
 
-A code is exchanged with its PKCE verifier, 43 to 128 unreserved
-characters as RFC 7636 has it. Tokens are opaque, kept as their SHA-256, never as themselves, so a
-grant ends the moment it is revoked, or its member is put out of the
-group (`oauth_store.rs`).
+Writing a group's records is different. Those calls go to the group's
+PDS, which is this host, with a token issued as the group. The rest of
+this page is about those tokens.
+
+## Signing an app in as a group
+
+A group has no password to type, so a member signs an app in for it. The
+app asks this host, and a member approves in the console, choosing which
+of their groups it acts as.
+
+An app finds this host the usual atproto way: the group's DID document
+names this host as its PDS, whose
+`/.well-known/oauth-protected-resource` names `PUBLIC_URL` as its sole
+authorization server. The flow is atproto OAuth. The app pushes its
+request to `/oauth/par` with PKCE and a DPoP proof, asking for `atproto`
+and only scopes its client metadata declares. `/oauth/authorize`
+forwards the browser to the console's approval page. After approval the
+app exchanges the code at `/oauth/token` for an access and a refresh
+token, both bound to its DPoP key, with `sub` the group's DID.
+
+A client is the https URL of its metadata document, or the loopback
+client `http://localhost` for programs on the same machine. The host
+fetches a document only at a public address, pinning the connection to
+the address it checked, so a client id cannot make the host reach into
+its own network. It keeps a document ten minutes.
+
+A public client holds no secret; a confidential one signs a client
+assertion with a key its metadata lists. A confidential client's grant
+lasts 90 days unrefreshed and a public one's 14, since nothing but its
+DPoP key ties a public client to its grant. Either must keep
+authenticating the same way, with the same key, for as long as the grant
+lasts. A native application must be public.
+
+Details:
+
+- A redirect is registered if listed exactly, or, for an http loopback
+  address, listed without its port.
+- When `PUBLIC_URL` is http, client documents at any address are
+  allowed, for test networks.
+- DPoP proofs are ES256 or ES256K, and each must carry a nonce from the
+  host (`use_dpop_nonce` otherwise).
 
 ## Approving
 
-The console's approval page asks with the member's own service auth
-(`authorization.rs`):
+The approval page asks `getAuthorization` what the request is: the
+client, the scopes asked, and the groups offered. If the app's
+`login_hint` names a switched-on group here, that group is offered;
+otherwise every switched-on group where the member holds a role. For
+each, the page shows the member's roles and which asked scopes they
+would grant or withhold.
 
-- `getAuthorization` names the app and offers the groups the member may
-  sign it in as: the one the app named in its `login_hint`, by handle or
-  DID, or every group here, switched on, where they hold a role. For each,
-  what the app would get and what it would not.
-- `approveAuthorization` signs the app in as the group the member picks.
-  They must hold a role there, and it must be the group the app named, if
-  it named one. The grant is theirs.
-- `declineAuthorization` sends the browser back with `access_denied`.
+`approveAuthorization` requires the member to hold a role in the chosen
+group, and that group to be the one the app named, if it named one. The
+host narrows the scope to the member's roles, issues a code good for 60
+seconds, and returns the redirect. `declineAuthorization` drops the
+request and sends back `access_denied`. Both take service auth or the
+cookie.
+
+The grant records the member who approved it, not one of their roles, so
+the host can ask their roles again later.
 
 ## What a token may do
 
-The scope an app asks for is narrowed to the member's roles
-(`oauth_scope.rs`), each scope kept only if:
+At approval, the asked scope is narrowed to what the roles grant then.
+At every write, both that scope and the roles as they are now are asked.
 
-- `atproto`: always;
-- `include:fyi.opensocial.configure`: the roles configure the group;
-- `repo:C`: the roles' grants in the permissions record hold `repo:C`,
-  or `repo:*`;
-- `rpc:M`, a method of another service: the roles hold `repo:*`, and it
-  is not one of this host's own methods, which a member calls as
-  themselves;
-- `space:T?…`: some space of type `T` of the group's lets the roles
-  write as the group each collection asked for, as asked (its access
-  record's `credentialScopes`), or read it, if reading is all it asks;
-- `space:*?…`: made into one scope for each of the group's spaces the
-  roles read, writing there what they may of what it asks;
-- `blob:`: beside any of the above that writes.
+### Narrowing at approval
 
-Everything else is withheld: other permission sets, and the old
-`transition:` scopes.
+- `atproto` is always kept.
+- `include:fyi.opensocial.configure` is kept if the roles hold
+  `group.configure`.
+- `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
+- `rpc:M` is kept only if the roles hold `repo:*`, and `M` is neither
+  `*` nor a `fyi.opensocial.*` method.
+- `space:T?…` is kept if some space of type `T` lets the roles write
+  what is asked there, or read it, for a scope that only reads.
+- `space:*?…` becomes one scope per space the roles may read, naming the
+  asked collections they may write.
+- `blob:…` is kept only if something kept writes.
 
-The scope is then made concrete, so a token never depends on how a scope
-is read later: the configure set becomes the space scopes its lexicon
-lists, `authority=self` becomes the group, and a space scope naming no
-collection names every one, which narrowing let through only for roles
-that may write every one.
+Everything else is withheld: other `include:` sets, `transition:*`,
+`identity:` and `account:` scopes, and space scopes for another
+authority. The kept scope is then made concrete. The configure set
+becomes the space scopes its lexicon lists, compiled into the host, and
+`authority=self` becomes the group's DID. A grant keeps this scope
+through every refresh; refreshing does not ask the roles again, because
+each write does.
 
-## Using a token
+### Checking each write
 
-An app calls the group's PDS methods with `Authorization: DPoP <token>`
-and a proof of the request that hashes the token (its `ath`), signed by
-the key the token is bound to (`oauth_resource.rs`). A token refused is
-401 with a `WWW-Authenticate: DPoP error=…` challenge and the nonce for
-the next proof, as RFC 9449 has a resource server answer; an app whose
-nonce is stale sends the request again with the one it was given.
+An app sends `Authorization: DPoP <token>` with a proof signed by the
+key the grant is bound to. A token writes only its own group's repo,
+with the `com.atproto.repo.*` writes, the same writes in a space
+(`com.atproto.space.*`), and `uploadBlob`.
 
-With it, an app writes as the group (`token_writes.rs`):
+Each record write is asked twice. The token's scope must allow it, or it
+fails `ScopeMissing`. The member's roles must allow it now, or it fails
+403 "may no longer write … as the group". For a repo write the roles
+need a repo grant for the collection, or the right to write it as the
+group in one of its open spaces. For a space write they need
+`group.configure` in the meta and members spaces, and otherwise what the
+space's access record grants. Both are asked under the lock the commit
+is made under, so no change of roles slips in between.
 
-- in its repo: `com.atproto.repo.createRecord`, `putRecord`,
-  `deleteRecord` and `applyWrites`, each write as its `repo:` scope
-  allows, and `uploadBlob`, a type its `blob:` scope takes;
-- in its spaces: `com.atproto.space.createRecord`, `putRecord`,
-  `deleteRecord` and `applyWrites`, each as its `space:` scope allows;
-- and `com.atproto.server.getSession` says which group it is for, and
-  whether it is switched on.
+A member whose roles shrink therefore gives every app they signed in
+less at once, and a member who leaves or is put out ends every grant
+they approved. A group switched off refuses every write, but its tokens
+still refresh and `getSession` answers `status: "deactivated"`, so its
+apps carry on when it is switched on again.
 
-Everything a write asks of the repo is asked as it is written, under the
-lock its commit is made under, so no other write comes between
-(`repo::resolve`): a repo write's `swapCommit` must be the repo's head,
-and a put's or delete's `swapRecord` the record there (null for none),
-or it is `InvalidSwap`; a put is a create or an update by what is there
-then, and is asked of the token's scope and the member's roles as that;
-and a put of what is there already, or a delete of what is not, is
-asked as any other, then changes nothing and makes no commit. The scope is read as atproto's permission spec reads one
-(`scopes.rs`): a space scope's authority is the group unless it names
-one, and one naming no action grants every one but `read_self`.
+Details:
 
-A grant keeps the scope it was approved with through its refreshes, so
-what each write may do is asked again of the member's roles as they are
-now, as narrowing asked them: one whose roles shrink gives the app less
-at once.
+- `applyWrites` takes at most 200 writes. Repo writes honour
+  `swapCommit` and `swapRecord`.
+- The meta space takes only a profile, rules and the labeler, and the
+  members space only roles. A role still named by a grant cannot be
+  deleted.
+- Each use marks the grant used, at most once a minute.
 
-In the group's own meta and members spaces, a token writes only what the
-configure set names, and only as the host's methods would: the profile
-(with a name, and a join policy it knows) and the labeler, kept at
-`self` and never deleted; rules; and roles, one taken away only once no
-grant names it. Memberships, permissions, and any space's access record
-change only through the host's methods, which check that nobody gives
-themselves more than they hold.
+## Lifetimes
 
-## Group tokens
+| What | Lasts | Then |
+| --- | --- | --- |
+| A pushed request | 5 minutes | swept on a later push |
+| A code | 60 seconds | deleted when exchanged |
+| An OAuth access token | 1 hour | refreshed |
+| A grant, public client | 14 days unrefreshed | each refresh extends it |
+| A grant, confidential client | 90 days unrefreshed | each refresh extends it |
+| A group token | 15 minutes | never refreshed |
+| An app password's access token | 2 hours | refreshed |
+| An app password's session | 90 days unrefreshed | each refresh extends it |
 
-The console acts as the group without OAuth's dance (`group_tokens.rs`):
-`getGroupAuth` takes the member's own service auth and a DPoP proof, and
-gives a token for the group, good for fifteen minutes and never
-refreshed, bound to that proof's key. Its scope is what the member's
-roles may write as the group in the one space asked for, by its access
-record's `credentialScopes`: those collections there, with those writes,
-the same kinds of record in the group's repo (a role may publish what it
-writes as the group, as the access lexicon has it), and image files, or
-any file for a role that writes any kind. A member whose roles write
-nothing there gets no token.
+A refresh replaces both tokens atomically: of two refreshes of one
+token, one fails, and the old pair stops working.
+
+## Why tokens are stored and nonces are not
+
+The host must end a grant the moment someone revokes it, which a
+self-contained token would not allow. So tokens are opaque, 32 random
+bytes, and the host keeps each grant with only the SHA-256 of its
+tokens. Revoking deletes the row, and the next call fails.
+
+DPoP nonces need no such power. A nonce is an HMAC of a three-minute
+time step under a key derived from the rotation secret. The host accepts
+the current step and those either side, so it checks a nonce without
+storing one.
+
+## Group tokens for the console
+
+The console acts as a group too. Rather than run OAuth against the host
+it is part of, it asks `fyi.opensocial.getGroupAuth` for a group and one
+of its spaces, as the member, with a DPoP proof. The token's scope is,
+for each collection the member's roles may write in that space, a space
+scope and a repo scope, plus blob uploads; if they write nothing there,
+the request fails 403. The token lasts 15 minutes and is an ordinary
+grant with source `getGroupAuth`, checked at each write as above.
+
+## Listing and revoking
+
+Every grant records its member, its client, its source (`oauth`,
+`getGroupAuth`, `appPassword` or `provisionGroup`), its scope, when it
+was made, and when it was last used. Members who hold `group.configure`
+list every grant in force with `fyi.opensocial.listGroupTokens` and end
+any one with `fyi.opensocial.revokeGroupToken`. An app ends its own at
+`/oauth/revoke`. Assistant grants are listed apart, with
+`listConnectedApps`.
+
+`listGroupTokens` also returns the group's latest 20 log entries, each
+naming the member, the action, the time and the client. The log records
+sign-ins, group tokens taken, each write made with a token, app
+passwords made and revoked, and grants revoked with `revokeGroupToken`.
+It does not record refreshes, or grants that end another way: at
+`/oauth/revoke`, by `deleteSession`, or when a member is put out.
 
 ## App passwords
 
-An app that signs in with a handle and a password, as the Bluesky app
-does, signs in to a group with an app password (`app_passwords.rs`). A
-group has no password, and one does not give it one: a member who may do
-anything as the group (every repo collection) makes it in the console
-(`createAppPassword`), named for where it is used, and it stays theirs.
-It is shown once; the host keeps its SHA-256 alone, as it is 80 random
-bits, which no slow hash would make harder to guess. A group holds 25 at
-most. `listAppPasswords` shows every one to the group's configurers, and
-each maker their own; `revokeAppPassword` takes one away, its maker's or
-any for a configurer, and signs out every app signed in with it.
+Some apps sign in with a handle and a password through
+`com.atproto.server.createSession`, as the Bluesky app does. App
+passwords let them sign in as a group.
 
-`com.atproto.server.createSession` signs in with one, by the group's
-handle or DID; `refreshSession` gives a new pair and ends the old; and
-`deleteSession` signs out. A session is a grant like any other, listed
-among the group's, its tokens bearer ones and JWTs, as a PDS's are, so an
-app may read when they lapse; the host still finds them by their hash. A
-lapsed access token is a 400 `ExpiredToken`, the sign to refresh. Its
-scope is `atproto transition:generic`, the group's repo and blobs and
-never a space, with `transition:chat.bsky` for a privileged one.
+A member whose roles hold `repo:*` makes one in the console with
+`fyi.opensocial.createAppPassword`, and it stays theirs. The password
+appears in that answer only; the host keeps its SHA-256. A group holds
+at most 25. Makers list their own with `listAppPasswords` and
+configurers list every one; `revokeAppPassword` deletes one with every
+session signed in with it.
 
-An app password works only while its maker could make it: at each use,
-sign-in and refresh, the host asks, and once they could not (they lost
-the role, or left), every app password of theirs is forgotten and every
-session from one signed out.
+A session is a grant with source `appPassword`. Its tokens are Bearer
+JWTs, not DPoP-bound, found by hash like any other. Its scope is
+`atproto transition:generic`: the group's repo and blobs, never a space.
+A privileged password adds `transition:chat.bsky`, though the host
+serves no chat.
+
+Its scope cannot be narrowed, so it follows its maker's roles more
+bluntly. A sign-in by a maker who no longer holds `repo:*` is refused.
+At each use and refresh the host asks whether the password still exists
+and its maker still holds `repo:*`; once they do not, every app password
+of theirs in the group is forgotten and every session from one ends.
 
 ## Provisioning
 
-An app makes a group for someone and leaves with its own session on it
-(`provision.rs`, `provisionGroup`). Two parties sign in: the person, with
-service auth from their own PDS, who becomes the founder; and the app, as
-at the token endpoint, its client id (and its assertion, if confidential)
-in the body and a DPoP proof in the header. It must be one the host makes
-groups for (`PROVISIONING_CLIENTS`), and its scope must hold `atproto`
-and nothing its metadata does not declare. All of that is checked before
-the group is made. The session is issued as a code exchange issues one,
-narrowed to the founder's roles as an approval is, and recorded as the
-founder's: from then on an ordinary grant, refreshed at `/oauth/token`,
-listed among the group's, revoked there.
+An app that starts groups wants to sign in to the new group in the same
+step. `fyi.opensocial.provisionGroup` does both. The person calls it as
+themselves and becomes the founder. The app proves itself in the same
+call with its `clientId`, a client assertion if confidential, a DPoP
+proof, and the scope it wants, which must hold `atproto` and only scopes
+its metadata declares. Only an app listed in `PROVISIONING_CLIENTS`
+([configuration](../reference/config.md)) may do this.
 
-## Who acts as the group
-
-Every grant names the member who gave it, its app, how it was given
-(`oauth`, `getGroupAuth`, `appPassword` or `provisionGroup`), its scope, and when it was last used, to the
-minute. `listGroupTokens` shows a group's configurers every grant that
-still lasts, and its log: each sign-in, each token taken, each record a
-grant wrote, and each grant ended, the latest twenty. `revokeGroupToken`
-ends one.
-
-## From the prototype
-
-- Tokens are opaque and kept as hashes; the prototype signed access JWTs
-  and kept refresh tokens as they were.
-- No lexicon is resolved at sign-in. The prototype resolved permission
-  sets and space types; here every permission set but the host's own is
-  withheld, as the prototype withheld them too, and the host's own is
-  read from its lexicon.
-- DPoP proofs and client assertions are ES256 or ES256K, the algorithms
-  atproto names, not every algorithm jose knows.
-- A grant records the member who approved it, not one of their roles.
-- The token and revoke endpoints take a form, as OAuth has them, not
-  JSON.
-- What a token may write is asked of the member's roles at each use; the
-  prototype asked only at approval.
-- Records are checked against the data model and their collection's
-  `$type`, not against their lexicons, so `validationStatus` is
-  `unknown`, as a PDS answers for a lexicon it does not know.
+The host checks all of that before it makes the group, with
+`createGroup`'s fields ([groups](groups.md)). It then narrows the scope
+to the founder's roles, as approval would, and answers with the group
+and a token response. The session is an ordinary grant with source
+`provisionGroup`: it lasts as one from a code, refreshes at
+`/oauth/token`, is listed, and can be revoked.

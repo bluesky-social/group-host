@@ -23,13 +23,11 @@
 
 ## How it was checked
 
-<!-- Tests added or run, and which of the TypeScript host's tests they
-     port. What is left to CI. -->
+<!-- Tests added or run, and what they cover. What is left to CI. -->
 
 ## Shortcomings
 
-<!-- What it does not do yet that the TypeScript host does, what was not
-     run, what could go wrong. -->
+<!-- What it does not do yet, what was not run, what could go wrong. -->
 
 ## Review
 

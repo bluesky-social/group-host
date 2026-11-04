@@ -13,8 +13,6 @@
 //!
 //! The keys are the directory's to say; the host remembers only who added
 //! which, to show.
-//!
-//! As the prototype's `methods/recovery.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

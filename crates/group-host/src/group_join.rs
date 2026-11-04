@@ -7,8 +7,6 @@
 //! no member, and the members space is for members. Decided, it goes: a
 //! request turned down looks the same as one never made, so its asker may
 //! ask again and the group need not say.
-//!
-//! As the prototype's `requestJoin` and `methods/join.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};

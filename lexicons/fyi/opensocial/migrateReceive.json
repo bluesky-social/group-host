@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "On the destination host: take the group in. Pulls it from the host it's leaving with migratePrepare's token (its public repo, each space's meta archive and the group's repo there, its files), checked against the group's current key, and keeps it switched off. The caller must be an admin by the group's own permissions. Answers with what the PLC operation should name.",
+      "description": "On the destination host: take the group in. Pulls it from the host it's leaving with migratePrepare's token (its public repo, what the host it leaves keeps of each space as its authority and the group's repo there, its files), checked against the group's current key, and keeps it switched off. The caller must hold group.configure by the group's own records as they arrive. Answers with what the PLC operation should name.",
       "input": {
         "encoding": "application/json",
         "schema": {

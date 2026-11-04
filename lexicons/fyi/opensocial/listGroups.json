@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Host-level: the groups hosted here, with their profiles. v1 discovery; a real index would come from declarations on the public network.",
+      "description": "Host-level: the groups hosted here, with their profiles.",
       "parameters": {
         "type": "params",
         "properties": {}

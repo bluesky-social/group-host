@@ -9,8 +9,8 @@
 //! `SERVICE_DID`). Run again, it finds nothing left to repoint, and tells
 //! the relays again of each account at the new address.
 //!
-//! As the prototype's `scripts/move-host.ts`. This host keeps no managing
-//! app on its spaces and no PDS per group, so only the documents change.
+//! The host keeps no app managing its spaces and no PDS per group, so
+//! only the documents change.
 
 use crate::Host;
 use crate::repo::identity;

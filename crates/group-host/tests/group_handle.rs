@@ -173,7 +173,7 @@ async fn takes_a_domain_that_names_it_and_its_address_back() {
         (events.last().unwrap().kind.as_str(), last["handle"].clone()),
         ("#identity", json!("riders.test"))
     );
-    // Its site stays at its address.
+    // Its address stays.
     let (_, shown) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
     assert_eq!(
         (

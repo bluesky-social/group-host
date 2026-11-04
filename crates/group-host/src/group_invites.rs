@@ -8,8 +8,6 @@
 //!
 //! An invite is redeemed by asking to join: admitted at once, whatever
 //! the group's join policy, with its default roles.
-//!
-//! As the prototype's `methods/invites.ts` and `checkUserAccess.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};

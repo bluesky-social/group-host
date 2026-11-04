@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "The caller's own invites still waiting, from the groups on this host, newest first: for a group's site, which can't read the caller's inbox. With group, that group's only.",
+      "description": "The caller's own invites still waiting, from the groups on this host, newest first: for an app, which can't read the caller's inbox. With group, that group's only.",
       "parameters": {
         "type": "params",
         "properties": {

@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Give the group a handle on a domain it owns, once that domain names the group by its _atproto DNS record or its /.well-known/atproto-did; or give it back its own address as its handle. Updates the group's did:plc and tells the network. The group's site stays at its address. Requires group.configure.",
+      "description": "Give the group a handle on a domain it owns, once that domain names the group by its _atproto DNS record or its /.well-known/atproto-did; or give it back its own address as its handle. Updates the group's did:plc and tells the network. Its address stays reserved for it. Requires group.configure.",
       "input": {
         "encoding": "application/json",
         "schema": {

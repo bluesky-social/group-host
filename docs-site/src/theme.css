@@ -1,0 +1,205 @@
+/* Starlight in the console's own look: its palette, type and links taken
+   from web/src/tokens.css, which change with the colour scheme as the
+   console's do. Starlight's light palette names its colours as its dark one
+   does, the strongest text `white` and the page `black`, so one mapping
+   holds in both. */
+
+@import '../../web/src/tokens.css';
+
+:root,
+:root[data-theme='light'] {
+	--sl-color-white: var(--fg);
+	--sl-color-gray-1: var(--fg);
+	--sl-color-gray-2: var(--fg);
+	--sl-color-gray-3: var(--mute);
+	--sl-color-gray-4: var(--faint);
+	--sl-color-gray-5: var(--line);
+	--sl-color-gray-6: var(--soft);
+	--sl-color-gray-7: var(--panel);
+	--sl-color-black: var(--bg);
+	--sl-color-accent-low: var(--primary-soft);
+	--sl-color-accent: var(--primary);
+	--sl-color-accent-high: var(--primary-hover);
+	--sl-color-bg-nav: var(--bg);
+	--sl-color-bg-sidebar: var(--bg);
+	--sl-color-hairline: var(--line);
+	--sl-color-hairline-light: var(--line);
+	--sl-color-hairline-shade: var(--line);
+	--sl-font: var(--font-sans);
+	--sl-font-mono: var(--font-mono);
+	--sl-line-height: var(--leading);
+	/* Type on the console's scale, not Starlight's larger one. */
+	--sl-text-body: var(--text-base);
+	--sl-text-h1: var(--text-2xl);
+	--sl-text-h2: var(--text-xl);
+	--sl-text-h3: var(--text-lg);
+	--sl-text-h4: var(--text-base);
+	--sl-text-h5: var(--text-base);
+	--sl-text-h6: var(--text-base);
+}
+
+/* Headings rounded and bold, as the console's are. */
+h1, h2, h3, h4, h5, h6 {
+	font-family: var(--font-round);
+	font-weight: var(--weight-bold);
+	letter-spacing: var(--tracking-tight);
+	line-height: var(--leading-tight);
+}
+
+/* A section's heading is ruled off, as in the console. */
+.sl-markdown-content .level-h2 {
+	padding-bottom: var(--space-2);
+	border-bottom: var(--border);
+}
+
+/* The header: the brand, in mono. */
+.brand {
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-2);
+	font: var(--weight-semibold) var(--text-base) var(--font-mono);
+	color: var(--fg);
+	text-decoration: none;
+	white-space: nowrap;
+}
+.brand.section {
+	font-weight: var(--weight-normal);
+	color: var(--mute);
+}
+
+/* Links underlined quietly, as the console has them. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+	color: var(--primary);
+	text-decoration-color: var(--link-line);
+	text-underline-offset: var(--space-1);
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+	color: var(--primary-hover);
+	text-decoration-color: currentColor;
+}
+
+/* Sidebar: the page one is on marked as the console marks the tab one is on. */
+.sidebar-content a[aria-current='page'] {
+	background: var(--primary-soft);
+	color: var(--fg);
+	font-weight: var(--weight-semibold);
+}
+
+/* Reference: a table of names and what each does, drawn as a list of
+   them (reference.mjs), each name on a line of its own. */
+.sl-markdown-content .ref-list {
+	margin-top: var(--space-4);
+	border-top: var(--border);
+}
+.sl-markdown-content .ref-list dt {
+	margin-top: 0;
+	padding-top: var(--space-4);
+	font-weight: var(--weight-normal);
+}
+.sl-markdown-content .ref-list dt code {
+	background: none;
+	padding: 0;
+	font-size: var(--text-base);
+	font-weight: var(--weight-semibold);
+	/* A signature breaks between its words, never inside a flag. */
+	overflow-wrap: normal;
+	word-break: normal;
+}
+.sl-markdown-content .ref-list dd {
+	margin: var(--space-1) 0 0;
+	padding-bottom: var(--space-4);
+	border-bottom: var(--border);
+}
+.sl-markdown-content .ref-list dd > * + * {
+	margin-top: var(--space-2);
+}
+.sl-markdown-content .ref-meta {
+	font-size: var(--text-sm);
+	color: var(--mute);
+}
+.ref-label {
+	font-size: var(--text-sm);
+	font-weight: var(--weight-medium);
+	color: var(--faint);
+	margin-right: var(--space-1);
+}
+
+/* An HTTP method, as a badge before its route. */
+.method {
+	display: inline-block;
+	padding: 0 var(--space-2);
+	border-radius: var(--radius-sm);
+	font: var(--weight-semibold) var(--text-xs) / var(--leading) var(--font-mono);
+	letter-spacing: 0.02em;
+	vertical-align: 0.15em;
+	background: var(--primary-soft);
+	color: var(--primary);
+}
+.method-post {
+	background: var(--soft);
+	color: var(--success);
+}
+.method-ws {
+	color: var(--done);
+}
+
+/* A method's lexicon, folded away under it. */
+.sl-markdown-content .lexicon {
+	margin-top: var(--space-2);
+	border: var(--border);
+	border-radius: var(--radius-md);
+	font-size: var(--text-sm);
+}
+.sl-markdown-content .lexicon summary {
+	padding: var(--space-2) var(--space-3);
+	color: var(--mute);
+	cursor: pointer;
+}
+.sl-markdown-content .lexicon[open] summary {
+	border-bottom: var(--border);
+}
+.sl-markdown-content .lexicon > :not(summary) {
+	margin: var(--space-3);
+}
+.sl-markdown-content .lex-title {
+	font-weight: var(--weight-semibold);
+	color: var(--fg);
+	margin-bottom: var(--space-1) !important;
+}
+.sl-markdown-content .lex-fields {
+	display: table;
+	table-layout: fixed;
+	width: calc(100% - 2 * var(--space-3));
+	font-size: var(--text-sm);
+}
+.sl-markdown-content .lex-fields td {
+	vertical-align: top;
+}
+.lex-type {
+	display: block;
+	margin-top: var(--space-1);
+	color: var(--mute);
+	font-size: var(--text-xs);
+}
+.sl-markdown-content .lex-fields td:first-child {
+	width: 40%;
+}
+.sl-markdown-content .ref-list dt .word {
+	white-space: nowrap;
+}
+.sl-markdown-content .lex-source {
+	color: var(--mute);
+}
+
+/* The header's link to the repository, quiet as the console's header links
+   are, and no divider after it: Starlight's sits before the theme
+   picker, which the docs leave out. */
+.social-icons::after {
+	display: none;
+}
+.social-icons a {
+	color: var(--mute);
+}
+.social-icons a:hover {
+	color: var(--fg);
+}

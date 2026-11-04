@@ -10,9 +10,6 @@
 //! nothing grants it. Who holds which role, what each may do, and who may
 //! read a space change only through the host's methods, which check that
 //! nobody gives themselves more than they hold.
-//!
-//! As the prototype's `pds/api/repo.ts`, `pds/api/space.ts` and
-//! `groupWrites.ts`.
 
 use crate::Host;
 use crate::api::invalid;

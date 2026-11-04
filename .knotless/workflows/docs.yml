@@ -1,0 +1,24 @@
+# The docs, as `just docs` checks them: every relative link and anchor
+# lands (harness/docs.mjs); and the site docs-site/ makes of them builds.
+# `just docs-deploy` deploys it, from the owner's machine: the site of a
+# private repository is kept in its space, which an app password, all a
+# run could sign in with, cannot write. The site's packages are kept
+# between runs and installed again only when its lockfile changes.
+image: node:24.22.1
+# Pushes to main, and pulls that change the docs, their check, the site,
+# the lexicons and tokens it takes, or this file. A pull changing none
+# passes at once, noted as skipped.
+on:
+  push: {refs: [refs/heads/main]}
+  pull:
+    base: [refs/heads/main, refs/heads/feature/*]
+    paths: [docs/**, README.md, AGENTS.md, harness/docs.mjs, docs-site/**, lexicons/**, web/src/tokens.css, .knotless/workflows/docs.yml, .knotless/uses.lock]
+cache: [docs-site/node_modules]
+steps:
+  - uses: chadtmiller.com/steps/npm-ci@1
+    name: packages
+    with: {dir: docs-site}
+  - name: links
+    run: node harness/docs.mjs
+  - name: site
+    run: cd docs-site && npm run build

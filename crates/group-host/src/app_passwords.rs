@@ -12,8 +12,6 @@
 //! A session from one is a grant like any other, its tokens bearer ones.
 //! Its scope is `atproto transition:generic` (and `transition:chat.bsky`
 //! for a privileged one): the group's repo and blobs, never a space.
-//!
-//! As the prototype's `methods/appPasswords.ts` and `pds/appPasswords.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

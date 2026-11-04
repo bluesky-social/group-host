@@ -2,12 +2,10 @@
 
 For every agent working here: CLAUDE.md is this file, imported.
 
-This is a group host for atproto, built in Rust and Svelte as knotless is.
-Its first take is the prototype at `~/code/opensocial`: the core of its host
-(`packages/group-host`) and the console's pages (`apps/web`). That prototype
-is what we learned from, not a spec: this host does what its core does, in
-the shape that is right here. `docs/design/README.md` says what is here,
-what is still to come, and in what order.
+This is a group host for atproto, built in Rust and Svelte as knotless is,
+implementing the opensocial proposal
+(https://tangled.org/opensocial.group/proposal). `docs/design/README.md`
+says what is here, what is still to come, and in what order.
 
 Use `rustup run stable cargo` (the Justfile's `cargo`), not a system cargo.
 Node is the version `.node-version` names, CI's.
@@ -34,27 +32,19 @@ fixed, with `CARGO_BUILD_JOBS=2`: other agents build on this machine too.
   it, as it counts each function at the build of it with the most lines;
   `--show-missing-lines` and the HTML then show nothing missed.
 
-## Building from the prototype
+## Building a part
 
 Each pull brings one part of the host, whole: its methods, its records,
-its tests, and its page in `docs/`. Read how the prototype does that part,
-and its tests, for what it has to handle; then write it as it should be.
+its tests, and its page in `docs/`. The tests say what the part must get
+right, and come before the code they test.
 
-- Not one to one. A method, record or field the prototype has can be
-  renamed, merged, reshaped or left out when that makes the host simpler
-  or clearer; the pull says what changed from the prototype and why. Only
-  the prototype's core comes over, never its sites module (sites,
-  templates, drafts, the network index, notifications).
-- Its tests say what a part must get right; the cases they hold become
-  tests here, in this host's terms, before the code they test.
 - The atproto primitives (DRISL, CIDs, keys, the MST, CAR, PLC, service
   auth) are this repo's own, in `crates/atproto`, as knotless writes its
   own: few dependencies, every line under the gate. Check each against
   atproto's interop test vectors (github.com/bluesky-social/atproto-interop-tests)
   and the reference implementation, not only against itself.
-- What the prototype gets from `@atproto/*` packages (a PDS's repo
-  handling, the OAuth provider, the space alpha) is written here as far as
-  the host uses it, and no further.
+- What a PDS, the OAuth provider and the space alpha do is written here
+  as far as the host uses it, and no further.
 
 ## Layout
 
@@ -73,6 +63,8 @@ and its tests, for what it has to handle; then write it as it should be.
 - `web/`: the console, a SvelteKit app. Its TypeScript types are made from
   the lexicons by @atproto/lex (`npm run lex`, which `dev`, `build` and
   `check` run first) into `web/src/lib/lexicons`, not kept in git.
+- `docs-site/`: the docs as a site, made from `docs/` as it is, and
+  deployed with `just docs-deploy` (`docs/development.md`).
 - `harness/`: the checks beside the tests, and the console's flows end to
   end (`harness/e2e`).
 
@@ -102,8 +94,8 @@ and its tests, for what it has to handle; then write it as it should be.
 
 ## Lexicons
 
-The schemas under `lexicons/` are the prototype's core, as a starting
-point: they are this host's to change until they are published from here.
+The schemas under `lexicons/` are this host's to change until they are
+published from here.
 Once one is published, it is evolved, never changed, with new fields
 optional and nothing removed, renamed, retyped, made required or narrowed.
 Every schema of ours (`fyi.opensocial.*`) follows the Lexicon Style Guide
@@ -126,12 +118,16 @@ that page in the same pull:
 
 - what is built and what is next: `docs/design/README.md`
 - an environment variable: `docs/reference/config.md`
+- an XRPC method or route: `docs/reference/api.md`; an MCP tool:
+  `docs/reference/mcp.md`
+- a new page: the sidebar in `docs-site/astro.config.mjs`
 - a command of `opensocial`, or a `just` recipe: `docs/reference/cli.md`
 - building, testing, the checks: `docs/development.md`
 
-Design pages for each part (groups, membership, signing in, moderation)
-arrive with the part, written from the code here; the prototype's
-`docs/design/` is background, not a source to copy.
+A design page arrives with its part, written from the code here, and
+says what this host does, never what another does or where an idea came
+from. The `docs` skill (`.claude/skills/docs`) is how a page is written
+or checked: facts from the code first, then the page fresh.
 
 ## What CI checks
 
@@ -144,9 +140,11 @@ pulls into it or into a `feature/` branch:
   the build.
 - `lexicons`: `just lex`.
 - `e2e`: `just e2e`, the console in Chromium over the reference PDS.
+- `docs`: `just docs`, every link and anchor landing, and the docs site's
+  build.
 
-On a pull, `web`, `lexicons` and `e2e` run only when it changes what they
-read; otherwise each passes at once, noted as skipped.
+On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
+what they read; otherwise each passes at once, noted as skipped.
 
 ## Landing a change
 

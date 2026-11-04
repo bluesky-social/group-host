@@ -3,8 +3,7 @@
 //! `http://localhost`; and how they authenticate. A public client names
 //! itself; a confidential one signs a JWT with a key its metadata lists.
 //!
-//! As the prototype's `pds/oauth/clients.ts`, whose checks follow
-//! @atproto/oauth-provider's.
+//! Its checks follow @atproto/oauth-provider's.
 
 use crate::Host;
 use crate::index_api::capped;

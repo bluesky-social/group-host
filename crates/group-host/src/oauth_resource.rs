@@ -4,8 +4,6 @@
 //! hashes it, signed by the key the token is bound to. A refusal is 401
 //! with a `WWW-Authenticate` challenge and the nonce for the next proof,
 //! as RFC 9449 has a resource server answer.
-//!
-//! As the prototype's `pds/oauth/resource.ts`.
 
 use crate::Host;
 use crate::oauth::OAuthError;

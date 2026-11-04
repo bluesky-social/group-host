@@ -10,9 +10,6 @@
 //! - **Reports** come from anyone, members or not
 //!   (`com.atproto.moderation.createReport`), on a record in one of a
 //!   group's spaces here.
-//!
-//! As the prototype's `methods/moderation.ts`, less the host's own queue,
-//! which moderated what its sites module shared.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};

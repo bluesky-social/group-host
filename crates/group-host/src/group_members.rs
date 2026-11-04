@@ -9,9 +9,6 @@
 //! Someone who stops being a member reads its spaces no more: the
 //! credentials they hold are revoked, and the index forgets what they
 //! wrote there.
-//!
-//! As the prototype's `methods/roles.ts`, `methods/membership.ts` and
-//! `leaveGroup` in `methods/join.ts`.
 
 use crate::Host;
 use crate::api::invalid;

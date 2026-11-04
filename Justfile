@@ -32,6 +32,21 @@ cov-html:
 lex:
     node harness/lexicons.mjs
 
+# The docs' links and anchors, as the docs check runs it.
+docs:
+    node harness/docs.mjs
+
+# The docs as their site, at http://localhost:4321/, redrawn as they change.
+docs-site:
+    cd docs-site && npm ci --no-audit --no-fund && npm run dev
+
+# An app password cannot write the space a private repository's site is
+# kept in, so this runs as its owner, signed in with `knotless login`.
+# The docs site, built and deployed as the repository's, for its members.
+docs-deploy:
+    cd docs-site && npm ci --no-audit --no-fund && npm run build
+    knotless site knotless://chadtmiller.com/group-host docs-site/dist --not-found 404.html
+
 lint:
     {{cargo}} fmt --all --check
     {{cargo}} clippy --workspace --all-targets -- -D warnings

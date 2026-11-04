@@ -1,16 +1,20 @@
 # Docs
 
-A small wiki of the host as built here. Design pages explain why, the
-guides show how, the reference lists what.
+The group host: the PDS, space authority and OAuth server for groups on
+atproto. It implements the opensocial proposal
+(https://tangled.org/opensocial.group/proposal).
 
-- [Design](design/README.md): what the host is, how it is put together,
-  and what is still to come; [spaces](design/spaces.md), a group's repos
-  in them; [groups](design/groups.md);
-  [membership](design/membership.md).
-- [Development](development.md): building, testing, and the checks a pull
-  runs.
-- Reference: [configuration](reference/config.md), [the command and the
-  recipes](reference/cli.md).
+- [Design](design/README.md): what the host is to a group, and why each
+  part works as it does: [spaces](design/spaces.md),
+  [groups](design/groups.md), [membership](design/membership.md),
+  [signing in](design/signing-in.md), [moderation](design/moderation.md),
+  [assistants](design/assistants.md), [recovery](design/recovery.md) and
+  [moving](design/moving.md).
+- Reference: [the HTTP and XRPC API](reference/api.md), [the MCP
+  tools](reference/mcp.md), [the commands and recipes](reference/cli.md)
+  and [configuration](reference/config.md).
+- [Development](development.md): building, testing, the checks a pull
+  runs, and the docs site.
 
-The standard a host implements is opensocial's proposal, at
-https://docs.opensocial.fyi.
+These pages are also a site (`docs-site/`), for the repository's members:
+[development](development.md#the-docs-site) says how it is made.

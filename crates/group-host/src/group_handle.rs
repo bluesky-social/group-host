@@ -1,14 +1,12 @@
 //! A group's handle on a domain of its own.
 //!
 //! A group starts with a handle under `HANDLE_DOMAIN`, which is also its
-//! address, where its site is served. It may take a handle on a domain of
+//! address, kept for it whatever handle it takes. It may take a handle on a domain of
 //! its own instead, once the domain names it (by its `_atproto` DNS record
 //! or its `/.well-known/atproto-did`, as any handle is resolved): the
 //! handle is then its name everywhere, and goes with it to another host.
 //! The address stays. Under the host's domain a group may take only its
 //! own address back, so no group takes another's.
-//!
-//! As the prototype's `methods/handle.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

@@ -1,191 +1,213 @@
 # Groups
 
-A group is an account on this host: its own `did:plc`, its own public
-repo, and two spaces of its own, of which it is the authority.
+A group is an atproto account that no one person owns. It has no password
+and no one to sign in as it, yet someone has to start it, change its
+profile and rules, give it a name, and one day end it. On this host each
+of those is decided by the roles its members hold. What a group shows
+also depends on who asks: a stranger, a member and an admin each see a
+different amount. The inputs and errors of every method named here are in
+[the API reference](../reference/api.md).
 
-- **meta** (`at://<group>/space/fyi.opensocial.meta/self`): its profile,
-  rules and labeler, for whoever it lets read them (anyone signed in,
-  unless it says otherwise).
-- **members** (`at://<group>/space/fyi.opensocial.members/self`): its
-  roles, what each may do, its memberships and the index of its spaces,
-  for its members.
+## A group is an account with two spaces
 
-Everything a group is lives in records the group writes in its own
-repos there. The host reads them to answer for it; it keeps nothing of
-a group beside them but the account and the spaces.
+A group needs a place for what it is and a place for who belongs to it,
+and some of that only members should read. So each group is an account of
+its own, with its own `did:plc` and public repo, and this host as its PDS.
+It also gets two spaces. A space is a private record store: each member
+writes in their own repo in it, on their own PDS, and the space's
+authority decides who may read and write. The group is the authority of
+both of its spaces; [spaces](spaces.md) explains them.
 
-## Starting one
+- `meta` (`at://<group>/space/fyi.opensocial.meta/self`) holds the
+  profile, the rules and the labeler.
+- `members` (`at://<group>/space/fyi.opensocial.members/self`) holds
+  roles, permissions, memberships, and the index of the group's spaces.
 
-`fyi.opensocial.createGroup`, signed in as the founder with service auth
-from their own PDS (for this host's `SERVICE_DID`), makes:
+Everything a group is lives in records the group writes in its own repos
+in those spaces, and the host reads them to answer for it. Something is a
+group here only if it is an account on this host and its `members` space
+exists here. Outside its records the host keeps the account and its keys,
+its address, the stewards kept while it is switched off, join requests,
+invites and tokens.
 
-- the account, at a handle one label under `HANDLE_DOMAIN`;
-- in meta, its profile (name, words, how people join: `open`,
-  `approval` or `invite`), its labeler, and an access record: who reads
-  meta, and that admins write the profile and rules as the group;
-- in members, an access record (members read it), the `admin` and
-  `member` roles (`member` given to all who join), the permissions record
-  (`admin` may do every action, write any public-repo collection as the
-  group, and give out `member`; `member` holds nothing more), an index
-  entry for each space, and the founder's and stewards' memberships as
-  admins and members;
-- if anyone may read meta, a declaration in the group's public repo,
-  pointing at it, so it can be found.
+`createGroup` starts a group, and its caller becomes the founder and first
+admin. A caller signs in with service auth from their own PDS (a
+short-lived token for calling this host as them) or, from the console, by
+its session cookie; every signed-in method here takes either.
+`GROUP_FOUNDERS` names the people the host starts groups for, or anyone
+when empty ([configuration](../reference/config.md)).
 
-`GROUP_FOUNDERS` names who the host starts groups for; anyone, unless it
-names someone.
+Starting a group writes its profile (display name, description, join
+policy), labeler and access record in `meta`. In `members` it writes an
+access record readable by `member`, the roles `admin` and `member`, the
+permissions record, index entries for `meta` and `members`, and a
+membership with both roles for the founder and each steward, the people
+named at the start to run the group beside the founder. If anyone may
+read `meta`, it writes a declaration in the public repo. If setup fails
+partway, the host deletes the account and ends its DID, so the handle is
+free again. Joining and roles are in [membership](membership.md).
 
-`com.atproto.server.describeServer` says, as any PDS does, the domain the
-host names its groups under (`availableUserDomains`), its DID, and that
-nobody signs up here (`inviteCodeRequired`): a group is made for someone.
-The console's form for starting one reads the domain from it, and makes
-the label under it from the group's name as it is typed, until the label
-is changed by hand; once typing stops it asks whether the address is
-free, and offers the next free one if not. `fyi.opensocial.checkAddress`
-answers that, for anyone: whether the name is an account's handle here,
-or kept as a group's address after it took a handle of its own. A group
-is never started at either; resolving the name as a handle would miss
-the second.
+Details:
 
-## Who may do what
+- The join policy is `open`, `approval` or `invite`; `approval` when not
+  given.
+- A membership's record key is the member's DID.
 
-A space's access record says who reads it (`readableBy`: roles, or
-`public` for anyone signed in) and who writes in it in their own name
-(`writableBy`; any member, when it says no one), or names the chosen
-people it is for. A member's roles are their membership record in the
-members space. The permissions record grants each role OAuth scopes;
-each action the host's methods ask about (`invite`, `admit`,
-`role.assign`, `group.configure`, …) is answered by one scope. Roles
-compose by union.
+## Its address
 
-The host, as each space's authority, issues credentials and admits
-writes by those records (`rbac.rs`): the same answer whether it reads a
-group for someone or lets them read it themselves.
+A group needs a name before it has a domain of its own. The host gives it
+a handle of one label under `HANDLE_DOMAIN`, the domain of this host's
+handles, and keeps that handle as the group's address. The address never
+changes. When the group takes a handle on its own domain, the address
+stays reserved for it, until the group is deleted.
 
-## Reading one
+`checkAddress` says, without signing in, whether an address is free: not
+an account's handle here and not kept as a group's address.
+`describeServer` names the domain that follows the label. The console's
+new-group form builds the label from the name as typed, asks
+`checkAddress` once typing stops, and when the address is taken offers the
+first free one of `<label>-2` to `<label>-19`.
 
-- `fyi.opensocial.getGroup` is a group as its caller may see it: its
-  profile and rules for whoever may read meta, their own standing (are
-  they a member, their roles, the actions they have, have they written
-  their acceptance), and for a member, its members, roles, what each
-  role may do, and its spaces, each with its access record for whoever
-  that lets read the space.
-- `fyi.opensocial.listGroups` is every group here, unauthenticated: by
-  handle, and for one whose meta anyone may read, its profile and rules.
-- `fyi.opensocial.getActor` names a person, by their DID, as their DID
-  document does, for someone signed in: themselves (with whether the host
-  starts groups for them), or anyone the host shows, a member of one of
-  its groups or someone asking to join one, switched on; no one else.
+## Roles decide what each person may do
 
-## Changing its face
+With no owner to ask, "may this person do that?" is answered from the
+group's records.
 
-Its profile, images and rules are records in meta written by the group,
-so the host writes them for a caller holding `group.configure`:
+A member's roles are the `roles` list of their membership in `members`. A
+space's access record says who reads it (`readableBy`) and who writes in
+it in their own name (`writableBy`, any member when absent), as lists of
+roles; `public` among them means anyone signed in. An access record can
+instead name `people`, the chosen people a space is for, with `reviewers`,
+the roles that may also read it.
 
-- `updateProfile` replaces the profile. Where it meets, whether online,
-  its topics and languages are as given, none when left out (topics
-  trimmed, each once, ten at most, 64 characters each; languages BCP 47
-  tags, five at most). Its site and images are kept when left out, and
-  `null` clears an image. Its first `createdAt` is kept.
-- `uploadImage` keeps an image (1 MB at most) as the group's blob, for
-  the profile to reference: a blob in anyone else's repo would not
-  resolve for it.
+The permissions record in `members` grants each role OAuth scopes and the
+roles it may assign. Each of the host's twelve actions, such as `invite`,
+`eject`, `space.create` or `group.configure`, is answered by one scope.
+Roles compose by union: a person may do whatever any of their roles
+grants, with no deny, precedence or hierarchy. The same scopes bound an
+app or assistant a member signs in ([signing in](signing-in.md)).
 
-Any image of a group's is served for a page to draw at
-`/img/{did}/{cid}` (`blobs.rs`), to whoever may see a record that holds
-it: anyone, for a record in its public repo, or in its profile while it is
-declared (as `listGroups` shows that profile to anyone); for a record in a
-space, whoever that space lets read, as the console's session cookie says.
-Only a PNG, JPEG, WebP, GIF or AVIF is served, as an image and nothing
-more (`nosniff`, and a sandbox for any document), and kept in the browser
-for good, as a CID names its bytes. A group switched off shows none.
+As made, `admin` holds every action, may write any public-repo collection
+as the group, and may assign `member` but not `admin`. `member` holds
+nothing. A group changes this by changing its permissions record.
 
-The console's settings set its pictures, and who sees its profile:
-anyone, when it is declared too, or its members alone. The host still
-lists every group of its own (`listGroups`), a hidden one by its handle
-alone.
-- `putRule` makes or changes a rule. A rule keeps its key when changed,
-  so a label citing it still does; a new one goes last unless it says
-  where. `deleteRule` takes one away; a label citing it keeps the URI.
+The host, as authority, decides every read and write in a group's spaces.
+The group itself always may. Anyone else may if their roles fit the
+space's access record, or if they hold an explicit grant. Nobody reads or
+writes in the spaces of a group that is switched off.
 
-## Its other spaces
+Details:
 
-Beside meta and members, a group's members make spaces for what they do
-together: a calendar, a forum, a channel. Each is the group's, its
-authority the group, with an access record and an entry in the members
-space's index, which apps read to find it.
+- An access record's `credentialScopes` say which collections each role
+  writes in that space as the group; in `meta`, `admin` writes the profile
+  and rules.
+- A missing action is refused with `403 Forbidden`, "missing <action>".
 
-- `createSpace` (for `space.create`) makes one, of a type and key, with
-  who reads it, who writes in it in their own name (any member, unless
-  it says), and which roles write in it as the group.
-- `updateSpace` (for `space.configure`) changes its name, readers,
-  writers or roles. The members space stays readable by members, and who
-  writes in it in their own name, which is joining, stays as it is.
-  Meta's readers are the group's visibility: its declaration is made
-  when anyone may read meta, and taken away when not.
-- `deleteSpace` (for `space.delete`) ends one: its syncers are told,
-  its state as the authority and the group's own repo in it go, and it
-  leaves the index. What members wrote there is theirs, at their own
-  PDSes. Meta and members stay. The prototype only took a space out of
-  the index, leaving it issuing credentials to any it had let read.
+## What each person sees, and finding a group
 
-A space kept for chosen people is theirs: nobody who runs the group
-changes or ends it.
+`getGroup` answers anyone and gives more to those allowed more. Everyone
+gets the group's DID, handle, address, and the URIs of its two spaces.
+Whoever may read `meta` also gets the profile and the rules, in order. A
+signed-in caller gets `viewer`: whether they are a member, their roles and
+actions, and for a member whether their own repo in `members` holds
+anything yet. Whoever may read `members` gets the members, the roles and
+what each may do, and the spaces, with a space's access shown only to
+those who may read it. A holder of `admit` also gets the join requests. A
+switched-off group shows only the first part and `deactivated: true`.
 
-## Its handle
+A group that wants to be found says so with its declaration, a
+`fyi.opensocial.declaration` record in its public repo pointing at
+`meta`. The host writes it when `public` is among `meta`'s readers and
+removes it when not. `listGroups` lists every group on the host, adding
+the profile and rules of those whose `meta` is readable by `public`. A
+hidden group still appears with its DID, handle, address and space URIs.
 
-A group starts with a handle one label under `HANDLE_DOMAIN`, which is
-also its address, kept apart from its handle: where its site is served,
-which never changes here. It may take a handle on a domain of its own
-instead, once the domain names it, as any handle is resolved
-(`HANDLE_RESOLVERS`: the domain's `/.well-known/atproto-did`, then a
-service answering `resolveHandle`, which reads its `_atproto` DNS
-record). Under `HANDLE_DOMAIN` it may take only its own address back, so
-no group takes another's, and going back is always possible.
+`getActorGroups` lists the switched-on groups a person is in that the
+caller is in too, with each group's member count, and its display name and
+avatar when the caller may read `meta`. `getActor` describes a member of
+a group here, or someone asking to join one, to a signed-in caller.
 
-- `checkGroupHandle` says whether a domain is ready, and whose it names
-  now. It changes nothing.
-- `updateGroupHandle` takes it: the group's `did:plc` first, signed with
-  the host's rotation key (refused, `NotController`, once the host holds
-  none for it), then the host, then the relays with an `#identity`
-  event.
+## Changing its profile, rules and pictures
 
-Both are for a caller holding `group.configure`.
+The host writes a group's profile and rules in `meta`, as the group, for
+anyone whose roles hold `group.configure`. `updateProfile`, `uploadImage`,
+`putRule` and `deleteRule` all ask for it. Nothing is written as a
+switched-off group.
 
-## Switching off, on, and deleting
+`updateProfile` replaces the profile. A display name is required. The
+description, location, online flag, topics and languages are as given,
+and removed when left out. The join policy, site, avatar and banner are
+kept when left out; `null` clears an avatar or banner.
 
-- `deactivateGroup` switches a group off, for one holding
-  `group.configure`. Its account is deactivated, as a PDS deactivates
-  one, and the relays are told: its repo and its repos in spaces read as
-  `RepoDeactivated`, nothing is written as it, and its spaces issue no
-  credentials and admit no writes, so nobody, its admins included, reads
-  them. `getGroup` and `listGroups` show it as switched off and nothing
-  more. Since its memberships can't be read while it is off, the host
-  keeps who held `group.configure` then.
-- `activateGroup` switches it back on, for one of those.
-- `deleteGroup` deletes it, for one holding `group.configure` (or, while
-  it is off, one who did then): the services syncing its spaces are told
-  (`notifySpaceDeleted`, best effort, signed by the group while it still
-  has a key), its account, repos, spaces and blobs go, the relays are
-  told, and its DID is ended in the directory with a tombstone, as only
-  this host holds a key to it. What members wrote in its spaces is
-  theirs, at their own PDSes, and stays.
+A picture must be a blob in the group's own repo, because a blob in
+another account's repo would not resolve for the group's profile. So
+`uploadImage` keeps the image's bytes as the group's blob, and the client
+names that blob in `updateProfile`. An upload no record takes within a
+day is swept away, and a blob goes when its last reference does.
 
-A group whose setup fails partway is deleted the same way, so its handle
-is free again.
+The host serves images at `/img/{did}/{cid}` to whoever may see a record
+holding them: anyone, for the public repo or for `meta` while the group is
+declared; otherwise whoever may read the space, signed in to the console.
+A switched-off group's images are not served.
 
-## From the prototype
+`putRule` adds or changes a rule and `deleteRule` removes one. Rules keep
+an order, and a new rule goes last. A label citing a deleted rule keeps
+its URI, which no longer resolves ([moderation](moderation.md)).
 
-As `bootstrap.ts` and `methods/groups.ts`, with these changes:
+Details:
 
-- the spaces are the host's own, decided by the access records directly,
-  where the prototype gave each a `managedspace` policy naming the host
-  and asked itself;
-- lists in records are of objects (`[{role}]`, `[{scope}]`), as this
-  host's lexicons have them;
-- `createGroup`'s `joinPolicy` takes the profile's words (`approval`) or
-  the method's (`fyi.opensocial.profile#request`);
-- a group's address is its handle, until groups take handles of their
-  own;
-- `getGroup` names a member by DID alone, and has no join requests yet:
-  people's profiles and joining arrive with membership.
+- `uploadImage` takes at most 1,000,000 bytes.
+- The console's settings set pictures through `uploadImage` then
+  `updateProfile`, and visibility by setting `meta`'s readers to `public`
+  or `member` through `updateSpace`.
+
+## More spaces
+
+A group may want more places, such as one only its admins read. Each
+further space has an access record and an index entry in `members` that
+apps read to find it. `createSpace` (for `space.create`) makes one from a
+type, its readers, and optionally its writers, key, name and credential
+scopes. `updateSpace` (for `space.configure`) changes those.
+`deleteSpace` (for `space.delete`) removes the index entry, tells the
+space's syncers, and deletes the space and the group's repo in it. What
+members wrote there stays theirs at their PDSes.
+
+Two spaces carry the group itself, so their rules are fixed: `meta` and
+`members` cannot be deleted, `members` must stay readable by `member`, and
+who joins it by writing there cannot change. A space for chosen people is
+theirs, and the group can neither change nor delete it.
+
+## A handle on its own domain
+
+A group may take a handle on a domain it controls. The domain must name
+the group the way any handle names an account: by
+`/.well-known/atproto-did`, or through the services in `HANDLE_RESOLVERS`.
+Under `HANDLE_DOMAIN` a group may take only its own address.
+
+`checkGroupHandle` says whether a handle names the group yet, changing
+nothing. `updateGroupHandle` checks the same, updates the group's DID
+document with the host's rotation key, then the host's own record, and
+tells relays. It fails when the domain does not name the group, or when
+the host's key no longer controls the DID. Both are for `group.configure`.
+
+## Switching off, on and deleting
+
+`deactivateGroup` (for `group.configure`) switches a group off and tells
+relays. While it is off, its repos refuse reads, its spaces grant nothing
+to anyone, the group included, and its images are not served.
+
+A switched-off group's roles cannot decide who may switch it back on, so
+the host keeps who held `group.configure` when it was switched off.
+`activateGroup` is for one of those stewards.
+
+`deleteGroup` is for a holder of `group.configure`, or for a kept steward
+while the group is off. It tells the syncers of each space, then deletes
+the account, repos, spaces, address, invites, join requests, tokens,
+moderation state and blobs together, and tells relays. What members wrote
+in its spaces stays theirs, at their PDSes.
+
+The host ends the DID with a tombstone only when its own key is the only
+rotation key on it. If a steward holds a recovery key there, the host
+leaves the DID for its holder to bring the group back elsewhere, and
+`deleteGroup` answers `tombstoned: false` ([recovery](recovery.md),
+[moving](moving.md)).

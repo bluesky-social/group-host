@@ -24,9 +24,8 @@
 //! 4. `migrateActivate`, at the destination: once the directory names it,
 //!    the group switched on.
 //!
-//! As the prototype's `methods/migration.ts`, between two of these hosts.
-//! A space's state moves as this host keeps it, not as the space alpha's
-//! meta archive, which a move between two of them does not need.
+//! A move is between two of these hosts, so a space's state moves as
+//! this host keeps it, not as the space alpha's meta archive.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

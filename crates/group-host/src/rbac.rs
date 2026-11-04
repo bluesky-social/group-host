@@ -4,8 +4,7 @@
 //! each action the host's methods ask about is answered by one scope.
 //! Roles compose by union: no deny, no precedence, no hierarchy.
 //!
-//! As the prototype's `access.ts` and `roles.ts` have them, over this
-//! host's records, whose lists are of objects (`{role}`, `{scope}`).
+//! The records' lists are of objects (`{role}`, `{scope}`).
 
 use serde_json::Value;
 use std::collections::BTreeSet;

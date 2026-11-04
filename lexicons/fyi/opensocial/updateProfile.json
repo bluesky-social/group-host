@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Replace the profile: name, description, join policy, where it meets, its topics and languages. Requires group.configure. Fields are inlined rather than referencing fyi.opensocial.profile, because a record def cannot be used as an input object — mirrors createGroup.",
+      "description": "Replace the profile: name, description, join policy, where it meets, its topics and languages. Requires group.configure. Fields are inlined rather than referencing fyi.opensocial.profile, because a record def cannot be used as an input object, as createGroup's are.",
       "input": {
         "encoding": "application/json",
         "schema": {

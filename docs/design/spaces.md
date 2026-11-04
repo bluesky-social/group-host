@@ -1,158 +1,180 @@
 # Spaces
 
-A space is the space alpha's permissioned place for records: a space of
-an authority (`at://<authority>/space/<type>/<skey>`), in which each
-account that writes there keeps a repo of its own at its own PDS. The
-authority says who may read and write; each repo host keeps its
-accounts' repos and serves them to those the authority lets read.
+A group's private records do not live in one place. Each member writes in
+their own account, on their own PDS. Someone has to decide who may read
+and write those records, give readers credentials, and find out what was
+written so a page can show it. For a group on this host, the host does
+all three.
 
-This host is both, for its groups: the repo host for a group's repos in
-spaces wherever their authority is, and the authority for the group's
-own spaces.
+## What a space is
 
-## A repo in a space
+A space is a private record store from atproto's permissioned-data alpha
+(see https://atproto.com), named `at://<authority>/space/<type>/<skey>`:
+the authority a DID, the type an NSID, the skey a record key. Each
+account that writes in a space keeps its own repo there, on its own PDS.
+The authority says who may read and write, and gives readers credentials.
+This host is the repo host for its groups' repos in spaces, and the
+authority for each group's own spaces.
 
-A group's repo in a space is its records there and a revision, as its
-public repo is, but with no signed tree. Its records are summed into a
-set hash (an LtHash: each record's `collection/rkey/cid` expanded to
-1024 lanes and added), and a commit is the repo, the space, the
-revision and the digest of that hash. A write updates the hash by
-taking out each record's old element and adding its new one, so it
-never reads the repo whole.
+## The spaces a group keeps
 
-Each write is also kept as ops (the path, the CID after and before, by
-revision and place), so a syncer can catch up from a revision it has
-rather than read the repo again.
+Starting a group makes two spaces. Meta,
+`at://<group>/space/fyi.opensocial.meta/self`, holds the group's profile,
+its labeler and an access record. Members,
+`at://<group>/space/fyi.opensocial.members/self`, holds the roles, the
+permissions, the memberships, and a `fyi.opensocial.space` record for
+each of the group's spaces: the list apps read to find them. A group
+listed on the network points at its meta space from a
+`fyi.opensocial.declaration` record in its public repo.
 
-A record in a space is checked as a record in the public repo is: by the
-data model, of its collection's `$type`, and referencing only blobs
-uploaded to the group. A blob is the group's, whichever repo references
-it, and goes once no record in any of them does.
+A member holding `space.create` makes more with
+`fyi.opensocial.createSpace`; one holding `space.delete` ends one with
+`fyi.opensocial.deleteSpace`. Meta and members cannot be deleted. A space
+for chosen people is changed only by them ([groups](groups.md)).
 
-## Telling the authority
+## Who writes where
 
-After each write the host sends the space's authority, at its PDS,
-`com.atproto.space.notifyWrite`: the repo's revision and digest, with
-service auth signed by the group, for `<authority>#atproto_pds`. The
-authority keeps it, and tells the services syncing the space.
+The group's own repo in a space holds what the group writes as itself. A
+member's repo in the same space holds what that member writes, on their
+PDS. The host holds the group's repos and hears of the members' by
+notice. Apps signed in as the group write through
+`com.atproto.space.createRecord`, `putRecord`, `deleteRecord` and
+`applyWrites` ([signing in](signing-in.md)).
 
-The write stands whether the authority heard or not. The host owes the
-authority word of it, kept in an outbox and tried at once: a refusal
-that may pass (no answer, a 5xx, a 429) is tried again ten seconds
-later, then twice as long each time, up to an hour, until it lands or a
-day has passed; a refusal for good is given up. Word of a newer write
-to the same space takes the place of word still owed. This is pds.js's
-`outbox.js`. A space whose authority is a group here hears of the
-write at once, in the host. An authority may be a `did:plc` or a
-`did:web`.
+A repo in a space is its records and a revision, with no signed tree. A
+set hash stands in for the tree: each record adds an element built from
+its `collection/rkey/cid`, and a digest of the sum names the repo's
+state. A write takes out each changed record's old element and adds its
+new one, so the hash moves without being recomputed. A commit is the
+repo, the space, the revision and that digest.
 
-## Being the authority
+The group also writes in spaces it is not the authority for. An invite
+goes in the group's repo in the invitee's inbox,
+`at://<invitee>/space/fyi.opensocial.inbox/self`. The inbox's authority
+asks this host who may use it, with
+`com.atproto.managedspace.checkUserAccess`: its owner may read, and a
+group here may write ([membership](membership.md)).
 
-A group here is the authority for its own spaces. Who may do what in
-one is the host's to say, from its grants: the group itself anything;
-another account what it is granted, reading, writing or both; and
-anyone, reading a space made open to all. Groups and roles, as they
-arrive, fill the grants in, as the prototype decided each space's
-access from the group's own records.
+Details:
 
-- `getSpaceCredential` issues a credential, bound to a P-256 key of the
-  caller's, to the user a delegation token names: one their PDS signed
-  for `<group>#atproto_pds` and this space, spent once. A user the space
-  does not let read is told there is no such space. Without a token, a
-  credential is issued only for a space open to all.
-- `notifyWrite` is how a repo host tells the authority of a write: from
-  the writer's own account, for this authority, of a revision not
-  ahead of the clock, by one the space lets write. The writer set keeps
-  each repo's latest revision and digest, and the space's revision when
-  it heard; `listRepos` answers it, a page at a time, to a credential's
-  holder.
-- `registerNotify` has the authority tell a service of each write for a
-  day, at the endpoint the service's own DID document names; a write
-  is forwarded to each, signed by the group, best effort. A syncer that
-  misses one learns of it with the next.
+- The set hash is an LtHash: BLAKE3 expands each element to 1024 u16
+  lanes added mod 2^16; the digest is SHA-256 of the 2048-byte state.
+- Records are checked as in the public repo: DRISL data, `$type` equal to
+  the collection, only blobs the group uploaded.
+- Writes to a repo go one at a time, each with a new TID revision; one
+  whose head moved under it fails rather than overwrite.
+- A blob belongs to the group and goes once no record in any of its repos
+  references it. An upload no record takes within a day is swept.
 
-Not yet: deleting a space and telling its syncers, and revoking the
-credentials of one who loses their grant, which come with groups and
-membership.
+## Deciding who reads and writes
+
+Members and roles change, so a space's rule cannot be a fixed list. Each
+space holds an access record, `fyi.opensocial.access/self`, in the
+group's own repo there, and the host asks it against the user's roles on
+every request. A user may read if `readableBy` names `"public"` or a role
+they hold. Any member may write in their own name, unless `writableBy`
+names who may. In a space of chosen people (`people`), those people read
+and write while they are members, and reviewers read.
+
+The group itself may do anything in its spaces. Where the access record
+does not allow a user, a grant may; grants come only from moving a group
+in ([moving](moving.md)). While a group is switched off, no one reads or
+writes in its spaces, the group included.
+
+## Credentials
+
+A reader proves to a repo host that the authority lets them read with a
+space credential. A user asks for one with
+`com.atproto.space.getSpaceCredential`, sending a delegation token their
+own key signs. The token lives 60 seconds and is spent on first use, so
+one seen in transit cannot buy a second credential. A user the space does
+not let read gets `SpaceNotFound`, the same as for a space not here.
+
+A credential is a JWT the group signs for one space, bound to a P-256 key
+the caller holds, and lasts 10 minutes. The host records each it issues,
+so it can take them back. Putting a member out revokes their unexpired
+credentials to all the group's spaces: at once for repos here, and by
+`com.atproto.space.notifyCredentialRevoked` to each other writer's PDS,
+best effort.
+
+## Hearing of writes
+
+A member's write lands on the member's PDS, so the authority knows of it
+only if that PDS says so. In turn, after each write to a group's repo in
+any space, this host tells the space's authority with
+`com.atproto.space.notifyWrite`, signed by the group. The write stands
+whether the authority heard or not. Word owed waits in an outbox, which
+keeps only the newest write per repo and space, and is retried for a day.
+An authority that is a group here is told at once, inside the host.
+
+As an authority, the host takes `notifyWrite` only from the writer's own
+account, for a repo the space lets write. It keeps a writer set: each
+repo's latest revision and digest. `com.atproto.space.listRepos` answers
+it. Other services follow a space by `registerNotify`, for a day, and get
+each kept write forwarded; one that misses a notice learns of the write
+with the next, or on its own next read.
 
 ## The index
 
-The host keeps a copy of what is written in its groups' spaces, so it can
-answer for a space in one request where a reader would need a credential
-and a listing per writer. As each space's authority it knows the writer
-set: when a writer's digest is not the one the index came to, the index
-reads their repo, as knotless's syncer reads a space.
+A page wants a space's records in one request, not one per member's PDS,
+so the host indexes its groups' spaces. A writer whose digest in the
+writer set differs from the one the index reached is read again: from the
+store if here, else from their PDS with a credential the group issues
+itself. Where the index has read the repo before, it reads on with
+`listRepoOps` from that revision, moving the set hash by each op and
+checking it against the last page's commit. Otherwise, or if that fails,
+it reads the repo whole with `getRepo`. Every record must match its CID.
 
-- A writer here is read from the store.
-- A writer elsewhere is read from their PDS, with a credential the group
-  issues itself, bound to a key made for the read, and a secret agreed
-  against the writer's `#atproto_kem` key for each request. Read before,
-  their repo is read on from its oplog (`listRepoOps`), the set hash
-  moved by each write and checked against the commit their host vouches
-  for, each record checked against its write's CID. Not read before, or
-  if that does not check out, it is read whole (`getRepo`, a STAR
-  archive) and checked the same way. A record that is not a DRISL map is
-  hashed, as the commit covers it, and left out.
+A writer the space no longer lets write is dropped from the index, and
+putting a member out drops them from every space of the group at once.
+The index reads a space when its writer set moves, and every minute for
+anything missed.
 
-The index reads a space as its writer set moves, in the background, and
-before it answers for it. `fyi.opensocial.listSpaceRecords` lists it,
-newest first, by collection, by a field's value, or one by URI;
-`fyi.opensocial.getSpaceBlob` serves a file in it, read from whoever
-wrote it (5 MB at most, and only the file asked for). Both answer only
-those the space's access record lets read, asked on every call: the
-index holds copies, and never decides who sees them.
+## Reading members' repos elsewhere
 
-## Others' identities
+The host finds a member's PDS and keys in their DID document: a
+`did:plc` one from the PLC directory, a `did:web` one from
+`/.well-known/did.json` at its host. A document must name the DID asked
+for. Documents are kept five minutes; a signature the kept key turns away
+is checked again against a fresh one, so a key just changed still works.
 
-The host reads other accounts' DID documents (a space's authority, an
-authority revoking a credential) from the PLC directory for a
-`did:plc`, and from `/.well-known/did.json` at its host for a `did:web`
-(`DID_WEB_SCHEME`, `https` unless it is a network of test servers). A
-document must be the DID's own, its `id` that DID. Each is kept five
-minutes, so the same authority's credentials are checked without a
-lookup each; a signature the kept key turns away is checked again with
-the document read afresh, so a key the authority moved to counts at
-once. A key it moved away from counts for those minutes still.
+`fyi.opensocial.getSpaceBlob` serves a file from whoever wrote it, with
+the group's credential. It fetches only from a repo in the space's writer
+set, so a caller cannot point the host at a server of their choosing, and
+the bytes must hash to the CID asked for.
 
-Whose document is read is a caller's to say: the issuer of a credential
-or a service token is read before it is checked. So any caller can have
-the host GET `/.well-known/did.json` from a host of their choosing, as
-any server resolving a `did:web` can be made to. The host reads at most
-256 KiB of it, keeps at most 10,000 documents, and does not refuse
-private or loopback addresses: a host whose network reaches services
-that answer `/.well-known/did.json` to anyone inside it should keep its
-outgoing requests from reaching them.
+Details:
 
-## Reading
+- `DID_WEB_SCHEME` picks `https` or `http` ([config](../reference/config.md)).
+  A `did:web` with a path is refused, and redirects are not followed.
+- A document is read up to 256 KiB; a file up to 5 MiB.
 
-A repo in a space is read only with a space credential, which the
-space's authority issues to someone it lets read the space, bound to a
-P-256 key of theirs:
+## Reading a space through the host
 
-- the credential is the authority's, for this space, not lapsed, and not
-  revoked (an authority revokes with
-  `com.atproto.space.notifyCredentialRevoked`, which is kept until the
-  credential would have lapsed anyway);
-- the request names this repo as its audience, and is signed with the
-  key the credential is bound to;
-- the reader sends a key share in `Atproto-Space-Want-Mac`, from which
-  the host and the reader agree a secret against the group's
-  `#atproto_kem` key. The answer is vouched for with a MAC under it: a
-  commit's for `getRepo`, `getLatestCommit` and the last page of
-  `listRepoOps`, a record's for `getRecord`.
+The `fyi.opensocial.*` methods answer from the index.
+`fyi.opensocial.listSpaceRecords` brings the index up to date, waiting at
+most 5 seconds, then answers newest first; its `createdAt` is when the
+index read a record. It and `getSpaceBlob` ask the access record on every
+call, so the index never decides who sees what. The caller is known by
+service auth or the console's session; one with neither reads only what
+is readable by `"public"`. A space's images are also served at
+`/img/{did}/{cid}` to whoever the space lets read.
 
-The MAC says the group's host answered, to this reader alone; nobody
-else can check it, so nothing a reader is sent can be passed on as
-proof.
+The `com.atproto.space.*` methods read one repo directly: `getRecord`,
+`listRecords`, `getRepo`, `getLatestCommit`, `listRepoOps`, `getBlob`,
+`listBlobs`. Each needs a credential from the space's authority, on a
+request signed with the key it is bound to. A reader may send a key
+share; the host agrees a secret against the group's `#atproto_kem` key
+and returns a MAC over the commit or record. The MAC proves to that
+reader alone that this host answered.
 
-A group reading its own repos, through an app it signed in to, comes
-with signing in.
+Not yet built: an app signed in as the group reading its own repos.
+Parameters, limits and headers are in [the API reference](../reference/api.md).
 
-## From the prototype
+## Ending a space or a group
 
-The prototype's repo-host side is `pds/api/space.ts` over
-`@atproto/space` and the reference PDS's store. Here it is the same
-methods, less what needs signing in (writes over XRPC, an account
-reading its own repo, `listSpaces`, `clearRecords`), which arrive with
-signing in, and less `notifySpaceDeleted`, which a host that syncs no
-other authority's spaces has nothing to do with.
+Deleting a space removes its entry in members and tells its followers
+with `com.atproto.space.notifySpaceDeleted`. The host forgets the space's
+index, writer set, grants, issued credentials, and the group's own repo
+in it. Members' repos on their own PDSes are theirs, and stay. Deleting a
+group tells the followers of each of its spaces the same way, best effort.

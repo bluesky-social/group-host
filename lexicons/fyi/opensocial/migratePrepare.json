@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "On the source host: start moving the group to another host. Answers with a createAccount service token signed by the group, for the destination; the group's handle, address and spaces; and a token, good for an hour, with which the destination pulls the group from here (migrateExport). Requires group.configure.",
+      "description": "On the source host: start moving the group to another host. Answers with a service token signed by the group, for the destination's migrateReceive; the group's handle, address and spaces; and a token, good for an hour, with which the destination pulls the group from here (migrateExport). Requires group.configure.",
       "input": {
         "encoding": "application/json",
         "schema": {

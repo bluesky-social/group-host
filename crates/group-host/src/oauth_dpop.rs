@@ -3,8 +3,7 @@
 //! of the time, so the host checks one without keeping it; a proof is
 //! good once, its `jti` spent as a token's is.
 //!
-//! As the prototype's `pds/oauth/dpop.ts`, for the keys atproto uses:
-//! ES256 and ES256K.
+//! For the keys atproto uses: ES256 and ES256K.
 
 use crate::Host;
 use crate::oauth::OAuthError;

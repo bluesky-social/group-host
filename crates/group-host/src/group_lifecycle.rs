@@ -4,8 +4,6 @@
 //! While a group is on, who may do each is who holds `group.configure`;
 //! while it is off nothing can read its memberships, so it is who held it
 //! when it was switched off, kept then.
-//!
-//! As the prototype's `methods/lifecycle.ts`.
 
 use crate::Host;
 use crate::api::invalid;

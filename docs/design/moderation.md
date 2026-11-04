@@ -1,54 +1,134 @@
 # Moderation
 
-A group moderates what is in its spaces, and who is in it, itself: reports
-come in, labels go out, and a queue sits between (`moderation.rs`).
+A group's members write in their own repos, on their own PDSes. The
+group cannot edit or delete what they wrote. So a group moderates by
+writing its judgements beside the content, as records of its own, and by
+keeping a queue of what still needs a judgement. Reports come in, labels
+go out, and the queue sits between them.
+
+Every moderation method names a group hosted here, a group account with
+a members [space](spaces.md). A DID that is not one is refused with
+`GroupNotFound`.
+
+## Who moderates
+
+Moderating is a matter of roles, as everything a member does in a group
+is (see [membership](membership.md)). Four of the host's actions are
+about moderation:
+
+- `mod.read`: see the queue and a subject's history.
+- `mod.resolve`: resolve, escalate or add a note to a subject.
+- `label`: write a label.
+- `takedown`: write the labels that ask for content to be hidden or
+  taken down.
+
+A role holds an action through an OAuth scope in the group's permissions
+record, and a member holds the union of their roles' actions. There is
+no deny and no hierarchy. A new group's `admin` role holds every action,
+moderation included; its `member` role holds none. To make moderators, a
+group gives a role these actions and gives that role to people.
+
+Each method checks the caller's roles as they are at the moment of the
+call. The caller is whoever signed in, either through service auth from
+their PDS or through the console's session (see [signing
+in](signing-in.md)). A caller without the action is refused `403
+Forbidden`. An assistant a member connects can read the queue, label and
+resolve as that member, within the same roles (see
+[assistants](assistants.md)).
+
+Details:
+
+- The scopes behind each action are in [the API
+  reference](../reference/api.md).
+- A `space:*` scope covering the `fyi.opensocial.label` collection
+  grants both `label` and `takedown`; the `applyLabel` method's scope
+  grants `label` only.
+- No caller at all is `401 AuthMissing`.
 
 ## Labels
 
-A label is a record the group writes, `fyi.opensocial.label`, naming its
-subject, its value, and the rule it is under if one. It lives beside what
-it labels: a label on a record goes in the space the record is in, so
-whoever may read the record may read its labels, and nobody else; a label
-on an account has no content to sit beside, and goes in the members
-space. A group labels only what is in its own spaces: another group's
-content is that group's to moderate.
+A label is a moderation tag on a record or an account. Here it is an
+`fyi.opensocial.label` record that the group writes with `applyLabel`.
+It holds the `subject`, a value `val`, optionally the
+`fyi.opensocial.rule` it cites as `rule`, and `createdAt`.
 
-`applyLabel` writes one, for a role holding `label`; the values that
-remove content, `!hide` and `!takedown`, take `takedown`. `negateLabel`
-takes one back with a second record, `neg: true`, rather than deleting
-the first: that a label was applied is part of what happened.
+A label has to be readable by the people who see its subject, and only
+by them. So the host writes it where the subject lives. A record's label
+goes into the space the record is in, in the group's own repo there; an
+account's label goes into the group's members space. Whoever may read
+the space may read its labels. A group labels only what is in its own
+spaces; a record in a space with another authority is refused.
+
+A judgement can be withdrawn, but the history of it should stay. So
+`negateLabel` does not delete the label. It writes a second label record
+with the same subject and value and `neg: true`. A reader takes a label
+as standing until a negation follows it.
+
+The host writes labels and gives no value an effect of its own: it hides
+and removes nothing. An app that reads a space reads its labels with it,
+and decides what to show. The values `!hide` and `!takedown` ask for
+content to be hidden or taken down, so writing or negating them needs
+`takedown`; every other value needs `label`.
+
+Details:
+
+- A subject is an account (`com.atproto.admin.defs#repoRef`, by DID) or
+  a record (`com.atproto.repo.strongRef`, by URI and CID).
+- A record's URI must be a record in a space:
+  `at://<authority>/space/<type>/<skey>/<repo>/<collection>/<rkey>`.
+- The record key is a TID from the host's clock. `applyLabel` answers
+  the label's `uri` and `cid`.
+- The host does not check that the subject exists, that a CID matches,
+  or that a negation follows a label.
+- Every label and negation is also an event in the queue.
 
 ## The queue
 
-Each subject (a record, by its URI; an account, by its DID) is open,
-escalated or resolved, with what happened to it in order: reports,
-labels, negations, notes, and the moderators' decisions. The queue is the
-host's to keep, not the group's to publish: its statuses are a group's
-moderators' working state.
+A moderator needs to know what is waiting for a judgement and what was
+already done about it. The queue answers that. It is the host's own,
+kept in its database rather than published in the group's repo, and only
+those with `mod.read` see it.
 
-- `listSubjects` (for `mod.read`): the queue, of a status if asked, the
-  latest changed first, a page at a time.
-- `getSubjectHistory` (for `mod.read`): one subject, and what happened to
-  it.
-- `resolveSubject` (for `mod.resolve`): resolve it, escalate it, or note
-  something on it, which changes nothing else.
+A subject in the queue is a record, by its URI, or an account, by its
+DID. It has a status: `open`, `escalated` or `resolved`. Its events are
+kept in order, each with a kind (`report`, `label`, `negate`, `resolve`,
+`escalate`, `note`), the actor, and what applies of a reason, value and
+note. A subject enters the queue with its first report or label, opened.
 
-A label opens a subject nobody reported, and leaves a resolved one
-resolved: labelling is the moderators acting, not someone asking them to.
+`listSubjects` lists the queue, latest changed first, filtered by status
+if asked. Every event moves a subject to the top. `getSubjectHistory`
+shows one subject with its events. `resolveSubject` acts on a subject
+already in the queue: `resolve` sets it `resolved`, `escalate` sets it
+`escalated`, and `note` keeps a note without changing the status.
+Escalating is only a status, for a group to give its own meaning; no one
+is told.
+
+A resolved subject should come back when someone reports it again. A
+label is a moderator's own act, so it should not undo a resolution. So
+only a report reopens a resolved subject; a label opens a subject nobody
+reported, and leaves a resolved one resolved. An escalated subject stays
+escalated through new reports.
+
+Deleting a group deletes its queue.
 
 ## Reports
 
-`com.atproto.moderation.createReport` takes a report from anyone, member
-or not, as their PDS sends it on: of a record in one of a group's spaces
-here, into that group's queue. A report on a resolved subject opens it
-again. As anyone may write to a group's queue so, what a report
-says is bounded: its subject a record's URI whose every part is what it
-says, its reason 20,000 bytes at most (as the lexicon has it), and its
-reason type 256.
+Anyone signed in may report, member or not. A reporter needs no role and
+need not be able to read the space. A report arrives at
+`com.atproto.moderation.createReport`, by service auth or the console's
+session.
 
-## From the prototype
+A report here is of a record, by its URI. The record must be in a space
+hosted here. The report goes into the queue of the group that is that
+space's authority, as a `report` event with the reporter, a `reasonType`
+and an optional `reason`. Nobody is notified: the report waits in the
+queue for a moderator.
 
-- The host's own queue, for what its sites module shared with everyone
-  (templates, their likes), is not here, with the sites module.
-- A report is of a record; an account is labelled by the group, not
-  reported to it, as the prototype had it.
+Details:
+
+- A report of an account is refused; a URI outside a space hosted here
+  is `NotHosted`.
+- The host does not check that the reported record exists or that its
+  CID matches.
+- Limits and the answer's fields are in [the API
+  reference](../reference/api.md).

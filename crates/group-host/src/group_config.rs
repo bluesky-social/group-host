@@ -1,8 +1,6 @@
 //! Changing a group's face: its profile, its images and its rules. Each is
 //! a record in its meta space, written by the group, so the host writes it
 //! for a caller holding `group.configure`.
-//!
-//! As the prototype's `methods/profile.ts` and `methods/rules.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

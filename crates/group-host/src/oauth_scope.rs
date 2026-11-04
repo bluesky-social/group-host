@@ -3,8 +3,7 @@
 //! group, then made concrete, so the token never depends on how a scope
 //! is read later.
 //!
-//! As the prototype's `pds/oauth/scope.ts`, except that no lexicon is
-//! resolved: the only permission set a token keeps is this host's own
+//! No lexicon is resolved: the only permission set a token keeps is this host's own
 //! (`fyi.opensocial.configure`), read from its lexicon here, and a space
 //! scope naming no collection keeps every one, which narrowing allowed
 //! only to roles that may write every one there.

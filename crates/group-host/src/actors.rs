@@ -1,8 +1,6 @@
 //! People, as the console shows them: who is asking (`getViewer`, as
 //! knotless's), a person (`getActor`), and the groups someone is in
 //! (`getActorGroups`).
-//!
-//! As the prototype's `methods/groups.ts`'s `getActorGroups`.
 
 use crate::Host;
 use crate::api::{Params, page, param};

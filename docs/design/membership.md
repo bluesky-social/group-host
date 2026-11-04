@@ -1,109 +1,141 @@
 # Membership
 
-Who is in a group, and what each may do, are records in its members
-space, written by the group: a membership for each member, naming their
-roles; a role record for each role, its name and words; and one
-permissions record, granting each role OAuth scopes and the roles its
-holders may give. The host's methods ask by action (`invite`, `admit`,
-`role.assign`, `eject`, `group.configure`, …), each answered by the one
-scope that grants it, and roles compose by union (`rbac.rs`).
+A group has no one person in charge. So who is in it, and what each member
+may do, is recorded where every member's tools can check it. Getting in is
+a decision the group makes, and getting out leaves no access behind. The
+methods' parameters and errors are in [the API reference](../reference/api.md).
 
-## Roles
+## Where membership is recorded
 
-- `putRole` (for `group.configure`) defines a role or changes one: its
-  name and words; whether its people are bots; whether every new member
-  gets it (kept when not said); what it may do, as the scopes of its
-  actions beside any other scope it held; its public-repo collections
-  (kept when not said); and the roles its holders may give.
-- `deleteRole` (for `group.configure`) takes away a role nobody holds
-  (`RoleInUse` while someone does).
+The group writes its roster in its members space,
+`at://<group>/space/fyi.opensocial.members/self`. A space is a private
+record store whose authority, here the group, decides who may read and
+write it ([spaces](spaces.md)). Any member's tools can read the roster
+there, and no one outside the group can. The group writes three kinds of
+record:
 
-A group never loses its last way to be run: the last role that may
-configure it keeps that (`LastConfigurer`), and stays.
+- `fyi.opensocial.membership`, one per member, keyed by their DID: the
+  `roles` they hold.
+- `fyi.opensocial.role`, one per role, keyed by its id: its name,
+  description, and whether it is a `default` or `bot` role.
+- `fyi.opensocial.permissions`, one record: a grant per role, with the
+  scopes it carries and the roles it may assign.
 
-## Members
+A member is anyone with a membership record. Every member holds `member`,
+the role the members space lets read, and `assignRoles` refuses to take it
+away. Who may write the members space is fixed; `updateSpace` will not
+change it.
 
-- `assignRoles` (for `role.assign`) gives a member the roles named in
-  place of theirs. Each role added or taken away must be one the
-  caller's roles may give; each must be defined; the member must be
-  one. Everyone in a group holds `member`, which lets them read the
-  members space: it goes only when they do (`MemberRole`).
-- `ejectMember` (for `eject`) puts a member out, if the caller's roles
-  may give or take each of theirs.
-- `leaveGroup` takes the caller out. The last member able to configure
-  the group may not leave (`LastConfigurer`).
+A member may also write an `fyi.opensocial.acceptance` record in their own
+repo there. It is their side of membership, for apps that show only those
+who have taken up their place. It changes nothing they may do. `getGroup`
+reports it to them as `viewer.accepted`.
+
+## Roles and what they grant
+
+The host's methods ask about twelve actions, such as `invite`, `admit`,
+`eject`, `role.assign` and `group.configure`. Each is answered by exactly
+one scope, in atproto's permission syntax
+(`rpc:fyi.opensocial.createInvite?aud=*`, `space:*?manage=create`). A
+member may do what any of their roles grants. Roles add up, with no deny,
+precedence or hierarchy, so every "may they?" is a lookup. A grant may
+also carry `repo:<collection>` scopes, the collections of the group's
+public repo its holders may write as the group.
+
+Power over other members needs its own limit. A grant's `assignable` lists
+the roles its holders may give or take, and whose holders they may eject.
+It counts only through the grant that carries the action: whom a member
+may assign comes from their roles granting `role.assign`, whom they may
+eject from those granting `eject`.
+
+A new group has two roles. `admin` grants every action and `repo:*`, and
+may assign only `member`. `member` is the default role and grants nothing.
+The founder and each steward named at creation hold both
+([groups](groups.md)). So an admin cannot make or eject another admin
+until a role's `assignable` says so.
+
+Some member must always hold a role that grants `group.configure`, or no
+one could run the group. Every method that could break this refuses with
+`LastConfigurer`: `putRole` and `deleteRole`, and `assignRoles`,
+`ejectMember` and `leaveGroup`.
+
+Details:
+
+- `putRole` and `deleteRole` need `group.configure`; `deleteRole`
+  refuses a role someone holds.
+- `assignRoles` (needs `role.assign`) sets a member's whole set of roles,
+  each defined and each one the caller may assign.
 
 ## Joining
 
-How people get in is the group's profile's `joinPolicy`:
+The profile's `joinPolicy` decides how people get in: `open`, `approval`
+(the default) or `invite`. Someone asks with `requestJoin`. With `open`
+they are in at once. With `invite` they are refused (`InviteRequired`)
+unless invited. With `approval` their request waits, with an optional
+message, until someone holding `admit` calls `admitMember` or
+`denyJoinRequest`. A live invite admits whatever the policy, since the
+group has already said yes.
 
-- `open`: `requestJoin` admits them at once, with the roles the group
-  marks default (`member`, unless it marks others).
-- `approval`: `requestJoin` keeps their request, with what they say, for
-  one holding `admit`. `listJoinRequests` lists those waiting, newest
-  first; `getGroup` shows them to whoever may admit, and to the asker
-  their own. `admitMember` admits one, with the defaults or the roles
-  named, each one the admitter may give (admitting gives roles, so it
-  is bound as giving them is); `denyJoinRequest` turns one down;
-  `cancelJoinRequest` withdraws one's own; `getJoinRequest` is one's
-  own, while it waits.
-- `invite`: not without an invite (`InviteRequired`).
+A newcomer gets the default roles: those marked `default`, or `member` if
+none is. An admitter may name other roles, but only ones they may assign.
 
-An invite admits its invitee whatever the policy: asking to join
-redeems it, with the group's default roles.
+The asker is no member, and the members space is for members, so requests
+are not records: the host keeps them in its database, one per group and
+asker. A decided request is deleted, so a denial looks like no request and
+the asker may ask again.
 
-A request waits in the host, not in the group's records: who asks is no
-member, and the members space is for members. Decided, it goes: a
-request turned down looks the same as one never made, so its asker may
-ask again and the group need not say.
+Details:
+
+- Asking again while a request waits keeps the first message and time.
+- Getting in by any route ends a waiting request; `admitMember` then
+  answers `AlreadyMember`.
+- The asker sees their request with `getJoinRequest` and withdraws it
+  with `cancelJoinRequest`; admitters list them with `listJoinRequests`.
 
 ## Invites
 
-A group invites someone by writing an invite in its own repo in their
-inbox: a space under their own DID (`fyi.opensocial.inbox`), at their
-PDS, whose policy lets this host say who reads and writes it. The host
-answers its authority (`com.atproto.managedspace.checkUserAccess`, with
-service auth from the authority): its owner reads it, and only groups on
-this host write in it. The group's write is told to the invitee's PDS as
-any write to a space elsewhere is, owed until it lands. The invitee's
-apps read the invite there; the host keeps its own list of what it sent,
-which is what redeems an invite, as the inbox is its owner's to read,
-not the group's.
+An invite must reach someone outside the group, so the group writes it
+where they already look: their inbox,
+`at://<invitee>/space/fyi.opensocial.inbox/self`, a space of their own at
+their PDS. The invite is an `fyi.opensocial.invite` record in the group's
+repo there, with `by`, an optional `message` and `expiresAt`. The host
+answers `com.atproto.managedspace.checkUserAccess` for inboxes: only a
+group on this host may write one, and only its owner may read it.
 
-- `createInvite` (for `invite`) invites someone not yet a member, with
-  words and a lapse if it says; one already waiting is the one answered.
-- `listInvites` (for `invite`) lists those waiting, newest first, the
-  lapsed left out.
-- `revokeInvite` (for `invite`) takes one back by its URI; `declineInvite`
-  is its invitee's own say. Either takes the record out of the inbox and
-  the host's list; the group may invite them again.
-- `getActorInvites` is the caller's own invites waiting, from the groups
-  here, for a group's site, which can't read the caller's inbox.
+The group tells the invitee's PDS of the write at once. If that fails it
+retries, the wait doubling from 10 seconds up to an hour, and gives up
+after a day.
 
-## Out is out
+The inbox is the invitee's to read, so the host keeps its own list of
+invites sent, one per group and invitee, and redeems from that list.
+Redeeming takes the invite back, from the inbox and the list. Inviting
+again answers the waiting invite; one past its `expiresAt` no longer
+admits, and inviting again replaces it. The invitee may refuse with
+`declineInvite`, and the group may still invite them later. Holders of
+`invite` list invites with `listInvites` and take one back with
+`revokeInvite`. A site that cannot read someone's inbox shows them their
+invites through `getActorInvites`.
 
-A member put out, or leaving, reads the group's spaces no more:
+## Leaving and being put out
 
-- their membership goes, so the access records let them read nothing
-  that needs a role;
-- the credentials the group issued them are revoked: at once for the
-  repos on this host, and told to the host of each other writer in
-  those spaces (`notifyCredentialRevoked`, signed by the group, best
-  effort), so they lapse everywhere rather than within the hour. The
-  authority keeps each credential it issues, to whom, until it lapses,
-  for this;
-- the index forgets what they wrote, and keeps only writers the space
-  still lets write.
+A member leaves with `leaveGroup`. A holder of `eject` puts one out with
+`ejectMember`, if every role the member holds is one the ejecter's `eject`
+grants may assign. Either way the host, in order:
 
-What they wrote stays in their own repos, at their own PDSes.
+1. revokes the space credentials the group issued them;
+2. ends the OAuth grants they approved for the group, and their
+   [assistants'](assistants.md) grants, with every session those began;
+3. drops their app passwords for the group;
+4. deletes their membership;
+5. unindexes their repo in each of the group's spaces.
 
-## From the prototype
+Credentials go first, so that if revoking fails they are still in and the
+call can be made again. A credential lasts ten minutes; the group keeps
+each it issues until it lapses, to revoke it at once. For writers on other
+PDSes it sends `com.atproto.space.notifyCredentialRevoked`, best effort.
+With no membership they hold no roles, so the access records grant them
+nothing.
 
-As `methods/roles.ts`, `methods/membership.ts` and `leaveGroup`, with
-these changes: `assignRoles` refuses someone who is not a member, where
-the prototype would write them a membership and so admit them; roles
-given must be defined; `deleteRole` refuses a role someone holds, as
-the lexicon's `RoleInUse` says; leaving or being put out revokes
-credentials, which the prototype left to lapse; an inbox takes invites
-from groups here alone, where the prototype let anyone write in it; and
-an invite's `expiresAt` is kept to.
+What they wrote stays in their own repos at their own PDSes. The group's
+index forgets it at once, and drops on each sync any writer a space no
+longer lets write.

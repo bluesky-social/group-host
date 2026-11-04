@@ -2,8 +2,6 @@
 //! pictures and files there, for whoever its access record lets read the
 //! space, asked on every call. The index holds copies; it never decides
 //! who sees them.
-//!
-//! As the prototype's `methods/spaceRecords.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};

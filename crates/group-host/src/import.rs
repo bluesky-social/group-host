@@ -21,7 +21,7 @@
 //! the DID names this host, the network reads the account here.
 //!
 //! Its spaces come with it, by `importAccountSpace` (`import_space.rs`),
-//! while the move is pending. As the prototype's `methods/importAccount.ts`.
+//! while the move is pending.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

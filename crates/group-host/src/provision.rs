@@ -9,8 +9,6 @@
 //! exchange issues one, narrowed to the founder's roles as an approval is,
 //! so from then on it is an ordinary grant: refreshed at `/oauth/token`,
 //! listed among the group's, revoked there.
-//!
-//! As the prototype's `methods/provision.ts`.
 
 use crate::Host;
 use crate::api::invalid;

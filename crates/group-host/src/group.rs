@@ -4,8 +4,6 @@
 //! of its spaces, for its members). Everything a group is lives in those
 //! records, written by the group; who may read or write each space is its
 //! access record, against the reader's roles.
-//!
-//! As the prototype's `bootstrap.ts` makes one, and `group.ts` reads it.
 
 use crate::Host;
 use crate::rbac::{ACTIONS, Grant, NS, listed};

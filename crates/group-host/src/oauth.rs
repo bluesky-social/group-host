@@ -10,8 +10,6 @@
 //!
 //! Tokens are opaque and kept, as their hashes, so a grant ends the moment
 //! it is revoked or its member is put out of the group.
-//!
-//! As the prototype's `pds/oauth/server.ts` and `tokens.ts`.
 
 use crate::Host;
 use crate::oauth_clients::{registered, same_auth};

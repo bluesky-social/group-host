@@ -4,9 +4,8 @@
 //! write in it as the group; and an entry in the members space's index,
 //! which apps read to find it.
 //!
-//! As the prototype's `methods/spaces.ts`, except that deleting a space
-//! ends it, as its authority, where the prototype only took it out of the
-//! index.
+//! Deleting a space ends it, as its authority, as well as taking it out
+//! of the index.
 
 use crate::Host;
 use crate::api::invalid;

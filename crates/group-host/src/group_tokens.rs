@@ -10,8 +10,6 @@
 //! `listGroupTokens` shows a group's configurers every grant that acts as
 //! it, whose it is, and what was done with grants lately;
 //! `revokeGroupToken` ends one.
-//!
-//! As the prototype's `methods/groupAuth.ts` and `connectedApps.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

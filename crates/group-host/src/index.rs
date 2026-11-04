@@ -13,8 +13,7 @@
 //! host vouches for; or reads it whole, as a STAR archive, and checks it
 //! the same way. A record that is not a DRISL map is left out.
 //!
-//! As knotless's `space_sync.rs` reads a member's repo, and the
-//! prototype's `spaceIndex.ts` keeps what it reads.
+//! It reads a member's repo as knotless's `space_sync.rs` does.
 
 use crate::Host;
 use crate::authority::Access;

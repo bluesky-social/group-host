@@ -3,8 +3,6 @@
 //! approves or declines. The member is whoever signed the service auth,
 //! their own PDS vouching for them, so who signed an app in is never a
 //! guess, and the grant is theirs: it ends when they are put out.
-//!
-//! As the prototype's `methods/authorization.ts`.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};

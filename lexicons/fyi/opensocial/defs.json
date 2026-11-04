@@ -158,7 +158,7 @@
         },
         "address": {
           "type": "string",
-          "description": "The hostname this host serves the group's site at: one label under its handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+          "description": "The group's address here: one label under this host's handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
         },
         "meta": {
           "type": "string",
@@ -260,7 +260,7 @@
         },
         "address": {
           "type": "string",
-          "description": "The hostname this host serves the group's site at: one label under its handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+          "description": "The group's address here: one label under this host's handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
         },
         "meta": {
           "type": "string",
@@ -567,7 +567,7 @@
         },
         "address": {
           "type": "string",
-          "description": "The hostname this host serves the group's site at: one label under its handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+          "description": "The group's address here: one label under this host's handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
         },
         "displayName": {
           "type": "string"
@@ -616,7 +616,7 @@
     },
     "file": {
       "type": "object",
-      "description": "One file of what a site, a channel or a template is made of, by its path there: a page, a script, a stylesheet, JSON (a lexicon), an image or a font. What it is served as follows its path's extension.",
+      "description": "One file, by its path among the rest: a page, a script, a stylesheet, JSON (a lexicon), an image or a font. What it is served as follows its path's extension.",
       "required": [
         "path",
         "file"

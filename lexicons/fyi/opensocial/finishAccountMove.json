@@ -43,7 +43,7 @@
             },
             "address": {
               "type": "string",
-              "description": "The hostname its site and methods answer at."
+              "description": "Its address here: one label under this host's handle domain."
             },
             "meta": {
               "type": "string"
