@@ -24,7 +24,7 @@ use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
 use axum::Json;
-use axum::body::Bytes;
+use axum::body::Body;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use serde_json::{Value, json};
@@ -411,11 +411,7 @@ pub async fn apply_writes(
 }
 
 /// A blob for the group's records, of a type the token's scope takes.
-pub async fn upload_blob(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    bytes: Bytes,
-) -> Answer {
+pub async fn upload_blob(State(host): State<Arc<Host>>, headers: HeaderMap, body: Body) -> Answer {
     let acting = host.acting(&headers, "POST", "/xrpc/com.atproto.repo.uploadBlob")?;
     let mime = headers
         .get(header::CONTENT_TYPE)
@@ -424,6 +420,8 @@ pub async fn upload_blob(
     if !acting.permissions.blob(mime) {
         return Err(missing(format!("blob:{mime}")).into());
     }
+    let limit = host.config.blob_upload_limit;
+    let bytes = crate::xrpc::read_body(body, limit, "BlobTooLarge").await?;
     let blob = host.upload_blob(&acting.grant.group, &bytes, mime)?;
     Ok(Json(json!({ "blob": blob })))
 }

@@ -2,6 +2,7 @@
 //! `{error, message}`.
 
 use axum::Json;
+use axum::body::{Body, Bytes};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
@@ -48,4 +49,19 @@ impl IntoResponse for XrpcError {
         let body = json!({ "error": self.error, "message": self.message });
         (self.status, Json(body)).into_response()
     }
+}
+
+/// A request's body, at most `limit` bytes, read once its caller is known
+/// to be let send one: a longer body, or one cut off, is refused as
+/// `too_large`, as the method's lexicon names it.
+pub async fn read_body(
+    body: Body,
+    limit: u64,
+    too_large: &'static str,
+) -> Result<Bytes, XrpcError> {
+    let most = usize::try_from(limit).unwrap_or(usize::MAX);
+    axum::body::to_bytes(body, most).await.map_err(|e| {
+        let said = format!("a body of {limit} bytes at most, read whole: {e}");
+        XrpcError::new(StatusCode::PAYLOAD_TOO_LARGE, too_large, said)
+    })
 }

@@ -205,7 +205,7 @@ async fn says_whom_a_token_is_for() {
 
 #[tokio::test]
 async fn writes_the_groups_repo_within_its_scope() {
-    let h = start(&[], false).await;
+    let h = start(&[("BLOB_UPLOAD_LIMIT", "3000000")], false).await;
     let (did, _, [alice, ..]) = group(&h).await;
     let app = App::loopback(&format!("atproto repo:{POST} blob:image/*"));
     let access = token(&h, &app, &alice, &did).await;
@@ -426,7 +426,7 @@ async fn writes_the_groups_repo_within_its_scope() {
     }
 
     // A blob, of a type its scope takes.
-    let upload = async |mime: &str| {
+    let upload = async |mime: &str, bytes: Vec<u8>| {
         let nsid = "com.atproto.repo.uploadBlob";
         let req = h
             .http
@@ -434,13 +434,33 @@ async fn writes_the_groups_repo_within_its_scope() {
             .header("authorization", format!("DPoP {access}"))
             .header("dpop", app.resource_proof(&h, "POST", nsid, &access))
             .header("content-type", mime)
-            .body(b"face".to_vec());
+            .body(bytes);
         app.said(req).await
     };
-    let said = upload("image/png").await;
+    let said = upload("image/png", b"face".to_vec()).await;
     assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(said.body["blob"]["mimeType"], "image/png");
-    assert_eq!(upload("video/mp4").await.error(), (403, "ScopeMissing"));
+    assert_eq!(
+        upload("video/mp4", b"face".to_vec()).await.error(),
+        (403, "ScopeMissing")
+    );
+    // Up to the host's limit, past the 2 MB a body is held to by default;
+    // past it, refused as the lexicon names it.
+    let said = upload("image/png", vec![7; 2_500_000]).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(said.body["blob"]["size"], 2_500_000);
+    let said = upload("image/png", vec![7; 3_500_000]).await;
+    assert_eq!(said.error(), (413, "BlobTooLarge"));
+    // A caller without a token is turned away before its body is read.
+    let res = h
+        .http
+        .post(format!("{}/xrpc/com.atproto.repo.uploadBlob", h.url))
+        .header("content-type", "image/png")
+        .body(vec![7; 3_500_000])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
 }
 
 #[tokio::test]
