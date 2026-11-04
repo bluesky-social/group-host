@@ -18,7 +18,7 @@ on:
   push: {refs: [refs/heads/main]}
   pull:
     base: [refs/heads/main, refs/heads/feature/*]
-    paths: [web/**, lexicons/**, crates/**, Cargo.toml, Cargo.lock, harness/e2e/**, harness/pds.mjs, harness/tls-proxy.mjs, harness/package.json, harness/package-lock.json, .knotless/workflows/e2e.yml, .knotless/uses.lock]
+    paths: [web/**, lexicons/**, crates/**, Cargo.toml, Cargo.lock, harness/e2e/**, harness/world.mjs, harness/pds.mjs, harness/tls-proxy.mjs, harness/package.json, harness/package-lock.json, .knotless/workflows/e2e.yml, .knotless/uses.lock]
 cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/node, /opt/browsers, /opt/chromium-debs, web/node_modules, harness/node_modules]
 env:
   PLAYWRIGHT_BROWSERS_PATH: /opt/browsers

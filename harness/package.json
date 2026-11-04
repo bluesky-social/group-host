@@ -7,6 +7,7 @@
     "@atproto/dev-env": "0.6.26"
   },
   "devDependencies": {
-    "@playwright/test": "1.58.2"
+    "@playwright/test": "1.58.2",
+    "portless": "0.15.7"
   }
 }

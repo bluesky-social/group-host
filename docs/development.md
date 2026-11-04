@@ -6,9 +6,28 @@ for the lexicons.
 
 ```sh
 just setup     # the console's packages, and cargo-llvm-cov
-just serve     # the host, on http://localhost:2600
-just web-dev   # the console, asking that host
+just dev       # all of it, to use: see below
+just serve     # the host alone, on http://localhost:2600
+just web-dev   # the console alone, asking that host
 ```
+
+## Using it
+
+`just dev` starts a world of its own (`harness/dev.mjs`): the reference
+PDS and a PLC directory with alice, bob and harbor on them, the host over
+them, and the console at https://group-host.localtest.me, with a group of
+alice's. It prints each one's password, where the codes the PDS emails
+are read, and how to run the command against it. ctrl-c stops it all, and
+each start is empty again.
+
+Signing in to the console takes https at a name: the host is the
+console's OAuth client, and a PDS fetches a client's metadata only so.
+portless (a harness package) serves it: its proxy on port 443 sends every
+name under localtest.me (which public DNS resolves to 127.0.0.1) to the
+port registered for it, with a certificate from a local CA in the system's
+trust store, which the PDS is told to trust too. Start its proxy once a
+boot, as `just dev` says if it is not up; it asks for your password to
+take port 443.
 
 ## Tests
 

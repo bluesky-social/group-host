@@ -49,6 +49,7 @@ usage.
 | `cov`, `cov-html` | the tests under the 100% gate, or their coverage as a page |
 | `lint` | formatting, clippy, the console's layers and svelte-check |
 | `lex` | the lexicons' checks |
+| `dev` | the console to use, over a world of its own: the reference PDS with alice, bob and harbor, the host, and the console at https://group-host.localtest.me ([development](../development.md#using-it)) |
 | `serve` | the host |
 | `web`, `web-dev` | the console built, or served as its source changes |
 | `e2e <args>` | the console's flows in Chromium over the reference PDS, as the `e2e` check runs them |

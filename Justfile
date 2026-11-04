@@ -51,6 +51,13 @@ web:
 web-dev:
     cd web && npm run dev
 
+# The console to use yourself, over a world of its own (harness/dev.mjs):
+# the reference PDS with alice, bob and harbor, the host, and the console
+# at https://group-host.localtest.me, behind portless. Empty each time.
+dev: web
+    {{cargo}} build -p group-host
+    node harness/dev.mjs
+
 # The console used as people use it (harness/e2e/flows.spec.mjs): in
 # Chromium, signed in to through the reference PDS's own approval page,
 # and an app signed in as a group through it, over a world of its own.
