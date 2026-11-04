@@ -74,8 +74,9 @@ says otherwise.
    told to the authority (`space.rs`, `space_api.rs`; done, see
    [spaces](spaces.md)), others' DID documents read for a `did:plc` or a
    `did:web` and kept a few minutes (`identity.rs`; done), then being the
-   authority for its groups' spaces, with a queue that tries a
-   `notifyWrite` again for a day, as the reference PDS does.
+   authority for its groups' spaces, with an outbox that tries a
+   `notifyWrite` again for a day (`authority.rs`, `authority_api.rs`;
+   done).
    Then the
    groups: `createGroup`, `getGroup`, `listGroups`,
    handles, profile, rules, activating and deleting; the meta and members

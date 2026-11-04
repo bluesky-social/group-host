@@ -106,6 +106,54 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (space, jti)
     );
 ",
+    "
+    CREATE TABLE space (
+        uri TEXT PRIMARY KEY,
+        authority TEXT NOT NULL REFERENCES account (did),
+        public_read INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE space_grant (
+        space TEXT NOT NULL REFERENCES space (uri),
+        did TEXT NOT NULL,
+        read INTEGER NOT NULL,
+        write INTEGER NOT NULL,
+        PRIMARY KEY (space, did)
+    );
+    CREATE TABLE space_writer (
+        space TEXT NOT NULL REFERENCES space (uri),
+        did TEXT NOT NULL,
+        repo_rev TEXT NOT NULL,
+        data BLOB NOT NULL,
+        space_rev TEXT NOT NULL,
+        PRIMARY KEY (space, did)
+    );
+    CREATE INDEX space_writer_rev ON space_writer (space, space_rev);
+    CREATE TABLE space_recipient (
+        space TEXT NOT NULL REFERENCES space (uri),
+        service TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (space, service)
+    );
+    CREATE TABLE spent_token (
+        iss TEXT NOT NULL,
+        jti TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (iss, jti)
+    );
+    CREATE TABLE outbox (
+        repo TEXT NOT NULL,
+        space TEXT NOT NULL,
+        rev TEXT NOT NULL,
+        data BLOB NOT NULL,
+        attempts INTEGER NOT NULL,
+        next_at INTEGER NOT NULL,
+        deliver_by INTEGER NOT NULL,
+        PRIMARY KEY (repo, space)
+    );
+    CREATE INDEX outbox_due ON outbox (next_at);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -159,6 +207,25 @@ const REVOKE: &str =
 const FORGET_REVOKED: &str = "DELETE FROM revoked_credential WHERE expires_at <= ?1";
 const REVOKED: &str =
     "SELECT 1 FROM revoked_credential WHERE space = ?1 AND jti = ?2 AND expires_at > ?3";
+const NEW_SPACE: &str = "INSERT INTO space (uri, authority, public_read, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (uri) DO NOTHING";
+const SPACE: &str = "SELECT authority, public_read FROM space WHERE uri = ?1";
+const PUT_GRANT: &str = "INSERT INTO space_grant (space, did, read, write) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (space, did) DO UPDATE SET read = ?3, write = ?4";
+const GRANT: &str = "SELECT read, write FROM space_grant WHERE space = ?1 AND did = ?2";
+const UNGRANT: &str = "DELETE FROM space_grant WHERE space = ?1 AND did = ?2";
+const WRITER_REV: &str = "SELECT repo_rev FROM space_writer WHERE space = ?1 AND did = ?2";
+const LAST_SPACE_REV: &str = "SELECT MAX(space_rev) FROM space_writer WHERE space = ?1";
+const PUT_WRITER: &str = "INSERT INTO space_writer (space, did, repo_rev, data, space_rev) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (space, did) DO UPDATE SET repo_rev = ?3, data = ?4, space_rev = ?5";
+const WRITERS: &str = "SELECT did, repo_rev, data, space_rev FROM space_writer WHERE space = ?1 AND space_rev > ?2 ORDER BY space_rev LIMIT ?3";
+const PUT_RECIPIENT: &str = "INSERT INTO space_recipient (space, service, endpoint, expires_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (space, service) DO UPDATE SET endpoint = ?3, expires_at = ?4";
+const RECIPIENTS: &str = "SELECT service, endpoint FROM space_recipient WHERE space = ?1 AND expires_at > ?2 ORDER BY service";
+const UNREGISTER: &str = "DELETE FROM space_recipient WHERE space = ?1 AND service = ?2";
+const FORGET_SPENT: &str = "DELETE FROM spent_token WHERE expires_at <= ?1";
+const SPEND: &str = "INSERT OR IGNORE INTO spent_token (iss, jti, expires_at) VALUES (?1, ?2, ?3)";
+const OWE: &str = "INSERT INTO outbox (repo, space, rev, data, attempts, next_at, deliver_by) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6) ON CONFLICT (repo, space) DO UPDATE SET rev = ?3, data = ?4, attempts = 0, next_at = ?5, deliver_by = ?6";
+const DUE: &str = "SELECT repo, space, rev, data, attempts FROM outbox WHERE next_at <= ?1 ORDER BY next_at LIMIT ?2";
+const DELIVERED: &str = "DELETE FROM outbox WHERE repo = ?1 AND space = ?2 AND rev = ?3";
+const RETRY: &str = "UPDATE outbox SET attempts = attempts + 1, next_at = ?4 WHERE repo = ?1 AND space = ?2 AND rev = ?3";
+const LAPSED: &str = "DELETE FROM outbox WHERE deliver_by <= ?1 RETURNING repo, space, rev";
 const COLLECTIONS: &str =
     "SELECT DISTINCT collection FROM record WHERE did = ?1 ORDER BY collection";
 
@@ -260,6 +327,35 @@ pub struct SpaceOp {
     pub cid: Option<Cid>,
     pub prev: Option<Cid>,
     pub value: Option<Vec<u8>>,
+}
+
+/// A space whose authority is an account here: the authority, and
+/// whether anyone may read it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Space {
+    pub authority: String,
+    pub public_read: bool,
+}
+
+/// A repo's last write in a space, as its authority knows it: its
+/// revision and digest, and the space's revision when it was told.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Writer {
+    pub did: String,
+    pub repo_rev: String,
+    pub data: Vec<u8>,
+    pub space_rev: String,
+}
+
+/// A write an authority elsewhere is owed word of: the repo, the space,
+/// the revision and digest, and how often telling it has failed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Notice {
+    pub repo: String,
+    pub space: String,
+    pub rev: String,
+    pub data: Vec<u8>,
+    pub attempts: i64,
 }
 
 /// A blob as kept: its type, its size, and whether it waits for a record
@@ -829,6 +925,193 @@ impl Store {
         let conn = self.conn();
         let found = conn.query_row(REVOKED, params![space, jti, now], |_| Ok(()));
         Ok(found.optional()?.is_some())
+    }
+
+    /// Keeps a new space of `authority`'s; `false` if there is one at `uri`.
+    pub fn create_space(
+        &self,
+        uri: &str,
+        authority: &str,
+        public_read: bool,
+        now: i64,
+    ) -> Result<bool> {
+        let conn = self.conn();
+        let added = conn.execute(NEW_SPACE, params![uri, authority, public_read, now])?;
+        Ok(added > 0)
+    }
+
+    /// The space at `uri`, if its authority is here.
+    pub fn space(&self, uri: &str) -> Result<Option<Space>> {
+        let conn = self.conn();
+        let found = conn.query_row(SPACE, [uri], |r| {
+            Ok(Space {
+                authority: r.get(0)?,
+                public_read: r.get(1)?,
+            })
+        });
+        Ok(found.optional()?)
+    }
+
+    /// Lets `did` read or write `space`, or both, as given.
+    pub fn grant(&self, space: &str, did: &str, read: bool, write: bool) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(PUT_GRANT, params![space, did, read, write])?;
+        Ok(())
+    }
+
+    /// What `did` may do in `space`: read, and write.
+    pub fn granted(&self, space: &str, did: &str) -> Result<Option<(bool, bool)>> {
+        let conn = self.conn();
+        let found = conn.query_row(GRANT, [space, did], |r| Ok((r.get(0)?, r.get(1)?)));
+        Ok(found.optional()?)
+    }
+
+    /// Takes back whatever `did` was let do in `space`.
+    pub fn ungrant(&self, space: &str, did: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(UNGRANT, [space, did])?;
+        Ok(())
+    }
+
+    /// Keeps `did`'s repo in `space` as at `repo_rev` with digest `data`, at
+    /// the space's revision `space_rev`, unless it is known at that
+    /// revision or a later one: none then. The space's revision before.
+    pub fn record_writer(
+        &self,
+        space: &str,
+        did: &str,
+        repo_rev: &str,
+        data: &[u8],
+        space_rev: &str,
+    ) -> Result<Option<Option<String>>> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let known = tx.query_row(WRITER_REV, [space, did], |r| r.get::<_, String>(0));
+        if known.optional()?.is_some_and(|k| k.as_str() >= repo_rev) {
+            return Ok(None);
+        }
+        let before = tx.query_row(LAST_SPACE_REV, [space], |r| r.get::<_, Option<String>>(0))?;
+        let kept = tx.execute(PUT_WRITER, params![space, did, repo_rev, data, space_rev]);
+        kept?;
+        tx.commit()?;
+        Ok(Some(before))
+    }
+
+    /// The repos written in `space`, in the order the space last heard of
+    /// each, after `cursor` (a space revision), at most `limit`.
+    pub fn writers(&self, space: &str, cursor: Option<&str>, limit: u32) -> Result<Vec<Writer>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(WRITERS)?;
+        let rows = q.query_map(params![space, cursor.unwrap_or(""), limit], |r| {
+            Ok(Writer {
+                did: r.get(0)?,
+                repo_rev: r.get(1)?,
+                data: r.get(2)?,
+                space_rev: r.get(3)?,
+            })
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Tells `service`, at `endpoint`, of `space`'s writes until
+    /// `expires_at` (in seconds).
+    pub fn register(
+        &self,
+        space: &str,
+        service: &str,
+        endpoint: &str,
+        expires_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(PUT_RECIPIENT, params![space, service, endpoint, expires_at])?;
+        Ok(())
+    }
+
+    pub fn unregister(&self, space: &str, service: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(UNREGISTER, [space, service])?;
+        Ok(())
+    }
+
+    /// The services told of `space`'s writes at `now`, and where.
+    pub fn recipients(&self, space: &str, now: i64) -> Result<Vec<(String, String)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(RECIPIENTS)?;
+        let rows = q.query_map(params![space, now], |r| Ok((r.get(0)?, r.get(1)?)));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Spends `iss`'s token `jti`, good until `expires_at`: `false` if it
+    /// was spent already. Those lapsed by `now` are forgotten.
+    pub fn spend(&self, iss: &str, jti: &str, expires_at: i64, now: i64) -> Result<bool> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let forgot = tx.execute(FORGET_SPENT, [now]);
+        forgot?;
+        let spent = tx.execute(SPEND, params![iss, jti, expires_at])?;
+        tx.commit()?;
+        Ok(spent > 0)
+    }
+
+    /// Owes `space`'s authority word that `repo` is at `rev`, with digest
+    /// `data`, from `now` until `deliver_by`: in place of any word of an
+    /// earlier revision.
+    pub fn owe(&self, notice: &Notice, now: i64, deliver_by: i64) -> Result<()> {
+        let conn = self.conn();
+        let owed = params![
+            notice.repo,
+            notice.space,
+            notice.rev,
+            notice.data,
+            now,
+            deliver_by
+        ];
+        conn.execute(OWE, owed)?;
+        Ok(())
+    }
+
+    /// The notices due at `now`, at most `limit`, the longest due first.
+    pub fn due(&self, now: i64, limit: u32) -> Result<Vec<Notice>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(DUE)?;
+        let rows = q.query_map(params![now, limit], |r| {
+            Ok(Notice {
+                repo: r.get(0)?,
+                space: r.get(1)?,
+                rev: r.get(2)?,
+                data: r.get(3)?,
+                attempts: r.get(4)?,
+            })
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Owes `notice` no more; one for a later revision stays owed.
+    pub fn delivered(&self, notice: &Notice) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(DELIVERED, [&notice.repo, &notice.space, &notice.rev])?;
+        Ok(())
+    }
+
+    /// Tries `notice` again at `next_at`.
+    pub fn retry(&self, notice: &Notice, next_at: i64) -> Result<()> {
+        let conn = self.conn();
+        let asked = params![notice.repo, notice.space, notice.rev, next_at];
+        conn.execute(RETRY, asked)?;
+        Ok(())
+    }
+
+    /// Gives up the notices still owed at `now` past their time, answering
+    /// each's repo, space and revision.
+    pub fn lapse(&self, now: i64) -> Result<Vec<(String, String, String)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(LAPSED)?;
+        let rows = q.query_map([now], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Up to `limit` events after `cursor`, in order.

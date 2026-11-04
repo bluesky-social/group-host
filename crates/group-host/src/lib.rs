@@ -4,6 +4,8 @@
 //! says how it is built and what is still to come.
 
 pub mod api;
+pub mod authority;
+pub mod authority_api;
 pub mod blobs;
 pub mod config;
 pub mod firehose;
@@ -42,7 +44,7 @@ pub struct Host {
     pub events: tokio::sync::broadcast::Sender<()>,
     /// When the relays were last told of news.
     crawled: std::sync::Mutex<Option<std::time::Instant>>,
-    http: reqwest::Client,
+    pub(crate) http: reqwest::Client,
 }
 
 impl Host {
@@ -132,6 +134,26 @@ pub fn router(host: Arc<Host>) -> Router {
             "/xrpc/com.atproto.space.notifyCredentialRevoked",
             post(space_api::notify_credential_revoked),
         )
+        .route(
+            "/xrpc/com.atproto.space.getSpaceCredential",
+            post(authority_api::get_space_credential),
+        )
+        .route(
+            "/xrpc/com.atproto.space.notifyWrite",
+            post(authority_api::notify_write),
+        )
+        .route(
+            "/xrpc/com.atproto.space.listRepos",
+            get(authority_api::list_repos),
+        )
+        .route(
+            "/xrpc/com.atproto.space.registerNotify",
+            post(authority_api::register_notify),
+        )
+        .route(
+            "/xrpc/com.atproto.space.unregisterNotify",
+            post(authority_api::unregister_notify),
+        )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
@@ -162,6 +184,15 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             let swept = sweeping.sweep_blobs(time::now_millis());
             tracing::info!(?swept, "swept the uploads no record took");
             tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+        }
+    });
+    // Word of writes owed to authorities elsewhere, tried as it falls due.
+    let delivering = host.clone();
+    tokio::spawn(async move {
+        loop {
+            let tried = delivering.deliver_due().await;
+            tracing::debug!(?tried, "delivered the notifyWrites due");
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });
     let app = router(host);

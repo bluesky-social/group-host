@@ -4,11 +4,13 @@
 mod common;
 
 use atproto::did;
-use atproto::space::{COMMIT_MAC, encapsulate, mac_header, star, want_mac_header};
+use atproto::space::{
+    COMMIT_MAC, RECORD_MAC, encapsulate, mac_header, record_mac, star, want_mac_header,
+};
 use atproto::space_auth::{Expect, Kind, sign_request, space_host_aud, verify};
 use atproto::{Curve, Keypair};
 use common::net::net;
-use common::start;
+use common::{start, start_reachable};
 use group_host::repo::Write;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -247,4 +249,150 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
         atproto::drisl::encode(&atproto::Value::from_json(&rule).unwrap()),
     )]);
     assert_eq!(res.bytes().await.unwrap().to_vec(), star(&commit, &records));
+}
+
+/// What `GET nsid` with `query` and `headers` answers at `url`.
+async fn get(
+    url: &str,
+    nsid: &str,
+    query: &[(&str, &str)],
+    headers: &[(&str, String)],
+) -> (reqwest::StatusCode, reqwest::header::HeaderMap, Value) {
+    let mut req = reqwest::Client::new()
+        .get(format!("{url}/xrpc/{nsid}"))
+        .query(query);
+    for (k, v) in headers {
+        req = req.header(*k, v);
+    }
+    let res = req.send().await.unwrap();
+    let (status, headers) = (res.status(), res.headers().clone());
+    (status, headers, res.json().await.unwrap_or(Value::Null))
+}
+
+#[tokio::test]
+async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
+    let net = net();
+    if !net.spaces {
+        eprintln!("the reference PDS has no spaces: GROUP_HOST_DEV_ENV names the alpha's build");
+        return;
+    }
+    let h = start_reachable(&[("PLC_URL", net.plc.as_str())]).await;
+    let group = h.host.create_account("runners.groups.test").await.unwrap();
+    let space = h
+        .host
+        .create_space(&group, "fyi.opensocial.content", "self", false)
+        .unwrap();
+    let alice = &net.accounts[0];
+    h.host.grant(&space, &alice.did, true, true).unwrap();
+    let session = call(
+        &net.pds,
+        "com.atproto.server.createSession",
+        "",
+        &json!({"identifier": alice.handle, "password": alice.password}),
+    )
+    .await;
+    let jwt = session["accessJwt"].as_str().unwrap();
+
+    // Alice writes in the group's space at her own PDS, which tells the
+    // host, the space's authority.
+    let note = json!({"$type": "fyi.opensocial.note", "text": "Hello", "createdAt": "2026-11-03T00:00:00Z"});
+    let made = call(
+        &net.pds,
+        "com.atproto.space.createRecord",
+        jwt,
+        &json!({"space": space, "repo": alice.did, "collection": "fyi.opensocial.note", "rkey": "one", "record": note}),
+    )
+    .await;
+    let mut writers = Vec::new();
+    for _ in 0..100 {
+        writers = h.host.store.writers(&space, None, 10).unwrap();
+        if !writers.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(
+        writers.len(),
+        1,
+        "the reference PDS never told the host of {made}"
+    );
+    assert_eq!(writers[0].did, alice.did);
+
+    // Her PDS's delegation token buys a credential from the host.
+    let (status, _, token) = get(
+        &net.pds,
+        "com.atproto.space.getDelegationToken",
+        &[("space", space.as_str())],
+        &[("authorization", format!("Bearer {jwt}"))],
+    )
+    .await;
+    assert!(status.is_success(), "{status} {token}");
+    let key = Keypair::generate(Curve::P256);
+    let res = reqwest::Client::new()
+        .post(format!("{}/xrpc/com.atproto.space.getSpaceCredential", h.url))
+        .json(&json!({"space": space, "credentialKid": key.public().did_key(), "delegationToken": token["token"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let issued: Value = res.json().await.unwrap();
+    let authorization = format!(
+        "Atproto-Space-Credential {}",
+        issued["credential"].as_str().unwrap()
+    );
+
+    // Her PDS takes the host's credential, and vouches for her record.
+    let theirs: Value = reqwest::Client::new()
+        .get(format!("{}/{}", net.plc, alice.did))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let kem = did::kem_key(&theirs).unwrap().did_key();
+    let (share, secret) = encapsulate(&kem).unwrap();
+    let mut headers: Vec<(&str, String)> = sign_request(&key, &authorization, &alice.did)
+        .unwrap()
+        .into_iter()
+        .collect();
+    headers.push((
+        "atproto-space-want-mac",
+        want_mac_header(RECORD_MAC, &share),
+    ));
+    let (status, said, record) = get(
+        &net.pds,
+        "com.atproto.space.getRecord",
+        &[
+            ("space", space.as_str()),
+            ("repo", alice.did.as_str()),
+            ("collection", "fyi.opensocial.note"),
+            ("rkey", "one"),
+        ],
+        &headers,
+    )
+    .await;
+    assert!(status.is_success(), "{status} {record}");
+    assert_eq!(record["value"], note);
+    let uri = record["uri"].as_str().unwrap();
+    let cid = atproto::Cid::parse(record["cid"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        said["atproto-space-mac"].to_str().unwrap(),
+        mac_header(RECORD_MAC, &record_mac(&secret, uri, &cid))
+    );
+
+    // And the host lists her repo to the same credential.
+    let headers: Vec<(&str, String)> = sign_request(&key, &authorization, &group)
+        .unwrap()
+        .into_iter()
+        .collect();
+    let (status, _, repos) = get(
+        &h.url,
+        "com.atproto.space.listRepos",
+        &[("space", space.as_str())],
+        &headers,
+    )
+    .await;
+    assert_eq!(status, 200, "{repos}");
+    assert_eq!(repos["repos"][0]["did"], alice.did);
 }

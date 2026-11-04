@@ -6,16 +6,13 @@
 //! issues; `space_api` checks those.
 
 use crate::Host;
+use crate::authority::{Access, DELIVER_FOR};
 use crate::repo::{Checked, Write, invalid};
-use crate::store::{Account, Change, SpaceHead};
+use crate::store::{Change, Notice, SpaceHead};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use anyhow::{Context, Result, bail};
-use atproto::service_auth::{self, Claims};
 use atproto::space::{Commit, LtHash, SpaceRef, element};
-use atproto::space_auth::space_host_aud;
-use atproto::{Value, did};
-use serde_json::json;
 
 /// The method a repo host tells an authority of a write with.
 pub const NOTIFY_WRITE: &str = "com.atproto.space.notifyWrite";
@@ -24,8 +21,9 @@ impl Host {
     /// Makes `writes` to `did`'s repo in `space`, as one revision, and
     /// tells the space's authority. Its commit.
     ///
-    /// The authority not hearing of it fails nothing: the write is made,
-    /// and the authority learns of it with the next.
+    /// The authority not hearing of it fails nothing: the write is made.
+    /// An authority here keeps it at once; one elsewhere is owed word of
+    /// it, tried now and again until it lands or a day has passed.
     pub async fn space_write(
         &self,
         did: &str,
@@ -33,11 +31,33 @@ impl Host {
         writes: &[Write],
     ) -> Result<Commit, XrpcError> {
         let space = SpaceRef::parse(space).map_err(|e| invalid(e.to_string()))?;
-        let (account, commit) = self.space_commit(did, &space, writes)?;
-        if let Err(e) = self.notify_write(&account, &space, &commit).await {
-            tracing::warn!(space = %space, repo = did, error = %format!("{e:#}"), "notifyWrite failed");
+        let commit = self.space_commit(did, &space, writes)?;
+        if let Err(e) = self.tell_authority(&space, &commit).await {
+            tracing::warn!(space = %space, repo = did, error = %format!("{e:#}"), "telling the authority failed");
         }
         Ok(commit)
+    }
+
+    async fn tell_authority(&self, space: &SpaceRef, commit: &Commit) -> Result<()> {
+        let uri = space.to_string();
+        if let Some(hosted) = self.store.space(&uri)? {
+            if !self.may(&uri, &hosted, Some(&commit.repo), Access::Write)? {
+                bail!("{} may not write in {uri}", commit.repo);
+            }
+            let data = commit.data;
+            return self.record_writer(&uri, &hosted.authority, &commit.repo, &commit.rev, &data);
+        }
+        let notice = Notice {
+            repo: commit.repo.clone(),
+            space: uri,
+            rev: commit.rev.clone(),
+            data: commit.data.to_vec(),
+            attempts: 0,
+        };
+        let now = now_millis() / 1000;
+        self.store.owe(&notice, now, now + DELIVER_FOR)?;
+        self.try_notice(&notice).await?;
+        Ok(())
     }
 
     fn space_commit(
@@ -45,7 +65,7 @@ impl Host {
         did: &str,
         space: &SpaceRef,
         writes: &[Write],
-    ) -> Result<(Account, Commit), XrpcError> {
+    ) -> Result<Commit, XrpcError> {
         let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
@@ -108,51 +128,6 @@ impl Host {
             rev: new.rev,
             data: hash.digest(),
         };
-        Ok((account, commit))
-    }
-
-    /// Tells `space`'s authority, at its PDS, that `account`'s repo there
-    /// is now at `commit`, asking as the account.
-    async fn notify_write(
-        &self,
-        account: &Account,
-        space: &SpaceRef,
-        commit: &Commit,
-    ) -> Result<()> {
-        let doc = self.identity.kept(&space.authority);
-        let doc = match doc {
-            Some(doc) => doc,
-            None => self.identity.document(&space.authority).await?,
-        };
-        let pds = did::pds(&doc).context("the authority's document names no PDS")?;
-        let now = now_millis() as u64 / 1000;
-        let claims = Claims {
-            iss: account.did.clone(),
-            aud: space_host_aud(&space.authority),
-            exp: now + 60,
-            iat: Some(now),
-            lxm: Some(NOTIFY_WRITE.into()),
-            jti: Some(self.clock.next()),
-        };
-        let token = service_auth::sign(&account.signing, &claims);
-        let body = json!({
-            "space": commit.space,
-            "repo": commit.repo,
-            "repoRev": commit.rev,
-            "data": Value::Bytes(commit.data.to_vec()).to_json(),
-        });
-        let res = self
-            .http
-            .post(format!("{pds}/xrpc/{NOTIFY_WRITE}"))
-            .bearer_auth(token)
-            .json(&body)
-            .send()
-            .await?;
-        let status = res.status();
-        if !status.is_success() {
-            let said = res.text().await.unwrap_or_default();
-            bail!("the authority refused ({status}): {said}");
-        }
-        Ok(())
+        Ok(commit)
     }
 }

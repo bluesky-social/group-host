@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod net;
+pub mod spaces;
 
 use atproto::plc::Signed;
 use axum::extract::{Path, State};
@@ -135,6 +136,25 @@ impl Running {
 /// A host whose groups' handles are under `.groups.test`, with `vars`
 /// besides, publishing to a fake PLC directory.
 pub async fn start(vars: &[(&str, &str)], refuse: bool) -> Running {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    start_on(listener, vars, refuse).await
+}
+
+/// A host whose `PUBLIC_URL` is where it listens, for servers elsewhere
+/// to reach it.
+pub async fn start_reachable(vars: &[(&str, &str)]) -> Running {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let mut vars = vars.to_vec();
+    vars.push(("PUBLIC_URL", &url));
+    start_on(listener, &vars, false).await
+}
+
+async fn start_on(
+    listener: tokio::net::TcpListener,
+    vars: &[(&str, &str)],
+    refuse: bool,
+) -> Running {
     let (plc, plc_url) = start_plc(refuse).await;
     let data = tempfile::tempdir().unwrap();
     let dir = data.path().to_str().unwrap().to_string();
@@ -150,7 +170,9 @@ pub async fn start(vars: &[(&str, &str)], refuse: bool) -> Running {
     env.extend(vars.iter().map(|(k, v)| (k.to_string(), v.to_string())));
     let config = Config::from(|k| env.get(k).cloned()).unwrap();
     let host = Arc::new(Host::open(config).unwrap());
-    let url = serve(group_host::router(host.clone())).await;
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let router = group_host::router(host.clone());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     Running {
         host,
         url,

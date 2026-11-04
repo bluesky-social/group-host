@@ -28,15 +28,15 @@ pub const NOTIFY_REVOKED: &str = "com.atproto.space.notifyCredentialRevoked";
 const WANT_MAC: &str = "atproto-space-want-mac";
 const MAC: HeaderName = HeaderName::from_static("atproto-space-mac");
 
-fn unauthorized(code: &'static str, message: impl Into<String>) -> XrpcError {
+pub(crate) fn unauthorized(code: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::UNAUTHORIZED, code, message)
 }
 
-fn refused(e: TokenError) -> XrpcError {
+pub(crate) fn refused(e: TokenError) -> XrpcError {
     unauthorized(e.code, e.message)
 }
 
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     now_millis() as u64 / 1000
 }
 
@@ -51,7 +51,7 @@ struct Asked {
 /// Atproto-Space-Credential <jwt>`): issued by the space's authority, for
 /// this space and this repo, unrevoked, and the request signed with the key
 /// it is bound to.
-async fn credential(
+pub(crate) async fn credential(
     host: &Host,
     headers: &HeaderMap,
     space: &str,
@@ -422,7 +422,11 @@ pub async fn list_blobs(
 
 /// The claims of the request's service auth (`Authorization: Bearer`),
 /// signed by its issuer's key and for `lxm`.
-async fn service_caller(host: &Host, headers: &HeaderMap, lxm: &str) -> Result<Claims, XrpcError> {
+pub(crate) async fn service_caller(
+    host: &Host,
+    headers: &HeaderMap,
+    lxm: &str,
+) -> Result<Claims, XrpcError> {
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -444,7 +448,7 @@ async fn service_caller(host: &Host, headers: &HeaderMap, lxm: &str) -> Result<C
     Ok(claims)
 }
 
-fn forbidden(message: &str) -> XrpcError {
+pub(crate) fn forbidden(message: &str) -> XrpcError {
     XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", message)
 }
 

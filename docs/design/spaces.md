@@ -6,9 +6,9 @@ account that writes there keeps a repo of its own at its own PDS. The
 authority says who may read and write; each repo host keeps its
 accounts' repos and serves them to those the authority lets read.
 
-This host is both, for its groups. This page is the repo host's side:
-a group's repos in spaces, wherever their authority is. Being the
-authority for a group's own spaces comes next.
+This host is both, for its groups: the repo host for a group's repos in
+spaces wherever their authority is, and the authority for the group's
+own spaces.
 
 ## A repo in a space
 
@@ -36,10 +36,44 @@ After each write the host sends the space's authority, at its PDS,
 service auth signed by the group, for `<authority>#atproto_pds`. The
 authority keeps it, and tells the services syncing the space.
 
-The write stands whether the authority heard or not: it learns of the
-next write instead. The host waits on it ten seconds at most, as it
-waits on any server it asks. Trying again, as the reference PDS does for a day,
-is still to come. An authority may be a `did:plc` or a `did:web`.
+The write stands whether the authority heard or not. The host owes the
+authority word of it, kept in an outbox and tried at once: a refusal
+that may pass (no answer, a 5xx, a 429) is tried again ten seconds
+later, then twice as long each time, up to an hour, until it lands or a
+day has passed; a refusal for good is given up. Word of a newer write
+to the same space takes the place of word still owed. This is pds.js's
+`outbox.js`. A space whose authority is a group here hears of the
+write at once, in the host. An authority may be a `did:plc` or a
+`did:web`.
+
+## Being the authority
+
+A group here is the authority for its own spaces. Who may do what in
+one is the host's to say, from its grants: the group itself anything;
+another account what it is granted, reading, writing or both; and
+anyone, reading a space made open to all. Groups and roles, as they
+arrive, fill the grants in, as the prototype decided each space's
+access from the group's own records.
+
+- `getSpaceCredential` issues a credential, bound to a P-256 key of the
+  caller's, to the user a delegation token names: one their PDS signed
+  for `<group>#atproto_pds` and this space, spent once. A user the space
+  does not let read is told there is no such space. Without a token, a
+  credential is issued only for a space open to all.
+- `notifyWrite` is how a repo host tells the authority of a write: from
+  the writer's own account, for this authority, of a revision not
+  ahead of the clock, by one the space lets write. The writer set keeps
+  each repo's latest revision and digest, and the space's revision when
+  it heard; `listRepos` answers it, a page at a time, to a credential's
+  holder.
+- `registerNotify` has the authority tell a service of each write for a
+  day, at the endpoint the service's own DID document names; a write
+  is forwarded to each, signed by the group, best effort. A syncer that
+  misses one learns of it with the next.
+
+Not yet: deleting a space and telling its syncers, and revoking the
+credentials of one who loses their grant, which come with groups and
+membership.
 
 ## Others' identities
 
