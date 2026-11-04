@@ -14,6 +14,8 @@ pub struct Net {
     pub plc: String,
     /// Whether the PDS is on the space alpha.
     pub spaces: bool,
+    /// Where the codes the PDS mails are read: `GET <mail>?to=<address>`.
+    pub mail: String,
     pub accounts: Vec<Member>,
 }
 

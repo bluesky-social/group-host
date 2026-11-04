@@ -24,12 +24,19 @@ pub const USAGE: &str = "usage: opensocial <command>
                          invite someone in
   migrate <group> --to <address> [--to-did <did>]
                          move a group, whole, from this host to the one at <address>
+  import <account> [--address <label>]
+                         move an account from its server here, its spaces with it, to
+                         become a group run by you; its server emails a code
+  import <account> --code <code>
+                         with that code, finish moving it
   seed <handle>          a group to try things on: two rules, a moderator role, and an
                          invite for each handle in OPENSOCIAL_SEED_INVITE
 
   A group or person is a handle or a DID. You sign in as OPENSOCIAL_AS (a
   handle) with OPENSOCIAL_PASSWORD, at PDS_URL; the host is OPENSOCIAL_HOST,
-  its DID OPENSOCIAL_HOST_DID (by default the did:web of its address).
+  its DID OPENSOCIAL_HOST_DID (by default the did:web of its address). An
+  account you import signs in at its own server with OPENSOCIAL_IMPORT_PASSWORD,
+  its own password: its server hands its identity over for no app password.
 ";
 
 /// Where the command acts, and as whom: from the environment.
@@ -47,6 +54,9 @@ pub struct Env {
     pub password: Option<String>,
     /// Who `seed` invites, `OPENSOCIAL_SEED_INVITE`, comma-separated.
     pub seed_invite: Vec<String>,
+    /// The password of an account `import` moves, at its own server,
+    /// `OPENSOCIAL_IMPORT_PASSWORD`.
+    pub import_password: Option<String>,
 }
 
 /// The did:web a host at `url` is by default, as the host names itself.
@@ -72,6 +82,7 @@ impl Env {
             pds: pds.trim_end_matches('/').to_string(),
             handle: var("OPENSOCIAL_AS"),
             password: var("OPENSOCIAL_PASSWORD"),
+            import_password: var("OPENSOCIAL_IMPORT_PASSWORD"),
             seed_invite: invite
                 .split(',')
                 .map(str::trim)
@@ -158,6 +169,66 @@ impl Client {
         let res = sent
             .await
             .with_context(|| format!("reaching {}", host.url))?;
+        answer(res, lxm).await
+    }
+
+    /// `nsid` of the person's own PDS, as them: a query with `params`, or
+    /// with `body`, a procedure (one that takes none with a null body).
+    async fn own(
+        &self,
+        nsid: &str,
+        params: &[(&str, &str)],
+        body: Option<&Value>,
+    ) -> Result<Value> {
+        let url = format!("{}/xrpc/{nsid}", self.pds);
+        let asked = match body {
+            Some(Value::Null) => self.http.post(url),
+            Some(body) => self.http.post(url).json(body),
+            None => self.http.get(url),
+        };
+        let sent = asked.query(params).bearer_auth(&self.access).send().await;
+        let res = sent.context(format!("reaching {}", self.pds))?;
+        answer(res, nsid).await
+    }
+
+    /// The bytes `nsid` of the person's own PDS answers with `params`, and
+    /// their type; none where it holds no repo of theirs.
+    async fn own_bytes(
+        &self,
+        nsid: &str,
+        params: &[(&str, &str)],
+    ) -> Result<Option<(Vec<u8>, String)>> {
+        let url = format!("{}/xrpc/{nsid}", self.pds);
+        let asked = self.http.get(url).query(params).bearer_auth(&self.access);
+        let res = asked.send().await;
+        let res = res.context(format!("reaching {}", self.pds))?;
+        let kind = res
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok());
+        let kind = kind.unwrap_or("application/octet-stream").to_string();
+        if !res.status().is_success() {
+            let said = answer(res, nsid).await.expect_err("a refusal");
+            let none = format!("{said}").contains("RepoNotFound");
+            return none.then_some(None).ok_or(said);
+        }
+        Ok(Some((res.bytes().await?.to_vec(), kind)))
+    }
+
+    /// `host`'s procedure `lxm` with `params`, taking `bytes` of `kind`.
+    async fn send(
+        &self,
+        host: &Host,
+        lxm: &str,
+        params: &[(&str, &str)],
+        bytes: Vec<u8>,
+        kind: &str,
+    ) -> Result<Value> {
+        let token = self.token(&host.did, lxm).await?;
+        let url = format!("{}/xrpc/{lxm}", host.url);
+        let asked = self.http.post(url).bearer_auth(token).query(params);
+        let sent = asked.header("content-type", kind).body(bytes).send().await;
+        let res = sent.context(format!("reaching {}", host.url))?;
         answer(res, lxm).await
     }
 
@@ -255,6 +326,11 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
                 did: did.unwrap_or_else(|| did_web(to)),
             };
             migrate(&signed_in(env).await?, &host, &dest, group).await
+        }
+        "import" => {
+            let a = parse(rest, &["address", "code"])?;
+            let [account] = a.take()?;
+            import(&signed_in(env).await?, &host, env, account, &a).await
         }
         "seed" => {
             let [handle] = parse(rest, &[])?.take()?;
@@ -412,6 +488,159 @@ async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<Str
     me.call(to, &m("migrateActivate"), &body).await?;
     out += "switched on\n";
     Ok(out)
+}
+
+/// The cursor a listing's next page starts after, if it has one.
+fn next(listed: &Value) -> Option<String> {
+    let cursor = text(&listed["cursor"]);
+    (!cursor.is_empty()).then_some(cursor.to_string())
+}
+
+/// Moves `account` here to become a group run by `me`, in two runs: one
+/// copies it and its spaces and has its server email a code, and one, with
+/// that code, has its server sign its identity over and finishes.
+async fn import(
+    me: &Client,
+    host: &Host,
+    env: &Env,
+    account: &str,
+    a: &Args<'_>,
+) -> Result<String> {
+    let did = me.resolve(host, account).await?;
+    let mut asked = vec![("did", did.as_str())];
+    asked.extend(a.flags.get("address").map(|l| ("address", *l)));
+    let plan = me.query(host, &m("checkImport"), &asked).await?;
+    if let Some(no) = plan.get("refused") {
+        bail!("{} can't move here: {}", account, text(&no["message"]));
+    }
+    let Some(password) = &env.import_password else {
+        bail!("set OPENSOCIAL_IMPORT_PASSWORD to {account}'s own password at its server");
+    };
+    let theirs = Client::sign_in(text(&plan["pds"]), account, password).await?;
+    match a.flags.get("code") {
+        None => start_import(me, &theirs, host, &plan, account, a.flags.get("address")).await,
+        Some(code) => finish_import(me, &theirs, host, &plan, code).await,
+    }
+}
+
+async fn start_import(
+    me: &Client,
+    theirs: &Client,
+    host: &Host,
+    plan: &Value,
+    account: &str,
+    address: Option<&&str>,
+) -> Result<String> {
+    let did = theirs.did.as_str();
+    let proof = theirs
+        .token(&host.did, "com.atproto.server.createAccount")
+        .await?;
+    let mut body = json!({ "serviceJwt": proof });
+    if let Some(label) = address {
+        body["address"] = json!(label);
+    }
+    let copied = me.call(host, &m("importAccount"), &body).await?;
+    let mut out = format!(
+        "moving {did}
+  from {}
+  as   {}
+",
+        text(&plan["pds"]),
+        text(&copied["handle"])
+    );
+    out += &format!(
+        "copied    {} records, {} files
+",
+        copied["records"], copied["blobs"]
+    );
+    // Each space it governs or wrote in: a space it governs first, then its
+    // files there, then its repo, which holds them.
+    let mut spaces = Vec::new();
+    let mut cursor = Some(String::new());
+    while let Some(after) = cursor.take() {
+        let mut page = vec![("limit", "100")];
+        page.extend((!after.is_empty()).then_some(("cursor", after.as_str())));
+        let listed = theirs
+            .own("com.atproto.space.listSpaces", &page, None)
+            .await?;
+        let uris = listed["spaces"].as_array().into_iter().flatten();
+        spaces.extend(uris.map(|s| text(&s["uri"]).to_string()));
+        cursor = next(&listed);
+    }
+    let (mut files, mut records) = (0, 0);
+    let bring = &m("importAccountSpace");
+    for space in &spaces {
+        let at = [("space", space.as_str()), ("repo", did)];
+        let governs = space.starts_with(&format!("at://{did}/"));
+        if governs {
+            let meta = theirs
+                .own_bytes("com.atproto.space.exportSpaceMeta", &at[..1])
+                .await?;
+            let (meta, kind) = meta.context(format!("{space} exported nothing"))?;
+            me.send(host, bring, &[("did", did), ("part", "meta")], meta, &kind)
+                .await?;
+        }
+        let mut cursor = Some(String::new());
+        while let Some(after) = cursor.take() {
+            let mut page = at.to_vec();
+            page.extend((!after.is_empty()).then_some(("cursor", after.as_str())));
+            let listed = theirs
+                .own("com.atproto.space.listBlobs", &page, None)
+                .await?;
+            for cid in listed["cids"].as_array().into_iter().flatten() {
+                let at = [at[0], at[1], ("cid", text(cid))];
+                let blob = theirs.own_bytes("com.atproto.space.getBlob", &at).await?;
+                let (bytes, kind) = blob.context(format!("{space} has no file {}", text(cid)))?;
+                me.send(host, bring, &[("did", did), ("part", "blob")], bytes, &kind)
+                    .await?;
+                files += 1;
+            }
+            cursor = next(&listed);
+        }
+        if let Some((repo, kind)) = theirs.own_bytes("com.atproto.space.getRepo", &at).await? {
+            let kept = me
+                .send(host, bring, &[("did", did), ("part", "repo")], repo, &kind)
+                .await?;
+            records += kept["records"].as_u64().unwrap_or_default();
+        }
+    }
+    out += &format!(
+        "brought   {} spaces: {records} records, {files} files
+",
+        spaces.len()
+    );
+    let ask = "com.atproto.identity.requestPlcOperationSignature";
+    theirs.own(ask, &[], Some(&Value::Null)).await?;
+    out += &format!(
+        "its server has emailed a code to move its identity; finish with
+  opensocial import {account} --code <code>
+"
+    );
+    Ok(out)
+}
+
+async fn finish_import(
+    me: &Client,
+    theirs: &Client,
+    host: &Host,
+    plan: &Value,
+    code: &str,
+) -> Result<String> {
+    let did = theirs.did.as_str();
+    let Some(Value::Object(creds)) = plan.get("recommendedCreds") else {
+        bail!("no move of {did} of yours is under way here: start it without --code");
+    };
+    let mut asked = creds.clone();
+    asked.insert("token".into(), json!(code.trim()));
+    let sign = "com.atproto.identity.signPlcOperation";
+    let signed = theirs.own(sign, &[], Some(&Value::Object(asked))).await?;
+    let body = json!({ "did": did, "operation": signed["operation"] });
+    let done = me.call(host, &m("completeImport"), &body).await?;
+    Ok(format!(
+        "moved: {} is a group here, run by you
+",
+        text(&done["handle"])
+    ))
 }
 
 /// The rules a seeded group starts with.

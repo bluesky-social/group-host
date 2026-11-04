@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "What moving an account here would make of it, before anything moves (importAccount moves it so): its handle here, whether that's the one it has, and its address, this host's own name for it, where its site lives. A handle on a domain of the account's own that still names it comes along; one its old server gives out becomes the address. `refused` says why it can't have that address, as importAccount would.",
+      "description": "What moving an account here would make of it, before anything moves (importAccount moves it so): its handle here, whether that's the one it has, and its address, this host's own name for it, where its site lives. A handle on a domain of the account's own that still names it comes along; one its old server gives out becomes the address. `refused` says why it can't have that address, as importAccount would. While the caller's own move of it is pending, `recommendedCreds` says again what the operation should name, as importAccount did.",
       "parameters": {
         "type": "params",
         "required": [
@@ -60,6 +60,15 @@
             "refused": {
               "type": "unknown",
               "description": "{error, message}: InvalidHandle or HandleNotAvailable."
+            },
+            "pds": {
+              "type": "string",
+              "format": "uri",
+              "description": "The server it lives on now, as its DID document names it."
+            },
+            "recommendedCreds": {
+              "type": "unknown",
+              "description": "While the caller's own move of it is pending: rotationKeys, alsoKnownAs, verificationMethods and services, as importAccount answered, for the account's server to sign (com.atproto.identity.signPlcOperation)."
             }
           }
         }

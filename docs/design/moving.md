@@ -75,7 +75,10 @@ confirms it (an emailed code, on the reference PDS).
    out its own), that still names it; otherwise its handle is its
    address here, its handle's first label (or one asked for) under this
    host's domain. It says when that address, or that handle, is
-   another's here.
+   another's here, and which server the account lives on. While the
+   caller's own move of it is pending, it says again what the PLC
+   operation should name, so a client that has stopped in between can
+   have the account's server sign it.
 2. **`importAccount`**, for someone this host starts groups for, never
    the account itself, and only a did:plc account: the token checked
    against the account's key in the directory, for this host or one of
@@ -99,6 +102,13 @@ confirms it (an emailed code, on the reference PDS).
 
 The old server keeps its copy until its owner deletes it there; once the
 DID names this host, the network reads the account here.
+
+`opensocial import <account>` walks through it, signed in as the person
+moving it and, with its own password, as the account at its server (its
+server signs its identity over for no app password). It copies the
+account and its spaces and has its server email a code; `opensocial
+import <account> --code <code>` then has its server sign the operation
+and finishes.
 
 ## Its spaces
 

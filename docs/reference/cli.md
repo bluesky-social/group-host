@@ -24,6 +24,8 @@ any PDS may run it against any host.
 | `membership eject <group> <member> [--reason]` | puts a member out |
 | `membership invite <group> <person> [--message]` | invites someone in |
 | `migrate <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another ([moving](../design/moving.md)) |
+| `import <account> [--address <label>]` | moves an account from its server here, its spaces with it, to become a group run by you; its server emails a code ([moving](../design/moving.md#an-account-becoming-a-group)) |
+| `import <account> --code <code>` | with that code, has its server sign its identity over, and finishes |
 | `seed <handle>` | a group to try things on: two rules, a moderator role, and an invite for each of `OPENSOCIAL_SEED_INVITE` |
 
 A group or person is a handle or a DID. Anything else fails with its
@@ -36,6 +38,7 @@ usage.
 | `OPENSOCIAL_HOST` | the host; `http://localhost:2600` |
 | `OPENSOCIAL_HOST_DID` | its DID; the did:web of its address |
 | `OPENSOCIAL_SEED_INVITE` | who `seed` invites, comma-separated |
+| `OPENSOCIAL_IMPORT_PASSWORD` | the password of the account `import` moves, at its own server: its own, as its server signs its identity over for no app password |
 
 ## `just`
 

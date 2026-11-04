@@ -1,7 +1,7 @@
 // Runs the reference PDS (@atproto/pds, through @atproto/dev-env) and a PLC
 // directory on free ports, makes test accounts, prints one JSON line naming
-// them, and stops when stdin closes. As knotless's harness/pds.mjs, less what
-// only knotless needs.
+// them (and where the codes the PDS mails are read), and stops when stdin
+// closes. As knotless's harness/pds.mjs, less what only knotless needs.
 //
 //   node harness/pds.mjs [--accounts alice,bob]
 //
@@ -24,6 +24,7 @@ import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import dns from 'node:dns'
 import tls from 'node:tls'
+import http from 'node:http'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The PDS's better-sqlite3 is built for the Node .node-version names.
@@ -98,16 +99,35 @@ for (const name of names) {
   accounts.push({ handle, did, password })
 }
 
+// The codes the PDS mails to let an account's identity move (an account
+// moving to a group host asks for one), kept by address and served at
+// `mail`, as the account's inbox would have them.
+const codes = new Map()
+const mailer = net.pds.ctx.mailer
+const sendPlcOperation = mailer.sendPlcOperation.bind(mailer)
+mailer.sendPlcOperation = async (params, opts) => {
+  codes.set(opts.to, params.token)
+  return sendPlcOperation(params, opts)
+}
+const inbox = http.createServer((req, res) => {
+  const code = codes.get(new URL(req.url, 'http://inbox').searchParams.get('to'))
+  res.writeHead(code ? 200 : 404, { 'content-type': 'application/json' })
+  res.end(JSON.stringify(code ? { code } : { error: 'NoMail' }))
+})
+await new Promise((resolve) => inbox.listen(0, '127.0.0.1', resolve))
+
 const described = await fetch(`${net.pds.url}/xrpc/com.atproto.server.describeServer`).then((r) => r.json())
 console.log(JSON.stringify({
   pds: net.pds.url,
   plc: net.plc.url,
   spaces: described.spacesAlpha === true,
+  mail: `http://127.0.0.1:${inbox.address().port}`,
   console: { host: CONSOLE_HOST, cert, key },
   accounts,
 }))
 
 const shutdown = async () => {
+  inbox.close()
   await net.close()
   process.exit(0)
 }

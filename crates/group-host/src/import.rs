@@ -364,7 +364,7 @@ pub async fn check_import(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    signed_in(&host, &headers, &format!("{NS}.checkImport")).await?;
+    let me = signed_in(&host, &headers, &format!("{NS}.checkImport")).await?;
     let did = param(&p, "did")?;
     let plan = host
         .plan_import(did, p.get("address").map(String::as_str))
@@ -375,7 +375,17 @@ pub async fn check_import(
         "address": plan.address,
         "label": plan.label,
         "keeps": plan.keeps,
+        "pds": plan.pds,
     });
+    // What its operation should name, again, for whoever is moving it.
+    let pending = host
+        .store
+        .pending_import(did)
+        .map_err(XrpcError::internal)?;
+    if pending.is_some_and(|p| p.founder == me) {
+        let account = host.store.account(did).map_err(XrpcError::internal)?;
+        out["recommendedCreds"] = creds(&host, &account.expect("a move's account"));
+    }
     if let Some(from) = &plan.from {
         out["from"] = json!(from);
     }

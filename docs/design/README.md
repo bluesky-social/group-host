@@ -131,7 +131,7 @@ says otherwise.
    `methods/{moderation,recovery,importAccount,migration}.ts`,
    `hostLabels.ts`, `scripts/move-host.ts`.
 9. **MCP and the command.** The `opensocial` command's `create-group`,
-   `inspect`, `membership`, `migrate` and `seed`, signed in as a person on
+   `inspect`, `membership`, `migrate`, `import` and `seed`, signed in as a person on
    their own PDS (done, see [the commands](../reference/cli.md); moving
    the host is `group-host move-host`, as it needs the host's own
    database and keys); and the MCP tools over what steps 4 to 8 brought,

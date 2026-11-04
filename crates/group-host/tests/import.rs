@@ -831,6 +831,8 @@ async fn checks_what_a_move_would_make_of_it_before_anything_moves() {
     assert_eq!(said["keeps"], false);
     assert_eq!(said["from"], "harbor.old.test");
     assert!(said.get("refused").is_none());
+    assert_eq!(said["pds"], w.url.as_str());
+    assert!(said.get("recommendedCreds").is_none());
     assert!(w.h.host.store.account(&w.did).unwrap().is_none());
     let (_, said) = w.check(&format!("did={}&address=Riders", w.did)).await;
     assert_eq!(said["address"], "riders.groups.test");
@@ -840,9 +842,22 @@ async fn checks_what_a_move_would_make_of_it_before_anything_moves() {
     let said = w.start(&w.people[0], json!({"address": "-"})).await;
     assert_eq!(error(&said), (400, "InvalidHandle"));
     // An earlier move of the same account holds nothing that counts.
-    assert_eq!(w.start(&w.people[0], json!({})).await.0, 200);
+    let (status, started) = w.start(&w.people[0], json!({})).await;
+    assert_eq!(status, 200, "{started}");
     let (_, said) = w.check(&format!("did={}", w.did)).await;
     assert!(said.get("refused").is_none(), "{said}");
+    // Whoever is moving it is told again what its operation should name;
+    // nobody else is.
+    assert_eq!(said["recommendedCreds"], started["recommendedCreds"]);
+    let other = &w.people[1];
+    let (_, said) = get(
+        &w.h,
+        CHECK,
+        &format!("did={}", w.did),
+        &[auth(&w.h, other, CHECK)],
+    )
+    .await;
+    assert!(said.get("recommendedCreds").is_none(), "{said}");
     // One known by no handle takes the address asked for, and only that.
     let rotation = Keypair::generate(Curve::K256);
     let mut op = Op::atproto(
