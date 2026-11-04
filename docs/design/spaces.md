@@ -153,8 +153,9 @@ Details:
 
 The `fyi.opensocial.*` methods answer from the index.
 `fyi.opensocial.listSpaceRecords` brings the index up to date, waiting at
-most 5 seconds, then answers newest first; its `createdAt` is when the
-index read a record. It and `getSpaceBlob` ask the access record on every
+most 5 seconds, then answers newest first: by when the index first saw
+each record, its `createdAt`, which reading a repo again does not move.
+It and `getSpaceBlob` ask the access record on every
 call, so the index never decides who sees what. The caller is known by
 service auth or the console's session; one with neither reads only what
 is readable by `"public"`. A space's images are also served at

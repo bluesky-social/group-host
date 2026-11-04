@@ -829,3 +829,55 @@ async fn fetches_no_file_too_big_or_not_asked_for() {
     let got = read(&h, &lxm, &fetch, &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(got.status, 400);
 }
+
+#[tokio::test]
+async fn keeps_a_record_read_again_where_it_was() {
+    use group_host::store::SpaceHead;
+    let h = start(&[], false).await;
+    let [alice, _, _] = people(&h).await;
+    let (_, space) = group_with(&h, &alice, "did:plc:writer").await;
+    let store = &h.host.store;
+    let put = |v: &str| {
+        let value = v.as_bytes().to_vec();
+        Some((Cid::of_raw(&value), value))
+    };
+    let head = |rev: &str| SpaceHead {
+        rev: rev.into(),
+        state: vec![0; 2048],
+    };
+    let first = BTreeMap::from([
+        ("a.b.c/one".to_string(), put("one")),
+        ("a.b.c/two".to_string(), put("two")),
+    ]);
+    store
+        .index(&space, "did:plc:writer", &head("3l1"), true, &first, 100)
+        .unwrap();
+    // Read whole again: one unchanged, one changed, one new, none gone
+    // but what is not there.
+    let second = BTreeMap::from([
+        ("a.b.c/one".to_string(), put("one")),
+        ("a.b.c/two".to_string(), put("two, edited")),
+        ("a.b.c/three".to_string(), put("three")),
+    ]);
+    store
+        .index(&space, "did:plc:writer", &head("3l2"), true, &second, 200)
+        .unwrap();
+    let listed = store.indexed(&space, None, None, 10).unwrap();
+    let order: Vec<(&str, i64)> = listed
+        .iter()
+        .map(|r| (r.rkey.as_str(), r.indexed_at))
+        .collect();
+    // Newest first, the unchanged one where it was, first seen at 100.
+    assert_eq!(order, [("two", 200), ("three", 200), ("one", 100)]);
+    // A whole read without one takes it out.
+    let third = BTreeMap::from([("a.b.c/one".to_string(), put("one"))]);
+    store
+        .index(&space, "did:plc:writer", &head("3l3"), true, &third, 300)
+        .unwrap();
+    let listed = store.indexed(&space, None, None, 10).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        (listed[0].rkey.as_str(), listed[0].indexed_at),
+        ("one", 100)
+    );
+}

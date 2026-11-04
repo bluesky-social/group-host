@@ -485,7 +485,7 @@ const FORGET_OWN_REPO: &[&str] = &[
 ];
 const INDEXED_STATE: &str = "SELECT rev, state FROM index_repo WHERE space = ?1 AND did = ?2";
 const INDEX_STATE: &str = "INSERT INTO index_repo (space, did, rev, state) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (space, did) DO UPDATE SET rev = ?3, state = ?4";
-const UNINDEX_REPO: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2";
+const INDEXED_PATHS: &str = "SELECT path, cid FROM index_record WHERE space = ?1 AND did = ?2";
 const UNINDEX: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2 AND path = ?3";
 const INDEX: &str = "INSERT INTO index_record (space, did, path, cid, value, indexed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 const INDEXED: &str = "SELECT seq, did, path, cid, value, indexed_at FROM index_record WHERE space = ?1 AND (?2 IS NULL OR substr(path, 1, length(?2) + 1) = ?2 || '/') AND seq < ?3 ORDER BY seq DESC LIMIT ?4";
@@ -1417,11 +1417,25 @@ impl Store {
     ) -> Result<()> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
+        // A record read again as it was keeps its place, and when it was
+        // first seen: newest first is by when each came, not when it was
+        // last read.
+        let held: BTreeMap<String, String> = {
+            let mut q = tx.prepare(INDEXED_PATHS)?;
+            let rows = q.query_map([space, did], |r| Ok((r.get(0)?, r.get(1)?)));
+            rows?.collect::<rusqlite::Result<_>>()?
+        };
         if whole {
-            let cleared = tx.execute(UNINDEX_REPO, [space, did]);
-            cleared?;
+            for path in held.keys().filter(|p| !changes.contains_key(*p)) {
+                let gone = tx.execute(UNINDEX, [space, did, path]);
+                gone?;
+            }
         }
         for (path, put) in changes {
+            let same = put.as_ref().map(|(cid, _)| cid.to_string());
+            if same.is_some() && held.get(path) == same.as_ref() {
+                continue;
+            }
             let gone = tx.execute(UNINDEX, [space, did, path]);
             gone?;
             if let Some((cid, value)) = put {
