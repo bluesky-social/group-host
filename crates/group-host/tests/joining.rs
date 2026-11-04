@@ -147,6 +147,10 @@ async fn a_group_that_approves_its_members_keeps_requests() {
         .map(|r| r["actor"]["did"].as_str().unwrap())
         .collect();
     assert_eq!(waiting, [carol.did.as_str(), bob.did.as_str()]);
+    assert_eq!(
+        admins["joinRequests"][0]["actor"]["handle"],
+        "authority.test"
+    );
 
     // Listed for one who may admit, newest first, a page at a time.
     let (_, page) = ask(

@@ -57,9 +57,9 @@ test('asking to join, and being admitted', async () => {
   await bob.getByRole('button', { name: 'Ask to join' }).click()
   await expect(bob.getByText('You have asked to join.')).toBeVisible()
   await page.goto(url('/g/hikers.groups.test'))
-  const asking = page.locator('.requests li', { hasText: who.bob.did })
+  const asking = page.locator('.requests li', { hasText: '@bob.test' })
   await asking.getByRole('button', { name: 'Admit' }).click()
-  await expect(page.locator('.members', { hasText: who.bob.did })).toBeVisible()
+  await expect(page.locator('.members', { hasText: '@bob.test' })).toBeVisible()
   await bob.reload()
   await expect(bob.getByText('You are a member.')).toBeVisible()
 })
@@ -67,6 +67,42 @@ test('asking to join, and being admitted', async () => {
 test('leaving a group', async () => {
   await bob.getByRole('button', { name: 'Leave' }).click()
   await expect(bob.getByRole('button', { name: 'Ask to join' })).toBeVisible()
+})
+
+test('inviting someone by their handle', async () => {
+  await page.goto(url('/g/hikers.groups.test'))
+  await page.getByRole('textbox', { name: 'Their handle' }).fill('nobody.test')
+  await page.getByRole('button', { name: 'Invite' }).click()
+  await expect(page.getByText('We cannot find nobody.test.')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Their handle' }).fill('@bob.test')
+  await page.getByRole('button', { name: 'Invite' }).click()
+  await expect(page.locator('.invites', { hasText: who.bob.did })).toBeVisible()
+})
+
+test('taking up an invitation', async () => {
+  await bob.goto(url('/'))
+  await expect(bob.getByRole('heading', { name: 'You are invited' })).toBeVisible()
+  await bob.getByRole('button', { name: 'Join Hikers' }).click()
+  await expect(bob.getByRole('heading', { name: 'You are invited' })).toHaveCount(0)
+  await expect(bob.locator('.group-row', { hasText: 'Hikers' }).first()).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.members', { hasText: '@bob.test' })).toBeVisible()
+})
+
+test('giving roles, and putting someone out', async () => {
+  const row = page.locator('.member', { hasText: '@bob.test' })
+  await expect(row.getByRole('checkbox', { name: 'member' })).toBeChecked()
+  await row.getByRole('button', { name: "Save @bob.test's roles" }).click()
+  await expect(page.locator('.member', { hasText: '@bob.test' })).toContainText('member')
+  await page.locator('.member', { hasText: '@bob.test' }).getByRole('button', { name: 'Put @bob.test out' }).click()
+  await expect(page.locator('.members', { hasText: '@bob.test' })).toHaveCount(0)
+})
+
+test('being told why the host refused', async () => {
+  // The group's only admin may not leave it: the page says so.
+  await page.getByRole('button', { name: 'Leave' }).click()
+  await expect(page.locator('.danger')).toBeVisible()
+  await expect(page.getByText('You are a member.')).toBeVisible()
 })
 
 test('signing an app in as her group', async () => {

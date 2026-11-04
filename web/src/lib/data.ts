@@ -1,7 +1,7 @@
 // What a page shows, read from the group host, typed by the lexicons'
 // schemas under lexicons/, which `npm run lex` makes into src/lib/lexicons.
 
-import { error } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import type { InferInput, InferMethodOutputBody, LexErrorData, Query } from '@atproto/lex';
 
 type Load = { fetch: typeof fetch };
@@ -51,4 +51,16 @@ export async function call<T>({ fetch }: Load, nsid: string, input: object): Pro
 		error(res.status, failure?.message ?? res.statusText);
 	}
 	return res.json();
+}
+
+/**
+ * Does the XRPC procedure `nsid` with `input`, from a form's action: if
+ * the host refuses it, the form says why (`failed`), on the page it was
+ * sent from, rather than the page failing.
+ */
+export async function act({ fetch }: Load, nsid: string, input: object) {
+	const res = await fetch(`/xrpc/${nsid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+	if (res.ok) return;
+	const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
+	return fail(res.status, { failed: failure?.message ?? res.statusText });
 }

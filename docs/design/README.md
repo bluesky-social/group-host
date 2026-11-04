@@ -112,8 +112,10 @@ says otherwise.
    home, and approving an app (`/authorize`; `actors.rs`; done);
    starting a group (`/new`) and a group's page (`/g/<handle>`: its
    profile and rules, joining and leaving, its members, and admitting
-   those asking; done); then running a group from its page (roles,
-   invites, its apps and app passwords): the console's pages in
+   those asking; done); its members run from its page (roles given and
+   taken, people put out, invites by handle, and invitations taken up or
+   turned down on home; done); then its settings (profile, rules, its
+   apps and app passwords): the console's pages in
    `apps/web/src/pages`. Each is used end to end in `harness/e2e`.
 8. **Moderation, recovery and moving.** Reports, labels, subjects and
    history; recovery keys; importing an account; migrating a group to

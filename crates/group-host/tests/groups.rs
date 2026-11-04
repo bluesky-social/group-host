@@ -151,6 +151,14 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         .collect();
     assert_eq!(members.len(), 2);
     assert!(members.contains(&alice.did.as_str()) && members.contains(&bob.did.as_str()));
+    // Each by the handle their DID document names.
+    assert!(
+        mine["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|m| m["actor"]["handle"] == "authority.test")
+    );
     assert_eq!(
         mine["roles"],
         json!([

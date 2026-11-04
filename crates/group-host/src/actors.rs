@@ -33,6 +33,16 @@ pub async fn get_viewer(State(host): State<Arc<Host>>, headers: HeaderMap) -> An
 }
 
 impl Host {
+    /// A person as a list names them: their DID, and the handle their DID
+    /// document names, if it can be read.
+    pub(crate) async fn actor_view(&self, did: &str) -> Value {
+        let doc = self.identity.document(did).await.ok();
+        match doc.as_ref().and_then(did::handle) {
+            Some(handle) => json!({"did": did, "handle": handle}),
+            None => json!({"did": did}),
+        }
+    }
+
     /// A group as a list of someone's shows it, to `viewer`, a member: its
     /// name and picture as they may read them, and how many are in it.
     fn group_view_basic(&self, group: &str, viewer: &str) -> Answer {

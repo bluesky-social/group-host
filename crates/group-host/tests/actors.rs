@@ -171,3 +171,34 @@ async fn shows_a_groups_picture() {
     let (_, mine) = groups_of(&h, &alice, &format!("actor={}", alice.did)).await;
     assert_eq!(mine["groups"][0]["avatar"], image["blob"]["ref"]["$link"]);
 }
+
+#[tokio::test]
+async fn names_by_did_alone_someone_whose_document_it_cannot_read() {
+    let h = start(&[], false).await;
+    let [alice, ..] = people(&h).await;
+    let riders = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    join(&h, &riders, "did:plc:nobodynobodynobodyxx").await;
+    let lxm = format!("{NS}.getGroup");
+    let (_, view) = get(
+        &h,
+        &lxm,
+        &format!("group={riders}"),
+        &[auth(&h, &alice, &lxm)],
+    )
+    .await;
+    let theirs = view["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["actor"]["did"] == "did:plc:nobodynobodynobodyxx")
+        .unwrap();
+    assert_eq!(
+        theirs["actor"],
+        json!({"did": "did:plc:nobodynobodynobodyxx"})
+    );
+}

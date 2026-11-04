@@ -169,18 +169,37 @@ pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Query<Params>) 
     Ok(Json(json!({"repos": repos, "cursor": cursor})))
 }
 
-pub async fn resolve_handle(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
+/// The DID a handle names: an account's here, or for someone signed in,
+/// anyone's.
+pub async fn resolve_handle(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+    headers: HeaderMap,
+) -> Answer {
     let handle = param(&p, "handle")?.to_ascii_lowercase();
     let account = host.store.account(&handle).map_err(XrpcError::internal)?;
-    let account = account.filter(|a| a.handle == handle);
+    let mut did = account.filter(|a| a.handle == handle).map(|a| a.did);
+    // Anyone else's, as a PDS resolves them, for someone signed in: the
+    // host asks the handle's own server, which no stranger sends it to.
+    let lxm = "com.atproto.identity.resolveHandle";
+    if did.is_none()
+        && crate::group_api::caller(&host, &headers, lxm)
+            .await?
+            .is_some()
+    {
+        did = host
+            .identity
+            .resolve_handle(&handle, &host.config.handle_resolvers)
+            .await;
+    }
     let not_found = || {
         XrpcError::new(
             StatusCode::BAD_REQUEST,
             "HandleNotFound",
-            format!("no account {handle} here"),
+            format!("no account {handle} we can find"),
         )
     };
-    Ok(Json(json!({"did": account.ok_or_else(not_found)?.did})))
+    Ok(Json(json!({ "did": did.ok_or_else(not_found)? })))
 }
 
 /// A blob a record of the account references, served as a download: a

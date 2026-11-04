@@ -1,12 +1,19 @@
 <script lang="ts">
 	import Empty from '#lib/molecules/Empty.svelte';
 	import GroupList from '#lib/organisms/GroupList.svelte';
+	import Invitations from '#lib/organisms/Invitations.svelte';
 	import Page from '#lib/templates/Page.svelte';
-	let { data } = $props();
+	let { data, form } = $props();
 </script>
 
 <svelte:head><title>opensocial</title></svelte:head>
 
+{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
+{#if data.invitations.length}
+	<Page title="You are invited">
+		<Invitations invitations={data.invitations} />
+	</Page>
+{/if}
 {#if data.mine}
 	<Page title="Your groups">
 		<p><a href="/new">Start a group</a></p>

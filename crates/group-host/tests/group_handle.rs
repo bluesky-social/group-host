@@ -81,6 +81,34 @@ fn error(said: &(u16, Json)) -> (u16, &str) {
 }
 
 #[tokio::test]
+async fn resolves_anyones_handle_for_someone_signed_in() {
+    let (h, names, riders, [alice, ..]) = here().await;
+    names
+        .0
+        .lock()
+        .unwrap()
+        .insert("alice.example".into(), alice.did.clone());
+    let lxm = "com.atproto.identity.resolveHandle";
+    // Its own, for anyone.
+    let (_, ours) = get(&h, lxm, &format!("handle={RIDERS}"), &[]).await;
+    assert_eq!(ours["did"], riders.as_str());
+    // Anyone else's, only for someone signed in: no stranger sends the host
+    // to a handle's server.
+    let (status, said) = get(&h, lxm, "handle=alice.example", &[]).await;
+    assert_eq!(
+        (status, said["error"].as_str()),
+        (400, Some("HandleNotFound"))
+    );
+    let (status, said) = get(&h, lxm, "handle=alice.example", &[auth(&h, &alice, lxm)]).await;
+    assert_eq!(
+        (status, said["did"].as_str()),
+        (200, Some(alice.did.as_str()))
+    );
+    let (status, _) = get(&h, lxm, "handle=nobody.example", &[auth(&h, &alice, lxm)]).await;
+    assert_eq!(status, 400);
+}
+
+#[tokio::test]
 async fn checks_a_domain_before_it_is_taken() {
     let (h, names, did, [alice, _, _]) = here().await;
     names

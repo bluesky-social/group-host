@@ -252,10 +252,14 @@ pub async fn get_group(
         host.group_records(group, &members, &format!("{NS}.{collection}"))
             .map_err(XrpcError::internal)
     };
-    out["members"] = records("membership")?
-        .into_iter()
-        .map(|(_, m)| json!({"actor": {"did": m["member"]}, "roles": objects("role", listed(&m, "roles", "role"))}))
-        .collect();
+    let mut people = Vec::new();
+    for (_, m) in records("membership")? {
+        let actor = host
+            .actor_view(m["member"].as_str().unwrap_or_default())
+            .await;
+        people.push(json!({"actor": actor, "roles": objects("role", listed(&m, "roles", "role"))}));
+    }
+    out["members"] = json!(people);
     out["roles"] = records("role")?
         .into_iter()
         .map(|(key, r)| {
@@ -313,14 +317,13 @@ pub async fn get_group(
             .store
             .asking(group, None, 100)
             .map_err(XrpcError::internal)?;
-        out["joinRequests"] = waiting
-            .iter()
-            .map(|r| {
-                let mut view = crate::group_join::request_view(r);
-                view["actor"] = json!({"did": r.did});
-                view
-            })
-            .collect();
+        let mut asking = Vec::new();
+        for r in &waiting {
+            let mut view = crate::group_join::request_view(r);
+            view["actor"] = host.actor_view(&r.did).await;
+            asking.push(view);
+        }
+        out["joinRequests"] = json!(asking);
     }
     Ok(Json(out))
 }
