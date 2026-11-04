@@ -3,7 +3,7 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, signIn, signedInAs, url, who, world } from './pages.mjs'
+import { App, didKey, signIn, signedInAs, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -155,6 +155,20 @@ test('making an app password, and ending what it signed in', async () => {
   await page.getByRole('button', { name: 'Revoke “Phone”' }).click()
   await expect(page.locator('.passwords')).toHaveCount(0)
   expect((await signIn()).status).toBe(401)
+})
+
+test('adding a recovery key, and taking it off', async () => {
+  const key = didKey()
+  await page.goto(url('/g/hikers.groups.test/settings'))
+  await expect(page.locator('.recovery-keys li')).toHaveCount(1)
+  await page.getByRole('textbox', { name: 'A key of yours, as a did:key' }).fill(key)
+  await page.getByRole('button', { name: 'Add the recovery key' }).click()
+  const keys = page.locator('.recovery-keys li')
+  await expect(keys).toHaveCount(2)
+  await expect(keys.first()).toContainText(key)
+  await expect(keys.last()).toContainText('this host')
+  await keys.first().getByRole('button', { name: 'Take off' }).click()
+  await expect(page.locator('.recovery-keys li')).toHaveCount(1)
 })
 
 test('moderating: a label, and the queue', async () => {

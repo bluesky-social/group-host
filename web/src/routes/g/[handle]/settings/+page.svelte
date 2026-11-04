@@ -2,6 +2,7 @@
 	import AppPasswords from '#lib/organisms/AppPasswords.svelte';
 	import GroupApps from '#lib/organisms/GroupApps.svelte';
 	import ProfileForm from '#lib/organisms/ProfileForm.svelte';
+	import RecoveryKeys from '#lib/organisms/RecoveryKeys.svelte';
 	import RolesEditor from '#lib/organisms/RolesEditor.svelte';
 	import RulesEditor from '#lib/organisms/RulesEditor.svelte';
 	import Page from '#lib/templates/Page.svelte';
@@ -22,6 +23,10 @@
 		<RulesEditor rules={g.rules} />
 		<h2>Roles</h2>
 		<RolesEditor roles={data.roles} bindings={data.bindings} actions={ACTIONS} />
+		{#if data.recovery}
+			<h2>Recovery keys</h2>
+			<RecoveryKeys keys={data.recovery.keys} hostHolds={data.recovery.hostHolds} max={data.recovery.max} />
+		{/if}
 		<h2>Apps acting as the group</h2>
 		<GroupApps sessions={data.tokens?.sessions ?? []} activity={data.tokens?.activity ?? []} />
 	{/if}

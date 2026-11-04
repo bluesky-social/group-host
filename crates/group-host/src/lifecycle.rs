@@ -93,12 +93,23 @@ impl Host {
         if let Err(e) = &ended {
             tracing::warn!(did, error = %format!("{e:#}"), "could not end the DID");
         }
-        Ok(ended.is_ok())
+        Ok(ended.unwrap_or(false))
     }
 
-    async fn tombstone(&self, did: &str) -> Result<()> {
+    /// Ends `did` in the directory, if nobody but this host could ever use
+    /// it again: with a steward's recovery key on it, it is theirs to keep,
+    /// to bring the group back elsewhere, and is left alone. Whether it
+    /// ended it.
+    async fn tombstone(&self, did: &str) -> Result<bool> {
         let last = self.plc.last_op(did).await?;
+        let ours = self.secrets.rotation.public().did_key();
+        if let atproto::plc::Signed::Update { op, .. } = &last
+            && op.rotation_keys.iter().any(|k| *k != ours)
+        {
+            return Ok(false);
+        }
         let end = atproto::plc::tombstone(last.cid(), &self.secrets.rotation);
-        self.plc.publish(did, &end).await.context("tombstoning")
+        self.plc.publish(did, &end).await.context("tombstoning")?;
+        Ok(true)
     }
 }

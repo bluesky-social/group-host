@@ -37,6 +37,7 @@ pub mod oauth_store;
 pub mod plc;
 pub mod provision;
 pub mod rbac;
+pub mod recovery;
 pub mod repo;
 pub mod scopes;
 pub mod secrets;
@@ -380,6 +381,18 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/com.atproto.moderation.createReport",
             post(moderation::create_report),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.listRecoveryKeys",
+            get(recovery::list_recovery_keys),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.addRecoveryKey",
+            post(recovery::add_recovery_key),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.removeRecoveryKey",
+            post(recovery::remove_recovery_key),
         )
         .route("/oauth/authorize", get(oauth::authorize))
         .route(

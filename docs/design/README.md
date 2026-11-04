@@ -120,8 +120,8 @@ says otherwise.
    `apps/web/src/pages`. Each is used end to end in `harness/e2e`.
 8. **Moderation, recovery and moving.** Reports, labels, subjects and
    history, and the console's moderation page (`moderation.rs`; done, see
-   [moderation](moderation.md)); then recovery keys; importing an
-   account; migrating a group to another host and moving the host itself:
+   [moderation](moderation.md)); recovery keys (`recovery.rs`; done, see
+   [recovery](recovery.md)); then importing an account; migrating a group to another host and moving the host itself:
    `methods/{moderation,recovery,importAccount,migration}.ts`,
    `hostLabels.ts`, `scripts/move-host.ts`.
 9. **MCP and the command.** The MCP tools over what steps 4 to 8 brought,

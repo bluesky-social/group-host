@@ -143,3 +143,19 @@ export class App {
     return this.send(`${world.host}/xrpc/${nsid}`, init, token)
   }
 }
+
+/// A new P-256 key, as a did:key: what a steward holds as a recovery key.
+export const didKey = () => {
+  const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const point = publicKey.export({ format: 'der', type: 'spki' }).subarray(-65)
+  const compressed = Buffer.concat([Buffer.from([point[64] & 1 ? 3 : 2]), point.subarray(1, 33)])
+  const bytes = Buffer.concat([Buffer.from([0x80, 0x24]), compressed])
+  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+  let n = BigInt(`0x${bytes.toString('hex')}`)
+  let out = ''
+  while (n > 0n) {
+    out = alphabet[Number(n % 58n)] + out
+    n /= 58n
+  }
+  return `did:key:z${out}`
+}

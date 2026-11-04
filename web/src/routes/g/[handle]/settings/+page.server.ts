@@ -2,6 +2,7 @@ import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveH
 import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
 import type * as listAppPasswords from '#lib/lexicons/fyi/opensocial/listAppPasswords.ts';
 import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/listGroupTokens.ts';
+import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecoveryKeys.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { act, xrpc } from '#lib/data.ts';
@@ -25,8 +26,9 @@ export const load: PageServerLoad = async (event) => {
 	const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
 	const configures = view.group.viewer?.actions?.includes('group.configure') ?? false;
 	const tokens = configures ? await xrpc<typeof listGroupTokens.main>(event, 'fyi.opensocial.listGroupTokens', { group }) : null;
+	const recovery = configures ? await xrpc<typeof listRecoveryKeys.main>(event, 'fyi.opensocial.listRecoveryKeys', { group }).catch(() => null) : null;
 	const passwords = await xrpc<typeof listAppPasswords.main>(event, 'fyi.opensocial.listAppPasswords', { group }).catch(() => null);
-	return { ...view, configures, tokens, passwords: passwords?.passwords ?? null };
+	return { ...view, configures, tokens, recovery, passwords: passwords?.passwords ?? null };
 };
 
 async function asked(event: Event & { request: Request }) {
@@ -88,6 +90,14 @@ export const actions: Actions = {
 		const answer = await res.json().catch(() => null);
 		if (!res.ok) return fail(res.status, { failed: answer?.message ?? res.statusText });
 		return { made: { name: answer.name as string, password: answer.password as string } };
+	},
+	key: async (event) => {
+		const { group, form } = await asked(event);
+		return act(event, 'fyi.opensocial.addRecoveryKey', { group, key: text(form, 'key') });
+	},
+	unkey: async (event) => {
+		const { group, form } = await asked(event);
+		return act(event, 'fyi.opensocial.removeRecoveryKey', { group, key: text(form, 'key') });
 	},
 	unpassword: async (event) => {
 		const { group, form } = await asked(event);
