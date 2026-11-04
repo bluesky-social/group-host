@@ -124,8 +124,9 @@ says otherwise.
    [recovery](recovery.md)); moving a group to another host
    (`migration.rs`; done, see [moving](moving.md)); an account on
    another server becoming a group (`import.rs`; done, but for its
-   spaces, see [moving](moving.md#an-account-becoming-a-group)); then
-   moving the host itself:
+   spaces, see [moving](moving.md#an-account-becoming-a-group)); and
+   moving the host itself (`move_host.rs`; done, see
+   [moving](moving.md#moving-the-host)):
    `methods/{moderation,recovery,importAccount,migration}.ts`,
    `hostLabels.ts`, `scripts/move-host.ts`.
 9. **MCP and the command.** The MCP tools over what steps 4 to 8 brought,

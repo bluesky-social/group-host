@@ -105,3 +105,26 @@ DID names this host, the network reads the account here.
   and its repos in others' in the space alpha's archives, is not here
   yet: it waits for the alpha to publish its meta archive, which the
   version the prototype builds against does not have.
+
+# Moving the host
+
+The host itself moves to a new address, the URL it answers at and its
+did:web, and its groups keep their DIDs (`move_host.rs`). With the host
+stopped and its environment naming the new address (`PUBLIC_URL`,
+`SERVICE_DID`), `group-host move-host --from <old address>` points every
+service each account's DID document names at the old address at the new
+one, signed with the host's rotation key, and tells the relays who each
+account is. It skips, and says so, an account whose DID is ended and one
+this host holds no rotation key to any more (a steward took it).
+`--dry-run` says what it would do.
+
+Run again, it finds nothing left to repoint, and tells the relays again
+of each account at the new address: a relay that starts reading the host
+after the first run hears of them so.
+
+## From the prototype
+
+- This host keeps no managing app on its spaces and no PDS per group, so
+  only the DID documents change.
+- Sessions, app passwords' among them, are found by their hash, not
+  their audience, so they go on working at the new address.

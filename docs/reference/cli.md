@@ -1,4 +1,13 @@
-# The command and the recipes
+# The commands and the recipes
+
+## `group-host`
+
+| Command | What it does |
+| --- | --- |
+| none | serves, as the environment says ([config](config.md)) |
+| `move-host --from <old address> [--dry-run]` | points each account's DID document at the address the environment names now ([moving the host](../design/moving.md#moving-the-host)) |
+
+Anything else fails with its usage.
 
 ## `opensocial`
 

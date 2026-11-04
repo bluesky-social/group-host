@@ -552,7 +552,7 @@ fn linked(tx: &rusqlite::Transaction, did: &str, collection: &str, rkey: &str) -
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-fn sequence(tx: &rusqlite::Transaction, did: &str, events: &[Event]) -> Result<()> {
+pub(crate) fn sequence(tx: &rusqlite::Transaction, did: &str, events: &[Event]) -> Result<()> {
     for e in events {
         let added = tx.execute(SEQUENCE, params![did, e.kind, e.body]);
         added?;

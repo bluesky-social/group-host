@@ -30,6 +30,7 @@ pub mod index_api;
 pub mod lifecycle;
 pub mod migration;
 pub mod moderation;
+pub mod move_host;
 pub mod oauth;
 pub mod oauth_clients;
 pub mod oauth_dpop;
@@ -536,6 +537,30 @@ async fn health() -> Json<Value> {
 
 async fn not_implemented(Path(nsid): Path<String>) -> XrpcError {
     XrpcError::not_implemented(&nsid)
+}
+
+/// What `group-host` prints for a command it does not know.
+pub const USAGE: &str = "usage: group-host                 serve, as the environment says
+       group-host move-host --from <old address> [--dry-run]
+                                  repoint each account's DID document at the
+                                  address the environment names now";
+
+/// What `group-host` does with `args` (without its own name): serves,
+/// or moves the host, printing what it did.
+pub async fn run(args: &[String], config: Config) -> anyhow::Result<()> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    match args.as_slice() {
+        [] => serve(config).await,
+        ["move-host", "--from", from, rest @ ..] if rest.iter().all(|a| *a == "--dry-run") => {
+            let host = Host::open(config)?;
+            let dry_run = !rest.is_empty();
+            for line in move_host::move_host(&host, from, dry_run).await? {
+                println!("{line}");
+            }
+            Ok(())
+        }
+        _ => anyhow::bail!("{USAGE}"),
+    }
 }
 
 /// Serves `config` until the process is told to stop (SIGTERM, or ctrl-c),

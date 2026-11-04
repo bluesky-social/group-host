@@ -71,3 +71,30 @@ fn refuses_a_bad_environment() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("PORT is no port: eighty"));
 }
+
+#[test]
+fn moves_the_host_from_an_old_address() {
+    let data = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_group-host"))
+            .args(args)
+            .env("DATA_DIR", data.path())
+            .env("PUBLIC_URL", "https://new.test")
+            .env("RUST_LOG", "off")
+            .output()
+            .unwrap()
+    };
+    let out = run(&["move-host", "--from", "https://old.test", "--dry-run"]);
+    assert!(out.status.success());
+    let said = String::from_utf8_lossy(&out.stdout);
+    assert!(said.contains("0 of 0 DID documents to repoint"), "{said}");
+    for wrong in [
+        &["move-host"][..],
+        &["move-host", "--from", "x", "--wet"],
+        &["nonsense"],
+    ] {
+        let out = run(wrong);
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("usage: group-host"));
+    }
+}
