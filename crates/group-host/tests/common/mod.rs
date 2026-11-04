@@ -21,11 +21,13 @@ use std::sync::{Arc, Mutex};
 
 /// A PLC directory: each DID's operations, each checked as the real one
 /// checks them, and its document as it serves one. `refuse` turns every
-/// operation away.
+/// operation away; `slow` holds each read of a last operation a while, so
+/// two changes at once both read before either writes.
 #[derive(Default)]
 pub struct Plc {
     pub ops: Mutex<HashMap<String, Vec<Signed>>>,
     pub refuse: bool,
+    pub slow: std::sync::atomic::AtomicBool,
 }
 
 async fn publish(
@@ -50,7 +52,17 @@ async fn publish(
         }
         _ => false,
     };
-    if plc.refuse || !signed {
+    // At most five rotation keys, each one it can check a signature by.
+    let keys_taken = match &op {
+        Signed::Update { op: o, .. } => {
+            o.rotation_keys.len() <= 5
+                && o.rotation_keys
+                    .iter()
+                    .all(|k| atproto::PublicKey::from_did_key(k).is_ok())
+        }
+        Signed::Tombstone { .. } => true,
+    };
+    if plc.refuse || !signed || !keys_taken {
         return StatusCode::BAD_REQUEST;
     }
     log.push(op);
@@ -96,6 +108,9 @@ async fn last(
     State(plc): State<Arc<Plc>>,
     Path(did): Path<String>,
 ) -> Result<Json<Value>, StatusCode> {
+    if plc.slow.load(std::sync::atomic::Ordering::Relaxed) {
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
     let ops = plc.ops.lock().unwrap();
     let last = ops.get(&did).and_then(|l| l.last());
     last.map(|op| Json(op.to_json()))

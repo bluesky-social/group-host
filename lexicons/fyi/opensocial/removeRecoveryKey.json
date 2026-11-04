@@ -39,6 +39,10 @@
         },
         {
           "name": "NotController"
+        },
+        {
+          "name": "InvalidOperation",
+          "description": "The PLC directory refused the change, as when another was made first: ask again."
         }
       ],
       "output": {

@@ -371,12 +371,22 @@ impl Host {
         extra: &[(&str, &str)],
     ) -> Result<reqwest::Response, XrpcError> {
         let url = format!("{pds}/xrpc/fyi.opensocial.migrateExport");
-        let (pinned, at) = self.pinned(&url).await.map_err(source)?;
         let mut query = vec![("group", group), ("token", token)];
         query.extend_from_slice(extra);
-        let res = pinned.get(at).query(&query).send().await.map_err(source)?;
+        self.ask_source(&url, &query).await
+    }
+
+    /// GETs `url` of the group's host, with `query`: an answer other than
+    /// a success is the host's to say, not read as one.
+    async fn ask_source(
+        &self,
+        url: &str,
+        query: &[(&str, &str)],
+    ) -> Result<reqwest::Response, XrpcError> {
+        let (pinned, at) = self.pinned(url).await.map_err(source)?;
+        let res = pinned.get(at).query(query).send().await.map_err(source)?;
         if !res.status().is_success() {
-            return Err(source(format!("answered {}", res.status())));
+            return Err(source(format!("{url} answered {}", res.status())));
         }
         Ok(res)
     }
@@ -511,16 +521,8 @@ pub async fn migrate_receive(
     };
 
     // Its public repo, checked against the group's key.
-    let (pinned, at) = host
-        .pinned(&format!("{pds}/xrpc/com.atproto.sync.getRepo"))
-        .await
-        .map_err(source)?;
-    let res = pinned
-        .get(at)
-        .query(&[("did", group)])
-        .send()
-        .await
-        .map_err(source)?;
+    let url = format!("{pds}/xrpc/com.atproto.sync.getRepo");
+    let res = host.ask_source(&url, &[("did", group)]).await?;
     let read = capped(res, REPO_AT_MOST).await;
     let bytes = read.ok_or(source(too_much(REPO_AT_MOST)))?;
     let writes = repo_writes(&bytes, group, &key);
@@ -665,6 +667,7 @@ pub async fn migrate_complete(
     if theirs.is_empty() {
         return Err(invalid("recommendedCreds names no rotation key"));
     }
+    let turn = host.plc.turn().await;
     let last = host
         .plc
         .last_op(&group)
@@ -712,7 +715,8 @@ pub async fn migrate_complete(
     host.plc
         .publish(&group, &signed)
         .await
-        .map_err(XrpcError::internal)?;
+        .map_err(crate::plc::not_published)?;
+    drop(turn);
     let off = host.store.deactivate(&group, now_millis(), &me, &[], &[]);
     off.map_err(XrpcError::internal)?;
     // Handed over, there is nothing more to pull.

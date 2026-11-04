@@ -605,8 +605,15 @@ pub async fn run(args: &[String], config: Config) -> anyhow::Result<()> {
         ["move-host", "--from", from, rest @ ..] if rest.iter().all(|a| *a == "--dry-run") => {
             let host = Host::open(config)?;
             let dry_run = !rest.is_empty();
-            for line in move_host::move_host(&host, from, dry_run).await? {
+            let report = move_host::move_host(&host, from, dry_run).await?;
+            for line in &report.said {
                 println!("{line}");
+            }
+            if report.failed > 0 {
+                anyhow::bail!(
+                    "{} DID documents not repointed: run it again once the directory answers for them",
+                    report.failed
+                );
             }
             Ok(())
         }

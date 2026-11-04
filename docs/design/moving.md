@@ -58,9 +58,11 @@ have asked. It refuses `AlreadyHere` if the group is already an account
 here. It reaches the host it leaves only at the PDS endpoint the DID
 document names, never at an address the caller gives.
 
-The pulled data must prove itself. The public repo must be the group's,
-signed by its current key, and whole. Each file must hash to the CID it
-was listed under. Each space's repo must name the group and that space,
+The pulled data must prove itself. An error the host it leaves answers,
+for its repo or any other part, stops the move as `SourceUnreadable`
+with that status, rather than being read as data. The public repo must
+be the group's, signed by its current key, and whole. Each file must
+hash to the CID it was listed under. Each space's repo must name the group and that space,
 with its records' digest equal to its commit's. A file that does not
 come, or does not match, fails the move: the host it leaves is still
 serving, so a missing file means something is wrong, and records must
@@ -97,6 +99,9 @@ Details:
 new host as the group's PDS, the new keys, and the new handle. Its
 rotation keys are the stewards' first, then the new host's; the old
 host's own key is removed. Other services in the document are kept.
+If the directory refuses the operation, as it does a key it cannot read
+or more than five rotation keys, the move is refused `InvalidOperation`
+with what the directory said, and the group stays switched on here.
 
 The host it leaves then switches the group off, ends the export token,
 and logs the move in the group's activity. It holds no rotation key for
@@ -134,7 +139,9 @@ here, and never their own.
 
 The account's handle comes along if it is a domain of its own: not
 `handle.invalid`, not under this host's `HANDLE_DOMAIN` or a domain its
-server gives out, and still resolving to the DID. The account always
+server gives out, and still resolving to the DID. A server whose
+`describeServer` cannot be read might give out the handle's domain, so
+then the handle is not kept. The account always
 gets an address here, a label under `HANDLE_DOMAIN`, asked for or made
 from its current handle, and that is its handle when its own is not
 kept. `checkImport` answers what both would be, or why the move would be
@@ -218,6 +225,9 @@ account here, it points each service at the old address to the new one,
 signs the change with the host's rotation key, publishes it, and tells
 the relays. It skips and reports an account whose DID is ended, and one
 whose DID no longer lists this host's key because a steward took it.
+An account the directory fails on is reported with why, and the rest
+are still repointed; the command then exits with an error, to be run
+again once the directory answers for it.
 `--dry-run` reports what it would do and writes nothing.
 
 Run again, it has nothing left to repoint, and tells the relays again

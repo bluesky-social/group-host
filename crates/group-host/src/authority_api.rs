@@ -188,7 +188,11 @@ pub async fn list_repos(
         .store
         .writers(uri, cursor, limit)
         .map_err(XrpcError::internal)?;
-    let cursor = writers.last().map(|w| w.space_rev.clone());
+    // A short page is the last: no cursor to ask for an empty one after it.
+    let cursor = writers
+        .last()
+        .filter(|_| writers.len() == limit as usize)
+        .map(|w| w.space_rev.clone());
     let repos: Vec<Value> = writers
         .iter()
         .map(|w| {

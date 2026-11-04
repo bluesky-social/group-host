@@ -14,15 +14,20 @@ use group_host::move_host::move_host;
 use serde_json::json;
 use std::collections::HashMap;
 
-/// The host `h` is, opened again as its environment names `url`.
-fn at(h: &Running, url: &str) -> Host {
+/// The environment of the host `h` is, naming `url` as its address.
+fn config(h: &Running, url: &str) -> Config {
     let env: HashMap<&str, String> = HashMap::from([
         ("DATA_DIR", h.data.path().to_str().unwrap().to_string()),
         ("PLC_URL", h.host.config.plc_url.clone()),
         ("HANDLE_DOMAIN", ".groups.test".to_string()),
         ("PUBLIC_URL", url.to_string()),
     ]);
-    Host::open(Config::from(|k| env.get(k).cloned()).unwrap()).unwrap()
+    Config::from(|k| env.get(k).cloned()).unwrap()
+}
+
+/// The host `h` is, opened again as its environment names `url`.
+fn at(h: &Running, url: &str) -> Host {
+    Host::open(config(h, url)).unwrap()
 }
 
 async fn pds(h: &Running, did: &str) -> String {
@@ -49,12 +54,18 @@ async fn points_each_accounts_document_at_the_new_address() {
     let moved = at(&h, "https://new.test");
 
     // A dry run says what it would do, and does nothing.
-    let said = move_host(&moved, "https://host.test/", true).await.unwrap();
+    let said = move_host(&moved, "https://host.test/", true)
+        .await
+        .unwrap()
+        .said;
     assert!(said[0].contains("a dry run"), "{said:?}");
     assert_eq!(said.last().unwrap(), "1 of 1 DID documents to repoint");
     assert_eq!(pds(&h, &riders).await, "https://host.test");
 
-    let said = move_host(&moved, "https://host.test", false).await.unwrap();
+    let said = move_host(&moved, "https://host.test", false)
+        .await
+        .unwrap()
+        .said;
     assert_eq!(
         said[1..],
         [
@@ -64,9 +75,15 @@ async fn points_each_accounts_document_at_the_new_address() {
     );
     assert_eq!(pds(&h, &riders).await, "https://new.test");
     // Again, nothing is left to repoint.
-    let said = move_host(&moved, "https://host.test", false).await.unwrap();
+    let said = move_host(&moved, "https://host.test", false)
+        .await
+        .unwrap()
+        .said;
     assert_eq!(said.last().unwrap(), "0 of 1 DID documents repointed");
-    let said = move_host(&moved, "https://host.test", true).await.unwrap();
+    let said = move_host(&moved, "https://host.test", true)
+        .await
+        .unwrap()
+        .said;
     assert_eq!(said.last().unwrap(), "0 of 1 DID documents to repoint");
 }
 
@@ -98,7 +115,8 @@ async fn skips_an_ended_did_and_one_a_steward_took() {
         .unwrap();
     let said = move_host(&at(&h, "https://new.test"), "https://host.test", false)
         .await
-        .unwrap();
+        .unwrap()
+        .said;
     assert!(
         said.contains(&"ended.groups.test: its DID is ended, skipped".to_string()),
         "{said:?}"
@@ -107,6 +125,35 @@ async fn skips_an_ended_did_and_one_a_steward_took() {
         &"taken.groups.test: this host holds no rotation key to it, skipped".to_string()
     ));
     assert_eq!(said.last().unwrap(), "0 of 2 DID documents repointed");
+}
+
+#[tokio::test]
+async fn moves_the_rest_past_an_account_the_directory_fails_on() {
+    let h = start(&[], false).await;
+    let lost = group(&h, "lost.groups.test").await;
+    let riders = group(&h, RIDERS).await;
+    // The directory no longer answers for one of them.
+    h.plc.ops.lock().unwrap().remove(&lost);
+    let report = move_host(&at(&h, "https://new.test"), "https://host.test", false)
+        .await
+        .unwrap();
+    assert_eq!(report.failed, 1);
+    let said = report.said;
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("lost.groups.test: not repointed: ")),
+        "{said:?}"
+    );
+    assert_eq!(said.last().unwrap(), "1 of 2 DID documents repointed");
+    assert_eq!(pds(&h, &riders).await, "https://new.test");
+    // The command says so, as it fails.
+    let args = ["move-host", "--from", "https://host.test"].map(String::from);
+    let ran = group_host::run(&args, config(&h, "https://new.test")).await;
+    assert!(
+        ran.unwrap_err()
+            .to_string()
+            .contains("1 DID documents not repointed"),
+    );
 }
 
 #[tokio::test]

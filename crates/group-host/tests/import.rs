@@ -43,6 +43,8 @@ struct Old {
     repo_status: Mutex<Option<u16>>,
     blob: Mutex<Option<Vec<u8>>>,
     names: Mutex<HashMap<String, String>>,
+    /// describeServer fails, as a server down does.
+    undescribed: Mutex<bool>,
 }
 
 async fn old_repo(State(o): State<Arc<Old>>) -> Response {
@@ -67,8 +69,12 @@ async fn old_blob(State(o): State<Arc<Old>>) -> Response {
     }
 }
 
-async fn describe() -> axum::Json<Json> {
+async fn describe(State(o): State<Arc<Old>>) -> Response {
+    if *o.undescribed.lock().unwrap() {
+        return StatusCode::BAD_GATEWAY.into_response();
+    }
     axum::Json(json!({"did": "did:web:old.test", "availableUserDomains": [".old.test"]}))
+        .into_response()
 }
 
 async fn resolve(State(o): State<Arc<Old>>, Query(q): Query<HashMap<String, String>>) -> Response {
@@ -452,6 +458,23 @@ async fn keeps_a_handle_on_a_domain_of_its_own_that_still_names_it() {
     assert_eq!(done.1["address"], "harborcycling.groups.test");
     let account = w.h.host.store.account(&w.did).unwrap().unwrap();
     assert_eq!(account.handle, "harborcycling.org");
+}
+
+#[tokio::test]
+async fn keeps_no_handle_of_a_server_that_cannot_say_whose_it_is() {
+    // A handle under the old server's domain still names the account, but
+    // the server cannot say it gives such handles out: it is not kept.
+    let w = world().await;
+    w.old
+        .names
+        .lock()
+        .unwrap()
+        .insert("harbor.old.test".into(), w.did.clone());
+    *w.old.undescribed.lock().unwrap() = true;
+    let (status, said) = w.check(&format!("did={}", w.did)).await;
+    assert_eq!(status, 200, "{said}");
+    assert_eq!(said["keeps"], false, "{said}");
+    assert_eq!(said["handle"], "harbor.groups.test", "{said}");
 }
 
 #[tokio::test]

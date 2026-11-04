@@ -5,7 +5,7 @@
 | Command | What it does |
 | --- | --- |
 | none | serves, as the environment says ([config](config.md)) |
-| `move-host --from <old address> [--dry-run]` | run with the host stopped and the environment naming the new address: points each account's DID document there, printing a line for each, and tells the relays; run again, it repoints nothing and tells them again ([moving the host](../design/moving.md#when-the-host-changes-its-address)) |
+| `move-host --from <old address> [--dry-run]` | run with the host stopped and the environment naming the new address: points each account's DID document there, printing a line for each, and tells the relays; an account the directory fails on is reported, the rest moved, and the command exits with an error; run again, it repoints nothing and tells them again ([moving the host](../design/moving.md#when-the-host-changes-its-address)) |
 
 Anything else fails with its usage.
 

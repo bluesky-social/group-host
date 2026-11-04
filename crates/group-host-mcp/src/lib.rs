@@ -242,6 +242,12 @@ fn error(id: &Value, code: i64, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
+/// The answer to a message that is not JSON at all: JSON-RPC's parse
+/// error, with no id, as none could be read.
+pub fn not_json() -> Value {
+    error(&Value::Null, -32700, "a JSON-RPC message is JSON")
+}
+
 /// The answer to `message`, an assistant's JSON-RPC message, or none for
 /// a notification: each tool called through `call`, with its arguments,
 /// which answers what the method did, or why it did not.

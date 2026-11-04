@@ -751,7 +751,10 @@ pub async fn mcp(
     let Some(who) = found.map_err(XrpcError::internal)? else {
         return Ok(challenge(&host, Some("invalid_token")));
     };
-    let message: Value = serde_json::from_slice(&body).unwrap_or_default();
+    let Ok(message) = serde_json::from_slice::<Value>(&body) else {
+        let said = Json(group_host_mcp::not_json());
+        return Ok((StatusCode::BAD_REQUEST, said).into_response());
+    };
     let call = |tool: Tool, args: Value| async move { host.call_as(&who, tool, args).await };
     Ok(match group_host_mcp::answer(&message, &TOOLS, call).await {
         Some(answer) => Json(answer).into_response(),

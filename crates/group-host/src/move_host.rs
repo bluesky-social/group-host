@@ -29,6 +29,22 @@ pub enum Moved {
     Ended,
     /// This host holds no rotation key to it any more.
     NotOurs,
+    /// Not repointed, and why: the directory did not answer for it, or
+    /// refused the change.
+    Failed(String),
+}
+
+/// What a move did, a line each, and how many accounts it could not
+/// repoint.
+#[derive(Debug)]
+pub struct Report {
+    pub said: Vec<String>,
+    pub failed: usize,
+}
+
+/// An account the move could not repoint, and why.
+fn failed(e: anyhow::Error) -> Moved {
+    Moved::Failed(format!("{e:#}"))
 }
 
 impl Store {
@@ -84,8 +100,9 @@ impl Host {
 }
 
 /// Moves `host`, whose environment names its new address, from `from`:
-/// what it did, a line each.
-pub async fn move_host(host: &Host, from: &str, dry_run: bool) -> Result<Vec<String>> {
+/// what it did. An account it cannot repoint is said so, and the rest
+/// moved still.
+pub async fn move_host(host: &Host, from: &str, dry_run: bool) -> Result<Report> {
     let from = from.trim_end_matches('/');
     let to = host.config.public_url.trim_end_matches('/');
     if from == to {
@@ -100,7 +117,7 @@ pub async fn move_host(host: &Host, from: &str, dry_run: bool) -> Result<Vec<Str
             ""
         }
     )];
-    let (mut cursor, mut seen, mut moved) = (None::<String>, 0, 0);
+    let (mut cursor, mut seen, mut moved, mut not) = (None::<String>, 0, 0, 0);
     loop {
         let page = host.store.accounts(cursor.as_deref(), 100)?;
         let Some((last, _)) = page.last() else {
@@ -111,7 +128,8 @@ pub async fn move_host(host: &Host, from: &str, dry_run: bool) -> Result<Vec<Str
             seen += 1;
             let account = host.store.account(did)?.expect("an account listed");
             let name = &account.handle;
-            match host.repoint(did, name, from, dry_run).await? {
+            let repointed = host.repoint(did, name, from, dry_run).await;
+            match repointed.unwrap_or_else(failed) {
                 Moved::Repointed(ids) => {
                     moved += 1;
                     said.push(format!("{name}: {} → {to}", ids.join(", ")));
@@ -121,10 +139,14 @@ pub async fn move_host(host: &Host, from: &str, dry_run: bool) -> Result<Vec<Str
                 Moved::NotOurs => said.push(format!(
                     "{name}: this host holds no rotation key to it, skipped"
                 )),
+                Moved::Failed(why) => {
+                    not += 1;
+                    said.push(format!("{name}: not repointed: {why}"));
+                }
             }
         }
     }
     let done = if dry_run { "to repoint" } else { "repointed" };
     said.push(format!("{moved} of {seen} DID documents {done}"));
-    Ok(said)
+    Ok(Report { said, failed: not })
 }

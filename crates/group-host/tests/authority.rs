@@ -362,6 +362,9 @@ async fn keeps_the_writers_repo_hosts_tell_it_of() {
     assert_eq!(cursor, repos[0]["spaceRev"]);
     let (_, rest) = list_repos(&x, &format!("&cursor={cursor}"), &headers).await;
     assert_eq!(rest["repos"].as_array().unwrap().len(), 1);
+    // A page short of its limit is the last, with no cursor.
+    assert_eq!(rest["cursor"], Json::Null, "{rest}");
+    assert_eq!(all["cursor"], Json::Null, "{all}");
     let (_, none) = list_repos(
         &x,
         &format!("&cursor={}", repos[1]["spaceRev"].as_str().unwrap()),

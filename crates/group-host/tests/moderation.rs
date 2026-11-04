@@ -94,7 +94,10 @@ async fn takes_a_report_from_anyone() {
     assert_eq!(said["reportedBy"], carol.did.as_str());
     assert_eq!(said["reason"], "ads");
     assert_eq!(said["subject"], record);
-    report(&h, &carol, record.clone()).await;
+    // Each report its own id, however close together they come.
+    let (_, again) = report(&h, &carol, record.clone()).await;
+    let ids = (said["id"].as_i64().unwrap(), again["id"].as_i64().unwrap());
+    assert_eq!(ids.1, ids.0 + 1, "{ids:?}");
     let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
     assert_eq!(queue["subjects"][0]["subject"], record["uri"]);
     assert_eq!(queue["subjects"][0]["status"], "open");

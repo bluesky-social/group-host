@@ -680,6 +680,22 @@ async fn says_what_it_cannot_do_as_json_rpc_does() {
     let call =
         |params: Json| json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params});
     assert_eq!(ask(json!("not a message")).await, Some(-32600));
+    // Not JSON at all: a parse error, of no message's id.
+    let res = h
+        .http
+        .post(format!("{}/mcp", h.url))
+        .bearer_auth(access)
+        .header("content-type", "application/json")
+        .body("{not json")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+    let said: Json = res.json().await.unwrap();
+    assert_eq!(
+        (said["error"]["code"].as_i64(), &said["id"]),
+        (Some(-32700), &Json::Null)
+    );
     assert_eq!(
         ask(json!({"jsonrpc": "2.0", "id": 1, "method": "resources/list"})).await,
         Some(-32601)

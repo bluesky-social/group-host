@@ -130,6 +130,19 @@ impl Host {
         })
     }
 
+    /// The group's rotation keys, for a change to them: refused once the
+    /// host holds none, whatever the change.
+    async fn keys_to_change(&self, group: &str) -> Result<Keys, XrpcError> {
+        let keys = self.rotation_keys(group).await?;
+        if !keys.host_holds() {
+            return Err(refused(
+                "NotController",
+                "this host no longer holds a rotation key for the group, so it cannot change them",
+            ));
+        }
+        Ok(keys)
+    }
+
     /// Writes the group's rotation keys: its stewards', in order, and
     /// this host's last, signed by this host's.
     async fn set_rotation_keys(
@@ -138,12 +151,6 @@ impl Host {
         keys: &Keys,
         stewards: Vec<String>,
     ) -> Result<(), XrpcError> {
-        if !keys.host_holds() {
-            return Err(refused(
-                "NotController",
-                "this host no longer holds a rotation key for the group, so it cannot change them",
-            ));
-        }
         let mut next = keys.op.clone();
         next.rotation_keys = stewards;
         next.rotation_keys.push(keys.ours.clone());
@@ -151,7 +158,7 @@ impl Host {
         self.plc
             .publish(group, &signed)
             .await
-            .map_err(XrpcError::internal)
+            .map_err(crate::plc::not_published)
     }
 }
 
@@ -205,7 +212,8 @@ pub async fn add_recovery_key(
             "not a did:key the directory takes (secp256k1 or P-256)",
         ));
     }
-    let keys = host.rotation_keys(&group).await?;
+    let turn = host.plc.turn().await;
+    let keys = host.keys_to_change(&group).await?;
     if keys.op.rotation_keys.iter().any(|k| k == key) {
         return Err(refused(
             "AlreadyAdded",
@@ -221,6 +229,7 @@ pub async fn add_recovery_key(
     let mut stewards = keys.stewards.clone();
     stewards.push(key.into());
     host.set_rotation_keys(&group, &keys, stewards).await?;
+    drop(turn);
     let noted = host
         .store
         .note_recovery_key(&group, key, Some(&me), now_millis());
@@ -240,7 +249,8 @@ pub async fn remove_recovery_key(
         .configuring(&headers, "removeRecoveryKey", body["group"].as_str())
         .await?;
     let key = body["key"].as_str().unwrap_or_default();
-    let keys = host.rotation_keys(&group).await?;
+    let turn = host.plc.turn().await;
+    let keys = host.keys_to_change(&group).await?;
     if key == keys.ours {
         return Err(refused(
             "HostKey",
@@ -260,6 +270,7 @@ pub async fn remove_recovery_key(
         .cloned()
         .collect();
     host.set_rotation_keys(&group, &keys, stewards).await?;
+    drop(turn);
     let noted = host
         .store
         .note_recovery_key(&group, key, None, now_millis());

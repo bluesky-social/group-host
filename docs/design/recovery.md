@@ -43,8 +43,8 @@ within 72 hours.
 
 When a group's identity has left the host's control, the host stops
 changing it. Once the document no longer names the host's key, adding
-and removing keys are refused with `NotController`. The same holds once
-the DID has been ended.
+and removing keys are refused with `NotController`, whatever the key
+asked about. The same holds once the DID has been ended.
 
 ## Adding, listing and removing keys
 
@@ -69,6 +69,13 @@ and one is the host's, so a group has at most four recovery keys.
 `removeRecoveryKey` takes a key off the same way, and the rest keep
 their order. Any holder of `group.configure` may take off any steward's
 key, not only one they added. The host's own key cannot be removed.
+
+The host makes one change to a DID at a time, from reading its last
+operation to publishing the next, so two changes asked at once both
+land, one after the other. An operation the directory still refuses,
+as when a steward changed the document meanwhile, is answered
+`InvalidOperation`, with what the directory said; asking again builds on
+the document as it is now.
 
 `listRecoveryKeys` lists every rotation key in the document, the highest
 ranked first. Each is marked `host` for this host's key or `steward` for

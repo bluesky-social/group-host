@@ -1,13 +1,48 @@
 //! The PLC directory, `PLC_URL`: where the host publishes its groups'
 //! identity operations, and reads their documents back.
 
-use anyhow::{Context, Result, bail};
+use crate::xrpc::XrpcError;
+use anyhow::{Context, Result};
 use atproto::plc::Signed;
+use axum::http::StatusCode;
 use serde_json::Value;
 
 pub struct Directory {
     url: String,
     http: reqwest::Client,
+    /// Held from reading a DID's last operation to publishing the next,
+    /// so two changes at once never both build on the same one.
+    turn: tokio::sync::Mutex<()>,
+}
+
+/// An operation the directory answered with an error, and what it said.
+#[derive(Debug)]
+pub struct Refused {
+    pub status: StatusCode,
+    pub said: String,
+}
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let Refused { status, said } = self;
+        write!(f, "the PLC directory refused it ({status}): {said}")
+    }
+}
+
+impl std::error::Error for Refused {}
+
+/// An operation not published, as its caller is told. One the directory
+/// turned away (a 4xx: a key it does not take, too many keys, another
+/// change made first) is the caller's to change or send again,
+/// `InvalidOperation`; a directory that failed, or never answered, is the
+/// host's trouble.
+pub fn not_published(e: anyhow::Error) -> XrpcError {
+    match e.downcast_ref::<Refused>() {
+        Some(r) if r.status.is_client_error() => {
+            XrpcError::new(StatusCode::BAD_REQUEST, "InvalidOperation", r.to_string())
+        }
+        _ => XrpcError::internal(format!("{e:#}")),
+    }
 }
 
 impl Directory {
@@ -15,7 +50,14 @@ impl Directory {
         Directory {
             url: url.trim_end_matches('/').to_string(),
             http: crate::client(),
+            turn: Default::default(),
         }
+    }
+
+    /// The turn to change a DID's document: held from reading its last
+    /// operation until the next is published.
+    pub async fn turn(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.turn.lock().await
     }
 
     /// Publishes `op` as `did`'s next operation.
@@ -29,7 +71,8 @@ impl Directory {
         let status = res.status();
         if !status.is_success() {
             let said = res.text().await.unwrap_or_default();
-            bail!("the PLC directory refused {did}'s operation ({status}): {said}");
+            let refused = Err(Refused { status, said });
+            return refused.context(format!("{did}'s operation"));
         }
         Ok(())
     }

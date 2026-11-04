@@ -225,8 +225,11 @@ impl Host {
             return false;
         }
         let url = format!("{pds}/xrpc/com.atproto.server.describeServer");
-        let described = self.public_json(&url, "its server").await;
-        let described = described.unwrap_or_default();
+        // A server that cannot say which domains it gives out may give out
+        // this one: the handle is not kept on a guess.
+        let Ok(described) = self.public_json(&url, "its server").await else {
+            return false;
+        };
         let domains = described["availableUserDomains"].as_array();
         let theirs = domains.into_iter().flatten().filter_map(Value::as_str);
         if theirs.into_iter().any(|d| under(handle, d)) {

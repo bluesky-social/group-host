@@ -125,6 +125,7 @@ pub async fn update_group_handle(
     }
     // The directory first: until it names the handle, nobody takes it for
     // the group's.
+    let turn = host.plc.turn().await;
     let last = host.plc.last_op(group).await.map_err(XrpcError::internal)?;
     let Signed::Update { op, .. } = &last else {
         return Err(bad("NotController", "the group's DID is ended"));
@@ -142,7 +143,8 @@ pub async fn update_group_handle(
     host.plc
         .publish(group, &signed)
         .await
-        .map_err(XrpcError::internal)?;
+        .map_err(crate::plc::not_published)?;
+    drop(turn);
     // Taken here meanwhile, the database's unique handle refuses it.
     let set = host
         .store

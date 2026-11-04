@@ -522,6 +522,24 @@ async fn hands_over_only_what_names_the_destination() {
         .await;
         assert_eq!(error(&said), (400, "InvalidRequest"), "{missing:?}");
     }
+    // Keys the directory does not take are the caller's to change, not a
+    // fault of the host's.
+    let said = call(
+        &a,
+        &alice,
+        COMPLETE,
+        json!({"group": did, "recommendedCreds": creds}),
+    )
+    .await;
+    assert_eq!(error(&said), (400, "InvalidOperation"), "{}", said.1);
+    assert!(
+        said.1["message"]
+            .as_str()
+            .unwrap()
+            .contains("the PLC directory refused it (400 Bad Request)"),
+        "{}",
+        said.1
+    );
     // An ended DID is nobody's to hand over.
     let last = a.host.plc.last_op(&did).await.unwrap();
     a.host
@@ -545,13 +563,15 @@ struct Fake {
     said: Mutex<HashMap<String, Vec<u8>>>,
 }
 
-async fn fake_repo(State(f): State<Arc<Fake>>) -> Vec<u8> {
-    f.said
-        .lock()
-        .unwrap()
-        .get("repo")
-        .cloned()
-        .unwrap_or_default()
+/// Its repo, or, once `said` has `repo-gone`, a 404 of the PDS's.
+async fn fake_repo(State(f): State<Arc<Fake>>) -> (axum::http::StatusCode, Vec<u8>) {
+    let said = f.said.lock().unwrap();
+    if said.contains_key("repo-gone") {
+        let body = br#"{"error":"RepoNotFound","message":"no such repo"}"#;
+        return (axum::http::StatusCode::NOT_FOUND, body.to_vec());
+    }
+    let repo = said.get("repo").cloned().unwrap_or_default();
+    (axum::http::StatusCode::OK, repo)
 }
 
 async fn fake_export(
@@ -685,6 +705,16 @@ async fn takes_in_nothing_it_cannot_check() {
             .as_str()
             .unwrap()
             .contains("signed and whole")
+    );
+    // A repo its host says it has not: said so, not read as one.
+    let fake = Arc::new(Fake::default());
+    fake.said.lock().unwrap().insert("repo-gone".into(), vec![]);
+    let said = from_fake(&b, &alice, fake, &key).await;
+    assert_eq!(error(&said), (502, "SourceUnreadable"), "{}", said.1);
+    let message = said.1["message"].as_str().unwrap();
+    assert!(
+        message.contains("getRepo answered 404 Not Found"),
+        "{message}"
     );
     // A file that is not what it says.
     let fake = Arc::new(Fake::default());

@@ -12,7 +12,8 @@ signs in.
 | `initialize`, `ping`, `tools/list`, `tools/call` | as MCP has them |
 | a notification, with no `id` | 202, with no body |
 | any other method | JSON-RPC `-32601` |
-| not one JSON-RPC 2.0 object (a batch, or JSON that does not parse) | `-32600` |
+| a body that is not JSON | 400, JSON-RPC `-32700` with a null `id` |
+| JSON that is not one JSON-RPC 2.0 object (a batch, a string) | `-32600` |
 | an unknown tool, or arguments that are not an object | `-32602` |
 | no token, or one the host does not know | 401, with `WWW-Authenticate: Bearer` naming the resource metadata |
 

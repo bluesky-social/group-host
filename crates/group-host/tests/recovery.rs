@@ -218,6 +218,83 @@ async fn changes_nothing_once_the_host_holds_no_key() {
     )
     .await;
     assert_eq!(error(&said), (400, "NotController"));
+    // Whatever else a change would be refused for, it is this.
+    let host_key = h.host.secrets.rotation.public().did_key();
+    for (method, k) in [
+        ("addRecoveryKey", &theirs),
+        ("removeRecoveryKey", &host_key),
+        ("removeRecoveryKey", &key().1),
+    ] {
+        let said = call(&h, &alice, method, json!({"group": did, "key": k})).await;
+        assert_eq!(error(&said), (400, "NotController"), "{method} {k}");
+    }
+    // Five keys of the steward's: no room for another, but that is not why.
+    let last = h.host.plc.last_op(&did).await.unwrap();
+    let mut full = op.clone();
+    full.rotation_keys = vec![theirs.clone()];
+    full.rotation_keys.extend((0..4).map(|_| key().1));
+    h.host
+        .plc
+        .publish(&did, &full.sign(Some(last.cid()), &steward))
+        .await
+        .unwrap();
+    let said = call(
+        &h,
+        &alice,
+        "addRecoveryKey",
+        json!({"group": did, "key": key().1}),
+    )
+    .await;
+    assert_eq!(error(&said), (400, "NotController"));
+}
+
+#[tokio::test]
+async fn makes_two_changes_at_once_one_after_the_other() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let (_, first) = key();
+    let (_, second) = key();
+    // Each reads the last operation slowly, so both read before either writes.
+    h.plc.slow.store(true, std::sync::atomic::Ordering::Relaxed);
+    let add = |k: &String| {
+        call(
+            &h,
+            &alice,
+            "addRecoveryKey",
+            json!({"group": did, "key": k}),
+        )
+    };
+    let (a, b) = tokio::join!(add(&first), add(&second));
+    assert_eq!((a.0, b.0), (200, 200), "{} {}", a.1, b.1);
+    let keys = rotation_keys(&h, &did).await;
+    assert!(keys.contains(&first) && keys.contains(&second), "{keys:?}");
+    assert_eq!(keys.len(), 3);
+}
+
+#[test]
+fn says_whose_trouble_an_operation_not_published_is() {
+    use axum::http::StatusCode;
+    use group_host::plc::{Refused, not_published};
+    let refused = |status| {
+        anyhow::Error::new(Refused {
+            status,
+            said: "no".into(),
+        })
+    };
+    // Turned away: the caller's to change, or to send again.
+    let said = not_published(refused(StatusCode::BAD_REQUEST));
+    assert_eq!(
+        (said.status.as_u16(), said.error),
+        (400, "InvalidOperation")
+    );
+    // A directory that failed, or never answered: the host's.
+    let said = not_published(refused(StatusCode::SERVICE_UNAVAILABLE));
+    assert_eq!(
+        (said.status.as_u16(), said.error),
+        (500, "InternalServerError")
+    );
+    let said = not_published(anyhow::anyhow!("connection refused"));
+    assert_eq!(said.message, "connection refused");
 }
 
 #[tokio::test]

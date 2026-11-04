@@ -85,7 +85,7 @@ fn event_row(row: &Row) -> rusqlite::Result<Event> {
 impl Store {
     /// Keeps `event` on `subject` in `group`'s queue, opening the subject
     /// if it is new; a report reopens one resolved, as someone asks again.
-    pub fn moderate(&self, group: &str, subject: &str, event: &Event) -> Result<()> {
+    pub fn moderate(&self, group: &str, subject: &str, event: &Event) -> Result<i64> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let at = event.created_at;
@@ -101,8 +101,9 @@ impl Store {
             "INSERT INTO mod_event (grp, subject, kind, actor, reason_type, reason, val, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![group, subject, e.kind, e.actor, e.reason_type, e.reason, e.val, e.note, at],
         )?;
+        let seq = tx.last_insert_rowid();
         tx.commit()?;
-        Ok(())
+        Ok(seq)
     }
 
     /// Sets `subject`'s status in `group`'s queue: `false` if it has none.
@@ -499,11 +500,10 @@ pub async fn create_report(
         created_at: now,
         ..Event::default()
     };
-    host.store
-        .moderate(&group, uri, &event)
-        .map_err(XrpcError::internal)?;
+    let id = host.store.moderate(&group, uri, &event);
+    let id = id.map_err(XrpcError::internal)?;
     let mut out = json!({
-        "id": now,
+        "id": id,
         "reasonType": reason_type,
         "subject": body["subject"],
         "reportedBy": me,
