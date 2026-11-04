@@ -29,6 +29,28 @@ refuses every cookie signed before. Every server a handle leads to is
 reached only at a public address, as a client's metadata is. The console
 forwards `/console/*` to the host, cookies and all.
 
+## Signing in to an account being moved
+
+Moving an account here from the console takes a second sign-in, to that
+account at its own server, by someone already signed in to the console
+(`/console/move/login`, `account_move.rs`). The host asks it for what a
+move needs and no more: `atproto`, a `createAccount` service token for
+this host's `#opensocial` service, `identity:*`, and reading its own
+repos and files in spaces (`space:*?authority=*&action=read_self`).
+The browser stays signed in as the person moving it, and a sign-in that
+comes back to a browser no longer signed in as them is refused.
+
+Unlike their own sign-in, the host keeps these tokens: one account per
+person, for a day at most, while it does the move's steps itself
+([moving](moving.md#moving-one-from-the-console)). Its calls to the account's
+server are DPoP-bound to a key it made for the sign-in, take the nonce
+the server asks for, and refresh the token before it lapses or once it
+is refused as lapsed; one with no refresh token asks them to sign in to
+the account again. The tokens are given back to the server, and
+forgotten here, when the move finishes, when it is cancelled, when the
+person signs in to another account to move, and, by the host's hourly
+sweep, once a day has passed.
+
 ## Apps acting as a person
 
 An app acting as a person, not as a group (the `opensocial` command, an

@@ -1,0 +1,109 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.startAccountMove",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Start moving the account the caller signed in to move (getAccountMove) here, to become a group they run: the host asks its server for its token for this host, copies it as importAccount does, brings its spaces as importAccountSpace takes them, and asks its server to email the code that lets its identity move (finishAccountMove). Started again, it starts over.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "string",
+              "maxLength": 63,
+              "description": "The label of its address here, if not its handle's first label."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did",
+            "handle",
+            "address",
+            "displayName",
+            "records",
+            "blobs",
+            "recommendedCreds"
+          ],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "handle": {
+              "type": "string",
+              "format": "handle",
+              "description": "Its handle once moved: its own domain if it has one that still names it, otherwise its address."
+            },
+            "address": {
+              "type": "string",
+              "description": "The hostname its site and methods answer at."
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "records": {
+              "type": "integer",
+              "description": "Records copied."
+            },
+            "blobs": {
+              "type": "integer",
+              "description": "Files copied."
+            },
+            "recommendedCreds": {
+              "type": "unknown",
+              "description": "rotationKeys, alsoKnownAs, verificationMethods and services, as com.atproto.identity.getRecommendedDidCredentials answers: what the account's server signs into its PLC operation (com.atproto.identity.signPlcOperation)."
+            },
+            "spaces": {
+              "type": "ref",
+              "ref": "#spacesBrought"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotFound",
+          "description": "No account is signed in for the caller to move."
+        },
+        {
+          "name": "UpstreamFailure",
+          "description": "The account's server failed, or refused what the move asked of it."
+        },
+        {
+          "name": "SignInAgain",
+          "description": "The account's sign-in at its server has lapsed, with no way to renew it: sign in to it again."
+        }
+      ]
+    },
+    "spacesBrought": {
+      "type": "object",
+      "description": "What came of the account's spaces.",
+      "required": [
+        "spaces",
+        "records",
+        "blobs"
+      ],
+      "properties": {
+        "spaces": {
+          "type": "integer",
+          "description": "The spaces it governs or wrote in."
+        },
+        "records": {
+          "type": "integer",
+          "description": "Its records in them, kept."
+        },
+        "blobs": {
+          "type": "integer",
+          "description": "Its files in them."
+        }
+      }
+    }
+  }
+}

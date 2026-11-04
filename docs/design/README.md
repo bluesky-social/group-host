@@ -125,7 +125,9 @@ says otherwise.
    [recovery](recovery.md)); moving a group to another host
    (`migration.rs`; done, see [moving](moving.md)); an account on
    another server becoming a group, its spaces with it (`import.rs`,
-   `import_space.rs`; done, see [moving](moving.md#an-account-becoming-a-group)); and
+   `import_space.rs`; done, see [moving](moving.md#an-account-becoming-a-group)),
+   moved from the console by the host signed in to it (`account_move.rs`;
+   done, its page next); and
    moving the host itself (`move_host.rs`; done, see
    [moving](moving.md#moving-the-host)):
    `methods/{moderation,recovery,importAccount,migration}.ts`,

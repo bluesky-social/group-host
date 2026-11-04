@@ -404,73 +404,87 @@ pub async fn import_account(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.importAccount")).await?;
-    if !host.may_found(&me) {
-        return Err(XrpcError::new(
-            StatusCode::FORBIDDEN,
-            "NotAllowed",
-            "this host is not starting groups for you",
-        ));
-    }
     let jwt = body["serviceJwt"].as_str();
     let jwt = jwt.ok_or_else(|| invalid("serviceJwt is required"))?;
-    let did = proof(&host, jwt).await?;
-    if did == me {
-        return Err(refused(
-            "SameAccount",
-            "sign in with your own account, not the one becoming the group",
-        ));
-    }
-    let started = host.store.pending_import(&did);
-    let here = host.store.account(&did).map_err(XrpcError::internal)?;
-    match started.map_err(XrpcError::internal)? {
-        Some(p) if p.founder != me => {
-            return Err(refused(
-                "AlreadyHere",
-                "someone else is moving this account here",
+    let started = host.import_as(&me, jwt, body["address"].as_str()).await?;
+    Ok(Json(started))
+}
+
+impl Host {
+    /// Starts moving the account `jwt` is the word of here, for `me`, at
+    /// `address` if asked: what importAccount answers.
+    pub(crate) async fn import_as(
+        &self,
+        me: &str,
+        jwt: &str,
+        address: Option<&str>,
+    ) -> Result<Value, XrpcError> {
+        if !self.may_found(me) {
+            return Err(XrpcError::new(
+                StatusCode::FORBIDDEN,
+                "NotAllowed",
+                "this host is not starting groups for you",
             ));
         }
-        Some(_) => host.forget(&did),
-        None if here.is_some() => {
-            return Err(refused("AlreadyHere", "this host has that account already"));
+        let did = proof(self, jwt).await?;
+        if did == me {
+            return Err(refused(
+                "SameAccount",
+                "sign in with your own account, not the one becoming the group",
+            ));
         }
-        None => {}
-    }
-    let plan = host.plan_import(&did, body["address"].as_str()).await?;
-    if let Some(e) = plan.refused {
-        return Err(e);
-    }
-    let account = take_in(&host, &did, &plan.handle, &plan.address).await?;
-    let off = host.store.deactivate(&did, now_millis(), &me, &[], &[]);
-    off.map_err(XrpcError::internal)?;
-    let (records, blobs, profile) = match host.copy(&did, &plan).await {
-        Ok(copied) => copied,
-        Err(e) => {
-            // Nothing half copied stays.
-            host.forget(&did);
+        let started = self.store.pending_import(&did);
+        let here = self.store.account(&did).map_err(XrpcError::internal)?;
+        match started.map_err(XrpcError::internal)? {
+            Some(p) if p.founder != me => {
+                return Err(refused(
+                    "AlreadyHere",
+                    "someone else is moving this account here",
+                ));
+            }
+            Some(_) => self.forget(&did),
+            None if here.is_some() => {
+                return Err(refused("AlreadyHere", "this host has that account already"));
+            }
+            None => {}
+        }
+        let plan = self.plan_import(&did, address).await?;
+        if let Some(e) = plan.refused {
             return Err(e);
         }
-    };
-    let named = profile["displayName"].as_str().map(str::trim);
-    let display_name = named.filter(|n| !n.is_empty()).unwrap_or(&plan.label);
-    let description = profile["description"].as_str();
-    let description = description.map(|d| d.chars().take(DESCRIPTION_MAX).collect());
-    let pending = Pending {
-        founder: me,
-        display_name: display_name.into(),
-        description,
-    };
-    let kept = host.store.start_import(&did, &pending, now_millis());
-    kept.map_err(XrpcError::internal)?;
-    tracing::info!(did, records, blobs, "an account copied here, switched off");
-    Ok(Json(json!({
-        "did": did,
-        "handle": plan.handle,
-        "address": plan.address,
-        "displayName": pending.display_name,
-        "records": records,
-        "blobs": blobs,
-        "recommendedCreds": creds(&host, &account),
-    })))
+        let account = take_in(self, &did, &plan.handle, &plan.address).await?;
+        let off = self.store.deactivate(&did, now_millis(), me, &[], &[]);
+        off.map_err(XrpcError::internal)?;
+        let (records, blobs, profile) = match self.copy(&did, &plan).await {
+            Ok(copied) => copied,
+            Err(e) => {
+                // Nothing half copied stays.
+                self.forget(&did);
+                return Err(e);
+            }
+        };
+        let named = profile["displayName"].as_str().map(str::trim);
+        let display_name = named.filter(|n| !n.is_empty()).unwrap_or(&plan.label);
+        let description = profile["description"].as_str();
+        let description = description.map(|d| d.chars().take(DESCRIPTION_MAX).collect());
+        let pending = Pending {
+            founder: me.to_string(),
+            display_name: display_name.into(),
+            description,
+        };
+        let kept = self.store.start_import(&did, &pending, now_millis());
+        kept.map_err(XrpcError::internal)?;
+        tracing::info!(did, records, blobs, "an account copied here, switched off");
+        Ok(json!({
+            "did": did,
+            "handle": plan.handle,
+            "address": plan.address,
+            "displayName": pending.display_name,
+            "records": records,
+            "blobs": blobs,
+            "recommendedCreds": creds(self, &account),
+        }))
+    }
 }
 
 /// Whether `signed` gives `account` to this host, as importAccount said
@@ -505,55 +519,71 @@ pub async fn complete_import(
     let me = signed_in(&host, &headers, &format!("{NS}.completeImport")).await?;
     let did = body["did"].as_str();
     let did = did.ok_or_else(|| invalid("did is required"))?;
-    let pending = host
-        .store
-        .pending_import(did)
-        .map_err(XrpcError::internal)?;
-    let Some(pending) = pending.filter(|p| p.founder == me) else {
-        return Err(refused("NotFound", "no move of that account here of yours"));
-    };
-    let account = host.store.account(did).map_err(XrpcError::internal)?;
-    let account = account.expect("a move's account");
-    let signed = Signed::from_json(&body["operation"]).ok();
-    let Some(signed) = signed.filter(|s| gives_here(&host, &account, s)) else {
-        return Err(refused(
-            "InvalidOperation",
-            "the signed operation does not give the account to this host",
-        ));
-    };
-    // The directory may have it already: sent by the account's server, or
-    // by a try of this that failed after sending it. It is not sent again.
-    let last = host.plc.last_op(did).await.ok().map(|op| op.cid());
-    let sent = match last == Some(signed.cid()) {
-        true => Ok(()),
-        false => host.plc.publish(did, &signed).await,
-    };
-    sent.map_err(|e| {
-        refused(
-            "InvalidOperation",
-            format!("the directory refused it: {e:#}"),
-        )
-    })?;
-    let on = host.activate_arrived(did, &account.handle);
-    on.map_err(XrpcError::internal)?;
-    host.tell_spaces(did).await.map_err(XrpcError::internal)?;
-    let group = NewGroup {
-        handle: account.handle.clone(),
-        founder: me.clone(),
-        display_name: pending.display_name,
-        description: pending.description,
-        ..NewGroup::default()
-    };
-    let made = host.make_group(did, &group).await?;
-    host.store.end_import(did).map_err(XrpcError::internal)?;
-    let logged = host.record(did, &me, None, "moved the account here as a group");
-    logged.map_err(XrpcError::internal)?;
-    let address = host.store.address(did).map_err(XrpcError::internal)?;
-    Ok(Json(json!({
-        "did": did,
-        "handle": account.handle,
-        "address": address,
-        "meta": made.meta,
-        "members": made.members,
-    })))
+    let done = host
+        .complete_import_as(&me, did, &body["operation"])
+        .await?;
+    Ok(Json(done))
+}
+
+impl Host {
+    /// Finishes `me`'s move of `did` with `operation`, its old server's
+    /// signature: what completeImport answers.
+    pub(crate) async fn complete_import_as(
+        &self,
+        me: &str,
+        did: &str,
+        operation: &Value,
+    ) -> Result<Value, XrpcError> {
+        let pending = self
+            .store
+            .pending_import(did)
+            .map_err(XrpcError::internal)?;
+        let Some(pending) = pending.filter(|p| p.founder == me) else {
+            return Err(refused("NotFound", "no move of that account here of yours"));
+        };
+        let account = self.store.account(did).map_err(XrpcError::internal)?;
+        let account = account.expect("a move's account");
+        let signed = Signed::from_json(operation).ok();
+        let Some(signed) = signed.filter(|s| gives_here(self, &account, s)) else {
+            return Err(refused(
+                "InvalidOperation",
+                "the signed operation does not give the account to this host",
+            ));
+        };
+        // The directory may have it already: sent by the account's server, or
+        // by a try of this that failed after sending it. It is not sent again.
+        let last = self.plc.last_op(did).await.ok().map(|op| op.cid());
+        let sent = match last == Some(signed.cid()) {
+            true => Ok(()),
+            false => self.plc.publish(did, &signed).await,
+        };
+        sent.map_err(|e| {
+            refused(
+                "InvalidOperation",
+                format!("the directory refused it: {e:#}"),
+            )
+        })?;
+        let on = self.activate_arrived(did, &account.handle);
+        on.map_err(XrpcError::internal)?;
+        self.tell_spaces(did).await.map_err(XrpcError::internal)?;
+        let group = NewGroup {
+            handle: account.handle.clone(),
+            founder: me.to_string(),
+            display_name: pending.display_name,
+            description: pending.description,
+            ..NewGroup::default()
+        };
+        let made = self.make_group(did, &group).await?;
+        self.store.end_import(did).map_err(XrpcError::internal)?;
+        let logged = self.record(did, me, None, "moved the account here as a group");
+        logged.map_err(XrpcError::internal)?;
+        let address = self.store.address(did).map_err(XrpcError::internal)?;
+        Ok(json!({
+            "did": did,
+            "handle": account.handle,
+            "address": address,
+            "meta": made.meta,
+            "members": made.members,
+        }))
+    }
 }

@@ -103,6 +103,27 @@ confirms it (an emailed code, on the reference PDS).
 The old server keeps its copy until its owner deletes it there; once the
 DID names this host, the network reads the account here.
 
+## Moving one from the console
+
+`account_move.rs` walks through the same steps for someone signed in to
+the console. They sign in to the account at its own server too
+([signing in](signing-in.md#signing-in-to-an-account-being-moved)), and
+the host, holding its tokens for them, does each step itself:
+
+- **`getAccountMove`**: the account signed in for them to move, if any,
+  and whether its move is started.
+- **`startAccountMove`**: the account's token for this host, from its
+  server; the copy, as `importAccount` makes it; its spaces, as
+  `importAccountSpace` takes them; and its server asked to email the
+  code that lets its identity move. Started again, it starts over.
+- **`finishAccountMove`**: with the code, its server signs the operation,
+  and the move finishes as `completeImport` does. Its tokens are given
+  back.
+- **`cancelAccountMove`**: its tokens given back and forgotten, and a copy
+  not yet finished discarded.
+
+## Moving one with the command
+
 `opensocial import <account>` walks through it, signed in as the person
 moving it and, with its own password, as the account at its server (its
 server signs its identity over for no app password). It copies the
@@ -111,6 +132,13 @@ import <account> --code <code>` then has its server sign the operation
 and finishes.
 
 ## Its spaces
+
+Spaces come only from a server that says it holds them
+(`describeServer`'s `spacesAlpha`, as the space alpha's servers say):
+most do not yet, and answer for a method they lack in no one way, so an
+account on one moves with nothing more to bring. A server that fails to
+say stops the move, before its identity moves, rather than leave its
+spaces behind.
 
 Between steps 2 and 3, the one moving it brings its spaces, with
 **`importAccountSpace`** (`import_space.rs`). Only the account, signed in

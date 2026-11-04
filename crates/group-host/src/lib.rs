@@ -3,6 +3,7 @@
 //! `fyi.opensocial.*` methods that run a group. `docs/design/README.md`
 //! says how it is built and what is still to come.
 
+pub mod account_move;
 pub mod actors;
 pub mod api;
 pub mod app_passwords;
@@ -442,6 +443,23 @@ pub fn router(host: Arc<Host>) -> Router {
             get(console_login::client_metadata),
         )
         .route("/console/login", get(console_login::login))
+        .route("/console/move/login", get(account_move::login))
+        .route(
+            "/xrpc/fyi.opensocial.getAccountMove",
+            get(account_move::get_account_move),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.startAccountMove",
+            post(account_move::start_account_move),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.finishAccountMove",
+            post(account_move::finish_account_move),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.cancelAccountMove",
+            post(account_move::cancel_account_move),
+        )
         .route("/console/callback", get(console_login::callback))
         .route("/console/logout", post(console_login::logout))
         .merge(token_routes())
@@ -598,12 +616,15 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     println!("listening on {}", listener.local_addr()?);
     tracing::info!(public_url = %config.public_url, did = %config.service_did, "serving");
     let host = Arc::new(Host::open(config)?);
-    // Uploads no record took, swept now and each hour after.
+    // Uploads no record took, and moves kept a day, swept now and each
+    // hour after.
     let sweeping = host.clone();
     tokio::spawn(async move {
         loop {
             let swept = sweeping.sweep_blobs(time::now_millis());
             tracing::info!(?swept, "swept the uploads no record took");
+            let moves = sweeping.sweep_moves(time::now_millis()).await;
+            tracing::info!(?moves, "gave back the moves kept a day");
             tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
         }
     });

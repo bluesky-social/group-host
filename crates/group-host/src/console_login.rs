@@ -45,6 +45,8 @@ const TAKES: i64 = 15 * 60_000;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pending {
     pub did: String,
+    /// Their PDS, as their DID document named it.
+    pub pds: String,
     pub issuer: String,
     pub token_endpoint: String,
     pub revocation_endpoint: Option<String>,
@@ -54,6 +56,9 @@ pub struct Pending {
     /// The page to go back to.
     pub back: String,
     pub started: i64,
+    /// For a sign-in to an account being moved here, who is moving it:
+    /// its tokens are kept for them, and the browser is not signed in.
+    pub mover: Option<String>,
 }
 
 impl Store {
@@ -75,7 +80,9 @@ impl Store {
             p.key,
             p.verifier,
             p.back,
-            p.started
+            p.started,
+            p.mover,
+            p.pds
         ];
         conn.execute(START_LOGIN, values)?;
         Ok(())
@@ -95,6 +102,8 @@ impl Store {
                 verifier: r.get(5)?,
                 back: r.get(6)?,
                 started: r.get(7)?,
+                mover: r.get(8)?,
+                pds: r.get(9)?,
             })
         });
         Ok(found.optional()?)
@@ -116,8 +125,8 @@ impl Store {
     }
 }
 
-const START_LOGIN: &str = "INSERT INTO console_login (state, did, issuer, token_endpoint, revocation_endpoint, key, verifier, back, started) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
-const FINISH_LOGIN: &str = "DELETE FROM console_login WHERE state = ?1 AND started > ?2 RETURNING did, issuer, token_endpoint, revocation_endpoint, key, verifier, back, started";
+const START_LOGIN: &str = "INSERT INTO console_login (state, did, issuer, token_endpoint, revocation_endpoint, key, verifier, back, started, mover, pds) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
+const FINISH_LOGIN: &str = "DELETE FROM console_login WHERE state = ?1 AND started > ?2 RETURNING did, issuer, token_endpoint, revocation_endpoint, key, verifier, back, started, mover, pds";
 const SIGN_OUT: &str =
     "INSERT INTO console_logout (did, at) VALUES (?1, ?2) ON CONFLICT (did) DO UPDATE SET at = ?2";
 
@@ -175,7 +184,7 @@ impl Host {
         format!("{}/console/client-metadata.json", self.config.console_url)
     }
 
-    fn console_callback(&self) -> String {
+    pub(crate) fn console_callback(&self) -> String {
         format!("{}/console/callback", self.config.console_url)
     }
 
@@ -219,7 +228,7 @@ impl Host {
     /// Sends `form` to `url` from the console's client, with a DPoP proof
     /// of `key` and its assertion for `issuer`, once more with the nonce
     /// the server asks for. The JSON answered, if it took it.
-    async fn console_post(
+    pub(crate) async fn console_post(
         &self,
         url: &str,
         issuer: &str,
@@ -282,9 +291,9 @@ impl Host {
         Err(format!("{url} asked for a nonce twice"))
     }
 
-    /// Where `identifier`, a handle or DID, signs in: their DID and their
-    /// PDS's authorization server's metadata.
-    async fn sign_in_at(&self, identifier: &str) -> Result<(String, Value), String> {
+    /// Where `identifier`, a handle or DID, signs in: their DID, their PDS,
+    /// and its authorization server's metadata.
+    async fn sign_in_at(&self, identifier: &str) -> Result<(String, String, Value), String> {
         let identifier = identifier.trim().trim_start_matches('@').to_lowercase();
         let did = match identifier.starts_with("did:") {
             true => Some(identifier.clone()),
@@ -318,7 +327,7 @@ impl Host {
         if server["issuer"] != issuer {
             return Err(format!("{issuer} calls itself {}", server["issuer"]));
         }
-        Ok((did, server))
+        Ok((did, pds, server))
     }
 }
 
@@ -333,7 +342,7 @@ pub async fn client_metadata(State(host): State<Arc<Host>>) -> Json<Value> {
         "client_name": "Group host",
         "client_uri": host.config.console_url,
         "redirect_uris": [host.console_callback()],
-        "scope": "atproto",
+        "scope": format!("atproto {}", host.move_scope()),
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
         "token_endpoint_auth_method": "private_key_jwt",
@@ -350,10 +359,21 @@ pub async fn login(
     State(host): State<Arc<Host>>,
     Query(q): Query<HashMap<String, String>>,
 ) -> Result<Response, XrpcError> {
+    sign_in(&host, &q, "atproto", None).await
+}
+
+/// Starts a sign-in to `q`'s `handle`, asking for `scope`, for `mover`
+/// where it is an account they are moving here.
+pub(crate) async fn sign_in(
+    host: &Host,
+    q: &HashMap<String, String>,
+    scope: &str,
+    mover: Option<String>,
+) -> Result<Response, XrpcError> {
     let Some(identifier) = q.get("handle").filter(|h| !h.trim().is_empty()) else {
         return Ok(failed(StatusCode::BAD_REQUEST, "say who you are"));
     };
-    let (did, server) = match host.sign_in_at(identifier).await {
+    let (did, pds, server) = match host.sign_in_at(identifier).await {
         Ok(found) => found,
         Err(why) => return Ok(failed(StatusCode::BAD_REQUEST, why)),
     };
@@ -368,7 +388,7 @@ pub async fn login(
         ("code_challenge", challenge.as_str()),
         ("code_challenge_method", "S256"),
         ("redirect_uri", callback.as_str()),
-        ("scope", "atproto"),
+        ("scope", scope),
         ("state", state.as_str()),
         ("login_hint", identifier.as_str()),
     ];
@@ -402,6 +422,7 @@ pub async fn login(
     let now = now_millis();
     let pending = Pending {
         did,
+        pds,
         issuer,
         token_endpoint: text("token_endpoint"),
         revocation_endpoint: server["revocation_endpoint"].as_str().map(String::from),
@@ -409,11 +430,12 @@ pub async fn login(
         verifier,
         back: back_to(q.get("back")),
         started: now,
+        mover,
     };
     host.store
         .start_login(&state, &pending, now)
         .map_err(XrpcError::internal)?;
-    let started = cookie(&host, STARTED, &state, TAKES / 1000);
+    let started = cookie(host, STARTED, &state, TAKES / 1000);
     Ok(([(header::SET_COOKIE, started)], Redirect::to(to.as_str())).into_response())
 }
 
@@ -468,6 +490,23 @@ pub async fn callback(
         let why = format!("signed in as {}, not {}", tokens["sub"], p.did);
         return Ok(failed(StatusCode::FORBIDDEN, why));
     }
+    let done = cookie(&host, STARTED, "", 0);
+    // An account being moved here: its tokens kept for the one moving it,
+    // still signed in, and this browser signed in as nobody new.
+    if let Some(mover) = &p.mover {
+        let caller = host.console_caller(&headers).map_err(XrpcError::internal)?;
+        if caller.as_ref() != Some(mover) {
+            return Ok(failed(
+                StatusCode::FORBIDDEN,
+                "sign in to the console again first",
+            ));
+        }
+        host.keep_move(&p, &tokens)
+            .await
+            .map_err(XrpcError::internal)?;
+        tracing::info!(did = p.did, mover, "signed in to an account to move");
+        return Ok(([(header::SET_COOKIE, done)], Redirect::to(&p.back)).into_response());
+    }
     // Knowing who they are is all the host wanted: it keeps nothing.
     if let (Some(url), Some(token)) = (&p.revocation_endpoint, tokens["access_token"].as_str()) {
         let revoked = host
@@ -482,7 +521,6 @@ pub async fn callback(
         &host.session_cookie(&p.did, now),
         LASTS / 1000,
     );
-    let done = cookie(&host, STARTED, "", 0);
     tracing::info!(did = p.did, "signed in to the console");
     let headers = AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, done)]);
     Ok((headers, Redirect::to(&p.back)).into_response())

@@ -1,0 +1,77 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.finishAccountMove",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Finish moving the account the caller signed in to move: with the code its server emailed, the host has its server sign the operation that gives its identity to this host, then finishes as completeImport does, and gives its tokens back.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "code"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "The code the account's server emailed."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did",
+            "handle",
+            "address",
+            "meta",
+            "members"
+          ],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "handle": {
+              "type": "string",
+              "format": "handle"
+            },
+            "address": {
+              "type": "string",
+              "description": "The hostname its site and methods answer at."
+            },
+            "meta": {
+              "type": "string"
+            },
+            "members": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotFound",
+          "description": "No account is signed in for the caller to move."
+        },
+        {
+          "name": "NotStarted",
+          "description": "Its move is not started (startAccountMove)."
+        },
+        {
+          "name": "UpstreamFailure",
+          "description": "The account's server failed, or refused the code."
+        },
+        {
+          "name": "SignInAgain",
+          "description": "The account's sign-in at its server has lapsed, with no way to renew it: sign in to it again."
+        }
+      ]
+    }
+  }
+}

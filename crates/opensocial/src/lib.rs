@@ -541,22 +541,23 @@ async fn start_import(
     }
     let copied = me.call(host, &m("importAccount"), &body).await?;
     let mut out = format!(
-        "moving {did}
-  from {}
-  as   {}
-",
+        "moving {did}\n  from {}\n  as   {}\n",
         text(&plan["pds"]),
         text(&copied["handle"])
     );
     out += &format!(
-        "copied    {} records, {} files
-",
+        "copied    {} records, {} files\n",
         copied["records"], copied["blobs"]
     );
     // Each space it governs or wrote in: a space it governs first, then its
     // files there, then its repo, which holds them.
     let mut spaces = Vec::new();
-    let mut cursor = Some(String::new());
+    // Only a server that says it holds spaces has any to bring.
+    let described = theirs
+        .own("com.atproto.server.describeServer", &[], None)
+        .await?;
+    let holds = described["spacesAlpha"] == true;
+    let mut cursor = holds.then_some(String::new());
     while let Some(after) = cursor.take() {
         let mut page = vec![("limit", "100")];
         page.extend((!after.is_empty()).then_some(("cursor", after.as_str())));
@@ -605,16 +606,13 @@ async fn start_import(
         }
     }
     out += &format!(
-        "brought   {} spaces: {records} records, {files} files
-",
+        "brought   {} spaces: {records} records, {files} files\n",
         spaces.len()
     );
     let ask = "com.atproto.identity.requestPlcOperationSignature";
     theirs.own(ask, &[], Some(&Value::Null)).await?;
     out += &format!(
-        "its server has emailed a code to move its identity; finish with
-  opensocial import {account} --code <code>
-"
+        "its server has emailed a code to move its identity; finish with\n  opensocial import {account} --code <code>\n"
     );
     Ok(out)
 }
@@ -637,8 +635,7 @@ async fn finish_import(
     let body = json!({ "did": did, "operation": signed["operation"] });
     let done = me.call(host, &m("completeImport"), &body).await?;
     Ok(format!(
-        "moved: {} is a group here, run by you
-",
+        "moved: {} is a group here, run by you\n",
         text(&done["handle"])
     ))
 }

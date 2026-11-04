@@ -378,6 +378,23 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX assistant_grant_member ON assistant_grant (grp, member);
 ",
+    "
+    ALTER TABLE console_login ADD COLUMN mover TEXT;
+    ALTER TABLE console_login ADD COLUMN pds TEXT NOT NULL DEFAULT '';
+    CREATE TABLE account_move (
+        mover TEXT PRIMARY KEY,
+        did TEXT NOT NULL,
+        pds TEXT NOT NULL,
+        issuer TEXT NOT NULL,
+        token_endpoint TEXT NOT NULL,
+        revocation_endpoint TEXT,
+        key BLOB NOT NULL,
+        access TEXT NOT NULL,
+        refresh TEXT,
+        expires_at INTEGER NOT NULL,
+        started INTEGER NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";

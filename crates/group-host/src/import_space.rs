@@ -180,7 +180,7 @@ impl Store {
 impl Host {
     /// A space `did` governs, from its meta archive: kept here as this
     /// host would keep it, replacing what an earlier try kept.
-    fn import_space_meta(&self, did: &str, bytes: &[u8]) -> Result<String, XrpcError> {
+    pub(crate) fn import_space_meta(&self, did: &str, bytes: &[u8]) -> Result<String, XrpcError> {
         let meta = read_space_meta(bytes);
         let meta = meta.map_err(|e| refused("InvalidArchive", e.to_string()))?;
         let space = SpaceRef::parse(&meta.space).expect("a space the archive's reader checked");
@@ -214,7 +214,11 @@ impl Host {
     /// `did`'s repo in a space, from its STAR archive once its records are
     /// what its commit says: kept here in place of what an earlier try
     /// kept, less any record this host would not keep. How many it kept.
-    fn import_space_repo(&self, did: &str, bytes: &[u8]) -> Result<(String, usize), XrpcError> {
+    pub(crate) fn import_space_repo(
+        &self,
+        did: &str,
+        bytes: &[u8],
+    ) -> Result<(String, usize), XrpcError> {
         let read = read_star(bytes).map_err(|e| refused("InvalidArchive", e.to_string()));
         let (commit, records) = read?;
         if commit.repo != did {
