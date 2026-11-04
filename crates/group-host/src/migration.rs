@@ -11,8 +11,7 @@
 //! keeps who writes, so it reads them on without waiting for them to write
 //! again, and their PDSes find the new authority by the group's DID.
 //!
-//! The steps, each a method, which the `opensocial` command or the console
-//! walks through:
+//! The steps, each a method, which the `opensocial` command walks through:
 //!
 //! 1. `migratePrepare`, at the source: a service token the group signs, for
 //!    the destination; the group's handle and spaces; and a token, good for

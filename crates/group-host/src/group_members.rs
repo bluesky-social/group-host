@@ -15,6 +15,7 @@ use crate::api::{at_most, invalid};
 use crate::group::{did_rkey, members_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
+use crate::moderation::Event;
 use crate::rbac::{ACTIONS, Grant, NS, actions_for, actions_of, grants, listed, scope_of};
 use crate::repo::Write;
 use crate::time::{iso, now_millis};
@@ -488,10 +489,15 @@ pub async fn eject_member(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let (members, _, mine) = acting(&host, &headers, &body, "ejectMember", Some("eject")).await?;
+    let (members, me, mine) = acting(&host, &headers, &body, "ejectMember", Some("eject")).await?;
     let member = body["member"]
         .as_str()
         .ok_or_else(|| invalid("member is required"))?;
+    let reason = body["reason"].as_str();
+    // As the lexicon has it: 300 graphemes, 3000 bytes, at most.
+    if reason.is_some_and(|r| r.len() > 3000 || r.chars().count() > 300) {
+        return Err(invalid("a reason is 300 characters at most"));
+    }
     let theirs = members
         .membership(member)?
         .ok_or_else(|| bad("NotAMember", format!("{member} is not a member")))?;
@@ -505,6 +511,16 @@ pub async fn eject_member(
     }
     members.keeps_a_configurer(member, &[])?;
     host.put_out(&members.group, member).await?;
+    // Kept in the group's queue, on them, for its moderators to read.
+    let event = Event {
+        kind: "eject".into(),
+        actor: Some(me),
+        reason: reason.map(str::to_string),
+        created_at: now_millis(),
+        ..Event::default()
+    };
+    let noted = host.store.moderate(&members.group, member, &event);
+    noted.map_err(XrpcError::internal)?;
     Ok(Json(json!({})))
 }
 

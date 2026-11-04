@@ -22,7 +22,7 @@
           },
           "default": {
             "type": "boolean",
-            "description": "Granted to members who join through requestJoin."
+            "description": "Granted to whoever joins without being given roles: by requestJoin, or by admitMember when it names none. With no role marked so, a newcomer gets member."
           },
           "bot": {
             "type": "boolean",

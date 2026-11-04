@@ -77,7 +77,7 @@ Details:
 - A record's URI must be a record in a space:
   `at://<authority>/space/<type>/<skey>/<repo>/<collection>/<rkey>`.
 - The record key is a TID from the host's clock. `applyLabel` answers
-  the label's `uri` and `cid`.
+  the label's `uri` and `cid`, and `negateLabel` the negation's.
 - A label's value is 128 bytes at most. A subject's CID must parse as
   one, and a `rule` cited must be a record's URI in a space, as a rule's
   is.
@@ -95,8 +95,10 @@ those with `mod.read` see it.
 A subject in the queue is a record, by its URI, or an account, by its
 DID. It has a status: `open`, `escalated` or `resolved`. Its events are
 kept in order, each with a kind (`report`, `label`, `negate`, `resolve`,
-`escalate`, `note`), the actor, and what applies of a reason, value and
-note. A subject enters the queue with its first report or label, opened.
+`escalate`, `note`, `eject`), the actor, and what applies of a reason,
+value and note. A subject enters the queue with its first report, label
+or ejection, opened. An ejection is kept on the member's DID, with who
+put them out and the reason `ejectMember` was given.
 
 `listSubjects` lists the queue, latest changed first, filtered by status
 if asked. Every event moves a subject to the top. `getSubjectHistory`
@@ -109,8 +111,8 @@ is told.
 
 A resolved subject should come back when someone reports it again. A
 label is a moderator's own act, so it should not undo a resolution. So
-only a report reopens a resolved subject; a label opens a subject nobody
-reported, and leaves a resolved one resolved. An escalated subject stays
+only a report reopens a resolved subject; a label or an ejection opens a
+subject nobody reported, and leaves a resolved one resolved. An escalated subject stays
 escalated through new reports.
 
 Deleting a group deletes its queue.

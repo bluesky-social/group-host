@@ -45,9 +45,6 @@
       },
       "errors": [
         {
-          "name": "NotPlc"
-        },
-        {
           "name": "InvalidHandle"
         },
         {

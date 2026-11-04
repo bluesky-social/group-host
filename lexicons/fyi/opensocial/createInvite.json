@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Write an invite into someone's own invites space. Requires invite.",
+      "description": "Write an invite into someone's own inbox (fyi.opensocial.inbox). Requires invite.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -52,9 +52,6 @@
         }
       },
       "errors": [
-        {
-          "name": "NoInvitesSpace"
-        },
         {
           "name": "AlreadyMember",
           "description": "The invitee is a member already."

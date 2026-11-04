@@ -36,5 +36,5 @@
 		{/each}
 	</ul>
 {:else}
-	<Empty title="Nothing to look at">Reports and labels show here.</Empty>
+	<Empty title="Nothing to look at">Reports, labels and ejections show here.</Empty>
 {/if}

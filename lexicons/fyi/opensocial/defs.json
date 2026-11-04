@@ -414,7 +414,7 @@
       "required": [
         "did"
       ],
-      "description": "A person, as a view names them: their handle from their DID document, and their name, words about themselves and face from their profile in the group the view is of, or else the Bluesky profile in their own repo, or Grain's for somebody with none.",
+      "description": "A person, as a view names them: their DID, and the handle their DID document names, when it can be read.",
       "properties": {
         "did": {
           "type": "string",
@@ -422,33 +422,8 @@
         },
         "handle": {
           "type": "string",
-          "format": "handle"
-        },
-        "displayName": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "avatar": {
-          "type": "string",
-          "format": "uri",
-          "description": "Served renderably by the host: at /img/actor/{did}/{cid}; or their picture in the group, from its members space, through getSpaceBlob, for whoever may read it."
-        },
-        "pronouns": {
-          "type": "string"
-        },
-        "links": {
-          "type": "array",
-          "items": {
-            "type": "ref",
-            "ref": "#actorLink"
-          },
-          "description": "The links on their profile in the group, in order."
-        },
-        "bot": {
-          "type": "boolean",
-          "description": "In the group the view is of, one of their roles says its people are bots: an account that acts on its own, not a person."
+          "format": "handle",
+          "description": "The handle their DID document names; missing when it names none or cannot be read."
         },
         "canCreateGroup": {
           "type": "boolean",
@@ -594,23 +569,6 @@
             "ref": "#actorView"
           },
           "description": "A few of its members, each as they are in the group, to show their faces. Only to its members."
-        }
-      }
-    },
-    "actorLink": {
-      "type": "object",
-      "required": [
-        "url"
-      ],
-      "properties": {
-        "url": {
-          "type": "string",
-          "format": "uri"
-        },
-        "title": {
-          "type": "string",
-          "maxLength": 640,
-          "maxGraphemes": 64
         }
       }
     },

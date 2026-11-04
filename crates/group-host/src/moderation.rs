@@ -315,9 +315,7 @@ pub async fn negate_label(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    // Its record is not the answer: a negation answers nothing.
-    let _negation = host.label(&headers, "negateLabel", &body, true).await?;
-    Ok(Json(json!({})))
+    host.label(&headers, "negateLabel", &body, true).await
 }
 
 fn subject_view(s: &Subject) -> Value {

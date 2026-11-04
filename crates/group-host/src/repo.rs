@@ -594,7 +594,7 @@ fn walk<'a>(
 
 /// The CID a record's JSON is kept under, once it is a record of
 /// `collection`.
-pub(crate) fn record_cid(collection: &str, value: &serde_json::Value) -> Result<Cid, XrpcError> {
+pub fn record_cid(collection: &str, value: &serde_json::Value) -> Result<Cid, XrpcError> {
     Ok(record(collection, value)?.0)
 }
 

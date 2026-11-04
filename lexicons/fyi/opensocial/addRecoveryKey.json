@@ -29,9 +29,6 @@
       },
       "errors": [
         {
-          "name": "NotPlc"
-        },
-        {
           "name": "InvalidKey"
         },
         {

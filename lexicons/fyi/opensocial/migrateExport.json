@@ -35,10 +35,12 @@
       },
       "errors": [
         {
-          "name": "Forbidden"
+          "name": "InvalidToken",
+          "description": "The token is not migratePrepare's for this group, or its hour is over."
         },
         {
-          "name": "NotFound"
+          "name": "BlobNotFound",
+          "description": "The group has no file by that CID."
         }
       ]
     }

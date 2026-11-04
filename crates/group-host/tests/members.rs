@@ -420,12 +420,18 @@ async fn one_put_out_reads_no_more() {
             &h,
             &dave,
             "ejectMember",
-            json!({"group": did, "member": bob.did})
+            json!({"group": did, "member": bob.did, "reason": "kept posting spam"})
         )
         .await,
         (200, json!({}))
     );
     assert_eq!(record(&h, &did, "membership", &bob.did), None);
+    // The ejection stays in the group's queue, on him, with its reason.
+    let events = h.host.store.events(&did, &bob.did).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind, "eject");
+    assert_eq!(events[0].actor.as_deref(), Some(dave.did.as_str()));
+    assert_eq!(events[0].reason.as_deref(), Some("kept posting spam"));
     assert!(
         h.host
             .store
@@ -454,6 +460,11 @@ async fn one_put_out_reads_no_more() {
             (403, "Forbidden"),
         ),
         (&dave, json!({"group": did}), (400, "InvalidRequest")),
+        (
+            &dave,
+            json!({"group": did, "member": dave.did, "reason": "x".repeat(301)}),
+            (400, "InvalidRequest"),
+        ),
     ] {
         let said = call(&h, who, "ejectMember", body.clone()).await;
         assert_eq!(error(&said), refused, "{body}");

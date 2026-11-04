@@ -76,12 +76,12 @@ spaces through the atproto methods below.
 | `GET fyi.opensocial.listJoinRequests` | the requests waiting, for those who admit |
 | `POST fyi.opensocial.admitMember` | lets a request in |
 | `POST fyi.opensocial.denyJoinRequest` | turns a request down |
-| `POST fyi.opensocial.createInvite` | invites someone, into their own invites space |
+| `POST fyi.opensocial.createInvite` | invites someone, into their own inbox |
 | `GET fyi.opensocial.listInvites` | the group's invites still waiting |
 | `POST fyi.opensocial.revokeInvite` | takes an invite back |
 | `GET fyi.opensocial.getActorInvites` | the caller's own invites from groups here |
 | `POST fyi.opensocial.declineInvite` | turns an invite down |
-| `GET com.atproto.managedspace.checkUserAccess` | whether someone may read or write an invites space the host keeps, asked by its authority |
+| `GET com.atproto.managedspace.checkUserAccess` | whether someone may read or write an inbox the host keeps, asked by its authority |
 
 ## People
 
@@ -172,7 +172,7 @@ its tools are in [MCP tools](mcp.md).
 | `GET fyi.opensocial.getSubjectHistory` | every event on one subject |
 | `POST fyi.opensocial.resolveSubject` | resolves or escalates a subject |
 | `POST fyi.opensocial.applyLabel` | labels a subject |
-| `POST fyi.opensocial.negateLabel` | takes a label back |
+| `POST fyi.opensocial.negateLabel` | takes a label back, with a record of its own |
 
 ## Recovery
 

@@ -8,7 +8,7 @@ use common::spaces::*;
 use common::{Running, start};
 use group_host::group::{members_space, meta_space};
 use group_host::moderation::space_of;
-use group_host::repo::Write;
+use group_host::repo::{Write, record_cid};
 use serde_json::{Value as Json, json};
 
 const CALENDAR: &str = "com.example.calendar";
@@ -184,14 +184,30 @@ async fn writes_a_label_beside_what_it_labels() {
     assert_eq!(queue["subjects"][0]["reportCount"], 0);
 
     // Taken back with a second record, not by deleting the first.
-    let (status, _) = call(
+    let (status, negated) = call(
         &h,
         &alice,
         "negateLabel",
         json!({"group": did, "subject": record, "val": "spam"}),
     )
     .await;
-    assert_eq!(status, 200);
+    assert_eq!(status, 200, "{negated}");
+    // Answered as a label is: the negation is a record of its own.
+    let uri = negated["uri"].as_str().unwrap();
+    assert!(
+        uri.starts_with(&format!("{space}/{did}/{NS}.label/")),
+        "{uri}"
+    );
+    assert_ne!(negated["uri"], made["uri"]);
+    let rkey = uri.rsplit('/').next().unwrap();
+    let negation = h
+        .host
+        .group_record(&did, &space, &format!("{NS}.label"), rkey)
+        .unwrap()
+        .unwrap();
+    assert_eq!(negation["neg"], true);
+    let cid = record_cid(&format!("{NS}.label"), &negation).unwrap();
+    assert_eq!(negated["cid"], cid.to_string());
     let labels = h
         .host
         .group_records(&did, &space, &format!("{NS}.label"))

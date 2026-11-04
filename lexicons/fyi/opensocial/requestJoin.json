@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Ask to join, or redeem an invite. No role required; authenticated as the requester.",
+      "description": "Ask to join. An invite the group has sent the caller, neither taken back nor past its expiresAt, admits them at once, whatever the group's join policy: the host redeems it from its own list, so no invite is named. No role required; authenticated as the requester.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -22,10 +22,6 @@
               "type": "string",
               "maxLength": 3000,
               "maxGraphemes": 300
-            },
-            "invite": {
-              "type": "string",
-              "format": "at-uri"
             }
           }
         }

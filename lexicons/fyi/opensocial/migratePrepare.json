@@ -34,7 +34,7 @@
             },
             "snapshot": {
               "type": "unknown",
-              "description": "{handle, address, spaces: [{uri, type, skey}]}: every space the group holds."
+              "description": "{handle, address, spaces: [uri]}: the group's handle and address, and every space the group holds, each by its URI, as a string. For migrateReceive, as it is."
             },
             "exportToken": {
               "type": "string",

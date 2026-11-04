@@ -82,7 +82,15 @@
       },
       "errors": [
         {
+          "name": "InvalidHandle",
+          "description": "The handle is not one label under this host's handle domain."
+        },
+        {
           "name": "HandleTaken"
+        },
+        {
+          "name": "AccountCreationFailed",
+          "description": "The PLC directory did not take the group's new DID."
         },
         {
           "name": "NotAllowed",

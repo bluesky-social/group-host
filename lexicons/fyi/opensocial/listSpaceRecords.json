@@ -62,18 +62,6 @@
             },
             "cursor": {
               "type": "string"
-            },
-            "rev": {
-              "type": "string",
-              "description": "Where the index has got to in the space: a reader that saw this revision has seen everything up to it."
-            },
-            "actors": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.defs#actorView"
-              },
-              "description": "Who wrote the records, by name and picture: for a caller who isn't one of the group's members, who has no other way to know them."
             }
           }
         }

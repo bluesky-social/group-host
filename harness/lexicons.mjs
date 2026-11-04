@@ -40,9 +40,18 @@ const base = process.argv[2] ?? (() => {
 
 // What was taken back on purpose before any record used it, each with why.
 // Once the base has none of it, an entry matches nothing and can go.
-// - `labellers` landed and was renamed `triagers` the same day: atproto's
-//   labelers are moderation services, and the name read as one of those.
-const retracted = new Set([])
+// - What the host never answered or read, taken out before any client
+//   was written to it: actorView's profile fields (it answers a DID and a
+//   handle, from the DID document), listSpaceRecords' `rev` and `actors`,
+//   and requestJoin's `invite` (an invite is redeemed from the host's own
+//   list, whatever is named).
+const retracted = new Set([
+  ...['displayName', 'description', 'avatar', 'pronouns', 'links', 'bot'].map((f) => `fyi.opensocial.defs#actorView.${f}`),
+  'fyi.opensocial.defs#actorLink',
+  'fyi.opensocial.listSpaceRecords#main.output.rev',
+  'fyi.opensocial.listSpaceRecords#main.output.actors',
+  'fyi.opensocial.requestJoin#main.input.invite',
+])
 
 const problems = []
 const say = (at, what) => retracted.has(at) || problems.push(`${at}: ${what}`)

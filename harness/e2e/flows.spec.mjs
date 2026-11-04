@@ -237,7 +237,10 @@ test('adding a recovery key, and taking it off', async () => {
 test('moderating: a label, and the queue', async () => {
   await page.goto(url('/g/hikers.groups.test'))
   await page.getByRole('link', { name: 'Moderation' }).click()
-  await expect(page.getByText('Nothing to look at')).toBeVisible()
+  // Putting him out is already in the queue, on him.
+  const ejected = page.locator('.subject', { hasText: who.bob.did })
+  await expect(ejected.locator('.status')).toHaveText('open')
+  await expect(ejected.locator('.events')).toContainText('eject')
   await page.getByRole('textbox', { name: 'Their handle' }).fill('bob.test')
   await page.getByRole('textbox', { name: 'Label' }).fill('troll')
   await page.getByRole('button', { name: 'Label them' }).click()

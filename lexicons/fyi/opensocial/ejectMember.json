@@ -26,7 +26,8 @@
             "reason": {
               "type": "string",
               "maxLength": 3000,
-              "maxGraphemes": 300
+              "maxGraphemes": 300,
+              "description": "Why, for the group's moderators: kept with the eject event in its queue, on the member's DID (getSubjectHistory)."
             }
           }
         }
@@ -38,6 +39,10 @@
         {
           "name": "NotAMember",
           "description": "The account is not a member of the group."
+        },
+        {
+          "name": "LastConfigurer",
+          "description": "The member is the last who may configure the group: nobody could run it after."
         }
       ],
       "output": {

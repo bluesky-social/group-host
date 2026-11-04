@@ -152,6 +152,10 @@ PDSes it sends `com.atproto.space.notifyCredentialRevoked`, best effort.
 With no membership they hold no roles, so the access records grant them
 nothing.
 
+An ejection is then kept in the group's [moderation](moderation.md)
+queue, as an `eject` event on the member's DID: who put them out, and the
+`reason`, if `ejectMember` was given one. Leaving keeps nothing there.
+
 What they wrote stays in their own repos at their own PDSes. The group's
 index forgets it at once, and drops on each sync any writer a space no
 longer lets write.
