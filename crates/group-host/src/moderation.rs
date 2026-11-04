@@ -12,7 +12,7 @@
 //!   group's spaces here.
 
 use crate::Host;
-use crate::api::{Params, at_most, invalid, page, param};
+use crate::api::{Params, invalid, page, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::NS;
@@ -237,12 +237,9 @@ impl Host {
     /// Writes a label (or its negation) on `subject` as `group`, in the
     /// space it lives in, and notes it in the queue.
     async fn label(&self, headers: &HeaderMap, lxm: &str, body: &Value, neg: bool) -> Answer {
-        let group = body["group"]
-            .as_str()
-            .ok_or_else(|| invalid("group is required"))?;
+        let group = body["group"].as_str().expect("its lexicon requires it");
         let val = body["val"].as_str().filter(|v| !v.is_empty());
         let val = val.ok_or_else(|| invalid("val is required"))?;
-        at_most("val", val, 128, 128)?;
         // A rule is cited by its URI, a record's in the group's meta.
         let rule = body["rule"].as_str();
         if rule.is_some_and(|r| space_of(r).is_none()) {
@@ -415,22 +412,13 @@ pub async fn resolve_subject(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     let me = host
         .moderator(&headers, "resolveSubject", group, "mod.resolve")
         .await?;
-    let subject = body["subject"]
-        .as_str()
-        .ok_or_else(|| invalid("subject is required"))?;
-    let action = body["action"]
-        .as_str()
-        .ok_or_else(|| invalid("action is required"))?;
+    let subject = body["subject"].as_str().expect("its lexicon requires it");
+    let action = body["action"].as_str().expect("its lexicon requires it");
     let note = body["note"].as_str();
-    if let Some(note) = note {
-        at_most("note", note, 3000, 300)?;
-    }
     let status = match action {
         "resolve" => Some("resolved"),
         "escalate" => Some("escalated"),

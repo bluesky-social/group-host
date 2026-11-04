@@ -81,7 +81,7 @@ async fn group(h: &Running) -> (String, String, Json, [Authority; 3]) {
     assert_eq!(status, 200, "{made}");
     membership(h, &did, &bob.did, &["member"]).await;
     let space = made["uri"].as_str().unwrap().to_string();
-    let post = json!({"uri": format!("{space}/{}/com.example.event/ride", bob.did), "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm"});
+    let post = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("{space}/{}/com.example.event/ride", bob.did), "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm"});
     (did, space, post, [alice, bob, carol])
 }
 
@@ -220,7 +220,7 @@ async fn writes_a_label_beside_what_it_labels() {
         &h,
         &alice,
         "applyLabel",
-        json!({"group": did, "subject": {"did": carol.did}, "val": "troll"}),
+        json!({"group": did, "subject": {"$type": "com.atproto.admin.defs#repoRef", "did": carol.did}, "val": "troll"}),
     )
     .await;
     assert_eq!(status, 200, "{made}");
@@ -248,24 +248,32 @@ async fn writes_a_label_beside_what_it_labels() {
     )
     .await;
     let cid = record["cid"].clone();
-    let theirs =
-        json!({"uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": cid});
+    let theirs = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": cid});
     for (body, refused) in [
         (
-            json!({"group": did, "subject": {"did": "not a did"}, "val": "x"}),
+            json!({"group": did, "subject": {"$type": "com.atproto.admin.defs#repoRef", "did": "not a did"}, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         (
-            json!({"group": did, "subject": {"uri": record["uri"]}, "val": "x"}),
+            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": record["uri"]}, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         (
-            json!({"group": did, "subject": {"uri": format!("at://{did}/a.b.c/x"), "cid": cid}, "val": "x"}),
+            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": format!("at://{did}/a.b.c/x"), "cid": cid}, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         // A CID that is none.
         (
-            json!({"group": did, "subject": {"uri": record["uri"], "cid": "x"}, "val": "x"}),
+            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": record["uri"], "cid": "bafynotacid"}, "val": "x"}),
+            (400, "InvalidRequest"),
+        ),
+        // A subject of a kind the open union does not list.
+        (
+            json!({"group": did, "subject": {"$type": "com.example.thing", "did": "not a did"}, "val": "x"}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            json!({"group": did, "subject": {"$type": "com.example.thing"}, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         // A value longer than the lexicon has it, in characters or bytes.
@@ -279,7 +287,7 @@ async fn writes_a_label_beside_what_it_labels() {
         ),
         // A rule that is no record's URI.
         (
-            json!({"group": did, "subject": record, "val": "x", "rule": "at://x/y/z"}),
+            json!({"group": did, "subject": record, "val": "x", "rule": "at://did:plc:x/fyi.opensocial.rule/z"}),
             (400, "InvalidRequest"),
         ),
         (
@@ -433,7 +441,7 @@ async fn resolves_escalates_and_notes() {
         json!({"group": did, "subject": uri}),
     )
     .await;
-    assert_eq!(said.1["message"], "action is required");
+    assert_eq!(said.1["message"], "input must have the property \"action\"");
     let long = "x".repeat(301);
     for (who, body, refused) in [
         (&alice, resolve("shrug", None), (400, "InvalidRequest")),

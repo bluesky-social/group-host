@@ -3,7 +3,7 @@
 //! for a caller holding `group.configure`.
 
 use crate::Host;
-use crate::api::{Params, at_most, invalid, param};
+use crate::api::{Params, invalid, param};
 use crate::blobs::IMAGES;
 use crate::group::{join_policy, members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
@@ -149,15 +149,6 @@ fn words(asked: &Value, field: &str, longest: usize, max: usize) -> Vec<String> 
     out
 }
 
-/// A BCP 47 tag, as the profile's languages are.
-fn is_language(tag: &str) -> bool {
-    let mut parts = tag.split('-');
-    let first = parts.next().unwrap_or_default();
-    (2..=3).contains(&first.len())
-        && first.chars().all(|c| c.is_ascii_alphabetic())
-        && parts.all(|p| (1..=8).contains(&p.len()) && p.chars().all(|c| c.is_ascii_alphanumeric()))
-}
-
 /// A blob as a record holds it, `{$type, ref, mimeType, size}`, from what
 /// `uploadImage` answered.
 fn blob(asked: &Value) -> Option<Value> {
@@ -185,21 +176,19 @@ fn image(host: &Host, group: &str, key: &str, asked: &Value) -> Result<Value, Xr
 
 /// Replaces the group's profile. What finds it (where it meets, online,
 /// topics, languages) is as given, none when left out; an image left out
-/// is kept, and `null` clears it; its first `createdAt` is kept.
+/// is kept, and `removeAvatar` or `removeBanner` clears it; its first
+/// `createdAt` is kept.
 pub async fn update_profile(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     let group = configurer(&host, &headers, group, "updateProfile").await?;
     let name = body["displayName"].as_str().unwrap_or_default().trim();
     if name.is_empty() {
         return Err(invalid("displayName is required"));
     }
-    at_most("displayName", name, 640, 64)?;
     let meta = meta_space(&group);
     let collection = format!("{NS}.profile");
     let current = host
@@ -221,7 +210,6 @@ pub async fn update_profile(
     });
     let text = |k: &str| body[k].as_str().map(str::trim).filter(|t| !t.is_empty());
     if let Some(d) = text("description") {
-        at_most("description", d, 3000, 300)?;
         profile["description"] = json!(d);
     }
     // The site is replaced, as the description is: left out, it goes.
@@ -247,15 +235,14 @@ pub async fn update_profile(
     }
     let languages: Vec<Value> = words(&body["languages"], "language", usize::MAX, 5)
         .into_iter()
-        .filter(|l| is_language(l))
         .map(|l| json!({"language": l}))
         .collect();
     if !languages.is_empty() {
         profile["languages"] = json!(languages);
     }
-    for key in ["avatar", "banner"] {
+    for (key, remove) in [("avatar", "removeAvatar"), ("banner", "removeBanner")] {
         let image = match body.get(key) {
-            Some(Value::Null) => None,
+            _ if body[remove] == true => None,
             Some(asked) => Some(image(&host, &group, key, asked)?),
             None => current.get(key).and_then(blob),
         };
@@ -301,17 +288,13 @@ pub async fn put_rule(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     let group = configurer(&host, &headers, group, "putRule").await?;
     let title = body["title"].as_str().unwrap_or_default().trim();
     if title.is_empty() {
         return Err(invalid("title is required"));
     }
-    at_most("title", title, 1000, 100)?;
     let text = body["text"].as_str().unwrap_or_default().trim();
-    at_most("text", text, 20000, 2000)?;
     let collection = format!("{NS}.rule");
     let rules = host
         .group_records(&group, &meta_space(&group), &collection)
@@ -332,9 +315,6 @@ pub async fn put_rule(
         .as_i64()
         .or_else(|| current.and_then(|r| r["order"].as_i64()))
         .unwrap_or_else(|| last.map_or(0, |l| l + 1));
-    if order < 0 {
-        return Err(invalid("order is 0 or more"));
-    }
     let created = current
         .and_then(|r| r.get("createdAt").cloned())
         .unwrap_or_else(|| json!(iso(now_millis())));
@@ -355,13 +335,9 @@ pub async fn delete_rule(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     let group = configurer(&host, &headers, group, "deleteRule").await?;
-    let rkey = body["rkey"]
-        .as_str()
-        .ok_or_else(|| invalid("rkey is required"))?;
+    let rkey = body["rkey"].as_str().expect("its lexicon requires it");
     let collection = format!("{NS}.rule");
     let meta = meta_space(&group);
     let current = host

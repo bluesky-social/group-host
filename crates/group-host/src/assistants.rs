@@ -19,7 +19,7 @@
 //! can do nothing there, and its grants end.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{Params, param};
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::NS;
 use crate::store::Store;
@@ -798,11 +798,9 @@ pub async fn revoke_connected_app(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, XrpcError> {
     let me = signed_in(&host, &headers, &format!("{NS}.revokeConnectedApp")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     let client = body["clientId"].as_str();
-    let client = client.ok_or_else(|| invalid("clientId is required"))?;
+    let client = client.expect("its lexicon requires it");
     group_of(&host, group)?;
     let ended = host.store.disconnect_assistant(group, &me, client);
     ended.map_err(XrpcError::internal)?;

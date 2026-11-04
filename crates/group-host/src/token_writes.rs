@@ -14,6 +14,7 @@
 use crate::Host;
 use crate::api::invalid;
 use crate::group::{join_policy, members_space, meta_space};
+use crate::lexicons::{check_record, validation};
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{may_write, writes_in};
 use crate::rbac::{self, NS, actions_for, grants, repo_collections_for};
@@ -162,6 +163,23 @@ impl Host {
     }
 }
 
+/// Refuses a record of our own collections, among `writes`, that is not
+/// what its lexicon describes.
+fn checked(writes: &[Write]) -> Result<(), XrpcError> {
+    for write in writes {
+        if let Write::Create {
+            collection, value, ..
+        }
+        | Write::Update {
+            collection, value, ..
+        } = write
+        {
+            check_record(collection, value)?;
+        }
+    }
+    Ok(())
+}
+
 /// A write's result, as `applyWrites` lists them.
 fn result(kind: &str, uri: String, write: &Write) -> Result<Value, XrpcError> {
     let (collection, _) = write.path();
@@ -179,7 +197,7 @@ fn result(kind: &str, uri: String, write: &Write) -> Result<Value, XrpcError> {
                 "$type": format!("com.atproto.{kind}.applyWrites#{which}"),
                 "uri": uri,
                 "cid": record_cid(collection, value)?.to_string(),
-                "validationStatus": "unknown",
+                "validationStatus": validation(collection),
             })
         }
     })
@@ -264,7 +282,7 @@ impl Host {
                 return Err(no_longer(collection));
             }
         }
-        Ok(())
+        checked(writes)
     }
 }
 
@@ -316,7 +334,7 @@ pub async fn create_record(
         "uri": repo_uri(group, &collection, &rkey),
         "cid": record_cid(&collection, &body["record"])?.to_string(),
         "commit": commit_view(&committed),
-        "validationStatus": "unknown",
+        "validationStatus": validation(&collection),
     })))
 }
 
@@ -352,7 +370,7 @@ async fn put_or_delete(
     if !delete {
         out["uri"] = json!(repo_uri(group, collection, rkey));
         out["cid"] = json!(record_cid(collection, &body["record"])?.to_string());
-        out["validationStatus"] = json!("unknown");
+        out["validationStatus"] = json!(validation(collection));
     }
     Ok(Json(out))
 }
@@ -474,7 +492,8 @@ impl Host {
                 return Err(no_longer(collection));
             }
         }
-        self.guard(group, uri, writes)
+        self.guard(group, uri, writes)?;
+        checked(writes)
     }
 }
 
@@ -538,7 +557,7 @@ fn space_record_view(
     Ok(json!({
         "uri": space_uri(uri, group, collection, rkey),
         "cid": record_cid(collection, &body["record"])?.to_string(),
-        "validationStatus": "unknown",
+        "validationStatus": validation(collection),
     }))
 }
 

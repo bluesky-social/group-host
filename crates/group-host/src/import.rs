@@ -52,8 +52,11 @@ type Answer = Result<Json<Value>, XrpcError>;
 
 /// The method an account's token for moving here is for.
 const CREATE_ACCOUNT: &str = "com.atproto.server.createAccount";
-/// The longest description a group's profile holds.
-const DESCRIPTION_MAX: usize = 3000;
+/// The longest name and description a group's profile holds, in
+/// characters: no more graphemes than its lexicon lets it have, and so no
+/// more bytes.
+const NAME_MAX: usize = 64;
+const DESCRIPTION_MAX: usize = 300;
 
 fn refused(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)
@@ -414,7 +417,7 @@ pub async fn import_account(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.importAccount")).await?;
     let jwt = body["serviceJwt"].as_str();
-    let jwt = jwt.ok_or_else(|| invalid("serviceJwt is required"))?;
+    let jwt = jwt.expect("its lexicon requires it");
     let started = host.import_as(&me, jwt, body["address"].as_str()).await?;
     Ok(Json(started))
 }
@@ -468,11 +471,13 @@ impl Host {
         };
         let named = profile["displayName"].as_str().map(str::trim);
         let display_name = named.filter(|n| !n.is_empty()).unwrap_or(&plan.label);
+        // As long as a group's name may be, as its description is cut.
+        let display_name: String = display_name.chars().take(NAME_MAX).collect();
         let description = profile["description"].as_str();
         let description = description.map(|d| d.chars().take(DESCRIPTION_MAX).collect());
         let pending = Pending {
             founder: me.to_string(),
-            display_name: display_name.into(),
+            display_name,
             description,
         };
         let kept = self.store.start_import(&did, &pending, now_millis());
@@ -521,7 +526,7 @@ pub async fn complete_import(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.completeImport")).await?;
     let did = body["did"].as_str();
-    let did = did.ok_or_else(|| invalid("did is required"))?;
+    let did = did.expect("its lexicon requires it");
     let done = host
         .complete_import_as(&me, did, &body["operation"])
         .await?;

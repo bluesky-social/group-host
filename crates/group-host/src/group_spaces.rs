@@ -8,7 +8,7 @@
 //! of the index.
 
 use crate::Host;
-use crate::api::{at_most, invalid};
+use crate::api::invalid;
 use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
@@ -17,7 +17,6 @@ use crate::repo::Write;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
-use atproto::syntax;
 use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -43,9 +42,7 @@ async fn acting(
     action: &str,
 ) -> Result<String, XrpcError> {
     let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(host, group)?;
     if !host.may_do(group, &me, action)? {
         return Err(forbidden(format!("missing {action}")));
@@ -60,8 +57,7 @@ fn audience(body: &Value, key: &str) -> Result<Option<Vec<Value>>, XrpcError> {
     };
     let roles = given
         .as_array()
-        .filter(|a| a.iter().all(|r| r["role"].is_string()));
-    let roles = roles.ok_or_else(|| invalid(format!("{key} is a list of {{role}}")))?;
+        .expect("its lexicon has it a list of {role}");
     Ok(Some(roles.clone()))
 }
 
@@ -81,9 +77,7 @@ fn entry_of(host: &Host, group: &str, space: &str) -> Result<(String, Value), Xr
 /// The space a body names, the group's, and its access record: refused
 /// for one kept for chosen people, which only they change.
 fn own_space(host: &Host, group: &str, body: &Value) -> Result<(String, Value), XrpcError> {
-    let space = body["space"]
-        .as_str()
-        .ok_or_else(|| invalid("space is required"))?;
+    let space = body["space"].as_str().expect("its lexicon requires it");
     let named = SpaceRef::parse(space).map_err(|e| invalid(e.to_string()))?;
     if named.authority != group {
         return Err(invalid("the space is not this group's"));
@@ -107,19 +101,12 @@ pub async fn create_space(
     Json(body): Json<Value>,
 ) -> Answer {
     let group = acting(&host, &headers, &body, "createSpace", "space.create").await?;
-    let kind = body["spaceType"].as_str().unwrap_or_default();
-    if !syntax::is_nsid(kind) {
-        return Err(invalid("spaceType is an NSID"));
-    }
+    let kind = body["spaceType"].as_str().expect("its lexicon requires it");
     let readers = audience(&body, "readableBy")?.unwrap_or_default();
     if readers.is_empty() {
         return Err(invalid("readableBy names who reads the space"));
     }
     let writers = audience(&body, "writableBy")?;
-    let name = body["name"].as_str();
-    if let Some(name) = name {
-        at_most("name", name, 640, 64)?;
-    }
     let skey = match body["skey"].as_str() {
         Some(skey) => skey.to_string(),
         None => host.clock.next(),
@@ -193,9 +180,6 @@ pub async fn update_space(
     }
     let writers = audience(&body, "writableBy")?;
     let name = body["name"].as_str();
-    if let Some(name) = name {
-        at_most("name", name, 640, 64)?;
-    }
     let names = |list: &[Value]| -> Vec<String> {
         list.iter()
             .filter_map(|r| r["role"].as_str().map(String::from))

@@ -9,7 +9,7 @@
 //! ask again and the group need not say.
 
 use crate::Host;
-use crate::api::{Params, at_most, invalid, page, param};
+use crate::api::{Params, invalid, page, param};
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
 use crate::group_members::{Members, acting};
@@ -51,9 +51,7 @@ pub async fn request_join(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.requestJoin")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     host.active(group)?;
     let members = Members::of(&host, group)?;
@@ -85,9 +83,6 @@ pub async fn request_join(
         Some("invite") => Err(bad("InviteRequired", "this group joins by invite")),
         _ => {
             let message = body["message"].as_str();
-            if let Some(m) = message {
-                at_most("message", m, 3000, 300)?;
-            }
             host.store
                 .ask(group, &me, message, now_millis())
                 .map_err(XrpcError::internal)?;
@@ -150,9 +145,7 @@ pub async fn admit_member(
     Json(body): Json<Value>,
 ) -> Answer {
     let (members, _, mine) = acting(&host, &headers, &body, "admitMember", Some("admit")).await?;
-    let did = body["did"]
-        .as_str()
-        .ok_or_else(|| invalid("did is required"))?;
+    let did = body["did"].as_str().expect("its lexicon requires it");
     let asked = host
         .store
         .asked(&members.group, did)
@@ -199,9 +192,7 @@ pub async fn deny_join_request(
     Json(body): Json<Value>,
 ) -> Answer {
     let (members, _, _) = acting(&host, &headers, &body, "denyJoinRequest", Some("admit")).await?;
-    let did = body["member"]
-        .as_str()
-        .ok_or_else(|| invalid("member is required"))?;
+    let did = body["member"].as_str().expect("its lexicon requires it");
     let decided = host.store.decide(&members.group, did);
     if !decided.map_err(XrpcError::internal)? {
         return Err(no_request());
@@ -216,9 +207,7 @@ pub async fn cancel_join_request(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.cancelJoinRequest")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     if !host.store.decide(group, &me).map_err(XrpcError::internal)? {
         return Err(no_request());

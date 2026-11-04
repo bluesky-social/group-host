@@ -177,11 +177,11 @@ async fn is_made_by_whoever_may_do_anything_as_the_group() {
             json!({"group": did, "name": "  "}),
             (400, "InvalidName"),
         ),
-        (&alice, json!({"group": did}), (400, "InvalidName")),
+        (&alice, json!({"group": did}), (400, "InvalidRequest")),
         (
             &alice,
             json!({"group": did, "name": "x".repeat(65)}),
-            (400, "InvalidName"),
+            (400, "InvalidRequest"),
         ),
         (
             &alice,
@@ -296,7 +296,7 @@ async fn signs_an_app_in_to_the_groups_repo() {
     .await;
     assert_eq!(made.0, 200, "{}", made.1);
     let space = format!("at://{did}/space/fyi.opensocial.meta/self");
-    let rule = json!({"repo": did, "space": space, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "x"}});
+    let rule = json!({"repo": did, "space": space, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "x", "text": "x"}});
     let said = xrpc(
         &h,
         "com.atproto.space.createRecord",

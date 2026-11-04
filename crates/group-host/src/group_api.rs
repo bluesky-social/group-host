@@ -5,7 +5,7 @@
 //! and the method: their own PDS signs it for them.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{Params, param};
 use crate::group::{Made, NewGroup, members_space, meta_space};
 use crate::rbac::{self, Access, NS, actions_for, grants, listed, repo_collections_for};
 use crate::space_api::{service_caller, unauthorized};
@@ -67,10 +67,10 @@ fn strings(body: &Value, key: &str, field: &str) -> Option<Vec<String>> {
 pub(crate) fn new_group(body: &Value, founder: String) -> Result<NewGroup, XrpcError> {
     let text = |k: &str| body[k].as_str().map(String::from);
     Ok(NewGroup {
-        handle: text("handle").ok_or_else(|| invalid("handle is required"))?,
+        handle: text("handle").expect("its lexicon requires it"),
         founder,
         stewards: strings(body, "stewards", "did").unwrap_or_default(),
-        display_name: text("displayName").ok_or_else(|| invalid("displayName is required"))?,
+        display_name: text("displayName").expect("its lexicon requires it"),
         description: text("description"),
         join_policy: text("joinPolicy"),
         meta_readable_by: strings(body, "metaReadableBy", "role"),

@@ -10,7 +10,7 @@
 //! the group's join policy, with its default roles.
 
 use crate::Host;
-use crate::api::{Params, at_most, invalid, page, param};
+use crate::api::{Params, invalid, page, param};
 use crate::group::meta_space;
 use crate::group_api::{caller, group_of, signed_in};
 use crate::group_members::acting;
@@ -195,10 +195,7 @@ pub async fn create_invite(
     Json(body): Json<Value>,
 ) -> Answer {
     let (members, me, _) = acting(&host, &headers, &body, "createInvite", Some("invite")).await?;
-    let invitee = body["invitee"].as_str().unwrap_or_default();
-    if !syntax::is_did(invitee) {
-        return Err(invalid("invitee is a DID"));
-    }
+    let invitee = body["invitee"].as_str().expect("its lexicon requires it");
     if members.membership(invitee)?.is_some() {
         return Err(bad("AlreadyMember", "they are a member already"));
     }
@@ -211,9 +208,6 @@ pub async fn create_invite(
         return Err(invalid("expiresAt is a time to come"));
     }
     let message = body["message"].as_str();
-    if let Some(m) = message {
-        at_most("message", m, 3000, 300)?;
-    }
     let group = members.group.clone();
     // One waiting is the one answered; one lapsed is taken back, and a
     // fresh one written.
@@ -285,9 +279,7 @@ pub async fn revoke_invite(
     Json(body): Json<Value>,
 ) -> Answer {
     let (members, _, _) = acting(&host, &headers, &body, "revokeInvite", Some("invite")).await?;
-    let uri = body["uri"]
-        .as_str()
-        .ok_or_else(|| invalid("uri is required"))?;
+    let uri = body["uri"].as_str().expect("its lexicon requires it");
     let invitee = uri.strip_prefix("at://").and_then(|r| r.split('/').next());
     let invitee = invitee
         .filter(|d| syntax::is_did(d))
@@ -357,9 +349,7 @@ pub async fn decline_invite(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.declineInvite")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     let invited = host
         .store

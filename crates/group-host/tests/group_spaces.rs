@@ -172,9 +172,10 @@ async fn an_admin_makes_a_space() {
         assert_eq!(error(&said), refused, "{body}");
     }
 
-    // An access record that is no record leaves no space behind, and its
+    // An access record that is no record (a float, which its lexicon lets
+    // through and DRISL does not) leaves no space behind, and its
     // key free to be made again.
-    let wrong = json!({"group": did, "spaceType": CALENDAR, "skey": "laps", "readableBy": [{"role": "member"}], "credentialScopes": [{"role": "admin", "scopes": 1.5}]});
+    let wrong = json!({"group": did, "spaceType": CALENDAR, "skey": "laps", "readableBy": [{"role": "member"}], "credentialScopes": [{"role": "admin", "scopes": [], "weight": 1.5}]});
     let said = call(&h, &alice, "createSpace", wrong).await;
     assert_eq!(error(&said), (400, "InvalidRequest"));
     let laps = format!("at://{did}/space/{CALENDAR}/laps");

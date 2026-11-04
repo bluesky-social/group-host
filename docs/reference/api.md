@@ -12,7 +12,8 @@ method may answer these:
 
 | Error | When |
 | --- | --- |
-| `InvalidRequest` | a missing or bad parameter |
+| `InvalidRequest` | a missing or bad parameter: a `fyi.opensocial.*` method's parameters and JSON input are checked against its lexicon before anything else, and refused with where and what, `input.roles[2].role must not be longer than 64 bytes` |
+| `PayloadTooLarge` | a JSON input of more than 2 MiB |
 | `AuthMissing` | no caller, where one is needed |
 | `BadJwt`, `BadJwtAudience`, `BadJwtIss`, `BadJwtLexiconMethod` | service auth that does not hold: a bad token, one for another service, a signer whose key cannot be found, or one for another method |
 | `Forbidden` | a caller whose roles lack the action, `missing <action>` |
@@ -21,7 +22,10 @@ method may answer these:
 | `InternalServerError` | the host's database, or a server it asked, failed |
 
 The atproto methods answer atproto's own names (`RepoNotFound`,
-`BlobNotFound`, `InvalidSwap`, `CredentialRevoked`, …). A GET or POST under
+`BlobNotFound`, `InvalidSwap`, `CredentialRevoked`, …). A record an app
+writes as a group, in one of our own `fyi.opensocial.*` collections, is
+checked against its lexicon and answered `validationStatus: "valid"`; a
+record of any other collection is kept unread, `unknown`. A GET or POST under
 `/xrpc/` that no route answers is 501 `MethodNotImplemented`.
 
 ## Who asks

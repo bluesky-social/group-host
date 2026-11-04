@@ -40,12 +40,12 @@ accounts on their own PDSes, anywhere on the network.
 
 | Crate or directory | What it is |
 | --- | --- |
-| `crates/atproto` | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE, and the space alpha's set hash, commits and tokens, checked against atproto's interop test vectors |
+| `crates/atproto` | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE, lexicon data validation, and the space alpha's set hash, commits and tokens, checked against atproto's interop test vectors and its reference implementation |
 | `crates/group-host` | the server, over SQLite: accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries |
 | `crates/group-host-mcp` | the host's methods as MCP tools, asked as the member who connected an assistant |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command ([commands](../reference/cli.md)) |
 | `web/` | the console, a SvelteKit app where people start and run groups and approve apps |
-| `lexicons/` | the schemas of the records and methods |
+| `lexicons/` | the schemas of the records and methods: every `fyi.opensocial.*` method's parameters and input are checked against its own before its handler runs, and a record of our own collections an app writes as a group before it is kept |
 
 ## The pages
 

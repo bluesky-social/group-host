@@ -96,8 +96,8 @@ async fn an_admin_changes_the_profile() {
             "url": "https://riders.example",
             "location": {"$type": "community.lexicon.location.address", "locality": "Ljubljana", "country": "SI"},
             "online": true,
-            "topics": [{"topic": "bikes"}, {"topic": " bikes "}, {"topic": ""}, {"topic": "x".repeat(80)}, {"topic": format!("{}y", "x".repeat(70))}],
-            "languages": [{"language": "sl"}, {"language": "en-GB"}, {"language": "not a tag"}],
+            "topics": [{"topic": "bikes"}, {"topic": " bikes "}, {"topic": ""}, {"topic": "x".repeat(64)}],
+            "languages": [{"language": "sl"}, {"language": "en-GB"}],
             "avatar": said,
         }),
     )
@@ -142,12 +142,12 @@ async fn an_admin_changes_the_profile() {
     assert_eq!(p.get("url"), None);
     assert_eq!(p["avatar"]["ref"], avatar["ref"]);
     assert_eq!(p["joinPolicy"], "invite");
-    // And `null` clears an image.
+    // And removeAvatar clears one.
     call(
         &h,
         &alice,
         "updateProfile",
-        json!({"group": did, "displayName": "Riders", "avatar": null}),
+        json!({"group": did, "displayName": "Riders", "removeAvatar": true}),
     )
     .await;
     assert_eq!(profile(&h, &did).get("avatar"), None);
@@ -204,10 +204,26 @@ async fn refuses_a_profile_it_should_not_keep() {
             json!({"group": did, "displayName": "Riders", "avatar": {"ref": "x"}}),
             (400, "InvalidRequest"),
         ),
-        // Longer than the lexicon has them.
+        // An image whose CID the host never keeps.
+        (
+            &alice,
+            json!({"group": did, "displayName": "Riders", "avatar": {"$type": "blob", "ref": {"$link": "bafkrgqaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "mimeType": "image/png", "size": 1}}),
+            (400, "InvalidRequest"),
+        ),
+        // Longer than the lexicon has them, or not of its format.
         (
             &alice,
             json!({"group": did, "displayName": "x".repeat(65)}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "displayName": "Riders", "topics": [{"topic": "x".repeat(65)}]}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "displayName": "Riders", "languages": [{"language": "not a tag"}]}),
             (400, "InvalidRequest"),
         ),
         (

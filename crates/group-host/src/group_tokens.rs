@@ -115,12 +115,8 @@ pub async fn get_group_auth(
 ) -> Result<Json<Value>, Refusal> {
     let nsid = format!("{NS}.getGroupAuth");
     let me = signed_in(&host, &headers, &nsid).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
-    let uri = body["space"]
-        .as_str()
-        .ok_or_else(|| invalid("space is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    let uri = body["space"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     host.active(group)?;
     let space = SpaceRef::parse(uri).ok().filter(|s| s.authority == group);
@@ -234,12 +230,8 @@ pub async fn revoke_group_token(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, XrpcError> {
     let me = signed_in(&host, &headers, &format!("{NS}.revokeGroupToken")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
-    let id = body["tokenId"]
-        .as_str()
-        .ok_or_else(|| invalid("tokenId is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    let id = body["tokenId"].as_str().expect("its lexicon requires it");
     host.configures(group, &me)?;
     let grant = host.store.grant_by_id(id).map_err(XrpcError::internal)?;
     let Some(grant) = grant.filter(|g| g.group == group) else {

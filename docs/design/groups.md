@@ -142,7 +142,7 @@ switched-off group.
 `updateProfile` replaces the profile. A display name is required. The
 description, site, location, online flag, topics and languages are as
 given, and removed when left out. The join policy, avatar and banner are
-kept when left out; `null` clears an avatar or banner.
+kept when left out; `removeAvatar` and `removeBanner` clear them.
 
 A picture must be a blob in the group's own repo, because a blob in
 another account's repo would not resolve for the group's profile. So

@@ -30,6 +30,7 @@ pub mod import;
 pub mod import_space;
 pub mod index;
 pub mod index_api;
+pub mod lexicons;
 pub mod lifecycle;
 pub mod migration;
 pub mod moderation;
@@ -473,6 +474,7 @@ pub fn router(host: Arc<Host>) -> Router {
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
+        .layer(axum::middleware::from_fn(lexicons::check))
         .with_state(host)
 }
 

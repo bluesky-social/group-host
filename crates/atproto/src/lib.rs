@@ -16,6 +16,7 @@ pub mod did;
 pub mod drisl;
 pub mod jose;
 pub mod keys;
+pub mod lexicon;
 pub mod mst;
 pub mod plc;
 pub mod service_auth;

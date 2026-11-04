@@ -36,6 +36,7 @@ tower = { version = "0.5", features = ["util"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util", "time", "sync", "net", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "json", "env-filter", "registry"] }
+unicode-segmentation = "1"
 
 # Every worktree keeps its own target/, so debug info is kept small: line
 # tables for our crates, none for dependencies.

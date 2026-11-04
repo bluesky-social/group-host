@@ -98,7 +98,7 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
     assert!(at_riders["address"].is_string());
 
     // Of Bob's, only those Alice is in too; of Alice's, only those Bob is.
-    let (_, bobs) = groups_of(&h, &alice, &format!("actor=@{}", bob.did)).await;
+    let (_, bobs) = groups_of(&h, &alice, &format!("actor={}", bob.did)).await;
     let mut both = vec![riders.as_str(), quiet.as_str()];
     both.sort();
     assert_eq!(dids(&bobs), both);

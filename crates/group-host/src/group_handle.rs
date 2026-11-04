@@ -9,7 +9,7 @@
 //! own address back, so no group takes another's.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{Params, param};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::forbidden;
 use crate::rbac::NS;
@@ -103,12 +103,8 @@ pub async fn update_group_handle(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
-    let asked = body["handle"]
-        .as_str()
-        .ok_or_else(|| invalid("handle is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    let asked = body["handle"].as_str().expect("its lexicon requires it");
     let address = configurable(&host, &headers, group, "updateGroupHandle").await?;
     let handle = wanted(&host, group, &address, asked)?;
     let current = host.store.account(group).map_err(XrpcError::internal)?;

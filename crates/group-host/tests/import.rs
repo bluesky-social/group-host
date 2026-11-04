@@ -814,7 +814,7 @@ async fn refuses_an_operation_that_does_not_give_the_account_to_this_host() {
     );
     assert_eq!(
         error(&w.finish(dana, json!("not an operation")).await),
-        (400, "InvalidOperation")
+        (400, "InvalidRequest")
     );
     // One the directory refuses: not signed by a key it holds.
     let mut wrong = w.signed(creds, |_| {}).await;

@@ -11,7 +11,7 @@
 //! wrote there.
 
 use crate::Host;
-use crate::api::{at_most, invalid};
+use crate::api::invalid;
 use crate::group::{did_rkey, members_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
@@ -200,9 +200,7 @@ pub(crate) async fn acting<'a>(
     action: Option<&str>,
 ) -> Result<(Members<'a>, String, Vec<String>), XrpcError> {
     let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(host, group)?;
     let members = Members::of(host, group)?;
     let roles = members.membership(&me)?.unwrap_or_default();
@@ -232,17 +230,11 @@ pub async fn put_role(
     if role.is_empty() || role.len() > 64 || !atproto::syntax::is_record_key(role) {
         return Err(invalid("role is a key of 64 characters at most"));
     }
-    let name = body["name"]
-        .as_str()
-        .ok_or_else(|| invalid("name is required"))?;
-    at_most("name", name, 640, 64)?;
+    let name = body["name"].as_str().expect("its lexicon requires it");
     let description = body["description"].as_str();
-    if let Some(d) = description {
-        at_most("description", d, 3000, 300)?;
-    }
     let actions: Vec<String> = body["actions"]
         .as_array()
-        .ok_or_else(|| invalid("actions is required"))?
+        .expect("its lexicon requires it")
         .iter()
         .map(|a| a.as_str().unwrap_or_default().to_string())
         .collect();
@@ -252,11 +244,6 @@ pub async fn put_role(
         .collect();
     if !unknown.is_empty() {
         return Err(invalid(format!("unknown actions: {unknown:?}")));
-    }
-    for flag in ["bot", "default"] {
-        if body.get(flag).is_some_and(|v| !v.is_boolean()) {
-            return Err(invalid(format!("{flag} is true or false")));
-        }
     }
     // A role giving up configuring the group leaves someone who still
     // may, or nobody could run it again.
@@ -359,9 +346,7 @@ pub async fn delete_role(
         Some("group.configure"),
     )
     .await?;
-    let role = body["role"]
-        .as_str()
-        .ok_or_else(|| invalid("role is required"))?;
+    let role = body["role"].as_str().expect("its lexicon requires it");
     let configuring = members.configuring();
     if configuring.len() == 1 && configuring.contains(role) {
         return Err(bad(
@@ -419,12 +404,7 @@ pub async fn assign_roles(
 ) -> Answer {
     let (members, _, mine) =
         acting(&host, &headers, &body, "assignRoles", Some("role.assign")).await?;
-    let member = body["member"]
-        .as_str()
-        .ok_or_else(|| invalid("member is required"))?;
-    if body["roles"].as_array().is_none() {
-        return Err(invalid("roles is required"));
-    }
+    let member = body["member"].as_str().expect("its lexicon requires it");
     let roles = listed(&body, "roles", "role");
     let current = members
         .membership(member)?
@@ -490,14 +470,8 @@ pub async fn eject_member(
     Json(body): Json<Value>,
 ) -> Answer {
     let (members, me, mine) = acting(&host, &headers, &body, "ejectMember", Some("eject")).await?;
-    let member = body["member"]
-        .as_str()
-        .ok_or_else(|| invalid("member is required"))?;
+    let member = body["member"].as_str().expect("its lexicon requires it");
     let reason = body["reason"].as_str();
-    // As the lexicon has it: 300 graphemes, 3000 bytes, at most.
-    if reason.is_some_and(|r| r.len() > 3000 || r.chars().count() > 300) {
-        return Err(invalid("a reason is 300 characters at most"));
-    }
     let theirs = members
         .membership(member)?
         .ok_or_else(|| bad("NotAMember", format!("{member} is not a member")))?;

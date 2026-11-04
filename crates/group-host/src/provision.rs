@@ -11,7 +11,6 @@
 //! listed among the group's, revoked there.
 
 use crate::Host;
-use crate::api::invalid;
 use crate::group::Made;
 use crate::group_api::{new_group, signed_in};
 use crate::oauth::{OAuthError, new_tokens, token_response};
@@ -54,9 +53,7 @@ pub async fn provision_group(
     let proof = host.dpop_proof(&headers, "POST", &format!("/xrpc/{nsid}"), None, now);
     let proof = proof.map_err(|e| host.refuse(e.error, e.description))?;
     let proof = proof.ok_or_else(|| host.refuse("invalid_dpop_proof", "DPoP proof required"))?;
-    let client_id = body["clientId"]
-        .as_str()
-        .ok_or_else(|| invalid("clientId is required"))?;
+    let client_id = body["clientId"].as_str().expect("its lexicon requires it");
     let client = host.client(client_id, now).await.map_err(refused)?;
     let mut form = HashMap::new();
     for (field, key) in [

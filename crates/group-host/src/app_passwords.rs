@@ -337,9 +337,7 @@ pub async fn create_app_password(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.createAppPassword")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     if !host.may_issue(group, &me)? {
         return Err(forbidden(
@@ -444,12 +442,8 @@ pub async fn revoke_app_password(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.revokeAppPassword")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
-    let name = body["name"]
-        .as_str()
-        .ok_or_else(|| invalid("name is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    let name = body["name"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     let found = host
         .store

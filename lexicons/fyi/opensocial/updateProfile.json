@@ -84,7 +84,11 @@
                 "image/avif"
               ],
               "maxSize": 1000000,
-              "description": "The group's avatar, as returned by uploadImage. Omit to keep the current one; null to clear it."
+              "description": "The group's avatar, as returned by uploadImage. Omit to keep the current one; removeAvatar clears it."
+            },
+            "removeAvatar": {
+              "type": "boolean",
+              "description": "True to clear the group's avatar."
             },
             "banner": {
               "type": "blob",
@@ -96,7 +100,11 @@
                 "image/avif"
               ],
               "maxSize": 1000000,
-              "description": "The group's banner, as returned by uploadImage. Omit to keep the current one; null to clear it."
+              "description": "The group's banner, as returned by uploadImage. Omit to keep the current one; removeBanner clears it."
+            },
+            "removeBanner": {
+              "type": "boolean",
+              "description": "True to clear the group's banner."
             }
           }
         }

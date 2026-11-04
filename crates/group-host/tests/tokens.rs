@@ -483,7 +483,7 @@ async fn writes_only_what_its_member_still_may() {
         .await
     };
     let rule = async || {
-        app.call(&h, "com.atproto.space.createRecord", &access, Some(&json!({"repo": did, "space": meta_space(&did), "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "createdAt": "2026-11-03T00:00:00Z"}}))).await
+        app.call(&h, "com.atproto.space.createRecord", &access, Some(&json!({"repo": did, "space": meta_space(&did), "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "text": "Be kind.", "createdAt": "2026-11-03T00:00:00Z"}}))).await
     };
     let event = async || {
         app.call(&h, "com.atproto.space.createRecord", &access, Some(&json!({"repo": did, "space": calendar, "collection": "com.example.note", "record": record("com.example.note", "x")}))).await
@@ -688,7 +688,7 @@ async fn configures_the_group_as_its_methods_would() {
         .await
     };
     let profile = |extra: Json| {
-        let mut p = json!({"$type": c("profile"), "displayName": "Riders United", "createdAt": "2026-11-03T00:00:00Z"});
+        let mut p = json!({"$type": c("profile"), "displayName": "Riders United", "joinPolicy": "open", "createdAt": "2026-11-03T00:00:00Z"});
         p.as_object_mut()
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
@@ -702,8 +702,7 @@ async fn configures_the_group_as_its_methods_would() {
         .unwrap()
         .unwrap();
     assert_eq!(named["displayName"], "Riders United");
-    let role =
-        json!({"$type": c("role"), "name": "Ride leader", "createdAt": "2026-11-03T00:00:00Z"});
+    let role = json!({"$type": c("role"), "displayName": "Ride leader", "createdAt": "2026-11-03T00:00:00Z"});
     assert_eq!(put(&members, &c("role"), "leader", role).await.status, 200);
     assert_eq!(delete(&members, &c("role"), "leader").await.status, 200);
 
@@ -730,6 +729,17 @@ async fn configures_the_group_as_its_methods_would() {
         ),
         (
             put(&meta, &c("profile"), "other", profile(json!({}))).await,
+            (400, "InvalidRequest"),
+        ),
+        // A record of ours that is not what its lexicon describes.
+        (
+            put(
+                &meta,
+                &c("rule"),
+                "r",
+                json!({"$type": c("rule"), "title": "x"}),
+            )
+            .await,
             (400, "InvalidRequest"),
         ),
         (

@@ -15,7 +15,7 @@
 //! which, to show.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{Params, param};
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::NS;
 use crate::store::Store;
@@ -97,7 +97,7 @@ impl Host {
         group: Option<&str>,
     ) -> Result<(String, String), XrpcError> {
         let me = signed_in(self, headers, &format!("{NS}.{lxm}")).await?;
-        let group = group.ok_or_else(|| invalid("group is required"))?;
+        let group = group.expect("its lexicon requires it");
         group_of(self, group)?;
         if !self.may_do(group, &me, "group.configure")? {
             return Err(XrpcError::new(

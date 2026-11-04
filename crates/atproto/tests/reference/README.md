@@ -30,3 +30,11 @@ version in `overrides`.
 @atproto/oauth-provider checks DPoP proofs and client assertions with):
 fixed P-256 and secp256k1 keys' public JWKs and RFC 7638 thumbprints, a
 DPoP proof each signs, and RFC 9449's own example key and thumbprint.
+
+`lexicon.json` is from `lexicon.mjs`, run against @atproto/lexicon 0.7.18
+(installed on its own, in a directory of its own) over a checkout of
+lexicon.js (github.com/bigmoves/lexicon.js), whose data, format and
+end-to-end cases it reads: each case's lexicons, the def it is checked
+against, the value, and the reference's verdict, with a few cases of this
+crate's own. `tests/lexicon.rs` holds where `atproto::lexicon` departs
+from it, and its module says why.

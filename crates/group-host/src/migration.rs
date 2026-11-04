@@ -130,7 +130,7 @@ impl Host {
         group: Option<&str>,
     ) -> Result<(String, String), XrpcError> {
         let me = signed_in(self, headers, &format!("{NS}.{lxm}")).await?;
-        let group = group.ok_or_else(|| invalid("group is required"))?;
+        let group = group.expect("its lexicon requires it");
         crate::group_api::group_of(self, group)?;
         if !self.may_do(group, &me, "group.configure")? {
             return Err(XrpcError::new(
@@ -155,7 +155,7 @@ pub async fn migrate_prepare(
     let dest = body["destDid"]
         .as_str()
         .filter(|d| atproto::syntax::is_did(d));
-    let dest = dest.ok_or_else(|| invalid("destDid is the destination host's DID"))?;
+    let dest = dest.expect("its lexicon requires it");
     let last = host
         .plc
         .last_op(&group)
@@ -473,15 +473,13 @@ pub async fn migrate_receive(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.migrateReceive")).await?;
     host.founding(&me)?;
-    let group = body["did"]
-        .as_str()
-        .ok_or_else(|| invalid("did is required"))?;
+    let group = body["did"].as_str().expect("its lexicon requires it");
     let token = body["exportToken"]
         .as_str()
-        .ok_or_else(|| invalid("exportToken is required"))?;
+        .expect("its lexicon requires it");
     let jwt = body["serviceJwt"]
         .as_str()
-        .ok_or_else(|| invalid("serviceJwt is required"))?;
+        .expect("its lexicon requires it");
     if host
         .store
         .account(group)

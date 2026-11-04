@@ -6,7 +6,6 @@
 //! access record, against the reader's roles.
 
 use crate::Host;
-use crate::api::at_most;
 use crate::rbac::{ACTIONS, Grant, NS, listed};
 use crate::repo::{Write, invalid};
 use crate::store::Record;
@@ -108,19 +107,12 @@ struct Shape {
 /// What `new` asks of a group's first day, checked.
 fn shape(new: &NewGroup) -> Result<Shape, XrpcError> {
     let join = join_policy(new.join_policy.as_deref())?;
-    at_most("displayName", &new.display_name, 640, 64)?;
-    if let Some(d) = &new.description {
-        at_most("description", d, 3000, 300)?;
-    }
     let readers = new
         .meta_readable_by
         .clone()
         .unwrap_or_else(|| vec!["public".into()]);
     let mut stewards = vec![new.founder.clone()];
     for s in &new.stewards {
-        if !atproto::syntax::is_did(s) {
-            return Err(invalid(format!("steward {s} is no DID")));
-        }
         if !stewards.contains(s) {
             stewards.push(s.clone());
         }

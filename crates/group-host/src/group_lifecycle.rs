@@ -6,7 +6,6 @@
 //! when it was switched off, kept then.
 
 use crate::Host;
-use crate::api::invalid;
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::forbidden;
 use crate::rbac::NS;
@@ -31,9 +30,7 @@ async fn asked(
     lxm: &str,
 ) -> Result<(String, String), XrpcError> {
     let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
-    let group = body["group"]
-        .as_str()
-        .ok_or_else(|| invalid("group is required"))?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(host, group)?;
     Ok((group.to_string(), me))
 }

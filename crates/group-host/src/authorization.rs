@@ -5,7 +5,7 @@
 //! guess, and the grant is theirs: it ends when they are put out.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{Params, param};
 use crate::assistants;
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
@@ -192,9 +192,9 @@ pub async fn approve_authorization(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.approveAuthorization")).await?;
     let uri = body["requestUri"].as_str();
-    let uri = uri.ok_or_else(|| invalid("requestUri is required"))?;
+    let uri = uri.expect("its lexicon requires it");
     let group = body["group"].as_str();
-    let group = group.ok_or_else(|| invalid("group is required"))?;
+    let group = group.expect("its lexicon requires it");
     if uri.starts_with(assistants::PREFIX) {
         let redirect = assistants::approve(&host, uri, &me, group)?;
         return Ok(Json(json!({ "redirectUrl": redirect })));
@@ -234,7 +234,7 @@ pub async fn decline_authorization(
 ) -> Answer {
     signed_in(&host, &headers, &format!("{NS}.declineAuthorization")).await?;
     let uri = body["requestUri"].as_str();
-    let uri = uri.ok_or_else(|| invalid("requestUri is required"))?;
+    let uri = uri.expect("its lexicon requires it");
     if uri.starts_with(assistants::PREFIX) {
         let redirect = assistants::decline(&host, uri)?;
         return Ok(Json(json!({ "redirectUrl": redirect })));

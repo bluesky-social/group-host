@@ -68,7 +68,8 @@ export const actions: Actions = {
 	},
 	unpicture: async (event) => {
 		const { group, form } = await asked(event);
-		return act(event, 'fyi.opensocial.updateProfile', { ...(await profileNow(event, group)), [text(form, 'slot')]: null });
+		const remove = text(form, 'slot') === 'banner' ? 'removeBanner' : 'removeAvatar';
+		return act(event, 'fyi.opensocial.updateProfile', { ...(await profileNow(event, group)), [remove]: true });
 	},
 	visibility: async (event) => {
 		const { group, form } = await asked(event);

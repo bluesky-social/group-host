@@ -50,6 +50,6 @@ export const actions: Actions = {
 		const found = await event.fetch(`/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
 		if (!found.ok) return fail(400, { failed: `We cannot find ${handle}.` });
 		const { did } = await found.json();
-		return act(event, 'fyi.opensocial.applyLabel', { group, subject: { did }, val: String(form.get('val') ?? '').trim() });
+		return act(event, 'fyi.opensocial.applyLabel', { group, subject: { $type: 'com.atproto.admin.defs#repoRef', did }, val: String(form.get('val') ?? '').trim() });
 	}
 };

@@ -164,7 +164,7 @@ async fn indexes_a_member_writing_at_another_host() {
     let got = read(
         &a,
         &lxm,
-        &format!("{query}&repo={bob}&cid=nope"),
+        &format!("{query}&repo={bob}&cid=bafynotacid"),
         &[auth(&a, &alice, &lxm)],
     )
     .await;
@@ -287,7 +287,7 @@ async fn pages_filters_and_finds_one() {
     .await;
     assert_eq!(missing["records"], json!([]));
     for (rest, refused) in [
-        ("&uri=at://elsewhere", (400, "NotFound")),
+        ("&uri=at://elsewhere.example.com", (400, "NotFound")),
         ("&cursor=x", (400, "InvalidRequest")),
         ("&limit=101", (400, "InvalidRequest")),
     ] {

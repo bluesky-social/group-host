@@ -150,7 +150,7 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         ),
         (
             &alice,
-            json!({"group": did, "invitee": carol.did, "expiresAt": "soon"}),
+            json!({"group": did, "invitee": carol.did, "expiresAt": "2027-02-30T00:00:00Z"}),
             (400, "InvalidRequest"),
         ),
         // One lapsed already would admit nobody.
@@ -239,7 +239,7 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
                 &h,
                 &alice,
                 "revokeInvite",
-                json!({"group": did, "uri": "nope"})
+                json!({"group": did, "uri": "at://alice.example.com/fyi.opensocial.invite/x"})
             )
             .await
         ),

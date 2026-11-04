@@ -242,6 +242,11 @@ async fn refuses_a_handle_it_cannot_take() {
             refused,
             "{handle}"
         );
+        // A handle that is none is refused by the update's lexicon.
+        let refused = match refused.1 {
+            "InvalidHandle" => (400, "InvalidRequest"),
+            _ => refused,
+        };
         assert_eq!(
             error(&update(&h, &alice, &did, handle).await),
             refused,

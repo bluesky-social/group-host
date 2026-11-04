@@ -135,6 +135,10 @@ async fn refuses_a_key_it_should_not_add_or_take_off() {
     for (body, refused) in [
         (
             json!({"group": did, "key": "not a key"}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            json!({"group": did, "key": "did:web:not.a.key"}),
             (400, "InvalidKey"),
         ),
         (json!({"group": did, "key": keys[0]}), (400, "AlreadyAdded")),
