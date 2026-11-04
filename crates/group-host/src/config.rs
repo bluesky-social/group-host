@@ -81,19 +81,28 @@ impl Config {
             var(name)
                 .unwrap_or_default()
                 .split(',')
-                .map(|c| c.trim().trim_end_matches('/').to_string())
+                .map(|c| c.trim().to_string())
                 .filter(|c| !c.is_empty())
                 .collect()
         };
+        // A service's URL is one with or without its trailing slash; any
+        // other item is as written, as a client id ending in one is.
+        let urls = |name: &str| -> Vec<String> {
+            list(name)
+                .into_iter()
+                .map(|u| u.trim_end_matches('/').to_string())
+                .filter(|u| !u.is_empty())
+                .collect()
+        };
         let group_founders = list("GROUP_FOUNDERS");
-        let mut handle_resolvers = list("HANDLE_RESOLVERS");
+        let mut handle_resolvers = urls("HANDLE_RESOLVERS");
         if handle_resolvers.is_empty() {
             handle_resolvers = vec![
                 "well-known:https".into(),
                 "https://public.api.bsky.app".into(),
             ];
         }
-        let crawlers = list("PDS_CRAWLERS");
+        let crawlers = urls("PDS_CRAWLERS");
         let blob_upload_limit = match var("BLOB_UPLOAD_LIMIT") {
             Some(l) => l
                 .parse()

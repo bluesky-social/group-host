@@ -78,7 +78,10 @@
               "type": "blob",
               "accept": [
                 "image/png",
-                "image/jpeg"
+                "image/jpeg",
+                "image/webp",
+                "image/gif",
+                "image/avif"
               ],
               "maxSize": 1000000,
               "description": "The group's avatar, as returned by uploadImage. Omit to keep the current one; null to clear it."
@@ -87,7 +90,10 @@
               "type": "blob",
               "accept": [
                 "image/png",
-                "image/jpeg"
+                "image/jpeg",
+                "image/webp",
+                "image/gif",
+                "image/avif"
               ],
               "maxSize": 1000000,
               "description": "The group's banner, as returned by uploadImage. Omit to keep the current one; null to clear it."

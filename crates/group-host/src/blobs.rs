@@ -146,8 +146,8 @@ fn collect(value: &Value, found: &mut Vec<Cid>) {
     }
 }
 
-/// The kinds of image a page may be given.
-const IMAGES: [&str; 5] = [
+/// The kinds of image a page may be given, and a group's profile holds.
+pub(crate) const IMAGES: [&str; 5] = [
     "image/png",
     "image/jpeg",
     "image/webp",

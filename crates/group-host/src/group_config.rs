@@ -3,13 +3,15 @@
 //! for a caller holding `group.configure`.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::{Params, at_most, invalid, param};
+use crate::blobs::IMAGES;
 use crate::group::{join_policy, members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::{NS, actions_for, grants, listed};
 use crate::repo::Write;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
+use atproto::Cid;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
@@ -132,12 +134,13 @@ pub(crate) async fn put_in(
     Ok(Json(json!({"uri": uri, "cid": kept.cid.to_string()})))
 }
 
-/// Words a profile lists, as `[{topic}]`: trimmed, each once, at most
-/// `max`.
-fn words(asked: &Value, field: &str, max: usize) -> Vec<String> {
+/// Words a profile lists, as `[{topic}]`: trimmed, cut to `longest`
+/// characters, each once, at most `max`.
+fn words(asked: &Value, field: &str, longest: usize, max: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for item in asked.as_array().into_iter().flatten() {
-        let word = item[field].as_str().unwrap_or_default().trim().to_string();
+        let word = item[field].as_str().unwrap_or_default().trim();
+        let word: String = word.chars().take(longest).collect();
         if !word.is_empty() && !out.contains(&word) {
             out.push(word);
         }
@@ -164,6 +167,22 @@ fn blob(asked: &Value) -> Option<Value> {
     Some(json!({"$type": "blob", "ref": {"$link": link}, "mimeType": mime, "size": size}))
 }
 
+/// The image `asked` names, as the group's profile holds it: one of its
+/// own uploads, of a kind of image a page is given, its type and size as
+/// the host kept them rather than as the caller says.
+fn image(host: &Host, group: &str, key: &str, asked: &Value) -> Result<Value, XrpcError> {
+    let not_one = invalid(format!("{key} is an image uploadImage answered"));
+    let link = asked["ref"]["$link"].as_str().unwrap_or_default();
+    let Ok(cid) = Cid::parse(link) else {
+        return Err(not_one);
+    };
+    let kept = host.store.blob(group, &cid).map_err(XrpcError::internal)?;
+    let kept = kept.filter(|b| IMAGES.contains(&b.mime_type.as_str()));
+    let kept = kept.ok_or(not_one)?;
+    let (mime, size) = (kept.mime_type, kept.size);
+    Ok(json!({"$type": "blob", "ref": {"$link": link}, "mimeType": mime, "size": size}))
+}
+
 /// Replaces the group's profile. What finds it (where it meets, online,
 /// topics, languages) is as given, none when left out; an image left out
 /// is kept, and `null` clears it; its first `createdAt` is kept.
@@ -180,6 +199,7 @@ pub async fn update_profile(
     if name.is_empty() {
         return Err(invalid("displayName is required"));
     }
+    at_most("displayName", name, 640, 64)?;
     let meta = meta_space(&group);
     let collection = format!("{NS}.profile");
     let current = host
@@ -201,6 +221,7 @@ pub async fn update_profile(
     });
     let text = |k: &str| body[k].as_str().map(str::trim).filter(|t| !t.is_empty());
     if let Some(d) = text("description") {
+        at_most("description", d, 3000, 300)?;
         profile["description"] = json!(d);
     }
     // The site is replaced, as the description is: left out, it goes.
@@ -217,14 +238,14 @@ pub async fn update_profile(
     if body["online"].as_bool() == Some(true) {
         profile["online"] = json!(true);
     }
-    let topics: Vec<Value> = words(&body["topics"], "topic", 10)
+    let topics: Vec<Value> = words(&body["topics"], "topic", 64, 10)
         .into_iter()
-        .map(|t| json!({"topic": t.chars().take(64).collect::<String>()}))
+        .map(|t| json!({ "topic": t }))
         .collect();
     if !topics.is_empty() {
         profile["topics"] = json!(topics);
     }
-    let languages: Vec<Value> = words(&body["languages"], "language", 5)
+    let languages: Vec<Value> = words(&body["languages"], "language", usize::MAX, 5)
         .into_iter()
         .filter(|l| is_language(l))
         .map(|l| json!({"language": l}))
@@ -235,7 +256,7 @@ pub async fn update_profile(
     for key in ["avatar", "banner"] {
         let image = match body.get(key) {
             Some(Value::Null) => None,
-            Some(asked) => Some(blob(asked).ok_or_else(|| invalid(format!("{key} is a blob")))?),
+            Some(asked) => Some(image(&host, &group, key, asked)?),
             None => current.get(key).and_then(blob),
         };
         if let Some(image) = image {
@@ -265,6 +286,9 @@ pub async fn upload_image(
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
+    if !IMAGES.contains(&mime) {
+        return Err(invalid(format!("an image is one of {}", IMAGES.join(", "))));
+    }
     let blob = host.upload_blob(&group, &bytes, mime)?;
     Ok(Json(json!({ "blob": blob })))
 }
@@ -285,19 +309,24 @@ pub async fn put_rule(
     if title.is_empty() {
         return Err(invalid("title is required"));
     }
-    let rkey = match body["rkey"]
-        .as_str()
-        .map(str::trim)
-        .filter(|k| !k.is_empty())
-    {
-        Some(k) => k.to_string(),
-        None => host.clock.next(),
-    };
+    at_most("title", title, 1000, 100)?;
+    let text = body["text"].as_str().unwrap_or_default().trim();
+    at_most("text", text, 20000, 2000)?;
     let collection = format!("{NS}.rule");
     let rules = host
         .group_records(&group, &meta_space(&group), &collection)
         .map_err(XrpcError::internal)?;
-    let current = rules.iter().find(|(k, _)| *k == rkey).map(|(_, r)| r);
+    // A key names a rule there is; a new one is keyed by the clock, as
+    // rules are.
+    let (rkey, current) = match body["rkey"].as_str() {
+        Some(k) => {
+            let found = rules.iter().find(|(key, _)| key == k);
+            let none = invalid(format!("no rule {k}: a new one is given no rkey"));
+            let found = found.ok_or(none)?;
+            (k.to_string(), Some(&found.1))
+        }
+        None => (host.clock.next(), None),
+    };
     let last = rules.iter().filter_map(|(_, r)| r["order"].as_i64()).max();
     let order = body["order"]
         .as_i64()
@@ -312,7 +341,7 @@ pub async fn put_rule(
     let rule = json!({
         "$type": collection,
         "title": title,
-        "text": body["text"].as_str().unwrap_or_default().trim(),
+        "text": text,
         "order": order,
         "createdAt": created,
     });

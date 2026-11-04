@@ -74,8 +74,9 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         uri
     );
 
-    // Listed for those who invite, newest first, a page at a time.
-    let soon = "2099-01-01T00:00:00.5Z";
+    // Listed for those who invite, newest first, a page at a time; its
+    // lapse as given, at an offset from UTC or in it.
+    let soon = "2099-01-01T01:00:00.5+01:00";
     call(
         &h,
         &alice,
@@ -148,6 +149,17 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         (
             &alice,
             json!({"group": did, "invitee": carol.did, "expiresAt": "soon"}),
+            (400, "InvalidRequest"),
+        ),
+        // One lapsed already would admit nobody.
+        (
+            &alice,
+            json!({"group": did, "invitee": carol.did, "expiresAt": "2020-01-01T00:00:00Z"}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "invitee": carol.did, "message": "x".repeat(301)}),
             (400, "InvalidRequest"),
         ),
         (
@@ -262,13 +274,16 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     );
 
     // Lapsed, it is no invite.
-    call(
+    let lapse = group_host::time::iso(group_host::time::now_millis() + 1000);
+    let (status, _) = call(
         &h,
         &alice,
         "createInvite",
-        json!({"group": did, "invitee": carol.did, "expiresAt": "2000-01-01T00:00:00Z"}),
+        json!({"group": did, "invitee": carol.did, "expiresAt": lapse}),
     )
     .await;
+    assert_eq!(status, 200);
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     assert_eq!(
         ask(&h, &alice, "listInvites", &format!("group={did}"))
             .await
@@ -379,7 +394,22 @@ fn reads_a_datetime() {
     assert_eq!(millis_of("2000-03-01T00:00:00.25Z"), Some(951_868_800_250));
     assert_eq!(millis_of("2026-11-03T12:30:15Z"), Some(1_793_709_015_000));
     assert_eq!(millis_of("2024-02-29T00:00:00Z"), Some(1_709_164_800_000));
+    // At an offset from UTC, the same moment.
+    assert_eq!(
+        millis_of("2026-11-03T13:30:15+01:00"),
+        Some(1_793_709_015_000)
+    );
+    assert_eq!(
+        millis_of("2026-11-03T12:00:15-00:30"),
+        Some(1_793_709_015_000)
+    );
     for bad in [
+        "x",
+        "2026-11-03T00:00:00-00:00",
+        "2026-11-03T00:00:00*01:00",
+        "2026-11-03T00:00:00+0100",
+        "2026-11-03T00:00:00+24:00",
+        "2026-11-03T00:00:00+01:60",
         "+026-11-03T00:00:00Z",
         "2026-11-03T00:00:00.+5Z",
         "2026-11-31T00:00:00Z",

@@ -10,7 +10,7 @@
 //! the group's join policy, with its default roles.
 
 use crate::Host;
-use crate::api::{Params, invalid, page, param};
+use crate::api::{Params, at_most, invalid, page, param};
 use crate::group::meta_space;
 use crate::group_api::{caller, group_of, signed_in};
 use crate::group_members::acting;
@@ -65,10 +65,14 @@ fn view(invite: &Invite) -> Value {
     view
 }
 
-/// An RFC 3339 datetime in UTC (`2026-11-03T00:00:00Z`, fractions of a
-/// second allowed), in milliseconds since 1970.
+/// An RFC 3339 datetime, as atproto writes one: in UTC
+/// (`2026-11-03T00:00:00Z`) or at an offset from it (`+01:00`, though not
+/// `-00:00`), fractions of a second allowed. In milliseconds since 1970.
 pub fn millis_of(text: &str) -> Option<i64> {
-    let text = text.strip_suffix('Z')?;
+    let (text, zone) = match text.strip_suffix('Z') {
+        Some(utc) => (utc, "+00:00"),
+        None => text.split_at_checked(text.len().checked_sub(6)?)?,
+    };
     let (date, time) = text.split_once('T')?;
     let (hms, frac) = time.split_once('.').unwrap_or((time, ""));
     // Digits alone, of the widths RFC 3339 writes them.
@@ -87,6 +91,17 @@ pub fn millis_of(text: &str) -> Option<i64> {
                 .collect()
         })?
     };
+    let (sign, offset) = zone.split_at_checked(1)?;
+    let o = fields(offset, ':', &[2, 2])?;
+    let east = match sign {
+        "+" => 1,
+        "-" if offset != "00:00" => -1,
+        _ => return None,
+    };
+    if o[0] > 23 || o[1] > 59 {
+        return None;
+    }
+    let east = east * (o[0] * 60 + o[1]) * 60_000;
     let d = fields(date, '-', &[4, 2, 2])?;
     let t = fields(hms, ':', &[2, 2, 2])?;
     let (y, m, day, h, min, s) = (d[0], d[1], d[2], t[0], t[1], t[2]);
@@ -119,7 +134,7 @@ pub fn millis_of(text: &str) -> Option<i64> {
     let doy = (153 * m + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146_097 + doe - 719_468;
-    Some(((days * 24 + h) * 60 + min) * 60_000 + s * 1000 + ms)
+    Some(((days * 24 + h) * 60 + min) * 60_000 + s * 1000 + ms - east)
 }
 
 impl Host {
@@ -175,6 +190,14 @@ pub async fn create_invite(
         Some(at) => Some(millis_of(at).ok_or_else(|| invalid("expiresAt is a datetime"))?),
         None => None,
     };
+    // One that has lapsed already could admit nobody.
+    if expires_at.is_some_and(|at| at <= now_millis()) {
+        return Err(invalid("expiresAt is a time to come"));
+    }
+    let message = body["message"].as_str();
+    if let Some(m) = message {
+        at_most("message", m, 3000, 300)?;
+    }
     let group = members.group.clone();
     // One waiting is the one answered; one lapsed is taken back, and a
     // fresh one written.
@@ -193,7 +216,7 @@ pub async fn create_invite(
         group: group.clone(),
         invitee: invitee.into(),
         by: me.clone(),
-        message: body["message"].as_str().map(String::from),
+        message: message.map(String::from),
         rkey: host.clock.next(),
         created_at: now_millis(),
         expires_at,

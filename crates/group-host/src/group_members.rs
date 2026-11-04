@@ -11,7 +11,7 @@
 //! wrote there.
 
 use crate::Host;
-use crate::api::invalid;
+use crate::api::{at_most, invalid};
 use crate::group::{did_rkey, members_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
@@ -137,6 +137,16 @@ impl<'a> Members<'a> {
         Ok(())
     }
 
+    /// Refuses `roles` unless the group defines each.
+    pub(crate) fn defined(&self, roles: &[String]) -> Result<(), XrpcError> {
+        let defined: BTreeSet<String> = self.records("role")?.into_iter().map(|(k, _)| k).collect();
+        let undefined: Vec<&String> = roles.iter().filter(|r| !defined.contains(*r)).collect();
+        if !undefined.is_empty() {
+            return Err(invalid(format!("no such roles: {undefined:?}")));
+        }
+        Ok(())
+    }
+
     /// Whether any member holds one of `roles`.
     fn held(&self, roles: &BTreeSet<String>) -> Result<bool, XrpcError> {
         let memberships = self.records("membership")?;
@@ -224,6 +234,11 @@ pub async fn put_role(
     let name = body["name"]
         .as_str()
         .ok_or_else(|| invalid("name is required"))?;
+    at_most("name", name, 640, 64)?;
+    let description = body["description"].as_str();
+    if let Some(d) = description {
+        at_most("description", d, 3000, 300)?;
+    }
     let actions: Vec<String> = body["actions"]
         .as_array()
         .ok_or_else(|| invalid("actions is required"))?
@@ -252,30 +267,37 @@ pub async fn put_role(
             "nobody else holds a role that configures the group: give one to someone first",
         ));
     }
+    // The roles it may give, as asked, or as they were: each one the group
+    // defines, or this one.
+    let previous = members.grants.iter().find(|g| g.role == role);
+    let assignable = match body.get("assignable") {
+        Some(_) => listed(&body, "assignable", "role"),
+        None => previous.map(|g| g.assignable.clone()).unwrap_or_default(),
+    };
+    let others: Vec<String> = assignable.iter().filter(|r| *r != role).cloned().collect();
+    members.defined(&others)?;
     let collection = format!("{NS}.role");
     let was = members
         .records("role")?
         .into_iter()
         .find(|(k, _)| k == role)
-        .map(|(_, r)| r);
+        .map(|(_, r)| r)
+        .unwrap_or_default();
     let mut record =
         json!({"$type": collection, "displayName": name, "createdAt": iso(now_millis())});
-    if let Some(d) = body["description"].as_str() {
+    if let Some(d) = description {
         record["description"] = json!(d);
     }
-    // Left out, whether it is given on joining stays as it was.
-    let given = body["default"]
-        .as_bool()
-        .or_else(|| was.as_ref().and_then(|w| w["default"].as_bool()));
-    if given == Some(true) {
-        record["default"] = json!(true);
-    }
-    if body["bot"].as_bool() == Some(true) {
-        record["bot"] = json!(true);
+    // Left out, whether it is given on joining, and whether its people
+    // are bots, stay as they were.
+    for flag in ["default", "bot"] {
+        let kept = body[flag].as_bool().or(was[flag].as_bool());
+        if kept == Some(true) {
+            record[flag] = json!(true);
+        }
     }
     // Its grant: the actions as their scopes, beside any other scope it
     // held; its public-repo collections as asked, or as they were.
-    let previous = members.grants.iter().find(|g| g.role == role);
     let kept = previous.map(|g| g.scopes.clone()).unwrap_or_default();
     let asked_collections = body
         .get("repoCollections")
@@ -295,7 +317,7 @@ pub async fn put_role(
     let grant = Grant {
         role: role.into(),
         scopes,
-        assignable: listed(&body, "assignable", "role"),
+        assignable,
     };
     let mut granted: Vec<Grant> = members
         .grants
@@ -412,15 +434,7 @@ pub async fn assign_roles(
             "everyone in the group holds member: to put someone out, eject them",
         ));
     }
-    let defined: BTreeSet<String> = members
-        .records("role")?
-        .into_iter()
-        .map(|(k, _)| k)
-        .collect();
-    let undefined: Vec<&String> = roles.iter().filter(|r| !defined.contains(*r)).collect();
-    if !undefined.is_empty() {
-        return Err(invalid(format!("no such roles: {undefined:?}")));
-    }
+    members.defined(&roles)?;
     let assignable = members.assignable(&mine, "role.assign");
     let changed = roles
         .iter()

@@ -78,6 +78,9 @@ Details:
   `at://<authority>/space/<type>/<skey>/<repo>/<collection>/<rkey>`.
 - The record key is a TID from the host's clock. `applyLabel` answers
   the label's `uri` and `cid`.
+- A label's value is 128 bytes at most. A subject's CID must parse as
+  one, and a `rule` cited must be a record's URI in a space, as a rule's
+  is.
 - The host does not check that the subject exists, that a CID matches,
   or that a negation follows a label.
 - Every label and negation is also an event in the queue.
@@ -99,7 +102,8 @@ note. A subject enters the queue with its first report or label, opened.
 if asked. Every event moves a subject to the top. `getSubjectHistory`
 shows one subject with its events. `resolveSubject` acts on a subject
 already in the queue: `resolve` sets it `resolved`, `escalate` sets it
-`escalated`, and `note` keeps a note without changing the status.
+`escalated`, and `note` keeps a note without changing the status. A
+note is 300 characters at most.
 Escalating is only a status, for a group to give its own meaning; no one
 is told.
 

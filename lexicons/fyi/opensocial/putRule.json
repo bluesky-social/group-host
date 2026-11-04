@@ -18,7 +18,8 @@
             },
             "rkey": {
               "type": "string",
-              "format": "record-key"
+              "format": "record-key",
+              "description": "The rule to change. Omitted for a new rule, which the host keys by a TID."
             },
             "title": {
               "type": "string",

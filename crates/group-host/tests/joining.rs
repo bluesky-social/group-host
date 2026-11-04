@@ -267,6 +267,30 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     )
     .await;
     assert_eq!(error(&said), (400, "InvalidRequest"));
+    // Nor with a role the group no longer defines, though the admitter's
+    // grant still names it.
+    let every: Vec<&str> = group_host::rbac::ACTIONS.to_vec();
+    for (method, body) in [
+        (
+            "putRole",
+            json!({"group": did, "role": "ghost", "name": "Ghost", "actions": []}),
+        ),
+        (
+            "putRole",
+            json!({"group": did, "role": "admin", "name": "Admin", "actions": every, "assignable": [{"role": "member"}, {"role": "ghost"}]}),
+        ),
+        ("deleteRole", json!({"group": did, "role": "ghost"})),
+    ] {
+        assert_eq!(call(&h, &alice, method, body).await.0, 200);
+    }
+    let said = call(
+        &h,
+        &alice,
+        "admitMember",
+        json!({"group": did, "did": carol.did, "roles": [{"role": "ghost"}]}),
+    )
+    .await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
     // A message is as long as the lexicon says.
     let frank = authority(&h, false, true).await;
     let long = "x".repeat(301);

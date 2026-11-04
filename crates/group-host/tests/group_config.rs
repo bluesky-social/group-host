@@ -77,10 +77,14 @@ async fn upload(
 async fn an_admin_changes_the_profile() {
     let (h, did, [alice, _, _]) = group().await;
     let created = profile(&h, &did)["createdAt"].clone();
-    let (status, image) = upload(&h, &alice, &did, b"face".to_vec(), "image/png").await;
+    let (status, image) = upload(&h, &alice, &did, b"face".to_vec(), "image/webp").await;
     assert_eq!(status, 200, "{image}");
     let avatar = image["blob"].clone();
-    assert_eq!(avatar["mimeType"], "image/png");
+    assert_eq!(avatar["mimeType"], "image/webp");
+    // Its type and size are the upload's, whatever the caller says of them.
+    let mut said = avatar.clone();
+    said["mimeType"] = json!("image/png");
+    said["size"] = json!(999);
     let (status, put) = call(
         &h,
         &alice,
@@ -92,9 +96,9 @@ async fn an_admin_changes_the_profile() {
             "url": "https://riders.example",
             "location": {"$type": "community.lexicon.location.address", "locality": "Ljubljana", "country": "SI"},
             "online": true,
-            "topics": [{"topic": "bikes"}, {"topic": " bikes "}, {"topic": ""}, {"topic": "x".repeat(80)}],
+            "topics": [{"topic": "bikes"}, {"topic": " bikes "}, {"topic": ""}, {"topic": "x".repeat(80)}, {"topic": format!("{}y", "x".repeat(70))}],
             "languages": [{"language": "sl"}, {"language": "en-GB"}, {"language": "not a tag"}],
-            "avatar": avatar,
+            "avatar": said,
         }),
     )
     .await;
@@ -117,7 +121,7 @@ async fn an_admin_changes_the_profile() {
         p["languages"],
         json!([{"language": "sl"}, {"language": "en-GB"}])
     );
-    assert_eq!(p["avatar"]["ref"], avatar["ref"]);
+    assert_eq!(p["avatar"], avatar);
     assert_eq!(p["createdAt"], created);
     assert_eq!(put["cid"].as_str().map(str::len), Some(59));
 
@@ -152,7 +156,14 @@ async fn an_admin_changes_the_profile() {
 #[tokio::test]
 async fn refuses_a_profile_it_should_not_keep() {
     let (h, did, [alice, bob, carol]) = group().await;
+    let words = h.host.upload_blob(&did, b"words", "text/plain").unwrap();
     for (who, body, refused) in [
+        // A blob of the group's that is no image.
+        (
+            &alice,
+            json!({"group": did, "displayName": "Riders", "avatar": words}),
+            (400, "InvalidRequest"),
+        ),
         (
             &bob,
             json!({"group": did, "displayName": "Mine"}),
@@ -193,6 +204,17 @@ async fn refuses_a_profile_it_should_not_keep() {
             json!({"group": did, "displayName": "Riders", "avatar": {"ref": "x"}}),
             (400, "InvalidRequest"),
         ),
+        // Longer than the lexicon has them.
+        (
+            &alice,
+            json!({"group": did, "displayName": "x".repeat(65)}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "displayName": "Riders", "description": "x".repeat(301)}),
+            (400, "InvalidRequest"),
+        ),
         // An image that is not the group's.
         (
             &alice,
@@ -211,12 +233,24 @@ async fn refuses_a_profile_it_should_not_keep() {
     let said = post(&h, &lxm, &json!({"group": did, "displayName": "X"}), &[]).await;
     assert_eq!(said.0, 401);
 
-    for (who, bytes, refused) in [
-        (&bob, b"face".to_vec(), (403, "Forbidden")),
-        (&alice, vec![], (400, "InvalidRequest")),
-        (&alice, vec![0; 1_000_001], (400, "InvalidRequest")),
+    for (who, bytes, mime, refused) in [
+        (&bob, b"face".to_vec(), "image/png", (403, "Forbidden")),
+        (&alice, vec![], "image/png", (400, "InvalidRequest")),
+        (
+            &alice,
+            vec![0; 1_000_001],
+            "image/png",
+            (400, "InvalidRequest"),
+        ),
+        // No image a page is given.
+        (
+            &alice,
+            b"page".to_vec(),
+            "application/pdf",
+            (400, "InvalidRequest"),
+        ),
     ] {
-        let said = upload(&h, who, &did, bytes, "image/png").await;
+        let said = upload(&h, who, &did, bytes, mime).await;
         assert_eq!((said.0, said.1["error"].as_str().unwrap()), refused);
     }
     let lxm = format!("{NS}.uploadImage");
@@ -291,15 +325,26 @@ async fn an_admin_keeps_the_rules() {
     )
     .await;
     assert_eq!(rule(&first_key).unwrap()["order"], 5);
-    // Or put where it is named.
-    call(
+    // A new one goes after it.
+    let (_, third) = call(
+        &h,
+        &alice,
+        "putRule",
+        json!({"group": did, "title": "Chosen"}),
+    )
+    .await;
+    let third_key = third["uri"].as_str().unwrap().rsplit('/').next().unwrap();
+    assert_eq!(rule(third_key).unwrap()["order"], 6);
+    // A key no rule has makes none: a new rule's key is the host's.
+    let said = call(
         &h,
         &alice,
         "putRule",
         json!({"group": did, "rkey": "chosen", "title": "Chosen"}),
     )
     .await;
-    assert_eq!(rule("chosen").unwrap()["order"], 6);
+    assert_eq!(said.0, 400, "{}", said.1);
+    assert_eq!(rule("chosen"), None);
 
     let (status, _) = call(
         &h,
@@ -347,6 +392,12 @@ async fn an_admin_keeps_the_rules() {
             json!({"group": did, "rkey": "a/b", "title": "Odd"}),
         ),
         ("putRule", json!({"title": "Odd"})),
+        // Longer than the lexicon has them.
+        ("putRule", json!({"group": did, "title": "x".repeat(101)})),
+        (
+            "putRule",
+            json!({"group": did, "title": "Odd", "text": "x".repeat(2001)}),
+        ),
         ("deleteRule", json!({"group": did})),
         ("deleteRule", json!({"rkey": "x"})),
     ] {

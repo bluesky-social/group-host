@@ -8,7 +8,7 @@
 //! of the index.
 
 use crate::Host;
-use crate::api::invalid;
+use crate::api::{at_most, invalid};
 use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
@@ -111,9 +111,15 @@ pub async fn create_space(
     if !syntax::is_nsid(kind) {
         return Err(invalid("spaceType is an NSID"));
     }
-    let readers =
-        audience(&body, "readableBy")?.ok_or_else(|| invalid("readableBy is required"))?;
+    let readers = audience(&body, "readableBy")?.unwrap_or_default();
+    if readers.is_empty() {
+        return Err(invalid("readableBy names who reads the space"));
+    }
     let writers = audience(&body, "writableBy")?;
+    let name = body["name"].as_str();
+    if let Some(name) = name {
+        at_most("name", name, 640, 64)?;
+    }
     let skey = match body["skey"].as_str() {
         Some(skey) => skey.to_string(),
         None => host.clock.next(),
@@ -135,7 +141,7 @@ pub async fn create_space(
     };
     host.space_write(&group, &uri, &[access_write]).await?;
     let mut entry = json!({"$type": format!("{NS}.space"), "space": uri, "createdAt": at});
-    if let Some(name) = body["name"].as_str() {
+    if let Some(name) = name {
         entry["name"] = json!(name);
     }
     let indexed = Write::Create {
@@ -165,6 +171,10 @@ pub async fn update_space(
         return Err(invalid("readableBy names who reads the space"));
     }
     let writers = audience(&body, "writableBy")?;
+    let name = body["name"].as_str();
+    if let Some(name) = name {
+        at_most("name", name, 640, 64)?;
+    }
     let names = |list: &[Value]| -> Vec<String> {
         list.iter()
             .filter_map(|r| r["role"].as_str().map(String::from))
@@ -206,7 +216,7 @@ pub async fn update_space(
         let declared = host.declare(&group, names(readers).iter().any(|r| r == PUBLIC));
         declared.await?;
     }
-    if let Some(name) = body["name"].as_str() {
+    if let Some(name) = name {
         let (rkey, mut entry) = entry_of(&host, &group, &space)?;
         entry["name"] = json!(name);
         let put = put_in(&host, &group, &members, &space_collection, &rkey, entry);

@@ -6,7 +6,7 @@ mod common;
 use common::groups::*;
 use common::spaces::*;
 use common::{Running, start};
-use group_host::group::members_space;
+use group_host::group::{members_space, meta_space};
 use group_host::moderation::space_of;
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
@@ -155,11 +155,12 @@ async fn takes_a_report_from_anyone() {
 async fn writes_a_label_beside_what_it_labels() {
     let h = start(&[], false).await;
     let (did, space, record, [alice, bob, carol]) = group(&h).await;
+    let rule = format!("{}/{did}/{NS}.rule/3mzjdd6rnfise", meta_space(&did));
     let (status, made) = call(
         &h,
         &alice,
         "applyLabel",
-        json!({"group": did, "subject": record, "val": "spam", "rule": "at://x/y/z"}),
+        json!({"group": did, "subject": record, "val": "spam", "rule": rule}),
     )
     .await;
     assert_eq!(status, 200, "{made}");
@@ -177,7 +178,7 @@ async fn writes_a_label_beside_what_it_labels() {
     assert_eq!(label["subject"]["uri"], record["uri"]);
     assert_eq!(label["subject"]["$type"], "com.atproto.repo.strongRef");
     assert_eq!(label["val"], "spam");
-    assert_eq!(label["rule"], "at://x/y/z");
+    assert_eq!(label["rule"], rule);
     // A label opens a subject, though nobody reported it.
     let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
     assert_eq!(queue["subjects"][0]["reportCount"], 0);
@@ -230,8 +231,9 @@ async fn writes_a_label_beside_what_it_labels() {
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
+    let cid = record["cid"].clone();
     let theirs =
-        json!({"uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": "x"});
+        json!({"uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": cid});
     for (body, refused) in [
         (
             json!({"group": did, "subject": {"did": "not a did"}, "val": "x"}),
@@ -242,7 +244,26 @@ async fn writes_a_label_beside_what_it_labels() {
             (400, "InvalidRequest"),
         ),
         (
-            json!({"group": did, "subject": {"uri": format!("at://{did}/a.b.c/x"), "cid": "x"}, "val": "x"}),
+            json!({"group": did, "subject": {"uri": format!("at://{did}/a.b.c/x"), "cid": cid}, "val": "x"}),
+            (400, "InvalidRequest"),
+        ),
+        // A CID that is none.
+        (
+            json!({"group": did, "subject": {"uri": record["uri"], "cid": "x"}, "val": "x"}),
+            (400, "InvalidRequest"),
+        ),
+        // A value longer than the lexicon has it, in characters or bytes.
+        (
+            json!({"group": did, "subject": record, "val": "x".repeat(129)}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            json!({"group": did, "subject": record, "val": "\u{e9}".repeat(100)}),
+            (400, "InvalidRequest"),
+        ),
+        // A rule that is no record's URI.
+        (
+            json!({"group": did, "subject": record, "val": "x", "rule": "at://x/y/z"}),
             (400, "InvalidRequest"),
         ),
         (
@@ -388,8 +409,23 @@ async fn resolves_escalates_and_notes() {
     assert_eq!(history["events"][0]["reason"], "ads");
     assert_eq!(history["events"][2]["note"], "Asked them");
 
+    // No action is no action it knows.
+    let said = call(
+        &h,
+        &alice,
+        "resolveSubject",
+        json!({"group": did, "subject": uri}),
+    )
+    .await;
+    assert_eq!(said.1["message"], "action is required");
+    let long = "x".repeat(301);
     for (who, body, refused) in [
         (&alice, resolve("shrug", None), (400, "InvalidRequest")),
+        (
+            &alice,
+            resolve("note", Some(&long)),
+            (400, "InvalidRequest"),
+        ),
         (
             &alice,
             json!({"group": did, "subject": "at://nothing", "action": "resolve"}),

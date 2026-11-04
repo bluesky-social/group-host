@@ -12,7 +12,7 @@
 //!   group's spaces here.
 
 use crate::Host;
-use crate::api::{Params, invalid, page, param};
+use crate::api::{Params, at_most, invalid, page, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::NS;
@@ -21,7 +21,7 @@ use crate::store::Store;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
-use atproto::syntax;
+use atproto::{Cid, syntax};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -208,6 +208,9 @@ fn subject_of(asked: &Value) -> Result<(Value, String), XrpcError> {
             "a subject is an account's did, or a record's uri and cid",
         ));
     };
+    if Cid::parse(cid).is_err() {
+        return Err(invalid("subject.cid is not a CID"));
+    }
     Ok((
         json!({"$type": "com.atproto.repo.strongRef", "uri": uri, "cid": cid}),
         uri.to_string(),
@@ -239,6 +242,12 @@ impl Host {
             .ok_or_else(|| invalid("group is required"))?;
         let val = body["val"].as_str().filter(|v| !v.is_empty());
         let val = val.ok_or_else(|| invalid("val is required"))?;
+        at_most("val", val, 128, 128)?;
+        // A rule is cited by its URI, a record's in the group's meta.
+        let rule = body["rule"].as_str();
+        if rule.is_some_and(|r| space_of(r).is_none()) {
+            return Err(invalid("rule is the URI of a rule"));
+        }
         let action = if TAKEDOWN_VALS.contains(&val) {
             "takedown"
         } else {
@@ -265,7 +274,7 @@ impl Host {
         if neg {
             value["neg"] = json!(true);
         }
-        if let Some(rule) = body["rule"].as_str() {
+        if let Some(rule) = rule {
             value["rule"] = json!(rule);
         }
         let rkey = self.clock.next();
@@ -417,7 +426,13 @@ pub async fn resolve_subject(
     let subject = body["subject"]
         .as_str()
         .ok_or_else(|| invalid("subject is required"))?;
-    let action = body["action"].as_str().unwrap_or_default();
+    let action = body["action"]
+        .as_str()
+        .ok_or_else(|| invalid("action is required"))?;
+    let note = body["note"].as_str();
+    if let Some(note) = note {
+        at_most("note", note, 3000, 300)?;
+    }
     let status = match action {
         "resolve" => Some("resolved"),
         "escalate" => Some("escalated"),
@@ -446,7 +461,7 @@ pub async fn resolve_subject(
     let event = Event {
         kind: action.into(),
         actor: Some(me),
-        note: body["note"].as_str().map(String::from),
+        note: note.map(String::from),
         created_at: now,
         ..Event::default()
     };

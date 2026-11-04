@@ -6,6 +6,7 @@
 //! access record, against the reader's roles.
 
 use crate::Host;
+use crate::api::at_most;
 use crate::rbac::{ACTIONS, Grant, NS, listed};
 use crate::repo::{Write, invalid};
 use crate::store::Record;
@@ -107,6 +108,10 @@ struct Shape {
 /// What `new` asks of a group's first day, checked.
 fn shape(new: &NewGroup) -> Result<Shape, XrpcError> {
     let join = join_policy(new.join_policy.as_deref())?;
+    at_most("displayName", &new.display_name, 640, 64)?;
+    if let Some(d) = &new.description {
+        at_most("description", d, 3000, 300)?;
+    }
     let readers = new
         .meta_readable_by
         .clone()

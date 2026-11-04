@@ -30,7 +30,8 @@
             },
             "expiresAt": {
               "type": "string",
-              "format": "datetime"
+              "format": "datetime",
+              "description": "When the invite lapses, a time still to come."
             }
           }
         }

@@ -47,22 +47,33 @@ fn the_environment_names_the_host() {
         ("SERVICE_DID", "did:web:other.example"),
         ("DID_WEB_SCHEME", "http"),
         ("GROUP_FOUNDERS", "did:plc:a, did:plc:b,"),
-        ("HANDLE_RESOLVERS", "https://resolver.example"),
+        ("HANDLE_RESOLVERS", "https://resolver.example/, /"),
+        ("PDS_CRAWLERS", "https://relay.example/"),
     ])
     .unwrap();
+    // A service's URL is taken without its trailing slash.
     assert_eq!(c.handle_resolvers, ["https://resolver.example"]);
+    assert_eq!(c.crawlers, ["https://relay.example"]);
     assert_eq!(c.group_founders, ["did:plc:a", "did:plc:b"]);
     assert_eq!(c.service_did, "did:web:other.example");
     assert_eq!(c.did_web_scheme, "http");
     let c = config(&[
         ("CONSOLE_URL", "https://console.example.com/"),
-        ("PROVISIONING_CLIENTS", "https://app.example/client.json, *"),
+        (
+            "PROVISIONING_CLIENTS",
+            "https://app.example/client.json, https://app.example/, *",
+        ),
     ])
     .unwrap();
     assert_eq!(c.console_url, "https://console.example.com");
+    // A client id is as written: one may end in a slash.
     assert_eq!(
         c.provisioning_clients,
-        ["https://app.example/client.json", "*"]
+        [
+            "https://app.example/client.json",
+            "https://app.example/",
+            "*"
+        ]
     );
 }
 

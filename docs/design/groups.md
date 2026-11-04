@@ -52,6 +52,11 @@ Details:
 - The join policy is `open`, `approval` or `invite`; `approval` when not
   given.
 - A membership's record key is the member's DID.
+- Text is held to its lexicon's length, here and in every method that
+  writes it, and refused with `InvalidRequest` past it: a group's display
+  name 64 characters, its description 300. The host counts characters,
+  so a text of combined characters may be refused a little short of the
+  lexicon's grapheme limit.
 
 ## Its address
 
@@ -156,7 +161,16 @@ its URI, which no longer resolves ([moderation](moderation.md)).
 
 Details:
 
-- `uploadImage` takes at most 1,000,000 bytes.
+- `uploadImage` takes at most 1,000,000 bytes, of a PNG, JPEG, WebP, GIF
+  or AVIF image as its `Content-Type` says, and refuses any other type.
+- `updateProfile` takes a picture's type and size from the upload the
+  host kept, not from what the caller writes, and refuses a blob that is
+  not one of the group's images.
+- A topic is cut to 64 characters, and topics the cut makes the same are
+  kept once.
+- A new rule's record key is a TID from the host's clock. `putRule` with
+  an `rkey` changes the rule of that key, and refuses a key no rule has.
+- A rule's title is 100 characters at most, its text 2,000.
 - The console's settings set pictures through `uploadImage` then
   `updateProfile`, and visibility by setting `meta`'s readers to `public`
   or `member` through `updateSpace`.
@@ -167,7 +181,8 @@ A group may want more places, such as one only its admins read. Each
 further space has an access record and an index entry in `members` that
 apps read to find it. `createSpace` (for `space.create`) makes one from a
 type, its readers, and optionally its writers, key, name and credential
-scopes. `updateSpace` (for `space.configure`) changes those.
+scopes. `updateSpace` (for `space.configure`) changes those. Both refuse
+a `readableBy` that names nobody, and a name over 64 characters.
 `deleteSpace` (for `space.delete`) removes the index entry, tells the
 space's syncers, and deletes the space and the group's repo in it. What
 members wrote there stays theirs at their PDSes.

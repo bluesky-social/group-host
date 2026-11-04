@@ -116,7 +116,7 @@ async fn an_admin_makes_a_space() {
         &h,
         &alice,
         "createSpace",
-        json!({"group": did, "spaceType": CALENDAR, "readableBy": [], "writableBy": []}),
+        json!({"group": did, "spaceType": CALENDAR, "readableBy": [{"role": "member"}], "writableBy": []}),
     )
     .await;
     let other = other["uri"].as_str().unwrap();
@@ -132,7 +132,7 @@ async fn an_admin_makes_a_space() {
         ),
         (
             &alice,
-            json!({"group": did, "spaceType": CALENDAR, "skey": "rides", "readableBy": []}),
+            json!({"group": did, "spaceType": CALENDAR, "skey": "rides", "readableBy": [{"role": "member"}]}),
             (400, "SpaceAlreadyExists"),
         ),
         (
@@ -153,6 +153,18 @@ async fn an_admin_makes_a_space() {
         (
             &alice,
             json!({"spaceType": CALENDAR, "readableBy": []}),
+            (400, "InvalidRequest"),
+        ),
+        // Nobody to read it, as no change takes either.
+        (
+            &alice,
+            json!({"group": did, "spaceType": CALENDAR, "readableBy": []}),
+            (400, "InvalidRequest"),
+        ),
+        // A name longer than the lexicon has it.
+        (
+            &alice,
+            json!({"group": did, "spaceType": CALENDAR, "readableBy": [{"role": "member"}], "name": "x".repeat(65)}),
             (400, "InvalidRequest"),
         ),
     ] {
@@ -347,6 +359,11 @@ async fn an_admin_changes_a_space() {
         (
             &alice,
             json!({"group": did, "space": uri, "readableBy": []}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "space": uri, "name": "x".repeat(65)}),
             (400, "InvalidRequest"),
         ),
     ] {

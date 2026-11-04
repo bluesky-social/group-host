@@ -64,6 +64,10 @@ Details:
 
 - `putRole` and `deleteRole` need `group.configure`; `deleteRole`
   refuses a role someone holds.
+- `putRole` keeps a role's `default`, `bot`, `assignable` and
+  `repoCollections` as they were when left out. Each role in `assignable`
+  must be one the group defines, or the role itself.
+- A role's name is 64 characters at most, its description 300.
 - `assignRoles` (needs `role.assign`) sets a member's whole set of roles,
   each defined and each one the caller may assign.
 
@@ -78,7 +82,8 @@ message, until someone holding `admit` calls `admitMember` or
 group has already said yes.
 
 A newcomer gets the default roles: those marked `default`, or `member` if
-none is. An admitter may name other roles, but only ones they may assign.
+none is. An admitter may name other roles, but only ones the group
+defines and they may assign.
 
 The asker is no member, and the members space is for members, so requests
 are not records: the host keeps them in its database, one per group and
@@ -88,6 +93,7 @@ the asker may ask again.
 Details:
 
 - Asking again while a request waits keeps the first message and time.
+- A request's message is 300 characters at most.
 - Getting in by any route ends a waiting request; `admitMember` then
   answers `AlreadyMember`.
 - The asker sees their request with `getJoinRequest` and withdraws it
@@ -116,6 +122,12 @@ admits, and inviting again replaces it. The invitee may refuse with
 `invite` list invites with `listInvites` and take one back with
 `revokeInvite`. A site that cannot read someone's inbox shows them their
 invites through `getActorInvites`.
+
+Details:
+
+- `expiresAt` is an atproto datetime, in UTC or at an offset from it, and
+  must be still to come.
+- An invite's message is 300 characters at most.
 
 ## Leaving and being put out
 

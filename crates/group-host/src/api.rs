@@ -31,6 +31,24 @@ pub(crate) fn invalid(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, "InvalidRequest", message)
 }
 
+/// Refuses `text`, the `field` a caller gave, longer than its lexicon
+/// lets it be: `bytes` bytes and `graphemes` characters at most. A
+/// character is counted as a grapheme, so a text of combined characters
+/// may be refused a little short of the lexicon's limit, never past it.
+pub(crate) fn at_most(
+    field: &str,
+    text: &str,
+    bytes: usize,
+    graphemes: usize,
+) -> Result<(), XrpcError> {
+    if text.len() > bytes || text.chars().count() > graphemes {
+        return Err(invalid(format!(
+            "{field} is {graphemes} characters and {bytes} bytes at most"
+        )));
+    }
+    Ok(())
+}
+
 /// The parameter `name`, which the method needs.
 pub(crate) fn param<'a>(params: &'a Params, name: &str) -> Result<&'a str, XrpcError> {
     params

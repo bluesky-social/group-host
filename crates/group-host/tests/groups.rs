@@ -460,6 +460,17 @@ async fn refuses_a_group_it_should_not_start() {
             me.to_vec(),
             (400, "InvalidRequest"),
         ),
+        // Longer than the lexicon has them.
+        (
+            body(json!({"displayName": "x".repeat(65)})),
+            me.to_vec(),
+            (400, "InvalidRequest"),
+        ),
+        (
+            body(json!({"description": "x".repeat(301)})),
+            me.to_vec(),
+            (400, "InvalidRequest"),
+        ),
     ] {
         let said = post(&h, &lxm, &body, &headers).await;
         assert_eq!(

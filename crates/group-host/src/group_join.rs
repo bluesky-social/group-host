@@ -9,7 +9,7 @@
 //! ask again and the group need not say.
 
 use crate::Host;
-use crate::api::{Params, invalid, page, param};
+use crate::api::{Params, at_most, invalid, page, param};
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
 use crate::group_members::{Members, acting};
@@ -82,9 +82,8 @@ pub async fn request_join(
         Some("invite") => Err(bad("InviteRequired", "this group joins by invite")),
         _ => {
             let message = body["message"].as_str();
-            // As the lexicon has it: 300 graphemes, 3000 bytes, at most.
-            if message.is_some_and(|m| m.len() > 3000 || m.chars().count() > 300) {
-                return Err(invalid("a message is 300 characters at most"));
+            if let Some(m) = message {
+                at_most("message", m, 3000, 300)?;
             }
             host.store
                 .ask(group, &me, message, now_millis())
@@ -173,6 +172,7 @@ pub async fn admit_member(
     if roles.is_empty() {
         return Err(invalid("roles names the roles to give"));
     }
+    members.defined(&roles)?;
     // The roles an admitter may give are those their `admit` grants may.
     let assignable = members.assignable(&mine, "admit");
     let blocked: Vec<&String> = roles.iter().filter(|r| !assignable.contains(*r)).collect();

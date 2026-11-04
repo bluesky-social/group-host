@@ -133,10 +133,21 @@ async fn an_admin_defines_roles() {
         (role["default"].clone(), role["bot"].clone()),
         (json!(true), json!(true))
     );
-    // Named, its collections are as named.
+    // Whom it may give to stays as it was when not named.
+    assert_eq!(g.assignable, ["member"]);
+    // Named, its collections are as named; whether its people are bots
+    // stays.
     call(&h, &alice, "putRole", json!({"group": did, "role": "moderator", "name": "Mod", "actions": [], "repoCollections": []})).await;
     let g = grant_of(&h, &did, "moderator").unwrap();
     assert!(!g.scopes.iter().any(|s| s.starts_with("repo:")));
+    assert_eq!(record(&h, &did, "role", "moderator").unwrap()["bot"], true);
+    // A role may give itself, though it is not yet defined.
+    let said = call(&h, &alice, "putRole", json!({"group": did, "role": "helper", "name": "Helper", "actions": ["role.assign"], "assignable": [{"role": "helper"}, {"role": "member"}]})).await;
+    assert_eq!(said.0, 200, "{}", said.1);
+    assert_eq!(
+        grant_of(&h, &did, "helper").unwrap().assignable,
+        ["helper", "member"]
+    );
 
     for (who, body, refused) in [
         (
@@ -177,6 +188,23 @@ async fn an_admin_defines_roles() {
         (
             &alice,
             json!({"role": "x", "name": "X", "actions": []}),
+            (400, "InvalidRequest"),
+        ),
+        // Longer than the lexicon has them.
+        (
+            &alice,
+            json!({"group": did, "role": "x", "name": "x".repeat(65), "actions": []}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "role": "x", "name": "X", "description": "x".repeat(301), "actions": []}),
+            (400, "InvalidRequest"),
+        ),
+        // Able to give a role the group does not define.
+        (
+            &alice,
+            json!({"group": did, "role": "x", "name": "X", "actions": [], "assignable": [{"role": "ghost"}]}),
             (400, "InvalidRequest"),
         ),
     ] {

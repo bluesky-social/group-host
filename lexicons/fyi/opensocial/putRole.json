@@ -38,7 +38,7 @@
             },
             "bot": {
               "type": "boolean",
-              "description": "Whether people with this role are bots: accounts that act on their own, not a person. Giving someone a bot role is how they are marked as one."
+              "description": "Whether people with this role are bots: accounts that act on their own, not a person. Giving someone a bot role is how they are marked as one. Omitted keeps the role's current value."
             },
             "default": {
               "type": "boolean",
@@ -57,7 +57,8 @@
               "items": {
                 "type": "ref",
                 "ref": "fyi.opensocial.defs#roleRef"
-              }
+              },
+              "description": "The roles holders may give or take, each one the group defines or this one. Omitted keeps the role's current value."
             },
             "repoCollections": {
               "type": "array",
