@@ -40,7 +40,17 @@
           "type": "object",
           "properties": {}
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "JoinRequestNotFound",
+          "description": "No request from that account is waiting."
+        },
+        {
+          "name": "NotAssignable",
+          "description": "A role asked for is not the caller's to give."
+        }
+      ]
     }
   }
 }

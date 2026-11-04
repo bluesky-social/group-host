@@ -33,6 +33,28 @@ configure it keeps that (`LastConfigurer`), and stays.
 - `leaveGroup` takes the caller out. The last member able to configure
   the group may not leave (`LastConfigurer`).
 
+## Joining
+
+How people get in is the group's profile's `joinPolicy`:
+
+- `open`: `requestJoin` admits them at once, with the roles the group
+  marks default (`member`, unless it marks others).
+- `approval`: `requestJoin` keeps their request, with what they say, for
+  one holding `admit`. `listJoinRequests` lists those waiting, newest
+  first; `getGroup` shows them to whoever may admit, and to the asker
+  their own. `admitMember` admits one, with the defaults or the roles
+  named, each one the admitter may give (admitting gives roles, so it
+  is bound as giving them is); `denyJoinRequest` turns one down;
+  `cancelJoinRequest` withdraws one's own; `getJoinRequest` is one's
+  own, while it waits.
+- `invite`: not without an invite (`InviteRequired`), which comes with
+  invites.
+
+A request waits in the host, not in the group's records: who asks is no
+member, and the members space is for members. Decided, it goes: a
+request turned down looks the same as one never made, so its asker may
+ask again and the group need not say.
+
 ## Out is out
 
 A member put out, or leaving, reads the group's spaces no more:

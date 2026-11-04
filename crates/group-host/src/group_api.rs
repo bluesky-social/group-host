@@ -232,6 +232,11 @@ pub async fn get_group(
         if member {
             viewer["accepted"] = json!(accepted(&host, &members, me).map_err(XrpcError::internal)?);
         }
+        // Their own request, while it waits.
+        let asked = host.store.asked(group, me).map_err(XrpcError::internal)?;
+        if let Some(request) = asked.filter(|_| !member) {
+            viewer["request"] = crate::group_join::request_view(&request);
+        }
         view["viewer"] = viewer;
     }
     let mut out = json!({ "group": view });
@@ -297,6 +302,21 @@ pub async fn get_group(
         spaces.push(space);
     }
     out["spaces"] = json!(spaces);
+    // The requests waiting, for one who may admit them.
+    if actions.contains("admit") {
+        let waiting = host
+            .store
+            .asking(group, None, 100)
+            .map_err(XrpcError::internal)?;
+        out["joinRequests"] = waiting
+            .iter()
+            .map(|r| {
+                let mut view = crate::group_join::request_view(r);
+                view["actor"] = json!({"did": r.did});
+                view
+            })
+            .collect();
+    }
     Ok(Json(out))
 }
 

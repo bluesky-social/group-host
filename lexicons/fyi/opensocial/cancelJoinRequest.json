@@ -27,7 +27,13 @@
           "type": "object",
           "properties": {}
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "JoinRequestNotFound",
+          "description": "No request from that account is waiting."
+        }
+      ]
     }
   }
 }

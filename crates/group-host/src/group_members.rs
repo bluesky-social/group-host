@@ -40,15 +40,15 @@ fn forbidden(message: impl Into<String>) -> XrpcError {
 }
 
 /// A group's members space, its grants, and its records there.
-struct Members<'a> {
-    host: &'a Host,
-    group: String,
-    space: String,
-    grants: Vec<Grant>,
+pub(crate) struct Members<'a> {
+    pub host: &'a Host,
+    pub group: String,
+    pub space: String,
+    pub grants: Vec<Grant>,
 }
 
 impl<'a> Members<'a> {
-    fn of(host: &'a Host, group: &str) -> Result<Members<'a>, XrpcError> {
+    pub(crate) fn of(host: &'a Host, group: &str) -> Result<Members<'a>, XrpcError> {
         let space = members_space(group);
         let permissions = host
             .group_record(group, &space, &format!("{NS}.permissions"), "self")
@@ -61,14 +61,14 @@ impl<'a> Members<'a> {
         })
     }
 
-    fn records(&self, collection: &str) -> Result<Vec<(String, Value)>, XrpcError> {
+    pub(crate) fn records(&self, collection: &str) -> Result<Vec<(String, Value)>, XrpcError> {
         self.host
             .group_records(&self.group, &self.space, &format!("{NS}.{collection}"))
             .map_err(XrpcError::internal)
     }
 
     /// `did`'s roles, and whether they are a member at all.
-    fn membership(&self, did: &str) -> Result<Option<Vec<String>>, XrpcError> {
+    pub(crate) fn membership(&self, did: &str) -> Result<Option<Vec<String>>, XrpcError> {
         let record = self
             .host
             .group_record(
@@ -81,17 +81,58 @@ impl<'a> Members<'a> {
         Ok(record.map(|m| listed(&m, "roles", "role")))
     }
 
-    fn can(&self, roles: &[String], action: &str) -> bool {
+    pub(crate) fn can(&self, roles: &[String], action: &str) -> bool {
         actions_for(&self.grants, roles).contains(action)
     }
 
     /// The roles holders of `roles` may give or take for `action`.
-    fn assignable(&self, roles: &[String], action: &str) -> BTreeSet<String> {
+    pub(crate) fn assignable(&self, roles: &[String], action: &str) -> BTreeSet<String> {
         self.grants
             .iter()
             .filter(|g| roles.contains(&g.role) && actions_of(&g.scopes).contains(action))
             .flat_map(|g| g.assignable.iter().cloned())
             .collect()
+    }
+
+    /// The roles every new member gets: those the group marks so, or
+    /// `member` in a group that marks none.
+    pub(crate) fn default_roles(&self) -> Result<Vec<String>, XrpcError> {
+        let marked: Vec<String> = self
+            .records("role")?
+            .into_iter()
+            .filter(|(_, r)| r["default"] == true)
+            .map(|(k, _)| k)
+            .collect();
+        Ok(if marked.is_empty() {
+            vec!["member".into()]
+        } else {
+            marked
+        })
+    }
+
+    /// Writes `did`'s membership, holding `roles`.
+    pub(crate) async fn put_membership(
+        &self,
+        did: &str,
+        roles: &[String],
+    ) -> Result<(), XrpcError> {
+        let membership = json!({
+            "$type": format!("{NS}.membership"),
+            "member": did,
+            "roles": objects("role", roles),
+            "createdAt": iso(now_millis()),
+        });
+        let (collection, key) = (format!("{NS}.membership"), did_rkey(did));
+        let put = put_in(
+            self.host,
+            &self.group,
+            &self.space,
+            &collection,
+            &key,
+            membership,
+        );
+        let _written = put.await?;
+        Ok(())
     }
 
     /// Refuses a change that would leave nobody able to configure the
@@ -115,7 +156,7 @@ impl<'a> Members<'a> {
     }
 
     /// The roles whose grant lets their holders configure the group.
-    fn configuring(&self) -> BTreeSet<String> {
+    pub(crate) fn configuring(&self) -> BTreeSet<String> {
         self.grants
             .iter()
             .filter(|g| actions_of(&g.scopes).contains("group.configure"))
@@ -123,7 +164,7 @@ impl<'a> Members<'a> {
             .collect()
     }
 
-    fn permissions(&self, grants: &[Grant]) -> Value {
+    pub(crate) fn permissions(&self, grants: &[Grant]) -> Value {
         let grants: Vec<Value> = grants.iter().map(Grant::to_json).collect();
         json!({"$type": format!("{NS}.permissions"), "grants": grants, "createdAt": iso(now_millis())})
     }
@@ -131,7 +172,7 @@ impl<'a> Members<'a> {
 
 /// The group a body names and its members space, once the caller of
 /// `lxm` may do `action` in it; and the caller's roles.
-async fn acting<'a>(
+pub(crate) async fn acting<'a>(
     host: &'a Host,
     headers: &HeaderMap,
     body: &Value,
@@ -384,24 +425,7 @@ pub async fn assign_roles(
         ));
     }
     members.keeps_a_configurer(member, &roles)?;
-    let membership = json!({
-        "$type": format!("{NS}.membership"),
-        "member": member,
-        "roles": objects("role", &roles),
-        "createdAt": iso(now_millis()),
-    });
-    let space = members.space.clone();
-    let collection = format!("{NS}.membership");
-    let member_key = did_rkey(member);
-    let put = put_in(
-        &host,
-        &members.group,
-        &space,
-        &collection,
-        &member_key,
-        membership,
-    );
-    let _written = put.await?;
+    members.put_membership(member, &roles).await?;
     Ok(Json(json!({})))
 }
 

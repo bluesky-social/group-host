@@ -202,6 +202,16 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX issued_credential_to ON issued_credential (did);
 ",
+    "
+    CREATE TABLE join_request (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        grp TEXT NOT NULL REFERENCES account (did),
+        did TEXT NOT NULL,
+        message TEXT,
+        created_at INTEGER NOT NULL,
+        UNIQUE (grp, did)
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -303,12 +313,18 @@ const FORGET_ISSUED: &str = "DELETE FROM issued_credential WHERE expires_at <= ?
 const ISSUED_TO: &str = "SELECT space, jti, expires_at FROM issued_credential WHERE did = ?1 AND expires_at > ?2 AND space IN (SELECT uri FROM space WHERE authority = ?3) ORDER BY space";
 const UNINDEX_WRITER: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2";
 const UNINDEX_STATE: &str = "DELETE FROM index_repo WHERE space = ?1 AND did = ?2";
+const ASK: &str = "INSERT INTO join_request (grp, did, message, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (grp, did) DO NOTHING";
+const ASKED: &str =
+    "SELECT seq, did, message, created_at FROM join_request WHERE grp = ?1 AND did = ?2";
+const ASKING: &str = "SELECT seq, did, message, created_at FROM join_request WHERE grp = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
+const DECIDE: &str = "DELETE FROM join_request WHERE grp = ?1 AND did = ?2";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
+    "DELETE FROM join_request WHERE grp = ?1",
     "DELETE FROM issued_credential WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM index_record WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM index_repo WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
@@ -492,6 +508,25 @@ fn indexed(row: &rusqlite::Row) -> rusqlite::Result<Indexed> {
         cid: cid(row.get(3)?),
         value: row.get(4)?,
         indexed_at: row.get(5)?,
+    })
+}
+
+/// A request to join a group, while it waits: in order, who asks, what
+/// they said, and when.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinRequest {
+    pub seq: i64,
+    pub did: String,
+    pub message: Option<String>,
+    pub created_at: i64,
+}
+
+fn join_request(row: &rusqlite::Row) -> rusqlite::Result<JoinRequest> {
+    Ok(JoinRequest {
+        seq: row.get(0)?,
+        did: row.get(1)?,
+        message: row.get(2)?,
+        created_at: row.get(3)?,
     })
 }
 
@@ -1245,6 +1280,36 @@ impl Store {
         gone?;
         tx.commit()?;
         Ok(())
+    }
+
+    /// Keeps `did`'s request to join `group`, unless one waits already.
+    pub fn ask(&self, group: &str, did: &str, message: Option<&str>, now: i64) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(ASK, params![group, did, message, now])?;
+        Ok(())
+    }
+
+    /// `did`'s request to join `group`, while it waits.
+    pub fn asked(&self, group: &str, did: &str) -> Result<Option<JoinRequest>> {
+        let conn = self.conn();
+        let found = conn.query_row(ASKED, [group, did], join_request);
+        Ok(found.optional()?)
+    }
+
+    /// The requests waiting to join `group`, newest first, before `before`
+    /// (a sequence number), at most `limit`.
+    pub fn asking(&self, group: &str, before: Option<i64>, limit: u32) -> Result<Vec<JoinRequest>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(ASKING)?;
+        let asked = params![group, before.unwrap_or(i64::MAX), limit];
+        let rows = q.query_map(asked, join_request)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Settles `did`'s request to join `group`: `false` if none waited.
+    pub fn decide(&self, group: &str, did: &str) -> Result<bool> {
+        let conn = self.conn();
+        Ok(conn.execute(DECIDE, [group, did])? > 0)
     }
 
     /// The spaces `authority` is the authority for.

@@ -51,7 +51,7 @@ async fn answers_health_and_refuses_unknown_methods() {
 
     for req in [
         http.get(format!("{}/xrpc/fyi.opensocial.listInvites", host.1)),
-        http.post(format!("{}/xrpc/fyi.opensocial.createInvite", host.1)),
+        http.post(format!("{}/xrpc/fyi.opensocial.applyLabel", host.1)),
     ] {
         let res = req.send().await.unwrap();
         assert_eq!(res.status(), 501);
