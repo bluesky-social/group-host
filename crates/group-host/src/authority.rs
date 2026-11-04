@@ -230,28 +230,42 @@ impl Host {
     /// gone, as the authority, before its key is: best effort, as a syncer
     /// that misses it learns so when its credential is refused.
     pub fn tell_spaces_deleted(&self, authority: &str) -> Result<()> {
+        for space in self.store.spaces_of(authority)? {
+            self.tell_space_deleted(authority, &space)?;
+        }
+        Ok(())
+    }
+
+    fn tell_space_deleted(&self, authority: &str, space: &str) -> Result<()> {
         let signing = self
             .store
             .account(authority)?
             .context("the authority is here")?
             .signing;
-        for space in self.store.spaces_of(authority)? {
-            for (service, endpoint) in self.store.recipients(&space, now())? {
-                let claims = self.claims(authority, &service, NOTIFY_SPACE_DELETED);
-                let send = self
-                    .http
-                    .post(format!("{endpoint}/xrpc/{NOTIFY_SPACE_DELETED}"))
-                    .bearer_auth(service_auth::sign(&signing, &claims))
-                    .json(&json!({ "space": space }))
-                    .send();
-                tokio::spawn(async move {
-                    let said = send.await.and_then(|r| r.error_for_status());
-                    if let Err(e) = said {
-                        tracing::warn!(service, error = %e, "notifySpaceDeleted failed");
-                    }
-                });
-            }
+        for (service, endpoint) in self.store.recipients(space, now())? {
+            let claims = self.claims(authority, &service, NOTIFY_SPACE_DELETED);
+            let send = self
+                .http
+                .post(format!("{endpoint}/xrpc/{NOTIFY_SPACE_DELETED}"))
+                .bearer_auth(service_auth::sign(&signing, &claims))
+                .json(&json!({ "space": space }))
+                .send();
+            tokio::spawn(async move {
+                let said = send.await.and_then(|r| r.error_for_status());
+                if let Err(e) = said {
+                    tracing::warn!(service, error = %e, "notifySpaceDeleted failed");
+                }
+            });
         }
+        Ok(())
+    }
+
+    /// Ends `authority`'s space at `space`: its syncers are told, and its
+    /// state and the authority's own repo in it go.
+    pub fn end_space(&self, authority: &str, space: &str) -> Result<()> {
+        self.tell_space_deleted(authority, space)?;
+        let orphans = self.store.delete_space(space, authority)?;
+        self.remove_blobs(orphans.iter().map(|cid| (authority, cid)));
         Ok(())
     }
 

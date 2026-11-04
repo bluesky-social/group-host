@@ -233,6 +233,28 @@ impl Host {
         Ok(Made { did, meta, members })
     }
 
+    /// Lists the group, by a declaration in its public repo pointing at
+    /// its meta space, or not.
+    pub async fn declare(&self, group: &str, listed: bool) -> Result<(), XrpcError> {
+        let collection = format!("{NS}.declaration");
+        let declared = self.store.record(group, &collection, "self");
+        let declared = declared.map_err(XrpcError::internal)?.is_some();
+        let write = match (listed, declared) {
+            (true, false) => put(
+                &collection,
+                "self",
+                json!({"$type": collection, "meta": meta_space(group), "createdAt": iso(now_millis())}),
+            ),
+            (false, true) => Write::Delete {
+                collection,
+                rkey: "self".into(),
+            },
+            _ => return Ok(()),
+        };
+        self.write(group, &[write])?;
+        Ok(())
+    }
+
     /// The group's own record in `space`, as JSON.
     pub fn group_record(
         &self,

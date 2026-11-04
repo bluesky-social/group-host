@@ -78,6 +78,30 @@ so the host writes them for a caller holding `group.configure`:
   so a label citing it still does; a new one goes last unless it says
   where. `deleteRule` takes one away; a label citing it keeps the URI.
 
+## Its other spaces
+
+Beside meta and members, a group's members make spaces for what they do
+together: a calendar, a forum, a channel. Each is the group's, its
+authority the group, with an access record and an entry in the members
+space's index, which apps read to find it.
+
+- `createSpace` (for `space.create`) makes one, of a type and key, with
+  who reads it, who writes in it in their own name (any member, unless
+  it says), and which roles write in it as the group.
+- `updateSpace` (for `space.configure`) changes its name, readers,
+  writers or roles. The members space stays readable by members, and who
+  writes in it in their own name, which is joining, stays as it is.
+  Meta's readers are the group's visibility: its declaration is made
+  when anyone may read meta, and taken away when not.
+- `deleteSpace` (for `space.delete`) ends one: its syncers are told,
+  its state as the authority and the group's own repo in it go, and it
+  leaves the index. What members wrote there is theirs, at their own
+  PDSes. Meta and members stay. The prototype only took a space out of
+  the index, leaving it issuing credentials to any it had let read.
+
+A space kept for chosen people is theirs: nobody who runs the group
+changes or ends it.
+
 ## Its handle
 
 A group starts with a handle one label under `HANDLE_DOMAIN`, which is

@@ -240,6 +240,19 @@ const DUE: &str = "SELECT repo, space, rev, data, attempts FROM outbox WHERE nex
 const DELIVERED: &str = "DELETE FROM outbox WHERE repo = ?1 AND space = ?2 AND rev = ?3";
 const RETRY: &str = "UPDATE outbox SET attempts = attempts + 1, next_at = ?4 WHERE repo = ?1 AND space = ?2 AND rev = ?3";
 const LAPSED: &str = "DELETE FROM outbox WHERE deliver_by <= ?1 RETURNING repo, space, rev";
+/// What goes with a space whose authority is here.
+const FORGET_SPACE: &[&str] = &[
+    "DELETE FROM space_recipient WHERE space = ?1",
+    "DELETE FROM space_writer WHERE space = ?1",
+    "DELETE FROM space_grant WHERE space = ?1",
+    "DELETE FROM space WHERE uri = ?1",
+];
+/// And the authority's own repo in it.
+const FORGET_OWN_REPO: &[&str] = &[
+    "DELETE FROM space_op WHERE space = ?1 AND did = ?2",
+    "DELETE FROM space_record WHERE space = ?1 AND did = ?2",
+    "DELETE FROM space_repo WHERE space = ?1 AND did = ?2",
+];
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
@@ -1002,6 +1015,37 @@ impl Store {
             })
         });
         Ok(found.optional()?)
+    }
+
+    /// Forgets the space at `uri` and `authority`'s own repo in it. The
+    /// blobs only that repo referenced, for their files to go.
+    pub fn delete_space(&self, uri: &str, authority: &str) -> Result<Vec<Cid>> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let unlinked: Vec<Cid> = {
+            let mut q = tx.prepare(
+                "DELETE FROM space_record_blob WHERE space = ?1 AND did = ?2 RETURNING cid",
+            )?;
+            let rows = q.query_map([uri, authority], |r| Ok(cid(r.get(0)?)));
+            rows?.collect::<rusqlite::Result<_>>()?
+        };
+        for sql in FORGET_SPACE {
+            let gone = tx.execute(sql, [uri]);
+            gone?;
+        }
+        for sql in FORGET_OWN_REPO {
+            let gone = tx.execute(sql, [uri, authority]);
+            gone?;
+        }
+        let mut orphans = Vec::new();
+        for cid in unlinked {
+            let gone = tx.execute(FORGET_ORPHAN, params![authority, cid.to_string()]);
+            if gone? > 0 {
+                orphans.push(cid);
+            }
+        }
+        tx.commit()?;
+        Ok(orphans)
     }
 
     /// The spaces `authority` is the authority for.

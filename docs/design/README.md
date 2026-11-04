@@ -83,10 +83,11 @@ says otherwise.
    `rbac.rs`; done, see [groups](groups.md)), their profile, images and
    rules (`group_config.rs`; done), switching them off and on and
    deleting them (`lifecycle.rs`, `group_lifecycle.rs`; done), handles
-   on their own domains (`group_handle.rs`; done), then spaces made and
-   configured by members, `checkUserAccess`, and the space index:
+   on their own domains (`group_handle.rs`; done), spaces made and
+   configured by members (`group_spaces.rs`; done), then the space index:
    `group.ts`, `bootstrap.ts`, `methods/{groups,handle,profile,rules,lifecycle,spaces,spaceRecords}.ts`,
-   `spaceIndex.ts`, `methods/checkUserAccess.ts`.
+   `spaceIndex.ts`. (`checkUserAccess`, for invite inboxes, comes with
+   invites.)
 5. **Membership and roles.** Roles and permissions, assigning, joining
    and join requests, invites, leaving and ejecting: `rbac.ts`,
    `methods/{roles,membership,join,invites}.ts`.

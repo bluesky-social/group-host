@@ -62,6 +62,16 @@ impl Host {
         Ok(self.configurers(group)?.iter().any(|c| c == did))
     }
 
+    /// Whether `did`'s roles in `group` carry `action`.
+    pub fn may_do(&self, group: &str, did: &str, action: &str) -> Result<bool, XrpcError> {
+        let members = members_space(group);
+        let permissions = self
+            .group_record(group, &members, &format!("{NS}.permissions"), "self")
+            .map_err(XrpcError::internal)?;
+        let roles = self.roles(group, did).map_err(XrpcError::internal)?;
+        Ok(actions_for(&grants(&permissions.unwrap_or_default()), &roles).contains(action))
+    }
+
     /// Everyone whose roles in `group` carry `group.configure`.
     pub fn configurers(&self, group: &str) -> Result<Vec<String>, XrpcError> {
         let members = members_space(group);
@@ -85,9 +95,21 @@ impl Host {
 /// Puts the group's record at `collection/rkey` in meta, made or replaced:
 /// its URI and CID.
 async fn put(host: &Host, group: &str, collection: &str, rkey: &str, value: Value) -> Answer {
-    let meta = meta_space(group);
+    put_in(host, group, &meta_space(group), collection, rkey, value).await
+}
+
+/// Puts the group's record at `collection/rkey` in `space`, made or
+/// replaced: its URI and CID.
+pub(crate) async fn put_in(
+    host: &Host,
+    group: &str,
+    meta: &str,
+    collection: &str,
+    rkey: &str,
+    value: Value,
+) -> Answer {
     let current = host
-        .group_record(group, &meta, collection, rkey)
+        .group_record(group, meta, collection, rkey)
         .map_err(XrpcError::internal)?;
     let (collection, rkey) = (collection.to_string(), rkey.to_string());
     let write = match current {
@@ -102,10 +124,10 @@ async fn put(host: &Host, group: &str, collection: &str, rkey: &str, value: Valu
             value,
         },
     };
-    host.space_write(group, &meta, &[write]).await?;
+    host.space_write(group, meta, &[write]).await?;
     let kept = host
         .store
-        .space_record(group, &meta, &collection, &rkey)
+        .space_record(group, meta, &collection, &rkey)
         .map_err(XrpcError::internal)?
         .expect("the record just written");
     let uri = format!("{meta}/{group}/{collection}/{rkey}");

@@ -14,6 +14,7 @@ pub mod group_api;
 pub mod group_config;
 pub mod group_handle;
 pub mod group_lifecycle;
+pub mod group_spaces;
 pub mod identity;
 pub mod lifecycle;
 pub mod plc;
@@ -202,6 +203,18 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.updateGroupHandle",
             post(group_handle::update_group_handle),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.createSpace",
+            post(group_spaces::create_space),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.updateSpace",
+            post(group_spaces::update_space),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.deleteSpace",
+            post(group_spaces::delete_space),
         )
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
