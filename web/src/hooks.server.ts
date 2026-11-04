@@ -2,12 +2,16 @@ import type { Handle, HandleFetch } from '@sveltejs/kit/hooks';
 import { GROUP_HOST } from '$app/env/private';
 
 /**
- * Signing in and out is the group host's (`/console/*`): asked of this
- * site, it is asked of the host, cookies and all, and its answer, its
- * redirects and the cookies it sets among it, is the browser's.
+ * What is the group host's, asked of this site, is asked of the host,
+ * cookies and all, and its answer, its redirects and the cookies it sets
+ * among it, is the browser's: signing in and out (`/console/*`), and its
+ * methods and OAuth, which a page asks from the browser once it is there,
+ * as `vite dev` hands them on.
  */
+const HOSTS = ['/console/', '/xrpc/', '/oauth/', '/.well-known/'];
+
 export const handle: Handle = async ({ event, resolve }) => {
-	if (!event.url.pathname.startsWith('/console/')) return resolve(event);
+	if (!HOSTS.some((p) => event.url.pathname.startsWith(p))) return resolve(event);
 	const asked = new Request(`${GROUP_HOST}${event.url.pathname}${event.url.search}`, {
 		method: event.request.method,
 		headers: event.request.headers,

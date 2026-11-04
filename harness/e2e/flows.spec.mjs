@@ -33,6 +33,14 @@ test('seeing her groups', async () => {
   await expect(page.locator('.group-row', { hasText: 'Riders' }).first()).toBeVisible()
 })
 
+test('coming back to her groups by a link, the page drawn in the browser', async () => {
+  await page.goto(url('/new'))
+  await page.getByRole('link', { name: 'opensocial' }).click()
+  await page.waitForURL(url('/'))
+  await expect(page.getByRole('heading', { name: 'Your groups' })).toBeVisible()
+  await expect(page.locator('.group-row', { hasText: 'Riders' }).first()).toBeVisible()
+})
+
 test('starting a group', async () => {
   await page.getByRole('link', { name: 'Start a group' }).click()
   await page.getByRole('textbox', { name: 'Handle' }).fill('hikers.groups.test')

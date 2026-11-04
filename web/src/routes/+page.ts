@@ -6,18 +6,13 @@ import { xrpc } from '#lib/data.ts';
 
 /**
  * The groups of whoever is signed in and those inviting them, and every
- * group this host runs. A
- * host that does not answer yet, as while its methods are being brought
- * over, is drawn as one with none.
+ * group this host runs. A host that fails to answer fails the page, rather
+ * than be drawn as one with none.
  */
 export const load: PageLoad = async (event) => {
 	const { viewer } = await event.parent();
-	const all = await xrpc<typeof listGroups.main>(event, 'fyi.opensocial.listGroups', {}).catch(() => null);
-	const mine = viewer
-		? await xrpc<typeof getActorGroups.main>(event, 'fyi.opensocial.getActorGroups', { actor: viewer.did }).catch(() => null)
-		: null;
-	const invited = viewer
-		? await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', {}).catch(() => null)
-		: null;
-	return { groups: all?.groups ?? [], mine: mine?.groups ?? null, invitations: invited?.invites ?? [] };
+	const all = await xrpc<typeof listGroups.main>(event, 'fyi.opensocial.listGroups', {});
+	const mine = viewer ? await xrpc<typeof getActorGroups.main>(event, 'fyi.opensocial.getActorGroups', { actor: viewer.did }) : null;
+	const invited = viewer ? await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', {}) : null;
+	return { groups: all.groups, mine: mine?.groups ?? null, invitations: invited?.invites ?? [] };
 };
