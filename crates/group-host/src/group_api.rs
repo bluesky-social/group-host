@@ -18,15 +18,16 @@ use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
-/// Who calls `lxm`, by their service auth for this host; none without
-/// any.
+/// Who calls `lxm`: by their service auth for this host, or else the
+/// console's session cookie; none without either.
 pub(crate) async fn caller(
     host: &Host,
     headers: &HeaderMap,
     lxm: &str,
 ) -> Result<Option<String>, XrpcError> {
+    // Signed in to the console, with no other say.
     if !headers.contains_key(header::AUTHORIZATION) {
-        return Ok(None);
+        return host.console_caller(headers).map_err(XrpcError::internal);
     }
     let claims = service_caller(host, headers, lxm).await?;
     let ours = &host.config.service_did;

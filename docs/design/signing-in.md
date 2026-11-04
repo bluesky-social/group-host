@@ -6,6 +6,29 @@ says yes. A group has no password, so whoever signs an app in as a group
 is one of its members, acting with their roles, and the app gets what
 those roles allow and nothing more.
 
+## Signing in to the console
+
+People sign in to the console as themselves, at their own PDS
+(`console_login.rs`). The host is a confidential OAuth client of it, as
+knotless-serve is of its accounts', its client id
+`<CONSOLE_URL>/console/client-metadata.json`, its key derived from the
+host's secret. It asks for `atproto` alone: the console's methods act as
+the group, never as the person, so the host needs only to know who they
+are. `/console/login` resolves their handle or DID to their PDS and its
+authorization server, pushes the request (PKCE, DPoP, a client assertion,
+their handle as the hint) and sends the browser there to approve;
+`/console/callback` checks that the browser coming back is the one that
+started, and the answer is from that server, exchanges the code, checks
+the token is for the person who started, revokes it at once, and signs
+them in. The host keeps nothing of theirs.
+
+The browser holds a cookie the host signed, naming the person, HttpOnly
+and SameSite=Lax, good for thirty days; with it, the host's methods know
+who calls as service auth would say. `/console/logout` signs out, and
+refuses every cookie signed before. Every server a handle leads to is
+reached only at a public address, as a client's metadata is. The console
+forwards `/console/*` to the host, cookies and all.
+
 ## The server
 
 The host is a standard atproto authorization server (`oauth.rs`):
@@ -184,7 +207,9 @@ at the token endpoint, its client id (and its assertion, if confidential)
 in the body and a DPoP proof in the header. It must be one the host makes
 groups for (`PROVISIONING_CLIENTS`), and its scope must hold `atproto`
 and nothing its metadata does not declare. All of that is checked before
-the group is made. The session is issued as a code exchange issues one,
+the group is made. What follows it (narrowing the scope, issuing the
+grant) fails only on an internal error, which leaves the group made, and
+its founder's to run, with no session for the app: it asks again. The session is issued as a code exchange issues one,
 narrowed to the founder's roles as an approval is, and recorded as the
 founder's: from then on an ordinary grant, refreshed at `/oauth/token`,
 listed among the group's, revoked there.

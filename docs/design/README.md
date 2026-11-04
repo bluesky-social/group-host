@@ -105,8 +105,8 @@ says otherwise.
    provisioning (`provision.rs`; done): `auth.ts`, `pds/auth.ts`, `pds/oauth/*`,
    `methods/{authorization,groupAuth,appPasswords,connectedApps,provision}.ts`.
    The console signs its people in at their own PDS here, as a
-   confidential client, and keeps the session on the server, as knotless
-   does.
+   confidential client, as knotless does, keeping only a signed cookie
+   (`console_login.rs`; done).
 7. **The console.** Home, starting a group, a group's page (members,
    roles, invites, requests, apps), approving an app, a person's
    sessions and app passwords: the console's pages in `apps/web/src/pages`.

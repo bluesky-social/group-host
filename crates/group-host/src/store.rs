@@ -278,6 +278,23 @@ pub const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (grp, name)
     );
 ",
+    "
+    CREATE TABLE console_login (
+        state TEXT PRIMARY KEY,
+        did TEXT NOT NULL,
+        issuer TEXT NOT NULL,
+        token_endpoint TEXT NOT NULL,
+        revocation_endpoint TEXT,
+        key BLOB NOT NULL,
+        verifier TEXT NOT NULL,
+        back TEXT NOT NULL,
+        started INTEGER NOT NULL
+    );
+    CREATE TABLE console_logout (
+        did TEXT PRIMARY KEY,
+        at INTEGER NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";

@@ -254,26 +254,24 @@ impl Host {
         })
     }
 
-    /// The JSON at `url`, an https URL at a public address (or http at any
-    /// address, while this host is on http itself, as a network of test
-    /// servers is). The connection goes to the address checked, so a name
-    /// that resolves elsewhere a moment later is not followed there.
-    async fn fetch_json(&self, url: &str, what: &str) -> Result<Value, OAuthError> {
-        let at = Url::parse(url).map_err(|_| invalid_metadata(format!("{url} is not a URL")))?;
+    /// A client for requests to `url`, an https URL at a public address
+    /// (or http at any address, while this host is on http itself, as a
+    /// network of test servers is), and the URL. Its connections go to the
+    /// addresses checked, so a name that resolves elsewhere a moment later
+    /// is not followed there, and it follows no redirect.
+    pub(crate) async fn pinned(&self, url: &str) -> Result<(reqwest::Client, Url), String> {
+        let at = Url::parse(url).map_err(|_| format!("{url} is not a URL"))?;
         let http_here = self.config.public_url.starts_with("http://");
         let scheme_ok = at.scheme() == "https" || (http_here && at.scheme() == "http");
         if !scheme_ok || at.fragment().is_some() || !at.username().is_empty() {
-            return Err(invalid_metadata(format!("{url} is not an https URL")));
+            return Err(format!("{url} is not an https URL"));
         }
-        let unreadable = |why: String| invalid_metadata(format!("{what} at {url}: {why}"));
         let host = at.host_str().unwrap_or_default().to_string();
         let port = at.port_or_known_default().unwrap_or_default();
         let found = tokio::net::lookup_host(format!("{host}:{port}")).await;
-        let addrs: Vec<SocketAddr> = found.map_err(|e| unreadable(e.to_string()))?.collect();
+        let addrs: Vec<SocketAddr> = found.map_err(|e| format!("{url}: {e}"))?.collect();
         if !http_here && !addrs.iter().all(|a| public(a.ip())) {
-            return Err(invalid_metadata(format!(
-                "{url} is not at a public address"
-            )));
+            return Err(format!("{url} is not at a public address"));
         }
         let pinned = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
@@ -281,6 +279,13 @@ impl Host {
             .resolve_to_addrs(host.trim_matches(['[', ']']), &addrs)
             .build()
             .expect("a client builds");
+        Ok((pinned, at))
+    }
+
+    /// The JSON object at `url`, fetched by a [`Host::pinned`] client.
+    pub(crate) async fn public_json(&self, url: &str, what: &str) -> Result<Value, String> {
+        let unreadable = |why: String| format!("{what} at {url}: {why}");
+        let (pinned, at) = self.pinned(url).await.map_err(unreadable)?;
         let sent = pinned.get(at).header("accept", "application/json");
         let res = sent.send().await.map_err(|e| unreadable(e.to_string()))?;
         if !res.status().is_success() {
@@ -292,6 +297,10 @@ impl Host {
             .ok()
             .filter(Value::is_object);
         json.ok_or_else(|| unreadable("not a JSON object".into()))
+    }
+
+    async fn fetch_json(&self, url: &str, what: &str) -> Result<Value, OAuthError> {
+        self.public_json(url, what).await.map_err(invalid_metadata)
     }
 
     /// How `client` authenticates on a request whose form is `form`: as

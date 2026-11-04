@@ -10,6 +10,7 @@ pub mod authority_api;
 pub mod authorization;
 pub mod blobs;
 pub mod config;
+pub mod console_login;
 pub mod firehose;
 pub mod group;
 pub mod group_api;
@@ -350,6 +351,13 @@ pub fn router(host: Arc<Host>) -> Router {
             post(group_tokens::revoke_group_token),
         )
         .route("/oauth/authorize", get(oauth::authorize))
+        .route(
+            "/console/client-metadata.json",
+            get(console_login::client_metadata),
+        )
+        .route("/console/login", get(console_login::login))
+        .route("/console/callback", get(console_login::callback))
+        .route("/console/logout", post(console_login::logout))
         .merge(token_routes())
         .merge(oauth_routes())
         .route("/.well-known/did.json", get(api::did_json))

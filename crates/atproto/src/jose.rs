@@ -31,6 +31,14 @@ pub fn b64(bytes: impl AsRef<[u8]>) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// The JSON object `part` holds, base64url: a JWT's header or claims.
+pub fn json_of(part: &str) -> Option<Value> {
+    let bytes = URL_SAFE_NO_PAD.decode(part).ok()?;
+    serde_json::from_slice::<Value>(&bytes)
+        .ok()
+        .filter(Value::is_object)
+}
+
 /// SHA-256 of `text`, base64url: a PKCE challenge, a DPoP proof's `ath`.
 pub fn sha256(text: &str) -> String {
     b64(Sha256::digest(text.as_bytes()))
@@ -120,12 +128,7 @@ pub fn parts(token: &str) -> Result<(Value, Value), JoseError> {
         return err("not a compact JWT");
     };
     let decode = |part: &str, what: &str| {
-        let bytes = URL_SAFE_NO_PAD.decode(part);
-        let json = bytes
-            .ok()
-            .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
-        json.filter(Value::is_object)
-            .ok_or_else(|| JoseError(format!("bad JSON in a JWT {what}")))
+        json_of(part).ok_or_else(|| JoseError(format!("bad JSON in a JWT {what}")))
     };
     Ok((decode(header, "header")?, decode(claims, "payload")?))
 }
