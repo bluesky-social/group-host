@@ -229,6 +229,14 @@ async fn says_what_is_wrong_with_what_it_is_asked() {
             .await
             .starts_with("no option --colour")
     );
+    assert!(
+        fails(
+            &alice,
+            &["membership", "assign", "g", "m", "r", "--reason", "x"]
+        )
+        .await
+        .starts_with("no option --reason")
+    );
     assert_eq!(
         fails(&alice, &["create-group", "x", "--name"]).await,
         "--name wants a value"

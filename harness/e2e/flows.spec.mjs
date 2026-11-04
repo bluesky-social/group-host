@@ -128,6 +128,7 @@ test('adding a rule, and taking it away', async () => {
 })
 
 test('defining a role', async () => {
+  await page.goto(url('/g/hikers.groups.test/settings'))
   await page.getByRole('textbox', { name: 'Its key' }).fill('leader')
   await page.getByRole('textbox', { name: 'Its name' }).fill('Ride leader')
   await page.getByRole('checkbox', { name: 'invite' }).check()
@@ -138,6 +139,7 @@ test('defining a role', async () => {
 })
 
 test('making an app password, and ending what it signed in', async () => {
+  await page.goto(url('/g/hikers.groups.test/settings'))
   await page.getByRole('textbox', { name: 'Where it is used' }).fill('Phone')
   await page.getByRole('button', { name: 'Make an app password' }).click()
   const password = (await page.locator('code.password').textContent()).trim()

@@ -517,7 +517,13 @@ pub async fn complete_import(
             "the signed operation does not give the account to this host",
         ));
     };
-    let sent = host.plc.publish(did, &signed).await;
+    // The directory may have it already: sent by the account's server, or
+    // by a try of this that failed after sending it. It is not sent again.
+    let last = host.plc.last_op(did).await.ok().map(|op| op.cid());
+    let sent = match last == Some(signed.cid()) {
+        true => Ok(()),
+        false => host.plc.publish(did, &signed).await,
+    };
     sent.map_err(|e| {
         refused(
             "InvalidOperation",

@@ -90,8 +90,9 @@ confirms it (an emailed code, on the reference PDS).
    is what the PLC operation should name. Starting again, the one who
    started discards what the first start copied; nobody else may.
 3. **`completeImport`**, for whoever started: the signed operation sent
-   to the directory, once it gives the account to this host as step 2
-   said (this host its server, the keys made for it here, this host's
+   to the directory (unless it has it already, sent by the account's
+   server or by a try that failed after sending it), once it gives the
+   account to this host as step 2 said (this host its server, the keys made for it here, this host's
    rotation key, and its handle); the account switched on, the relays
    told who it is; and its group made, with its profile's name and
    words, run by whoever moved it.

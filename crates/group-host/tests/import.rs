@@ -645,6 +645,20 @@ async fn sends_the_operation_switches_it_on_and_makes_a_group_its_mover_runs() {
 }
 
 #[tokio::test]
+async fn takes_an_operation_the_directory_has_already() {
+    let w = world().await;
+    let dana = &w.people[0];
+    let (_, out) = w.start(dana, json!({})).await;
+    let operation = w.signed(&out["recommendedCreds"], |_| {}).await;
+    // Its server sent it itself, as submitPlcOperation does.
+    let signed = Signed::from_json(&operation).unwrap();
+    w.h.host.plc.publish(&w.did, &signed).await.unwrap();
+    let (status, done) = w.finish(dana, operation).await;
+    assert_eq!(status, 200, "{done}");
+    assert!(w.h.host.deactivation(&w.did).unwrap().is_none());
+}
+
+#[tokio::test]
 async fn refuses_an_operation_that_does_not_give_the_account_to_this_host() {
     let w = world().await;
     let dana = &w.people[0];

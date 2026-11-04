@@ -1,5 +1,5 @@
 <script lang="ts">
-	/** Labelling someone, by their handle, as the group: a value, and the rule it is under. */
+	/** Labelling someone, by their handle, as the group, with a value. */
 </script>
 
 <form class="stack" method="post" action="?/label">

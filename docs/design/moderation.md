@@ -41,7 +41,10 @@ resolved: labelling is the moderators acting, not someone asking them to.
 `com.atproto.moderation.createReport` takes a report from anyone, member
 or not, as their PDS sends it on: of a record in one of a group's spaces
 here, into that group's queue. A report on a resolved subject opens it
-again.
+again. As anyone may write to a group's queue so, what a report
+says is bounded: its subject a record's URI whose every part is what it
+says, its reason 20,000 bytes at most (as the lexicon has it), and its
+reason type 256.
 
 ## From the prototype
 

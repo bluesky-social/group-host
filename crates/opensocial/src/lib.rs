@@ -236,7 +236,13 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             inspect(&signed_in(env).await?, &host, group).await
         }
         "membership" => {
-            let a = parse(rest, &["reason", "message"])?;
+            // Each takes its own option: eject a reason, invite a message.
+            let known: &[&str] = match rest.first().map(String::as_str) {
+                Some("eject") => &["reason"],
+                Some("invite") => &["message"],
+                _ => &[],
+            };
+            let a = parse(rest, known)?;
             membership(&signed_in(env).await?, &host, &a).await
         }
         "migrate" => {

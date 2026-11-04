@@ -23,6 +23,12 @@ The keys are the directory's to say: the host remembers only who added
 which, to show. Once the host holds no key (a steward took the identity
 elsewhere), it changes nothing.
 
+Whoever configures the group may add a key, and take off any steward's,
+not only one they added: the host asks the group's roles, not who holds
+which key. A steward who must not be taken off by the group's other
+admins keeps their key ranked above the host's, and so can undo, within
+PLC's 72 hours, the operation that took it off.
+
 Deleting a group ends its DID in the directory only if nobody but the
 host could ever use it again. With a recovery key on it, the DID is its
 steward's, to bring the group back elsewhere, and is left alone.

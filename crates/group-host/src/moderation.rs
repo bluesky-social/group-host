@@ -171,17 +171,27 @@ fn not_found() -> XrpcError {
 }
 
 /// The space a record's URI is in, `at://<authority>/space/<type>/<skey>`,
-/// and its authority, for a URI of a record inside one.
+/// and its authority, for a URI of a record inside one, each of its parts
+/// what it says: so a URI anyone sends is bounded, as its parts are.
 pub fn space_of(uri: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = uri.strip_prefix("at://")?.split('/').collect();
-    match parts[..] {
-        [authority, "space", kind, skey, _repo, _collection, _rkey] => Some((
-            format!("at://{authority}/space/{kind}/{skey}"),
-            authority.to_string(),
-        )),
-        _ => None,
-    }
+    let [authority, "space", kind, skey, repo, collection, rkey] = parts[..] else {
+        return None;
+    };
+    let dids = syntax::is_did(authority) && syntax::is_did(repo);
+    let names = syntax::is_nsid(kind) && syntax::is_nsid(collection);
+    let keys = syntax::is_record_key(skey) && syntax::is_record_key(rkey);
+    (dids && names && keys).then(|| {
+        let space = format!("at://{authority}/space/{kind}/{skey}");
+        (space, authority.to_string())
+    })
 }
+
+/// The longest reason a report gives, as `createReport`'s lexicon has it.
+const REASON_MAX: usize = 20_000;
+/// The longest reason type a report gives: one of the known ones, or
+/// another as long.
+const REASON_TYPE_MAX: usize = 256;
 
 /// A subject as a label holds it, and as the queue keys it: an account's
 /// DID, or a record's URI.
@@ -459,6 +469,17 @@ pub async fn create_report(
     let reason_type = body["reasonType"]
         .as_str()
         .ok_or_else(|| invalid("reasonType is required"))?;
+    if reason_type.len() > REASON_TYPE_MAX {
+        return Err(invalid(format!(
+            "reasonType is {REASON_TYPE_MAX} bytes at most"
+        )));
+    }
+    if body["reason"]
+        .as_str()
+        .is_some_and(|r| r.len() > REASON_MAX)
+    {
+        return Err(invalid(format!("reason is {REASON_MAX} bytes at most")));
+    }
     let uri = body["subject"]["uri"].as_str();
     let uri = uri.ok_or_else(|| invalid("a report here is of a record, by its uri"))?;
     let space =

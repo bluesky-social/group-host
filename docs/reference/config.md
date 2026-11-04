@@ -24,3 +24,9 @@ It stops on SIGTERM or ctrl-c, answering the requests under way first.
 
 The console reads one: `GROUP_HOST`, the host it asks (default
 `http://127.0.0.1:2600`).
+
+The `opensocial` command reads its own: `OPENSOCIAL_AS` and
+`OPENSOCIAL_PASSWORD` (who it signs in as), `PDS_URL` (where),
+`OPENSOCIAL_HOST` and `OPENSOCIAL_HOST_DID` (the host it asks), and
+`OPENSOCIAL_SEED_INVITE` (who `seed` invites): see
+[the commands](cli.md#opensocial).

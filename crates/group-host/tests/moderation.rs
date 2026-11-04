@@ -107,8 +107,8 @@ async fn takes_a_report_from_anyone() {
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
-    let elsewhere = json!({"uri": format!("at://did:plc:elsewhere/space/{CALENDAR}/rides/{}/c.d/e", carol.did), "cid": "x"});
-    let not_ours = json!({"uri": format!("at://{other}/space/{CALENDAR}/none/{}/c.d/e", carol.did), "cid": "x"});
+    let elsewhere = json!({"uri": format!("at://did:plc:elsewhere/space/{CALENDAR}/rides/{}/c.d.e/f", carol.did), "cid": "x"});
+    let not_ours = json!({"uri": format!("at://{other}/space/{CALENDAR}/none/{}/c.d.e/f", carol.did), "cid": "x"});
     for (subject, refused) in [
         (json!({"did": carol.did}), (400, "InvalidRequest")),
         (
@@ -117,6 +117,11 @@ async fn takes_a_report_from_anyone() {
         ),
         (elsewhere, (400, "NotHosted")),
         (not_ours, (400, "NotHosted")),
+        // Each part of its URI what it says, so none is unbounded.
+        (
+            json!({"uri": format!("at://{did}/space/{CALENDAR}/rides/{}/c.d.e/{}", carol.did, "r".repeat(513)), "cid": "x"}),
+            (400, "InvalidRequest"),
+        ),
     ] {
         assert_eq!(
             error(&report(&h, &carol, subject.clone()).await),
@@ -133,6 +138,13 @@ async fn takes_a_report_from_anyone() {
     )
     .await;
     assert_eq!(error(&said), (400, "InvalidRequest"));
+    for body in [
+        json!({"subject": record, "reasonType": "x".repeat(257)}),
+        json!({"subject": record, "reasonType": "com.atproto.moderation.defs#reasonSpam", "reason": "x".repeat(20_001)}),
+    ] {
+        let said = post(&h, lxm, &body, &[auth(&h, &carol, lxm)]).await;
+        assert_eq!(error(&said), (400, "InvalidRequest"), "{}", said.1);
+    }
     assert_eq!(post(&h, lxm, &json!({}), &[]).await.0, 401);
 }
 
@@ -216,7 +228,7 @@ async fn writes_a_label_beside_what_it_labels() {
     )
     .await;
     let theirs =
-        json!({"uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d/e", bob.did), "cid": "x"});
+        json!({"uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": "x"});
     for (body, refused) in [
         (
             json!({"group": did, "subject": {"did": "not a did"}, "val": "x"}),
