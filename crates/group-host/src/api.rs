@@ -69,6 +69,34 @@ fn view(did: &str, r: &Record) -> Value {
     json!({"uri": format!("at://{did}/{}/{}", r.collection, r.rkey), "cid": r.cid.to_string(), "value": value})
 }
 
+/// Whether an address under this host's domain is free for a new group:
+/// no account's handle here, nor kept by a group as its address. Anyone
+/// may ask, as anyone may resolve a handle.
+pub async fn check_address(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
+    let address = param(&p, "address")?.to_ascii_lowercase();
+    let label = address.strip_suffix(&host.config.handle_domain);
+    let ours = label.is_some_and(|l| !l.is_empty() && !l.contains('.'));
+    if !ours {
+        return Err(invalid(format!(
+            "an address is one label under {}",
+            host.config.handle_domain
+        )));
+    }
+    let available = !host.held_here(&address)?;
+    Ok(Json(json!({ "address": address, "available": available })))
+}
+
+/// The host as a PDS describes itself: its DID, and the domain whose names
+/// it gives its groups. Nobody signs up here: a group is made for someone.
+pub async fn describe_server(State(host): State<Arc<Host>>) -> Json<Value> {
+    Json(json!({
+        "did": host.config.service_did,
+        "availableUserDomains": [host.config.handle_domain],
+        "inviteCodeRequired": true,
+        "blobUploadLimit": host.config.blob_upload_limit,
+    }))
+}
+
 pub async fn describe_repo(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let repo = param(&p, "repo")?;
     let account = host.store.account(repo).map_err(XrpcError::internal)?;

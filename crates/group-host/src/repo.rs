@@ -172,6 +172,17 @@ fn now() -> i64 {
 }
 
 impl Host {
+    /// Whether `name` is an account's here, as its handle or as its
+    /// address: a name under this host's domain no new account may take.
+    pub fn held_here(&self, name: &str) -> Result<bool, XrpcError> {
+        let by_handle = self.store.account(name).map_err(XrpcError::internal)?;
+        let by_address = self.store.addressed(name).map_err(XrpcError::internal)?;
+        Ok(
+            by_handle.is_some_and(|a| a.handle == name.to_ascii_lowercase())
+                || by_address.is_some(),
+        )
+    }
+
     /// Makes an account at `handle`, one label under the host's handle
     /// domain: its keys, its `did:plc` published to the directory with
     /// the host's rotation key, and an empty repo. Its DID.
@@ -195,12 +206,10 @@ impl Host {
                 format!("{handle} is taken"),
             )
         };
-        if self
-            .store
-            .account(handle)
-            .map_err(XrpcError::internal)?
-            .is_some()
-        {
+        // Taken as another's handle, or as another's address, kept by a
+        // group that has since taken a handle of its own: before anything
+        // is sent to the directory.
+        if self.held_here(handle)? {
             return Err(taken());
         }
         let signing = Keypair::generate(Curve::K256);

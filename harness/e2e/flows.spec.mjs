@@ -43,20 +43,29 @@ test('coming back to her groups by a link, the page drawn in the browser', async
 
 test('starting a group', async () => {
   await page.getByRole('link', { name: 'Start a group' }).click()
-  await page.getByRole('textbox', { name: 'Handle' }).fill('hikers.groups.test')
-  await page.getByRole('textbox', { name: 'Name' }).fill('Hikers')
+  // Its address made from its name, under the host's domain.
+  await page.getByRole('textbox', { name: 'Name' }).pressSequentially('Hikers')
+  await expect(page.getByRole('textbox', { name: 'Its address' })).toHaveValue('hikers')
+  await expect(page.getByText('.groups.test', { exact: true })).toBeVisible()
   await page.getByRole('textbox', { name: 'What it is for' }).fill('Walks on Sundays.')
   await page.getByRole('button', { name: 'Start the group' }).click()
   await page.waitForURL(url('/g/hikers.groups.test'))
   await expect(page.getByRole('heading', { name: 'Hikers' })).toBeVisible()
   await expect(page.getByText('Walks on Sundays.')).toBeVisible()
   await expect(page.getByText('You are a member.')).toBeVisible()
-  // A handle taken already is the form's to say.
+  // An address taken already is said as it is typed, with the next free
+  // one to take; and the host's to refuse, sent all the same.
   await page.goto(url('/new'))
-  await page.getByRole('textbox', { name: 'Handle' }).fill('hikers.groups.test')
-  await page.getByRole('textbox', { name: 'Name' }).fill('Hikers again')
+  await page.getByRole('textbox', { name: 'Name' }).pressSequentially('Hikers')
+  await expect(page.getByText('hikers.groups.test is taken.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Use hikers-2.groups.test' })).toBeVisible()
   await page.getByRole('button', { name: 'Start the group' }).click()
-  await expect(page.locator('.danger')).toBeVisible()
+  await expect(page.locator('p.danger')).toBeVisible()
+  // Its address changed by hand stays as it was put, whatever the name.
+  await page.goto(url('/new'))
+  await page.getByRole('textbox', { name: 'Its address' }).pressSequentially('Sunday Walks!')
+  await page.getByRole('textbox', { name: 'Name' }).pressSequentially('Hikers')
+  await expect(page.getByRole('textbox', { name: 'Its address' })).toHaveValue('sunday-walks-')
 })
 
 test('asking to join, and being admitted', async () => {

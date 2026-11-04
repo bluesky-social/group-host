@@ -528,3 +528,21 @@ async fn exports_a_tree_of_many_layers() {
     assert_eq!(tree.leaves().len(), 200);
     assert!(tree.nodes().len() > 2);
 }
+
+#[tokio::test]
+async fn describes_itself_as_a_pds_that_names_groups_under_its_domain() {
+    let h = start(&[("HANDLE_DOMAIN", ".groups.test")], false).await;
+    let (status, described) = h.get("com.atproto.server.describeServer", "").await;
+    assert_eq!(status, 200, "{described}");
+    assert_eq!(described["did"], h.host.config.service_did.as_str());
+    assert_eq!(
+        described["availableUserDomains"],
+        serde_json::json!([".groups.test"])
+    );
+    // Nobody signs up here: a group is made for someone.
+    assert_eq!(described["inviteCodeRequired"], true);
+    assert_eq!(
+        described["blobUploadLimit"],
+        h.host.config.blob_upload_limit
+    );
+}

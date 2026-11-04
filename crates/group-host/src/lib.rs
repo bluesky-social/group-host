@@ -133,6 +133,11 @@ pub fn router(host: Arc<Host>) -> Router {
             "/xrpc/com.atproto.repo.describeRepo",
             get(api::describe_repo),
         )
+        .route(
+            "/xrpc/com.atproto.server.describeServer",
+            get(api::describe_server),
+        )
+        .route("/xrpc/fyi.opensocial.checkAddress", get(api::check_address))
         .route("/xrpc/com.atproto.repo.getRecord", get(api::get_record))
         .route("/xrpc/com.atproto.repo.listRecords", get(api::list_records))
         .route("/xrpc/com.atproto.sync.getRepo", get(api::get_repo))

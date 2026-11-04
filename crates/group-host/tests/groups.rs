@@ -519,3 +519,44 @@ async fn refuses_a_group_it_should_not_start() {
     .await;
     assert_eq!(status, 400);
 }
+
+#[tokio::test]
+async fn keeps_a_groups_address_for_it_after_it_takes_a_handle_of_its_own() {
+    let h = start(&[("HANDLE_DOMAIN", ".groups.test")], false).await;
+    let [alice, bob, _] = people(&h).await;
+    let did = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let free = async |address: &str| {
+        h.get("fyi.opensocial.checkAddress", &format!("address={address}"))
+            .await
+    };
+    assert_eq!(free("hikers.groups.test").await.1["available"], true);
+    assert_eq!(
+        free("Riders.groups.test").await.1,
+        json!({"address": RIDERS, "available": false})
+    );
+
+    // On a domain of its own, its address stays its own.
+    h.host
+        .store
+        .set_handle(&did, "riders.example.com", &[])
+        .unwrap();
+    assert_eq!(free(RIDERS).await.1["available"], false);
+    let lxm = format!("{NS}.createGroup");
+    let body = json!({"handle": RIDERS, "displayName": "Riders again"});
+    let (status, said) = post(&h, &lxm, &body, &[auth(&h, &bob, &lxm)]).await;
+    assert_eq!(
+        (status, said["error"].as_str()),
+        (400, Some("HandleTaken")),
+        "{said}"
+    );
+
+    // Only one label under this host's domain is an address here.
+    for not_ours in ["riders.example.com", ".groups.test", "a.b.groups.test"] {
+        assert_eq!(free(not_ours).await.0, 400, "{not_ours}");
+    }
+}

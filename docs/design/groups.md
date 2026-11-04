@@ -35,6 +35,18 @@ from their own PDS (for this host's `SERVICE_DID`), makes:
 `GROUP_FOUNDERS` names who the host starts groups for; anyone, unless it
 names someone.
 
+`com.atproto.server.describeServer` says, as any PDS does, the domain the
+host names its groups under (`availableUserDomains`), its DID, and that
+nobody signs up here (`inviteCodeRequired`): a group is made for someone.
+The console's form for starting one reads the domain from it, and makes
+the label under it from the group's name as it is typed, until the label
+is changed by hand; once typing stops it asks whether the address is
+free, and offers the next free one if not. `fyi.opensocial.checkAddress`
+answers that, for anyone: whether the name is an account's handle here,
+or kept as a group's address after it took a handle of its own. A group
+is never started at either; resolving the name as a handle would miss
+the second.
+
 ## Who may do what
 
 A space's access record says who reads it (`readableBy`: roles, or

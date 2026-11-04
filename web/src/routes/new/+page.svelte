@@ -14,7 +14,7 @@
 	{:else if !data.actor.canCreateGroup}
 		<p>This host starts groups only for the people it names.</p>
 	{:else}
-		<NewGroupForm failed={form?.failed} />
+		<NewGroupForm failed={form?.failed} domain={data.domain} />
 		<p>Or <a href="/move">move an account you already have</a> here, to become a group.</p>
 	{/if}
 </Page>
