@@ -5,6 +5,7 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
+use crate::authority::Access::Write;
 use crate::group_api::{caller, group_of};
 use crate::rbac::{Access, NS};
 use crate::time::iso;
@@ -192,10 +193,14 @@ impl Host {
         repo: &str,
         cid: &Cid,
     ) -> Option<(String, Vec<u8>)> {
-        // Only a writer of the space: any other DID would have the host ask
-        // a server of the caller's choosing, with the group's credential.
+        // Only a writer of the space, and one it still lets write, as the
+        // index keeps: any other DID would have the host ask a server of
+        // the caller's choosing, with the group's credential, and one put
+        // out has what they wrote there forgotten.
         let writers = self.store.writers(space, None, u32::MAX).ok()?;
-        if !writers.iter().any(|w| w.did == repo) {
+        let hosted = self.store.space(space).ok()??;
+        let writes = self.may(space, &hosted, Some(repo), Write).ok()?;
+        if !writes || !writers.iter().any(|w| w.did == repo) {
             return None;
         }
         let here = self

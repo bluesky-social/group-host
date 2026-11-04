@@ -779,6 +779,38 @@ async fn fetches_no_file_too_big_or_not_asked_for() {
         .await;
         assert_eq!(got.status == 200, ok);
     }
+    // One no longer a member, though still in the writer set: their files
+    // are fetched no more.
+    fake.answers.lock().unwrap().insert(
+        "getBlob".into(),
+        vec![Answer {
+            status: 200,
+            body: small.clone(),
+            vouch: None,
+        }],
+    );
+    let membership = (format!("{NS}.membership"), writer.to_string());
+    h.host
+        .space_write(
+            &did,
+            &members_space(&did),
+            &[Write::Delete {
+                collection: membership.0,
+                rkey: membership.1,
+            }],
+        )
+        .await
+        .unwrap();
+    let asked = *fake.asked.lock().unwrap();
+    let got = read(
+        &h,
+        &lxm,
+        &fetch(&Cid::of_raw(&small).to_string()),
+        &[auth(&h, &alice, &lxm)],
+    )
+    .await;
+    assert_eq!(got.error(), (400, "NotFound".into()));
+    assert_eq!(*fake.asked.lock().unwrap(), asked);
     // A writer whose host is not found.
     h.host
         .store
