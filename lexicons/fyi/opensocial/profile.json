@@ -46,6 +46,15 @@
             "format": "uri",
             "description": "The group's own site, if it keeps one. A third-party app that shows the group can link back to it."
           },
+          "links": {
+            "type": "array",
+            "maxLength": 5,
+            "items": {
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#link"
+            },
+            "description": "Where else the group is, in the order it shows them: each an http or https address, and what it is."
+          },
           "joinPolicy": {
             "type": "ref",
             "ref": "fyi.opensocial.defs#joinPolicy"

@@ -4,6 +4,7 @@
 import { expect } from '@playwright/test'
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { createServer } from 'node:http'
+import { serviceAuth } from '../world.mjs'
 
 export const world = JSON.parse(process.env.E2E_WORLD)
 export const who = Object.fromEntries(world.accounts.map((a) => [a.handle.split('.')[0], a]))
@@ -16,6 +17,22 @@ export const approve = async (page, name) => {
   await page.getByRole('textbox', { name: 'Password' }).fill(who[name].password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await page.getByRole('button', { name: /^(accept|authorize|allow)$/i }).click()
+}
+
+/// `name` joins the group `handle` from their own client, with service
+/// auth from their PDS, as the host's method takes it: at once, where
+/// anyone can join.
+export const joins = async (name, handle) => {
+  const { did } = await fetch(`${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`).then((r) => r.json())
+  const lxm = 'fyi.opensocial.requestJoin'
+  const token = await serviceAuth(world.pds, who[name], world.did, lxm)
+  const res = await fetch(`${world.host}/xrpc/${lxm}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ group: did }),
+  })
+  const said = await res.json()
+  expect(said.status, JSON.stringify(said)).toBe('admitted')
 }
 
 /// The sign-in dialog, wherever it was opened from.

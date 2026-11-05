@@ -5,7 +5,7 @@
 //! and the method: their own PDS signs it for them.
 
 use crate::Host;
-use crate::api::{Params, param};
+use crate::api::{Params, page, param};
 use crate::group::{Made, NewGroup, members_space, meta_space};
 use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for, roles_of};
 use crate::space_api::{service_caller, unauthorized};
@@ -120,6 +120,7 @@ fn profile_view(profile: &Value) -> Value {
         "description",
         "joinPolicy",
         "url",
+        "links",
         "location",
         "online",
         "topics",
@@ -194,8 +195,8 @@ fn signed_out(did: &str, handle: String) -> Value {
 
 /// One group in full, as the caller may see it: what its meta space
 /// holds for whoever may read it, the caller's own standing, and for a
-/// member, its members, roles and spaces. To no one signed in, only its
-/// DID and handle, whatever its access record says.
+/// member, how many are in it, its roles and spaces. To no one signed in,
+/// only its DID and handle, whatever its access record says.
 pub async fn get_group(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
@@ -252,25 +253,15 @@ pub async fn get_group(
         viewer["request"] = crate::group_join::request_view(&request);
     }
     view["viewer"] = viewer;
-    let mut out = json!({ "group": view });
     if !reads_members {
-        return Ok(Json(out));
+        return Ok(Json(json!({ "group": view })));
     }
     let records = |collection: &str| {
         host.group_records(group, &members, &format!("{NS}.{collection}"))
             .map_err(XrpcError::internal)
     };
-    // Each named by their document, read at once rather than in turn.
-    let memberships = records("membership")?;
-    let actors = memberships
-        .iter()
-        .map(|(_, m)| host.actor_view(m["member"].as_str().unwrap_or_default()));
-    let actors = futures::future::join_all(actors).await;
-    out["members"] = memberships
-        .iter()
-        .zip(actors)
-        .map(|((_, m), actor)| json!({"actor": actor, "roles": objects("role", roles_of(m))}))
-        .collect();
+    view["memberCount"] = json!(records("membership")?.len());
+    let mut out = json!({ "group": view });
     out["roles"] = records("role")?
         .into_iter()
         .map(|(key, r)| {
@@ -340,6 +331,69 @@ pub async fn get_group(
                 view
             })
             .collect();
+    }
+    Ok(Json(out))
+}
+
+/// A group's members, each with their roles, to one who may read its
+/// members space: a page at a time, in the order of their DIDs (the keys
+/// of their memberships), those after `cursor`; with `q`, only those
+/// whose handle or DID holds it, in any case. The cursor is there while
+/// more are.
+pub async fn list_members(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+    headers: HeaderMap,
+) -> Answer {
+    let group = param(&p, "group")?;
+    group_of(&host, group)?;
+    let me = signed_in(&host, &headers, &format!("{NS}.listMembers")).await?;
+    let members = members_space(group);
+    let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
+    let access = host
+        .group_record(group, &members, &format!("{NS}.access"), "self")
+        .map_err(XrpcError::internal)?;
+    if !access.is_some_and(|a| Access::of(&a, &members).can_read(&roles, &me)) {
+        let closed = "only those who may read its members space see them";
+        return Err(XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", closed));
+    }
+    let limit = page(&p, 50, 100)? as usize;
+    let after = p.get("cursor").cloned().unwrap_or_default();
+    let q = p
+        .get("q")
+        .map(|q| q.trim().to_lowercase())
+        .unwrap_or_default();
+    let memberships = host
+        .group_records(group, &members, &format!("{NS}.membership"))
+        .map_err(XrpcError::internal)?;
+    let left: Vec<(String, Value)> = memberships
+        .into_iter()
+        .filter(|(rkey, _)| *rkey > after)
+        .collect();
+    // Named by their documents a page and one more at a time, each page
+    // read at once rather than in turn, until a page and one are found.
+    let mut found: Vec<(String, Value)> = Vec::new();
+    for some in left.chunks(limit + 1) {
+        let actors = some
+            .iter()
+            .map(|(_, m)| host.actor_view(m["member"].as_str().unwrap_or_default()));
+        let actors = futures::future::join_all(actors).await;
+        for ((rkey, m), actor) in some.iter().zip(actors) {
+            let named = |at: &str| actor[at].as_str().unwrap_or_default().to_lowercase();
+            if named("did").contains(&q) || named("handle").contains(&q) {
+                let view = json!({"actor": actor, "roles": objects("role", roles_of(m))});
+                found.push((rkey.clone(), view));
+            }
+        }
+        if found.len() > limit {
+            break;
+        }
+    }
+    let more = found.len() > limit;
+    found.truncate(limit);
+    let mut out = json!({ "members": found.iter().map(|(_, v)| v).collect::<Vec<_>>() });
+    if let Some((last, _)) = found.last().filter(|_| more) {
+        out["cursor"] = json!(last);
     }
     Ok(Json(out))
 }

@@ -793,3 +793,110 @@ async fn one_whose_credentials_cannot_be_revoked_stays_in() {
             .is_empty()
     );
 }
+
+/// What `listMembers` answers `who` for `query`, past `group=`.
+async fn listed(h: &Running, who: Option<&Authority>, group: &str, query: &str) -> (u16, Json) {
+    let lxm = format!("{NS}.listMembers");
+    let headers: Vec<_> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
+    get(h, &lxm, &format!("group={group}{query}"), &headers).await
+}
+
+/// Each member a page names, by their DID.
+fn dids(page: &Json) -> Vec<String> {
+    let members = page["members"].as_array().unwrap().iter();
+    members
+        .map(|m| m["actor"]["did"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn members_are_listed_a_page_at_a_time() {
+    let h = start(&[], false).await;
+    let (did, [alice, bob, carol]) = group(&h).await;
+    // Seven more, whom no DID document names.
+    let nobodies: Vec<String> = ('a'..='g')
+        .map(|c| format!("did:plc:nobodynobodynobody{c}"))
+        .collect();
+    for n in &nobodies {
+        join(&h, &did, n, &["member"]).await;
+    }
+
+    // getGroup counts them, and lists none.
+    let shown = view(&h, &did, Some(&bob)).await;
+    assert_eq!(shown["group"]["memberCount"], 9);
+    assert_eq!(shown.get("members"), None);
+
+    // All of them, in pages of four, each once, in the order of their DIDs.
+    let mut seen: Vec<String> = Vec::new();
+    let mut cursor = String::new();
+    let mut pages = 0;
+    loop {
+        let (status, page) = listed(&h, Some(&bob), &did, &format!("&limit=4{cursor}")).await;
+        assert_eq!(status, 200, "{page}");
+        pages += 1;
+        seen.extend(dids(&page));
+        let Some(next) = page["cursor"].as_str() else {
+            break;
+        };
+        cursor = format!("&cursor={next}");
+    }
+    assert_eq!(pages, 3);
+    let mut every: Vec<String> = nobodies.clone();
+    every.extend([alice.did.clone(), bob.did.clone()]);
+    every.sort();
+    assert_eq!(seen, every);
+    // A page holding the last of them says there are no more.
+    let (_, whole) = listed(&h, Some(&bob), &did, "&limit=9").await;
+    assert_eq!(dids(&whole).len(), 9);
+    assert_eq!(whole.get("cursor"), None);
+
+    // Each with their roles, and named as their DID document names them.
+    let (_, all) = listed(&h, Some(&alice), &did, "").await;
+    let of = |who: &str| {
+        let members = all["members"].as_array().unwrap();
+        members
+            .iter()
+            .find(|m| m["actor"]["did"] == who)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(
+        of(&alice.did)["roles"],
+        json!([{"role": "admin"}, {"role": "member"}])
+    );
+    assert_eq!(of(&alice.did)["actor"]["handle"], "authority.test");
+    assert_eq!(
+        of(&nobodies[0]),
+        json!({"actor": {"did": nobodies[0]}, "roles": [{"role": "member"}]})
+    );
+
+    // Narrowed to those whose handle or DID holds `q`, whatever its case.
+    let (_, named) = listed(&h, Some(&bob), &did, "&q=AUTHORITY").await;
+    let mut both = vec![alice.did.clone(), bob.did.clone()];
+    both.sort();
+    assert_eq!(dids(&named), both);
+    let (_, one) = listed(&h, Some(&bob), &did, "&q=nobodyc").await;
+    assert_eq!(dids(&one), [nobodies[2].clone()]);
+    let (_, none) = listed(&h, Some(&bob), &did, "&q=nobody.else").await;
+    assert_eq!(none, json!({"members": []}));
+    // And a page at a time still.
+    let (_, first) = listed(&h, Some(&bob), &did, "&q=nobody&limit=5").await;
+    assert_eq!(dids(&first), nobodies[..5]);
+    let next = first["cursor"].as_str().unwrap();
+    let rest = format!("&q=nobody&limit=5&cursor={next}");
+    let (_, rest) = listed(&h, Some(&bob), &did, &rest).await;
+    assert_eq!(dids(&rest), nobodies[5..]);
+    assert_eq!(rest.get("cursor"), None);
+
+    // Only to whoever may read its members space.
+    assert_eq!(
+        error(&listed(&h, Some(&carol), &did, "").await),
+        (403, "Forbidden")
+    );
+    assert_eq!(listed(&h, None, &did, "").await.0, 401);
+    let lost = listed(&h, Some(&bob), "did:plc:nobody", "").await;
+    assert_eq!(error(&lost), (400, "GroupNotFound"));
+    // Nor does one not in it learn how many are.
+    let theirs = view(&h, &did, Some(&carol)).await;
+    assert_eq!(theirs["group"].get("memberCount"), None);
+}

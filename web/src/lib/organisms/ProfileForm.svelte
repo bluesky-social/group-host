@@ -1,12 +1,18 @@
 <script lang="ts">
-	/** A group's profile, to change: its name, its words, how people join, and its own site. */
+	/**
+	 * A group's profile, to change: its name, its words, how people join,
+	 * its own site, and up to five links, each an address and what it is.
+	 */
 	let {
 		displayName,
 		description,
 		joinPolicy,
-		url
-	}: { displayName?: string; description?: string; joinPolicy?: string; url?: string } = $props();
+		url,
+		links = []
+	}: { displayName?: string; description?: string; joinPolicy?: string; url?: string; links?: { url: string; title?: string }[] } = $props();
 	const policy = $derived(joinPolicy ?? 'approval');
+	// Each link it has, then empty rows up to five, for more.
+	const rows = $derived([...links, ...Array.from({ length: Math.max(0, 5 - links.length) }, () => ({ url: '', title: '' }))]);
 </script>
 
 <form class="stack" method="post" action="?/profile">
@@ -21,5 +27,12 @@
 		</select>
 	</label>
 	<label class="field">Its own site <input name="url" type="url" value={url ?? ''} /></label>
+	<fieldset class="link-rows">
+		<legend>Links, up to five</legend>
+		{#each rows as link, i (i)}
+			<label class="field">Link {i + 1} <input name="linkUrl" type="url" placeholder="https://" value={link.url} /></label>
+			<label class="field">What link {i + 1} is <input name="linkTitle" maxlength="64" value={link.title ?? ''} /></label>
+		{/each}
+	</fieldset>
 	<button type="submit">Save the profile</button>
 </form>

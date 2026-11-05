@@ -167,7 +167,7 @@ async fn names_by_did_alone_someone_whose_document_it_cannot_read() {
     )
     .await;
     join(&h, &riders, "did:plc:nobodynobodynobodyxx").await;
-    let lxm = format!("{NS}.getGroup");
+    let lxm = format!("{NS}.listMembers");
     let (_, view) = get(
         &h,
         &lxm,

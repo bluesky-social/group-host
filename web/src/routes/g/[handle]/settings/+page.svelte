@@ -22,7 +22,7 @@
 	{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 	{#if data.configures}
 		<Section title="Profile">
-			<ProfileForm displayName={g.displayName} description={g.description} joinPolicy={g.joinPolicy} url={g.url} />
+			<ProfileForm displayName={g.displayName} description={g.description} joinPolicy={g.joinPolicy} url={g.url} links={g.links} />
 		</Section>
 		<Section title="Pictures">
 			<ProfilePictures avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} />

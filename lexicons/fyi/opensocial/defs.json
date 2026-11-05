@@ -296,6 +296,15 @@
           "type": "string",
           "description": "CID of the banner blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
         },
+        "links": {
+          "type": "array",
+          "maxLength": 5,
+          "description": "Where else the group is, as its profile lists them.",
+          "items": {
+            "type": "ref",
+            "ref": "#link"
+          }
+        },
         "rules": {
           "type": "array",
           "description": "In the order they are presented. Absent when the meta space is closed to the viewer.",
@@ -303,6 +312,11 @@
             "type": "ref",
             "ref": "#groupRule"
           }
+        },
+        "memberCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many are in it. Present only when the viewer may read the members space, whose members listMembers gives a page at a time."
         },
         "viewer": {
           "type": "ref",
@@ -669,6 +683,27 @@
         "did": {
           "type": "string",
           "format": "did"
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "description": "A place on the web where the group is: its site, a chat, a calendar.",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "description": "An http or https address."
+        },
+        "title": {
+          "type": "string",
+          "maxGraphemes": 64,
+          "maxLength": 640,
+          "description": "What it is, as the group puts it."
         }
       }
     },

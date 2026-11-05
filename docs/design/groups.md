@@ -126,8 +126,9 @@ group's DID, handle, address, and the URIs of its two spaces. Whoever may
 read `meta` also gets the profile and the rules, in order. A signed-in
 caller gets `viewer`: whether they are a member, their roles and
 actions, and for a member whether their own repo in `members` holds
-anything yet. Whoever may read `members` gets the members, the roles and
-what each may do, and the spaces, with a space's access shown only to
+anything yet. Whoever may read `members` gets how many members it has
+(`listMembers` names them, a page at a time), the roles and what each
+may do, and the spaces, with a space's access shown only to
 those who may read it. A holder of `admit` also gets the join requests. A
 switched-off group shows only the first part and `deactivated: true`.
 
@@ -159,7 +160,7 @@ A put replaces the record whole: what it leaves out goes. Beyond what
 the lexicon checks, the host keeps a profile only with a display name
 that is more than spaces, a join policy of `open`, `approval` or
 `invite`, a location of one of `community.lexicon.location`'s kinds, a
-site on `http` or `https`, and topics and languages each listed once and
+site, and links, on `http` or `https`, and topics and languages each listed once and
 none blank. The profile stays at `self` and is never deleted.
 
 A picture must be a blob in the group's own repo, because a blob in

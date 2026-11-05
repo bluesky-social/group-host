@@ -149,22 +149,9 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     every.sort();
     assert_eq!(viewer["actions"], json!(every));
     assert_eq!(viewer["accepted"], false);
-    let members: Vec<&str> = mine["members"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|m| m["actor"]["did"].as_str().unwrap())
-        .collect();
-    assert_eq!(members.len(), 2);
-    assert!(members.contains(&alice.did.as_str()) && members.contains(&bob.did.as_str()));
-    // Each by the handle their DID document names.
-    assert!(
-        mine["members"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|m| m["actor"]["handle"] == "authority.test")
-    );
+    // How many are in it, she and her steward; listMembers names them.
+    assert_eq!(group["memberCount"], 2);
+    assert_eq!(mine.get("members"), None);
     assert_eq!(
         mine["roles"],
         json!([

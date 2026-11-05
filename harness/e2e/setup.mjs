@@ -18,9 +18,10 @@ const front = async (consolePort, net, children) => {
 }
 
 export default async function setup() {
-  // harbor is an account of its own, which alice moves here to become a group.
-  const w = await start({ accounts: ['alice', 'bob', 'harbor'], front })
+  // harbor is an account of its own, which alice moves here to become a group;
+  // carol, dan, erin and frank fill a group past a page of its members.
+  const w = await start({ accounts: ['alice', 'bob', 'harbor', 'carol', 'dan', 'erin', 'frank'], front })
   const { net } = w
-  process.env.E2E_WORLD = JSON.stringify({ base: w.base, host: w.host, pds: net.pds, mail: net.mail, accounts: net.accounts, riders: w.riders })
+  process.env.E2E_WORLD = JSON.stringify({ base: w.base, host: w.host, did: w.did, pds: net.pds, mail: net.mail, accounts: net.accounts, riders: w.riders })
   return w.stop
 }

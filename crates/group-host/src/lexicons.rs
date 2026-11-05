@@ -78,6 +78,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/listGroupTokens"),
     lexicon!("fyi/opensocial/listInvites"),
     lexicon!("fyi/opensocial/listJoinRequests"),
+    lexicon!("fyi/opensocial/listMembers"),
     lexicon!("fyi/opensocial/listRecoveryKeys"),
     lexicon!("fyi/opensocial/listSpaceRecords"),
     lexicon!("fyi/opensocial/listSubjects"),

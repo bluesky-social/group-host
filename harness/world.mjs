@@ -40,7 +40,7 @@ const up = async (url) => {
 }
 
 /// `account`'s service auth for `aud` and `lxm`, from their own PDS.
-const serviceAuth = async (pds, account, aud, lxm) => {
+export const serviceAuth = async (pds, account, aud, lxm) => {
   const session = await fetch(`${pds}/xrpc/com.atproto.server.createSession`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

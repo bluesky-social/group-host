@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Get a detailed view of a group: its profile and rules, and — for a viewer who may read the members space — its roster, roles, spaces and their read gates, plus the join queue for a viewer holding `admit`. Without auth, only the group's did and handle; with it, the viewer's standing and what their roles let them read. Every gate is the decision a space credential is minted on.",
+      "description": "Get a detailed view of a group: its profile and rules, and — for a viewer who may read the members space — how many are in it (listMembers names them), its roles, spaces and their read gates, plus the join queue for a viewer holding `admit`. Without auth, only the group's did and handle; with it, the viewer's standing and what their roles let them read. Every gate is the decision a space credential is minted on.",
       "parameters": {
         "type": "params",
         "required": ["group"],
@@ -25,13 +25,6 @@
             "group": {
               "type": "ref",
               "ref": "fyi.opensocial.defs#groupViewDetailed"
-            },
-            "members": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.defs#memberView"
-              }
             },
             "roles": {
               "type": "array",

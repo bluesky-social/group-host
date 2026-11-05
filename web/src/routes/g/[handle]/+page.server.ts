@@ -1,7 +1,9 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
+import type * as getActorInvites from '#lib/lexicons/fyi/opensocial/getActorInvites.ts';
 import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
 import type * as listConnectedApps from '#lib/lexicons/fyi/opensocial/listConnectedApps.ts';
 import type * as listInvites from '#lib/lexicons/fyi/opensocial/listInvites.ts';
+import type * as listMembers from '#lib/lexicons/fyi/opensocial/listMembers.ts';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
@@ -19,19 +21,34 @@ async function groupOf(event: { fetch: typeof fetch; params: { handle?: string }
 	return answer.did;
 }
 
+/** How many members a page shows at first, and how many more each time it shows more. */
+const STEP = 5;
+
 /**
- * A group, by its handle, as the person looking may see it; and its
- * invites waiting, for one who may invite.
+ * A group, by its handle, as the person looking may see it: to a member
+ * who may read them, its members, `shown` of them (five more each time)
+ * whose handle holds `q`; its invites waiting, for one who may invite;
+ * the AI apps a member connected; and to one not in it, whether it has
+ * invited them.
  */
 export const load: PageServerLoad = async (event) => {
 	const group = await groupOf(event);
 	const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
-	const invites = view.group.viewer?.actions?.includes('invite')
+	const viewer = view.group.viewer;
+	const q = event.url.searchParams.get('q')?.trim() ?? '';
+	const more = Math.floor(Number(event.url.searchParams.get('shown')) / STEP) * STEP;
+	const shown = Math.min(100, Math.max(STEP, more || STEP));
+	const page =
+		view.group.memberCount === undefined
+			? null
+			: await xrpc<typeof listMembers.main>(event, 'fyi.opensocial.listMembers', { group, limit: shown, ...(q ? { q } : {}) });
+	const invites = viewer?.actions?.includes('invite')
 		? (await xrpc<typeof listInvites.main>(event, 'fyi.opensocial.listInvites', { group })).invites
 		: null;
-	// The assistants a member connected here, and where they connect one.
-	const apps = view.group.viewer?.member ? (await xrpc<typeof listConnectedApps.main>(event, 'fyi.opensocial.listConnectedApps', { group })).apps : null;
-	return { ...view, invites, apps, mcp: `${event.url.origin}/mcp` };
+	// The AI apps a member connected here, and where they connect one.
+	const apps = viewer?.member ? (await xrpc<typeof listConnectedApps.main>(event, 'fyi.opensocial.listConnectedApps', { group })).apps : null;
+	const invited = viewer && !viewer.member ? (await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', { group })).invites.length > 0 : false;
+	return { ...view, members: page?.members ?? null, more: !!page?.cursor, q, shown, invites, apps, invited, mcp: `${event.url.origin}/mcp` };
 };
 
 /** The group a form on its page is about, and the DID a form names. */
@@ -55,8 +72,11 @@ async function membership(event: { fetch: typeof fetch }, group: string, who: st
 /** What a person does on a group's page: each drawn again after. */
 export const actions: Actions = {
 	join: async (event) => {
-		const { group } = await asked(event);
-		return act(event, 'fyi.opensocial.requestJoin', { group });
+		const { group, form } = await asked(event);
+		// Their note to whoever looks at the request, if they wrote one.
+		const message = String(form.get('message') ?? '').trim();
+		const failed = await act(event, 'fyi.opensocial.requestJoin', { group, ...(message ? { message } : {}) });
+		return failed ?? { joined: true };
 	},
 	cancel: async (event) => {
 		const { group } = await asked(event);
@@ -91,8 +111,9 @@ export const actions: Actions = {
 		const found = await event.fetch(`/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
 		if (!found.ok) return fail(400, { failed: `We cannot find ${handle}.` });
 		const { did } = await found.json();
-		// Written as the group, in their own inbox.
-		const record = { $type: 'fyi.opensocial.invite', createdAt: new Date().toISOString() };
+		// Written as the group, in their own inbox, with the note if there is one.
+		const message = String(form.get('message') ?? '').trim();
+		const record = { $type: 'fyi.opensocial.invite', ...(message ? { message } : {}), createdAt: new Date().toISOString() };
 		return asGroup(event, group, inboxOf(did), 'com.atproto.space.createRecord', { collection: 'fyi.opensocial.invite', record });
 	},
 	disconnect: async (event) => {

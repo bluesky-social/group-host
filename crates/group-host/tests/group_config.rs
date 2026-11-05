@@ -87,6 +87,14 @@ async fn an_admin_changes_the_profile() {
         "displayName": "Riders United",
         "description": "We ride.",
         "url": "https://riders.example",
+        // As many links as a profile holds, a title as long as one may be.
+        "links": [
+            {"url": "https://chat.riders.example", "title": "Our chat"},
+            {"url": "http://calendar.riders.example/rides"},
+            {"url": "https://a.example", "title": "x".repeat(64)},
+            {"url": "https://b.example", "title": "B"},
+            {"url": "https://c.example", "title": "C"},
+        ],
         "joinPolicy": "invite",
         "location": {"$type": "community.lexicon.location.address", "locality": "Ljubljana", "country": "SI"},
         "online": true,
@@ -113,6 +121,7 @@ async fn an_admin_changes_the_profile() {
     let shown = view(&h, &did, Some(&alice)).await;
     assert_eq!(shown["group"]["displayName"], "Riders United");
     assert_eq!(shown["group"]["joinPolicy"], "invite");
+    assert_eq!(shown["group"]["links"], record["links"]);
 
     // Replaced whole: what is left out goes, pictures and all.
     let said = app
@@ -155,6 +164,12 @@ async fn refuses_a_profile_it_should_not_keep() {
         riders(json!({"joinPolicy": "fyi.opensocial.profile#invite"})),
         riders(json!({"location": {"$type": "xyz.place"}})),
         riders(json!({"url": "ftp://riders.example"})),
+        riders(
+            json!({"links": [{"url": "https://riders.example"}, {"url": "ftp://riders.example"}]}),
+        ),
+        riders(json!({"links": [{"title": "Nowhere"}]})),
+        riders(json!({"links": [{"url": "https://riders.example", "title": "x".repeat(65)}]})),
+        riders(json!({"links": vec![json!({"url": "https://riders.example"}); 6]})),
         riders(json!({"topics": [{"topic": "bikes"}, {"topic": " bikes "}]})),
         riders(json!({"topics": [{"topic": " "}]})),
         riders(json!({"languages": [{"language": "sl"}, {"language": "sl"}]})),

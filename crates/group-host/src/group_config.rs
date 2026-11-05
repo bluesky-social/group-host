@@ -141,14 +141,20 @@ fn place(profile: &Value) -> Result<(), XrpcError> {
     Ok(())
 }
 
-/// Refuses a site that is not on the web.
-fn site(profile: &Value) -> Result<(), XrpcError> {
-    let Some(url) = profile.get("url") else {
-        return Ok(());
-    };
+/// Whether `url` is an address on the web.
+fn on_the_web(url: &Value) -> bool {
     let url = url.as_str().unwrap_or_default();
-    if !url.starts_with("https://") && !url.starts_with("http://") {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
+/// Refuses a site, or a link, that is not on the web.
+fn site(profile: &Value) -> Result<(), XrpcError> {
+    if profile.get("url").is_some_and(|url| !on_the_web(url)) {
         return Err(invalid("url is an http or https address"));
+    }
+    let links = profile["links"].as_array().into_iter().flatten();
+    if links.into_iter().any(|link| !on_the_web(&link["url"])) {
+        return Err(invalid("each link's url is an http or https address"));
     }
     Ok(())
 }
@@ -179,8 +185,8 @@ impl Host {
     }
 
     /// Refuses a profile the group should not keep: one with no name, a
-    /// join policy the host does not know, a place that is none, a site
-    /// not on the web, words blank or listed twice, or a picture that is
+    /// join policy the host does not know, a place that is none, a site or
+    /// link not on the web, words blank or listed twice, or a picture that is
     /// not one of its own.
     fn profile(&self, group: &str, profile: &Value) -> Result<(), XrpcError> {
         if !said(&profile["displayName"]) {

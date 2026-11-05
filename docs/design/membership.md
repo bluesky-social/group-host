@@ -23,6 +23,14 @@ record:
   with the scopes it carries and the roles it may assign
   (`defs#groupGrant`, each a list of strings).
 
+Whoever may read the members space reads who is in it with
+`listMembers`: each member and their roles, named by the handle their DID
+document gives, a page at a time in the order of their DIDs. A roster
+outgrows one answer, so `getGroup` only counts them (`memberCount`). With
+`q`, the page holds only those whose handle or DID contains it, whatever
+its case, which is how the console finds a member as their handle is
+typed.
+
 A member is anyone with a membership record. Every member holds `member`,
 the role the members space lets read, and no membership leaves it out.
 Who may read the members space is fixed; `updateSpace` will not change

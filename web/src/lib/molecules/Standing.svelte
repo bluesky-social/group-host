@@ -1,25 +1,11 @@
 <script lang="ts">
-	/**
-	 * Where the person looking stands with the group, and what they can do
-	 * about it: join or ask to, take back their request, or leave.
-	 */
-	let {
-		member,
-		asked,
-		joinPolicy
-	}: { member: boolean; asked: boolean; joinPolicy?: string } = $props();
-	const invited = $derived(joinPolicy === 'invite');
-	const open = $derived(joinPolicy === 'open');
+	import Tag from '#lib/atoms/Tag.svelte';
+	/** A member's standing in the group: the roles they hold there, and the way to leave it. */
+	let { roles }: { roles: string[] } = $props();
 </script>
 
-<div class="standing">
-	{#if member}
-		<form method="post" action="?/leave"><span class="mute">You are a member.</span> <button class="quiet" type="submit">Leave</button></form>
-	{:else if asked}
-		<form method="post" action="?/cancel"><span class="mute">You have asked to join.</span> <button class="quiet" type="submit">Take back the request</button></form>
-	{:else if invited}
-		<p class="mute">This group takes people by invitation.</p>
-	{:else}
-		<form method="post" action="?/join"><button type="submit">{open ? 'Join' : 'Ask to join'}</button></form>
-	{/if}
-</div>
+<form class="standing" method="post" action="?/leave">
+	<span class="mute">You're a member, as</span>
+	{#each roles as role (role)}<Tag text={role} />{/each}
+	<button class="quiet" type="submit">Leave the group</button>
+</form>

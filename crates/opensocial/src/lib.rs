@@ -548,8 +548,17 @@ async fn inspect(me: &Client, host: &Host, group: &str) -> Result<String> {
     out += &lines(&said["roles"], |r| {
         format!("{:<12} {}", text(&r["key"]), text(&r["name"]))
     });
+    // The first hundred, to one who may read them, as getGroup counts them.
+    let members = match g.get("memberCount") {
+        Some(_) => {
+            let asked = [("group", did.as_str()), ("limit", "100")];
+            let page = me.query(host, &m("listMembers"), &asked).await?;
+            page["members"].clone()
+        }
+        None => Value::Null,
+    };
     out += "members\n";
-    out += &lines(&said["members"], member_line);
+    out += &lines(&members, member_line);
     out += "spaces\n";
     out += &lines(&said["spaces"], |s| text(&s["uri"]).to_string());
     Ok(out)

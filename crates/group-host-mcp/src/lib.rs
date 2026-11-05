@@ -35,6 +35,7 @@ macro_rules! lexicon {
 /// The methods an assistant may call, by their lexicons.
 const METHODS: &[(&str, &str)] = &[
     lexicon!("getGroup"),
+    lexicon!("listMembers"),
     lexicon!("listJoinRequests"),
     lexicon!("denyJoinRequest"),
     lexicon!("listInvites"),

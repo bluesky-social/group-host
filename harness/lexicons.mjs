@@ -44,7 +44,10 @@ const base = process.argv[2] ?? (() => {
 //   was written to it: actorView's profile fields (it answers a DID and a
 //   handle, from the DID document), and listSpaceRecords' `rev` and
 //   `actors`.
+// - getGroup's whole roster, which outgrows one answer: it counts its
+//   members, and listMembers gives them a page at a time.
 const retracted = new Set([
+  'fyi.opensocial.getGroup#main.output.members',
   ...['displayName', 'description', 'avatar', 'pronouns', 'links', 'bot'].map((f) => `fyi.opensocial.defs#actorView.${f}`),
   'fyi.opensocial.defs#actorLink',
   'fyi.opensocial.listSpaceRecords#main.output.rev',

@@ -78,7 +78,7 @@ async function picture(event: Event, did: string, cid?: string) {
  */
 async function profileNow(event: Event, group: string) {
 	const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as `did:${string}:${string}` });
-	const kept = Object.fromEntries(['description', 'url', 'location', 'online', 'topics', 'languages'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : [])));
+	const kept = Object.fromEntries(['description', 'url', 'links', 'location', 'online', 'topics', 'languages'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : [])));
 	const [avatar] = await picture(event, now.did, now.avatar);
 	const [banner] = await picture(event, now.did, now.banner);
 	const pictures = { ...(avatar ? { avatar } : {}), ...(banner ? { banner } : {}) };
@@ -141,6 +141,15 @@ export const actions: Actions = {
 				if (text(form, k)) profile[k] = text(form, k);
 				else delete profile[k];
 			}
+			// Each link with an address, with its title if it has one.
+			const titles = form.getAll('linkTitle').map((t) => String(t).trim());
+			const links = form
+				.getAll('linkUrl')
+				.map((u, i) => ({ url: String(u).trim(), title: titles[i] ?? '' }))
+				.filter((l) => l.url)
+				.map((l) => (l.title ? l : { url: l.url }));
+			if (links.length) profile.links = links;
+			else delete profile.links;
 			return putProfile(session, profile);
 		});
 	},

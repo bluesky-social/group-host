@@ -152,6 +152,10 @@
 	--avatar: 24px;
 	--avatar-md: 44px;
 	--avatar-lg: 88px;
+	/* A small picture set in a line of text: a link's mark. */
+	--icon: 14px;
+	/* A group's banner: as wide as its card, a third as high. */
+	--banner-ratio: 3 / 1;
 	--header: 4rem;
 	--page: 46rem;
 	--dialog: 26rem;

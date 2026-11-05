@@ -210,6 +210,10 @@ pub fn router(host: Arc<Host>) -> Router {
         )
         .route("/xrpc/fyi.opensocial.getGroup", get(group_api::get_group))
         .route(
+            "/xrpc/fyi.opensocial.listMembers",
+            get(group_api::list_members),
+        )
+        .route(
             "/xrpc/fyi.opensocial.listGroups",
             get(group_api::list_groups),
         )

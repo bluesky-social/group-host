@@ -59,7 +59,8 @@ blob the group already holds.
 
 | Tool | What it does |
 | --- | --- |
-| `getGroup` | the group as the member may see it: its profile, rules, roster, roles and spaces |
+| `getGroup` | the group as the member may see it: its profile, rules, how many are in it, roles and spaces |
+| `listMembers` | who is in the group, and their roles, a page at a time, found by part of a handle or DID (`q`) |
 | `putProfile` | replaces the group's profile, as the group |
 | `putRule`, `deleteRule` | makes, changes or removes a rule, as the group |
 | `putRole`, `deleteRole` | writes a role, or deletes one nobody holds or is granted, as the group |

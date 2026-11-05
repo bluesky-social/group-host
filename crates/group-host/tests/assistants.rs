@@ -265,6 +265,11 @@ async fn acts_as_the_member_in_the_group_they_chose() {
         group.as_str(),
         "{got}"
     );
+    // Who is in it, found by part of their DID.
+    let got = tool(&h, access, "listMembers", json!({"q": &alice.did[8..]})).await;
+    let found = &got["structuredContent"]["members"];
+    assert_eq!(found[0]["actor"]["did"], alice.did.as_str(), "{got}");
+    assert_eq!(found.as_array().unwrap().len(), 1, "{got}");
     let got = tool(
         &h,
         access,

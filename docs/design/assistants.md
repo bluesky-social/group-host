@@ -118,10 +118,12 @@ Details:
 
 ## Seeing and disconnecting
 
-On the group's page, a member sees "Your assistants": the ones they
+On the group's page, a member whose roles hold `group.configure` sees
+"Connect an AI app": the MCP address to add, to copy, what the app will
+then ask of them, and a few things to ask it; and under it the ones they
 connected to that group, with when each connected and was last used.
-With none connected, the page shows the MCP address to add. A member
-sees and ends only their own.
+Any other member sees theirs under "Your AI apps", once they have
+connected one. A member sees and ends only their own.
 
 Disconnecting an assistant with `revokeConnectedApp` ends every
 connection the member made with that client in that group, and its
