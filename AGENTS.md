@@ -173,6 +173,11 @@ pulls into it or into a `feature/` branch:
 - `docs`: `just docs`, every link and anchor landing, and the docs site's
   build.
 
+One more, `mirror`, checks nothing: each push to `main` or a tag pushes
+the same commit to a private copy on GitHub
+(github.com/bluesky-social/group-host), for those who read the code
+there. Nothing is pushed to that copy but from here.
+
 On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
 what they read; otherwise each passes at once, noted as skipped.
 

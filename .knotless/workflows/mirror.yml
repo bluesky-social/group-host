@@ -1,0 +1,23 @@
+# A private copy on GitHub, bluesky-social/group-host, for those who read
+# the code there. Each push to main or a tag pushes the same commit there;
+# only the code goes, as pulls and issues stay here. MIRROR_KEY is that
+# repository's deploy key, with write access, given to the runners for
+# main and tags alone, so no other branch can change this and use it.
+#
+# The push is forced, so the copy follows main even where history is
+# rewritten: nothing is pushed to it but from here. GitHub's host key is
+# pinned, as `ssh-keyscan -t ed25519 github.com` shows it.
+on:
+  push: {refs: [refs/heads/main, refs/tags/*]}
+image: debian:stable-slim
+secrets: [MIRROR_KEY]
+env: {MIRROR: git@github.com:bluesky-social/group-host.git}
+steps:
+  - name: mirror
+    run: |
+      apt-get update -qq && apt-get install -qq -y git openssh-client >/dev/null
+      printf '%s\n' "$MIRROR_KEY" > /tmp/key && chmod 600 /tmp/key
+      echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > /tmp/known_hosts
+      git config --global --add safe.directory /work
+      GIT_SSH_COMMAND='ssh -i /tmp/key -o UserKnownHostsFile=/tmp/known_hosts' \
+        git push "$MIRROR" "+$KNOTLESS_RUN_SHA:$KNOTLESS_RUN_REF"
