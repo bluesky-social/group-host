@@ -2,7 +2,7 @@
 //! the server answers each message an MCP client sends.
 
 use group_host_mcp::{
-    Action, Key, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, plan, regrant, snake, tools,
+    Action, Key, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, edited, plan, regrant, snake, tools,
 };
 use serde_json::{Value, json};
 
@@ -103,14 +103,17 @@ fn makes_each_schema_from_the_lexicons() {
     assert_eq!(eject.input_schema["required"], json!(["member"]));
     assert_eq!(eject.input_schema["properties"]["member"]["format"], "did");
 
-    // The profile, at its one key: none to say, nor when it was made.
+    // The profile, at its one key: none to say, nor when it was made;
+    // each field changed only if given.
     let profile = tool("profile_set");
     let fields = &profile.input_schema["properties"];
     assert_eq!(fields["display_name"]["maxLength"], 640);
     assert!(fields.get("rkey").is_none() && fields.get("created_at").is_none());
-    assert_eq!(
-        profile.input_schema["required"],
-        json!(["display_name", "join_policy"])
+    assert_eq!(profile.input_schema["required"], json!([]));
+    assert!(
+        profile
+            .description
+            .contains("Changes only the fields given")
     );
     let said = fields["join_policy"]["description"].as_str().unwrap();
     assert!(said.contains("One of: "), "{said}");
@@ -231,20 +234,21 @@ fn plans_a_record_written_as_the_group() {
         rkey: rkey.map(String::from),
         record,
     };
-    // In snake case, written in the lexicon's own case.
+    // In snake case, in the lexicon's own case: the fields to change.
     assert_eq!(
         planned(
             "profile_set",
-            json!({"display_name": "Riders", "join_policy": "open"})
+            json!({"display_name": "Riders", "description": ""})
         ),
-        Ok(write(
-            "meta",
-            "profile",
-            Some("self"),
-            Some(
-                json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "joinPolicy": "open"})
-            )
-        ))
+        Ok(Plan::Edit {
+            space: "fyi.opensocial.meta".into(),
+            collection: "fyi.opensocial.profile".into(),
+            rkey: "self".into(),
+            fields: json!({"displayName": "Riders", "description": ""})
+                .as_object()
+                .unwrap()
+                .clone(),
+        })
     );
     let rule = json!({"$type": "fyi.opensocial.rule", "title": "Be kind", "text": ""});
     assert_eq!(
@@ -332,14 +336,21 @@ fn plans_an_invite_and_a_grant() {
         planned("role_grant", json!({"role": "leader", "scopes": ["rpc:x"]})),
         Ok(Plan::Grant {
             role: "leader".into(),
-            grant: Some(json!({"role": "leader", "scopes": ["rpc:x"], "assignable": []})),
+            scopes: vec!["rpc:x".into()],
+            assignable: vec![],
+            undo: false,
         })
     );
     assert_eq!(
-        planned("role_grant", json!({"role": "leader", "undo": true})),
+        planned(
+            "role_grant",
+            json!({"role": "leader", "assignable": ["member"], "undo": true})
+        ),
         Ok(Plan::Grant {
             role: "leader".into(),
-            grant: None
+            scopes: vec![],
+            assignable: vec!["member".into()],
+            undo: true,
         })
     );
     assert!(planned("role_grant", json!({})).is_err());
@@ -347,8 +358,7 @@ fn plans_an_invite_and_a_grant() {
 
 #[test]
 fn regrants_one_role_keeping_the_rest() {
-    let grant =
-        |role: &str, scope: &str| json!({"role": role, "scopes": [scope], "assignable": []});
+    let grant = |role: &str, scopes: &[&str], assignable: &[&str]| json!({"role": role, "scopes": scopes, "assignable": assignable});
     let written = |plan: Plan| match plan {
         Plan::Write {
             space,
@@ -368,23 +378,88 @@ fn regrants_one_role_keeping_the_rest() {
         }
         other => panic!("{other:?}"),
     };
-    let kept = json!({"$type": "fyi.opensocial.permissions", "grants": [grant("admin", "a"), grant("leader", "b"), grant("leader", "c")], "createdAt": NOW});
-    // In its place, once; the rest as they were.
-    let record = written(regrant(&kept, "leader", Some(grant("leader", "d"))));
+    let names = |n: &[&str]| n.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let kept = json!({"$type": "fyi.opensocial.permissions", "grants": [grant("admin", &["a"], &[]), grant("leader", &["b"], &["member"]), grant("leader", &["c"], &[])], "createdAt": NOW});
+    // What is named is added to what the role had, once, in its place;
+    // the rest as they were.
+    let record = written(regrant(&kept, "leader", &names(&["d", "b"]), &[], false));
     assert_eq!(
         record["grants"],
-        json!([grant("admin", "a"), grant("leader", "d")])
+        json!([
+            grant("admin", &["a"], &[]),
+            grant("leader", &["b", "c", "d"], &["member"])
+        ])
     );
     assert_eq!(record["createdAt"], NOW);
-    let record = written(regrant(&kept, "leader", None));
-    assert_eq!(record["grants"], json!([grant("admin", "a")]));
-    let record = written(regrant(&kept, "mod", Some(grant("mod", "e"))));
-    assert_eq!(record["grants"].as_array().unwrap().len(), 4);
+    // With undo, what is named is taken away; with nothing named, or
+    // nothing left, the grant goes.
+    let record = written(regrant(&kept, "leader", &names(&["b"]), &[], true));
+    assert_eq!(
+        record["grants"],
+        json!([
+            grant("admin", &["a"], &[]),
+            grant("leader", &["c"], &["member"])
+        ])
+    );
+    let record = written(regrant(&kept, "leader", &[], &[], true));
+    assert_eq!(record["grants"], json!([grant("admin", &["a"], &[])]));
+    let record = written(regrant(&kept, "admin", &names(&["a"]), &[], true));
+    let roles: Vec<&Value> = record["grants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| &g["role"])
+        .collect();
+    assert_eq!(roles, ["leader", "leader"]);
+    let record = written(regrant(&kept, "mod", &names(&["e"]), &[], false));
+    assert_eq!(record["grants"][3], grant("mod", &["e"], &[]));
     // A group with none yet has one.
-    let record = written(regrant(&Value::Null, "mod", Some(grant("mod", "e"))));
+    let record = written(regrant(&Value::Null, "mod", &names(&["e"]), &[], false));
     assert_eq!(
         record,
-        json!({"$type": "fyi.opensocial.permissions", "grants": [grant("mod", "e")]})
+        json!({"$type": "fyi.opensocial.permissions", "grants": [grant("mod", &["e"], &[])]})
+    );
+}
+
+#[test]
+fn edits_a_record_keeping_what_is_not_given() {
+    let avatar =
+        json!({"$type": "blob", "ref": {"$link": "bafy"}, "mimeType": "image/png", "size": 3});
+    let kept = json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "description": "Bikes", "avatar": avatar, "links": [{"url": "https://a.test"}], "joinPolicy": "open"});
+    let fields = json!({"displayName": "Riders United", "description": "", "links": [], "url": null, "online": false});
+    let plan = edited(
+        &kept,
+        "fyi.opensocial.meta".into(),
+        "fyi.opensocial.profile".into(),
+        "self".into(),
+        fields.as_object().unwrap().clone(),
+    );
+    assert_eq!(
+        plan,
+        Plan::Write {
+            space: "fyi.opensocial.meta".into(),
+            collection: "fyi.opensocial.profile".into(),
+            rkey: Some("self".into()),
+            record: Some(
+                json!({"$type": "fyi.opensocial.profile", "displayName": "Riders United", "avatar": avatar, "joinPolicy": "open", "online": false})
+            ),
+        }
+    );
+    // None yet: only what is given.
+    let fields = json!({"displayName": "Riders"});
+    let plan = edited(
+        &Value::Null,
+        "fyi.opensocial.meta".into(),
+        "fyi.opensocial.profile".into(),
+        "self".into(),
+        fields.as_object().unwrap().clone(),
+    );
+    let Plan::Write { record, .. } = plan else {
+        panic!()
+    };
+    assert_eq!(
+        record,
+        Some(json!({"$type": "fyi.opensocial.profile", "displayName": "Riders"}))
     );
 }
 #[tokio::test]

@@ -76,8 +76,6 @@ const MEMBERS: &str = "fyi.opensocial.members";
 /// Where a record a tool writes is kept in its space.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Key {
-    /// At this one key, as its lexicon has it: `self`.
-    Literal(String),
     /// At the key this argument names, which the tool requires.
     Named(String),
     /// At the key this field of the record names, which the tool
@@ -108,6 +106,13 @@ pub enum Action {
         key: Key,
         stamp: bool,
     },
+    /// Changes the fields given of the record of the kind `collection` at
+    /// `rkey` in the group's space of the type `space`, keeping the rest.
+    Edit {
+        collection: String,
+        space: String,
+        rkey: String,
+    },
     /// Deletes one.
     Delete {
         collection: String,
@@ -117,8 +122,8 @@ pub enum Action {
     /// Writes an invite as the group in the invitee's inbox; with `undo`,
     /// takes back the one waiting.
     Invite,
-    /// Sets a role's grant in the permissions record; with `undo`, drops
-    /// it.
+    /// Adds to a role's grant in the permissions record; with `undo`,
+    /// takes away from it.
     Grant,
 }
 
@@ -275,8 +280,6 @@ const DEPTH: u8 = 6;
 
 /// Where a record a tool writes is kept, as `TOOLS` says it.
 enum At {
-    /// At this one key.
-    Literal(&'static str),
     /// At the key this argument names, which is not the record's own.
     Named(&'static str),
     /// At the key this field of the record names: a membership's member.
@@ -291,6 +294,8 @@ enum Made {
     Method(&'static str, Option<&'static str>),
     /// A record of ours put, or deleted, in the group's space of a type.
     Put(&'static str, &'static str, At),
+    /// A record of ours at its one key, changed in the fields given.
+    Edit(&'static str, &'static str, &'static str),
     Delete(&'static str, &'static str, At),
     Invite,
     Grant,
@@ -308,9 +313,9 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "profile_set",
         &[],
-        "Replaces the group's profile as the group, whole: a field not given is dropped, and a \
-         picture is kept only by naming a blob the group holds.",
-        Made::Put("profile", META, At::Literal("self")),
+        "Changes the group's profile as the group. Changes only the fields given, keeping the \
+         rest; a field given empty, or null, is taken away.",
+        Made::Edit("profile", META, "self"),
     ),
     (
         "rule_set",
@@ -339,8 +344,9 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "role_grant",
         &["role"],
-        "Sets what a role may do, as the group: its scopes, and the roles its holders may assign, \
-         in place of its grant in the permissions record; with undo, drops its grant.",
+        "Adds to what a role may do, as the group: the scopes given, and the roles given that its \
+         holders may assign, to what its grant in the permissions record has; with undo, takes \
+         them away, or with none given drops its grant.",
         Made::Grant,
     ),
     (
@@ -547,7 +553,6 @@ impl Docs {
                 };
                 let stamp = drop(&mut input, "createdAt");
                 let key = match at {
-                    At::Literal(k) => Key::Literal(k.to_string()),
                     At::Named(n) => {
                         let said = format!("Which {kind}: its record's key.");
                         add(&mut input, n, rkey(said), true);
@@ -579,6 +584,19 @@ impl Docs {
                         key,
                         stamp,
                     },
+                };
+                (action, input, main["description"].as_str())
+            }
+            Made::Edit(kind, space, rkey) => {
+                let collection = format!("{NS}.{kind}");
+                let main = self.main(&collection);
+                let mut input = self.object(&collection, &main["record"], DEPTH);
+                drop(&mut input, "createdAt");
+                input["required"] = json!([]);
+                let action = Action::Edit {
+                    collection,
+                    space: space.to_string(),
+                    rkey: rkey.to_string(),
                 };
                 (action, input, main["description"].as_str())
             }
@@ -657,9 +675,24 @@ pub enum Plan {
         person: String,
         record: Option<Value>,
     },
-    /// Set `role`'s grant in the permissions record to `grant`; with none,
-    /// drop it. `regrant` makes the write, from the record as it is.
-    Grant { role: String, grant: Option<Value> },
+    /// Change the record of the kind `collection` at `rkey` in the
+    /// group's space of the type `space` in the `fields` given, keeping
+    /// the rest. `edited` makes the write, from the record as it is.
+    Edit {
+        space: String,
+        collection: String,
+        rkey: String,
+        fields: Map<String, Value>,
+    },
+    /// Add `scopes` and `assignable` to `role`'s grant in the permissions
+    /// record; with `undo`, take them away, or with none drop its grant.
+    /// `regrant` makes the write, from the record as it is.
+    Grant {
+        role: String,
+        scopes: Vec<String>,
+        assignable: Vec<String>,
+        undo: bool,
+    },
 }
 
 /// What calling `tool` with `args` comes to, `now` the time a record it
@@ -725,7 +758,6 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             key,
         } => {
             let rkey = match key {
-                Key::Literal(k) => Some(k.clone()),
                 Key::Named(n) => Some(given(&mut input, n)?),
                 Key::Field(n) => {
                     let named = given(&mut input, n)?;
@@ -749,6 +781,16 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
                 record,
             }
         }
+        Action::Edit {
+            collection,
+            space,
+            rkey,
+        } => Plan::Edit {
+            space: space.clone(),
+            collection: collection.clone(),
+            rkey: rkey.clone(),
+            fields: input,
+        },
         Action::Invite => {
             let person = given(&mut input, "person")?;
             let record = (!undo).then(|| stamped(input, &format!("{NS}.invite")));
@@ -756,43 +798,80 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
         }
         Action::Grant => {
             let role = given(&mut input, "role")?;
-            let list = |input: &Map<String, Value>, name: &str| {
-                input.get(name).cloned().unwrap_or(json!([]))
+            let list = |name: &str| -> Vec<String> {
+                let items = input.get(name).and_then(Value::as_array).into_iter();
+                let items = items.flatten().filter_map(Value::as_str);
+                items.map(String::from).collect()
             };
-            let grant = json!({
-                "role": role,
-                "scopes": list(&input, "scopes"),
-                "assignable": list(&input, "assignable"),
-            });
             Plan::Grant {
                 role,
-                grant: (!undo).then_some(grant),
+                scopes: list("scopes"),
+                assignable: list("assignable"),
+                undo,
             }
         }
     })
 }
 
-/// The write that sets `role`'s grant to `grant`, or with none drops it,
-/// in `permissions`, the group's permissions record as it is (none if it
-/// has none): each other role's grant as it was.
-pub fn regrant(permissions: &Value, role: &str, grant: Option<Value>) -> Plan {
+/// The write that adds `scopes` and `assignable` to `role`'s grant, or
+/// with `undo` takes them away, in `permissions`, the group's permissions
+/// record as it is (none if it has none): the grant dropped if nothing is
+/// named to take away, or nothing is left; each other role's as it was.
+pub fn regrant(
+    permissions: &Value,
+    role: &str,
+    scopes: &[String],
+    assignable: &[String],
+    undo: bool,
+) -> Plan {
     let mut record = match permissions {
         Value::Object(_) => permissions.clone(),
         _ => json!({}),
     };
+    let old = record["grants"].as_array().cloned().unwrap_or_default();
+    let had = |field: &str| -> Vec<String> {
+        let theirs = old.iter().filter(|g| g["role"] == role);
+        let items = theirs.flat_map(|g| g[field].as_array().cloned().unwrap_or_default());
+        let mut out: Vec<String> = Vec::new();
+        for item in items.filter_map(|i| i.as_str().map(String::from)) {
+            if !out.contains(&item) {
+                out.push(item);
+            }
+        }
+        out
+    };
+    let changed = |mut list: Vec<String>, named: &[String]| {
+        match undo {
+            true => list.retain(|i| !named.contains(i)),
+            false => list.extend(
+                named
+                    .iter()
+                    .filter(|n| !list.contains(n))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            ),
+        }
+        list
+    };
+    let scopes_now = changed(had("scopes"), scopes);
+    let assignable_now = changed(had("assignable"), assignable);
+    let named = !scopes.is_empty() || !assignable.is_empty();
+    let gone = undo && (!named || (scopes_now.is_empty() && assignable_now.is_empty()));
+    let grant =
+        (!gone).then(|| json!({"role": role, "scopes": scopes_now, "assignable": assignable_now}));
     let mut grants = Vec::new();
-    let mut replaced = false;
-    for old in record["grants"].as_array().into_iter().flatten() {
-        match old["role"] == role {
-            true if !replaced => {
-                replaced = true;
+    let mut placed = false;
+    for g in old {
+        match g["role"] == role {
+            true if !placed => {
+                placed = true;
                 grants.extend(grant.clone());
             }
             true => {}
-            false => grants.push(old.clone()),
+            false => grants.push(g),
         }
     }
-    if !replaced {
+    if !placed {
         grants.extend(grant);
     }
     record["$type"] = json!(format!("{NS}.permissions"));
@@ -802,6 +881,42 @@ pub fn regrant(permissions: &Value, role: &str, grant: Option<Value>) -> Plan {
         collection: format!("{NS}.permissions"),
         rkey: Some("self".into()),
         record: Some(record),
+    }
+}
+
+/// The write that changes `kept`, the record of the kind `collection` at
+/// `rkey` in the group's space of the type `space` as it is (none if there
+/// is none), in the `fields` given: each set, or taken away if given
+/// empty, an empty list, or null; the rest as they were.
+pub fn edited(
+    kept: &Value,
+    space: String,
+    collection: String,
+    rkey: String,
+    fields: Map<String, Value>,
+) -> Plan {
+    let mut record = match kept {
+        Value::Object(o) => o.clone(),
+        _ => Map::new(),
+    };
+    for (name, value) in fields {
+        let empty = match &value {
+            Value::Null => true,
+            Value::String(s) => s.is_empty(),
+            Value::Array(a) => a.is_empty(),
+            _ => false,
+        };
+        match empty {
+            true => record.remove(&name),
+            false => record.insert(name, value),
+        };
+    }
+    record.insert("$type".into(), json!(collection));
+    Plan::Write {
+        space,
+        collection,
+        rkey: Some(rkey),
+        record: Some(Value::Object(record)),
     }
 }
 

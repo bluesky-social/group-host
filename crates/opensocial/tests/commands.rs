@@ -14,6 +14,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+/// Two scopes a role may be granted: reading the moderation queue, and
+/// inviting.
+const MOD_READ: &str = "rpc:fyi.opensocial.listSubjects?aud=*";
+const INVITE: &str = "space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite";
+
 /// A host at a free port, on the reference directory, resolving
 /// handles at the reference PDS.
 struct Running {
@@ -257,37 +262,62 @@ async fn writes_the_groups_rules_roles_and_profile() {
     );
     let grants = || kept(&members, "permissions", "self").unwrap()["grants"].clone();
     let before = grants();
+    let leaders = || -> Vec<Value> {
+        let all = grants();
+        let all = all.as_array().unwrap().iter();
+        all.filter(|g| g["role"] == "leader").cloned().collect()
+    };
     ok(
         &alice,
         &["role", "grant", group, "leader", "--assignable", ""],
     )
     .await;
-    let leaders: Vec<Value> = grants()
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|g| g["role"] == "leader")
-        .cloned()
-        .collect();
     assert_eq!(
-        leaders,
+        leaders(),
         [json!({"role": "leader", "scopes": [], "assignable": []})]
     );
+    // Each added to what it had; one taken away, the rest kept.
+    let of_members = || -> Value {
+        let all = grants();
+        let all = all.as_array().unwrap();
+        let found = all.iter().find(|g| g["role"] == "member");
+        found.cloned().unwrap()
+    };
+    let had = of_members()["scopes"].as_array().unwrap().clone();
+    for scope in [MOD_READ, INVITE] {
+        ok(
+            &alice,
+            &["role", "grant", group, "member", "--scopes", scope],
+        )
+        .await;
+    }
+    let mut want = had.clone();
+    for scope in [MOD_READ, INVITE] {
+        if !want.contains(&json!(scope)) {
+            want.push(json!(scope));
+        }
+    }
+    assert_eq!(of_members()["scopes"], json!(want));
+    let undo = [
+        "role", "grant", group, "member", "--scopes", MOD_READ, "--undo",
+    ];
+    ok(&alice, &undo).await;
+    want.retain(|s| s != MOD_READ);
+    assert_eq!(of_members()["scopes"], json!(want));
     let said_so = fails(&alice, &["role", "grant", group, "leader", "--undo"]).await;
     assert!(said_so.contains("NotAssignable"), "{said_so}");
     assert_ne!(grants(), before);
     let said_so = fails(&alice, &["role", "delete", group, "leader"]).await;
     assert!(said_so.contains("RoleInUse"), "{said_so}");
 
-    // The profile, replaced whole.
+    // The profile, changed in what is given; given empty, taken away.
+    let before = kept(&meta, "profile", "self").unwrap();
     let profile = [
         "profile",
         "set",
         group,
         "--display-name",
         "Riders United",
-        "--join-policy",
-        "open",
         "--topics",
         r#"[{"topic": "cycling"}]"#,
     ];
@@ -295,7 +325,16 @@ async fn writes_the_groups_rules_roles_and_profile() {
     let written = kept(&meta, "profile", "self").unwrap();
     assert_eq!(written["displayName"], "Riders United");
     assert_eq!(written["topics"], json!([{"topic": "cycling"}]));
-    assert_eq!(written.get("description"), None);
+    assert_eq!(written["joinPolicy"], before["joinPolicy"]);
+    let profile = ["profile", "set", group, "--description", "Bikes"];
+    ok(&alice, &profile).await;
+    let written = kept(&meta, "profile", "self").unwrap();
+    assert_eq!(written["topics"], json!([{"topic": "cycling"}]));
+    assert_eq!(written["description"], "Bikes");
+    ok(&alice, &["profile", "set", group, "--topics", ""]).await;
+    let written = kept(&meta, "profile", "self").unwrap();
+    assert_eq!(written.get("topics"), None);
+    assert_eq!(written["description"], "Bikes");
 
     // The queue; a label on an account, and taken back, in its history.
     let queue = said(&ok(&alice, &["mod", "list", group, "--status", "open"]).await);

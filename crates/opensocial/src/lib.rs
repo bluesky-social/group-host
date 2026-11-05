@@ -31,8 +31,8 @@ group
   group move <group> --to <address> [--to-did <did>]
                          move a group, whole, from this host to the one at <address>
 profile
-  profile set <group> --display-name <name> --join-policy <policy> [--description <words>] …
-                         replace the group's profile
+  profile set <group> [--display-name <name>] [--join-policy <policy>] [--description <words>] …
+                         change the group's profile in what is given; \"\" takes a field away
 rule
   rule set <group> --title <title> --text <words> [--order <n>] [--rule <key>]
                          write a rule: the one --rule names, or a new one
@@ -44,7 +44,7 @@ role
   role delete <group> <role>
                          delete a role nobody holds or is granted
   role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
-                         set what a role may do, or with --undo drop its grant
+                         add to what a role may do, or with --undo take it away
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
                          who is in the group, and their roles, a page at a time
@@ -484,6 +484,7 @@ fn typed(name: &str, value: &str, schema: &Value) -> Result<Value> {
             let items = value.split(',').map(str::trim).filter(|v| !v.is_empty());
             json!(items.collect::<Vec<_>>())
         }
+        _ if value.is_empty() => Value::Null,
         _ => serde_json::from_str(value).map_err(|_| anyhow!("{name} wants JSON"))?,
     })
 }
@@ -721,9 +722,30 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
                 json!({"repo": group, "space": inbox, "collection": m("invite"), "rkey": rkey});
             session.call("com.atproto.space.deleteRecord", &body).await
         }
-        Plan::Grant { role, grant } => {
+        Plan::Edit {
+            space,
+            collection,
+            rkey,
+            fields,
+        } => {
+            // The record as it is, as the space's records are listed.
+            let uri = format!("at://{group}/space/{space}/self");
+            let record = format!("{uri}/{group}/{collection}/{rkey}");
+            let asked = [("group", group), ("space", &uri), ("uri", &record)];
+            let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
+            let kept = listed["records"][0]["value"].clone();
+            let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
+            Box::pin(carry_out(me, host, group, write)).await
+        }
+        Plan::Grant {
+            role,
+            scopes,
+            assignable,
+            undo,
+        } => {
             let view = me.query(host, &m("getGroup"), &[("group", group)]).await?;
-            let write = group_host_mcp::regrant(&permissions_of(&view), &role, grant);
+            let kept = permissions_of(&view);
+            let write = group_host_mcp::regrant(&kept, &role, &scopes, &assignable, undo);
             Box::pin(carry_out(me, host, group, write)).await
         }
     }

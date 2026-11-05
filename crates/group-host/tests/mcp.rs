@@ -442,18 +442,23 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
         h.host.group_record(&group, &meta, &c, rkey).unwrap()
     };
 
-    // The profile, at its one key, replaced whole.
-    let profile = json!({"display_name": "Riders United", "join_policy": "open"});
+    // The profile, at its one key, changed in what is given.
+    let before = kept("profile", "self").unwrap();
+    let profile = json!({"display_name": "Riders United", "description": "Bikes"});
     let got = tool(&h, access, "profile_set", profile).await;
     assert!(got.get("isError").is_none(), "{got}");
     let uri = format!("{meta}/{group}/{NS}.profile/self");
     assert_eq!(got["structuredContent"]["uri"], uri);
     assert!(got["structuredContent"]["cid"].is_string());
-    let written = kept("profile", "self").unwrap();
-    assert_eq!(
-        written,
-        json!({"$type": format!("{NS}.profile"), "displayName": "Riders United", "joinPolicy": "open"})
-    );
+    let mut want = before.clone();
+    want["displayName"] = json!("Riders United");
+    want["description"] = json!("Bikes");
+    assert_eq!(kept("profile", "self").unwrap(), want);
+    // Given empty, a field is taken away; the rest stay.
+    let got = tool(&h, access, "profile_set", json!({"description": ""})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    want.as_object_mut().unwrap().remove("description");
+    assert_eq!(kept("profile", "self").unwrap(), want);
 
     // A new rule, keyed by the clock; changed at its key; taken away.
     let got = tool(
@@ -476,13 +481,7 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     assert_eq!(kept("rule", &rkey), None);
 
     // Held to what the host keeps, as any write as the group is.
-    let got = tool(
-        &h,
-        access,
-        "profile_set",
-        json!({"display_name": " ", "join_policy": "open"}),
-    )
-    .await;
+    let got = tool(&h, access, "profile_set", json!({"display_name": " "})).await;
     assert_eq!(got["isError"], true, "{got}");
     let text = got["content"][0]["text"].as_str().unwrap();
     assert!(text.starts_with("InvalidRequest: "), "{text}");

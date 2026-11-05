@@ -34,7 +34,9 @@ comma-separated (`member,admin`); anything more than that is JSON
 (`--access '{"grants": []}'`). A person (`<member>`, `<person>`) may be
 a handle, which it resolves. Such a command prints what the host
 answered, as JSON, but `group show`, which prints lines. A write
-replaces the record whole: a field not given is dropped.
+replaces the record whole, a field not given dropped, but `profile set`,
+which changes only the fields given (`""` takes one away), and `role
+grant`, which adds to a role's grant or with `--undo` takes from it.
 
 The commands with no tool make or move a group or an account: `group
 create`, `group seed`, `group move` and `account import`.
@@ -52,7 +54,7 @@ create`, `group seed`, `group move` and `account import`.
 
 | Command | What it does |
 | --- | --- |
-| `profile set <group> --display-name <name> --join-policy <policy> [--description] [--url] [--online] [--topics <json>] [--languages <json>] [--location <json>]` | replaces the group's profile, as the group |
+| `profile set <group> [--display-name <name>] [--join-policy <policy>] [--description] [--url] [--online] [--topics <json>] [--languages <json>] [--location <json>] [--links <json>]` | changes the group's profile in the fields given, as the group, keeping the rest and its pictures; a field given `""` is taken away |
 
 ### rule
 
@@ -67,7 +69,7 @@ create`, `group seed`, `group move` and `account import`.
 | --- | --- |
 | `role set <group> <role> --display-name <name> [--description] [--default] [--bot]` | writes a role as the group, at its id |
 | `role delete <group> <role>` | deletes a role nobody holds or is granted |
-| `role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]` | sets what a role may do, in place of its grant in the permissions record: its scopes, and the roles its holders may assign, each none if not given; with `--undo`, drops its grant |
+| `role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]` | adds the scopes given, and the roles given that its holders may assign, to the role's grant in the permissions record; with `--undo`, takes them away, or with none given drops its grant |
 
 ### member
 

@@ -781,13 +781,31 @@ impl Host {
                 let written = self.invite_as(who, &person, record).await;
                 written.map_err(said)
             }
-            Plan::Grant { role, grant } => {
+            Plan::Edit {
+                space,
+                collection,
+                rkey,
+                fields,
+            } => {
+                let uri = format!("at://{}/space/{space}/self", who.group);
+                let kept = self.group_record(&who.group, &uri, &collection, &rkey);
+                let kept = kept.map_err(XrpcError::internal).map_err(said)?;
+                let kept = kept.unwrap_or_default();
+                let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
+                Box::pin(self.carry_out(who, write)).await
+            }
+            Plan::Grant {
+                role,
+                scopes,
+                assignable,
+                undo,
+            } => {
                 let members = crate::group::members_space(&who.group);
                 let collection = format!("{NS}.permissions");
                 let kept = self.group_record(&who.group, &members, &collection, "self");
                 let kept = kept.map_err(XrpcError::internal).map_err(said)?;
                 let kept = kept.unwrap_or_default();
-                let write = group_host_mcp::regrant(&kept, &role, grant);
+                let write = group_host_mcp::regrant(&kept, &role, &scopes, &assignable, undo);
                 Box::pin(self.carry_out(who, write)).await
             }
         }

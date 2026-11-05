@@ -52,9 +52,10 @@ allow, or the host refuses, is `isError: true`, its text `<error>:
 given, or not as text, is refused before anything is asked:
 `<name> is required, as text`.
 
-A write replaces the record whole: a field not given is dropped. A
-picture cannot be uploaded through MCP; `profile_set` keeps one only by
-naming a blob the group already holds.
+A write replaces the record whole, a field not given dropped, but
+`profile_set` and `role_grant`, which change only what they are given.
+A picture cannot be uploaded through MCP; `profile_set` keeps the
+group's as they are.
 
 ## group
 
@@ -66,7 +67,7 @@ naming a blob the group already holds.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `profile_set` | `profile set` | `fyi.opensocial.profile` | replaces the group's profile, at `self` in its meta space, as the group |
+| `profile_set` | `profile set` | `fyi.opensocial.profile` | changes the group's profile, at `self` in its meta space, as the group, in the fields given, keeping the rest; a field given empty, an empty list or `null` is taken away |
 
 ## rule
 
@@ -81,7 +82,7 @@ naming a blob the group already holds.
 | --- | --- | --- | --- |
 | `role_set` | `role set` | `fyi.opensocial.role` | writes the role `role`, its id, in the members space, as the group |
 | `role_delete` | `role delete` | `fyi.opensocial.role` | deletes a role nobody holds or is granted |
-| `role_grant` | `role grant` | `fyi.opensocial.permissions` | sets the grant of `role` in the permissions record, its `scopes` and the roles its holders may assign (`assignable`), each empty if not given, in place of the one it had; with `undo`, drops it. The rest of the record is as it was, and the write is held to the same rules as any of it |
+| `role_grant` | `role grant` | `fyi.opensocial.permissions` | adds the `scopes` given, and the roles given that its holders may assign (`assignable`), to the grant of `role` in the permissions record; with `undo`, takes them away, or with none given drops the grant. The rest of the record is as it was, and the write is held to the same rules as any of it |
 
 ## member
 
