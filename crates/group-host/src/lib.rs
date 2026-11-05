@@ -49,6 +49,7 @@ pub mod recovery;
 pub mod repo;
 pub mod scopes;
 pub mod secrets;
+pub mod sites;
 pub mod space;
 pub mod space_api;
 pub mod store;
@@ -129,6 +130,9 @@ pub fn client() -> reqwest::Client {
 
 /// The host's routes.
 pub fn router(host: Arc<Host>) -> Router {
+    // A site is published whole, its files in one body: as large as one
+    // upload may be, as the lexicons' check reads it.
+    let site_limit = usize::try_from(host.config.blob_upload_limit).unwrap_or(usize::MAX);
     Router::new()
         .route("/xrpc/_health", get(health))
         .route(
@@ -431,10 +435,22 @@ pub fn router(host: Arc<Host>) -> Router {
         .route("/console/logout", post(console_login::logout))
         .merge(token_routes())
         .merge(oauth_routes())
+        .route(
+            "/xrpc/fyi.opensocial.putSite",
+            post(sites::put_site).layer(axum::extract::DefaultBodyLimit::max(site_limit)),
+        )
+        .route("/xrpc/fyi.opensocial.deleteSite", post(sites::delete_site))
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
-        .layer(axum::middleware::from_fn(lexicons::check))
+        .layer(axum::middleware::from_fn_with_state(
+            host.clone(),
+            lexicons::check,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            host.clone(),
+            sites::serve,
+        ))
         .with_state(host)
 }
 

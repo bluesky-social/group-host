@@ -134,6 +134,12 @@ go when nothing here refers to it; `PUBLISHED` in `harness/lexicons.mjs`
 turns that off once the first is published.
 Once one is published, it is evolved, never changed, with new fields
 optional and nothing removed, renamed, retyped, made required or narrowed.
+A method's lexicon lists in `errors` each error it answers by name beyond
+those any method may (`docs/reference/api.md` lists them), each with a
+description of when: a client is to tell one refusal from another by its
+name, never by its message. An error the host cannot reach from that
+method is not listed.
+
 Every schema of ours (`fyi.opensocial.*`) follows the Lexicon Style Guide
 (https://atproto.com/guides/lexinomicon) and passes `just lex`: goat's
 linter, then `harness/lexicons.mjs` for what it does not see (`knownValues`

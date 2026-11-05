@@ -37,6 +37,8 @@ fn names_each_tool_for_its_command() {
             "role_set",
             "role_delete",
             "role_grant",
+            "site_publish",
+            "site_delete",
             "member_list",
             "member_assign",
             "member_eject",

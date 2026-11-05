@@ -47,6 +47,7 @@ export default defineConfig({
             page('Membership', 'design/membership'),
             page('Signing in', 'design/signing-in'),
             page('Moderation', 'design/moderation'),
+            page('Sites', 'design/sites'),
             page('MCP', 'design/mcp'),
             page('Recovery', 'design/recovery'),
             page('Moving', 'design/moving'),

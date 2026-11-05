@@ -75,6 +75,13 @@ stewards undo, but never delete it.
 | `role delete <group> <role>` | deletes a role nobody holds or is granted |
 | `role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]` | adds the scopes given, and the roles given that its holders may assign, to the role's grant in the permissions record; with `--undo`, takes them away, or with none given drops its grant |
 
+### site
+
+| Command | What it does |
+| --- | --- |
+| `site publish <group> <dir> [--fallback <path>] [--not-found <path>]` | publishes the files under `<dir>`, but those whose names start with a dot, as the group's website at its handle, in place of the one there: each as text if it is UTF-8, else as bytes |
+| `site delete <group>` | takes the group's website down |
+
 ### member
 
 | Command | What it does |

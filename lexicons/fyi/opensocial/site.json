@@ -1,0 +1,64 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.site",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "The group's website: static files its host serves as they are at the group's handle, `https://<handle>/`, each page sandboxed to an origin of its own. Kept in the group's public repo and written by those whose roles carry group.configure; each publish replaces it, and deleting it takes the site down.",
+      "record": {
+        "type": "object",
+        "required": ["files", "createdAt"],
+        "properties": {
+          "files": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 2000,
+            "items": { "type": "ref", "ref": "#file" },
+            "description": "What the site serves, each at a path of its own."
+          },
+          "notFound": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "The path of a file in `files` served, with status 404, for a path no file has."
+          },
+          "fallback": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "The path of a file in `files` served, with status 200, for a page no file has, as a single-page app routes in the browser: a request asking for `text/html`, or for a path whose last segment has no extension. Taken before `notFound`; anything else missing gets `notFound`."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this version of the site was published."
+          }
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "description": "One file of a site.",
+      "required": ["path", "blob"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Where it is served under the site's root: `/`-separated, with no leading `/`, no empty, `.` or `..` segment. `x/index.html` is served at `x/` too."
+        },
+        "blob": {
+          "type": "blob",
+          "description": "The file's bytes."
+        },
+        "contentType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The `Content-Type` it is served with, such as `text/html; charset=utf-8`; without it, the type its path's extension names."
+        }
+      }
+    }
+  }
+}

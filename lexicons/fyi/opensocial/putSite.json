@@ -1,0 +1,89 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.putSite",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Publish the group's website, whole: each file given is kept as a blob of the group's (one it holds already is used again), and the group's fyi.opensocial.site record is replaced by one naming them. Requires group.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "files"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "files": {
+              "type": "array",
+              "minLength": 1,
+              "maxLength": 2000,
+              "items": { "type": "ref", "ref": "#file" },
+              "description": "Every file of the site, each at a path of its own."
+            },
+            "notFound": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "description": "The path of a file given, served with status 404 for a path no file has."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "description": "The path of a file given, served with status 200 for a page no file has, as a single-page app routes in the browser."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "InvalidSite",
+          "description": "A site the host would not serve: a file at a path no file may be at, or at one another has; a file giving both its text and its bytes, or neither; or a fallback or notFound that is none of the files."
+        }
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["uri", "cid", "url", "uploaded"],
+          "properties": {
+            "uri": { "type": "string", "format": "at-uri", "description": "The site record." },
+            "cid": { "type": "string", "format": "cid", "description": "The site record's CID." },
+            "url": { "type": "string", "format": "uri", "description": "Where the site is served: the group's handle, over https." },
+            "uploaded": { "type": "integer", "minimum": 0, "description": "How many of the files given were new to the group; the rest it held already." }
+          }
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "description": "One file of a site, its bytes given as text or as bytes.",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Where it is served under the site's root: `/`-separated, with no leading `/`, no empty, `.` or `..` segment."
+        },
+        "text": {
+          "type": "string",
+          "description": "The file as UTF-8 text, as a page, a style sheet or a script is. Give this or `bytes`."
+        },
+        "bytes": {
+          "type": "bytes",
+          "description": "The file's bytes, as an image is: in JSON, as atproto writes bytes, `{\"$bytes\": \"<base64>\"}`. Give this or `text`."
+        },
+        "contentType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The `Content-Type` it is served with; without it, the type its path's extension names."
+        }
+      }
+    }
+  }
+}

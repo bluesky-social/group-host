@@ -31,6 +31,7 @@ accounts on their own PDSes, anywhere on the network.
 | --- | --- |
 | The group's identity | its DID document, in the PLC directory, changed with the host's rotation key and any recovery keys ([recovery](recovery.md)) |
 | Its public records and files | its repo here |
+| Its website | a record in its repo here, served at its handle ([sites](sites.md)) |
 | Its profile, rules and labeler | its `meta` space, in the group's repo there |
 | Its roles, permissions, memberships and spaces | its `members` space, in the group's repo there |
 | What members write in its spaces | each member's own repo in the space, on their own PDS |
@@ -58,6 +59,8 @@ accounts on their own PDSes, anywhere on the network.
 - [Signing in](signing-in.md): people, apps and MCP clients, and what a
   token may do.
 - [Moderation](moderation.md): labels, the queue, and reports.
+- [Sites](sites.md): a group's website, published whole and served
+  sandboxed at its handle.
 - [MCP](mcp.md): connecting an AI app to a group, and its tools.
 - [Recovery](recovery.md): keys that let a group's stewards hold its
   identity.

@@ -52,6 +52,8 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("applyLabel"),
     lexicon!("negateLabel"),
     lexicon!("resolveSubject"),
+    lexicon!("putSite"),
+    lexicon!("deleteSite"),
     lexicon!("profile"),
     lexicon!("rule"),
     lexicon!("role"),
@@ -357,6 +359,21 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
          holders may assign, to what its grant in the permissions record has; with undo, takes \
          them away, or with none given drops its grant.",
         Made::Grant,
+    ),
+    (
+        "site_publish",
+        &[],
+        "Publishes the group's website, whole, at its handle (`https://<handle>/`): every file \
+         of it, each as text or as bytes, in place of the site there; a file the group holds \
+         already is used again. Its pages run sandboxed, each in an origin of its own, with no \
+         cookies or storage; a page reads live data from the host's public methods.",
+        Made::Method("putSite", None),
+    ),
+    (
+        "site_delete",
+        &[],
+        "Takes the group's website down.",
+        Made::Method("deleteSite", None),
     ),
     (
         "member_list",

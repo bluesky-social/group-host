@@ -5,15 +5,17 @@
 //! of one of our own collections an app writes as a group before it is
 //! kept ([`check_record`]).
 
+use crate::Host;
 use crate::api::invalid;
 use crate::xrpc::XrpcError;
 use atproto::lexicon::Lexicons;
 use axum::body::Body;
-use axum::extract::{Query, Request};
+use axum::extract::{Query, Request, State};
 use axum::http::{Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 macro_rules! lexicon {
@@ -51,6 +53,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/declineInvite"),
     lexicon!("fyi/opensocial/defs"),
     lexicon!("fyi/opensocial/deleteGroup"),
+    lexicon!("fyi/opensocial/deleteSite"),
     lexicon!("fyi/opensocial/deleteSpace"),
     lexicon!("fyi/opensocial/denyJoinRequest"),
     lexicon!("fyi/opensocial/finishAccountMove"),
@@ -97,6 +100,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/permissions"),
     lexicon!("fyi/opensocial/profile"),
     lexicon!("fyi/opensocial/provisionGroup"),
+    lexicon!("fyi/opensocial/putSite"),
     lexicon!("fyi/opensocial/removeRecoveryKey"),
     lexicon!("fyi/opensocial/requestJoin"),
     lexicon!("fyi/opensocial/resolveSubject"),
@@ -105,6 +109,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/revokeGroupToken"),
     lexicon!("fyi/opensocial/role"),
     lexicon!("fyi/opensocial/rule"),
+    lexicon!("fyi/opensocial/site"),
     lexicon!("fyi/opensocial/space"),
     lexicon!("fyi/opensocial/startAccountMove"),
     lexicon!("fyi/opensocial/updateGroupHandle"),
@@ -141,8 +146,10 @@ fn refuse(err: XrpcError) -> Response {
 
 /// Refuses a call to a `fyi.opensocial.*` method whose parameters or JSON
 /// input are not what its lexicon describes, as `InvalidRequest` saying
-/// where and what; any other request passes as it came.
-pub async fn check(request: Request, next: Next) -> Response {
+/// where and what, or whose input is larger than it takes, as
+/// `PayloadTooLarge`: [`INPUT_AT_MOST`], but for `putSite`, which carries
+/// a whole site, `BLOB_UPLOAD_LIMIT`. Any other request passes as it came.
+pub async fn check(State(host): State<Arc<Host>>, request: Request, next: Next) -> Response {
     let path = request.uri().path();
     let ours = path
         .strip_prefix("/xrpc/")
@@ -169,8 +176,12 @@ pub async fn check(request: Request, next: Next) -> Response {
         return next.run(request).await;
     }
     let (parts, body) = request.into_parts();
-    let Ok(bytes) = axum::body::to_bytes(body, INPUT_AT_MOST).await else {
-        let said = format!("an input of {INPUT_AT_MOST} bytes at most, read whole");
+    let most = match nsid.as_str() {
+        "fyi.opensocial.putSite" => host.config.blob_upload_limit as usize,
+        _ => INPUT_AT_MOST,
+    };
+    let Ok(bytes) = axum::body::to_bytes(body, most).await else {
+        let said = format!("an input of {most} bytes at most, read whole");
         return refuse(XrpcError::new(
             StatusCode::PAYLOAD_TOO_LARGE,
             "PayloadTooLarge",

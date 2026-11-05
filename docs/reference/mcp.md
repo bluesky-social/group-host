@@ -87,6 +87,13 @@ group's as they are.
 | `role_delete` | `role delete` | `fyi.opensocial.role` | deletes a role nobody holds or is granted |
 | `role_grant` | `role grant` | `fyi.opensocial.permissions` | adds the `scopes` given, and the roles given that its holders may assign (`assignable`), to the grant of `role` in the permissions record; with `undo`, takes them away, or with none given drops the grant. The rest of the record is as it was, and the write is held to the same rules as any of it |
 
+## site
+
+| Tool | Command | Lexicon | What it does |
+| --- | --- | --- | --- |
+| `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's website whole, from `files`, each `{path, text}` or `{path, bytes}`, with `fallback` and `not_found` naming files of them; the command reads them from a folder |
+| `site_delete` | `site delete` | `fyi.opensocial.deleteSite` | takes the group's website down |
+
 ## member
 
 | Tool | Command | Lexicon | What it does |

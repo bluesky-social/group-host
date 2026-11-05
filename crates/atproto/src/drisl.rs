@@ -258,6 +258,14 @@ impl Value {
         }
     }
 
+    /// The bytes this is, if it is bytes.
+    pub fn into_bytes(self) -> Option<Vec<u8>> {
+        match self {
+            Value::Bytes(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
     /// The value a record's JSON holds, as atproto writes it: an object
     /// of `$link` alone a link, of `$bytes` alone bytes, a number with a
     /// fraction refused.

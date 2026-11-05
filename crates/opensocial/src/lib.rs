@@ -49,6 +49,11 @@ role
                          delete a role nobody holds or is granted
   role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
                          add to what a role may do, or with --undo take it away
+site
+  site publish <group> <dir> [--fallback <path>] [--not-found <path>]
+                         publish the files under <dir> as the group's website, at its
+                         handle, in place of the one there
+  site delete <group>    take the group's website down
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
                          who is in the group, and their roles, a page at a time
@@ -586,6 +591,20 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             let [account] = a.take()?;
             import(&signed_in(env).await?, &host, env, account, &a).await
         }
+        ["site", "publish", rest @ ..] => {
+            let a = parse(rest, &["fallback", "not-found"])?;
+            let [group, dir] = a.take()?;
+            let mut given = json!({"files": site_files(std::path::Path::new(dir))?});
+            for (flag, name) in [("fallback", "fallback"), ("not-found", "not_found")] {
+                if let Some(path) = a.flags.get(flag) {
+                    given[name] = json!(path);
+                }
+            }
+            let tools = group_host_mcp::tools();
+            let tool = tools.iter().find(|t| t.name == "site_publish");
+            let tool = tool.expect("site_publish is a tool");
+            command(&signed_in(env).await?, &host, tool, group, given).await
+        }
         [group, action, rest @ ..] => {
             let name = format!("{group}_{action}").replace('-', "_");
             let tools = group_host_mcp::tools();
@@ -597,6 +616,37 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
         }
         [other] => bail!("no command {other}\n\n{USAGE}"),
     }
+}
+
+/// The files under `dir`, for `putSite`: each at its path under it, as
+/// text if it is UTF-8, else as bytes. Those whose names start with a dot
+/// are left out, as the files of tools are.
+pub fn site_files(dir: &std::path::Path) -> Result<Vec<Value>> {
+    let mut out = Vec::new();
+    let mut waiting = vec![(dir.to_path_buf(), String::new())];
+    while let Some((at, under)) = waiting.pop() {
+        let entries =
+            std::fs::read_dir(&at).with_context(|| format!("reading {}", at.display()))?;
+        for entry in entries {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let path = format!("{under}{name}");
+            if std::fs::metadata(entry.path())?.is_dir() {
+                waiting.push((entry.path(), format!("{path}/")));
+                continue;
+            }
+            let bytes = std::fs::read(entry.path())?;
+            out.push(match String::from_utf8(bytes) {
+                Ok(text) => json!({"path": path, "text": text}),
+                Err(e) => json!({"path": path, "bytes": atproto::drisl::Value::Bytes(e.into_bytes()).to_json()}),
+            });
+        }
+    }
+    out.sort_by(|a, b| a["path"].as_str().cmp(&b["path"].as_str()));
+    Ok(out)
 }
 
 /// A tool's command, as `me`, in `group`: what it answers, as JSON; or

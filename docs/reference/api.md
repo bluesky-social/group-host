@@ -13,7 +13,7 @@ method may answer these:
 | Error | When |
 | --- | --- |
 | `InvalidRequest` | a missing or bad parameter: a `fyi.opensocial.*` method's parameters and JSON input are checked against its lexicon before anything else, and refused with where and what, `input.roles[2].role must not be longer than 64 bytes` |
-| `PayloadTooLarge` | a JSON input of more than 2 MiB |
+| `PayloadTooLarge` | a JSON input of more than 2 MiB, or for `putSite`, more than `BLOB_UPLOAD_LIMIT` |
 | `AuthMissing` | no caller, where one is needed |
 | `BadJwt`, `BadJwtAudience`, `BadJwtIss`, `BadJwtLexiconMethod` | service auth that does not hold: a bad token, one for another service, a signer whose key cannot be found, or one for another method |
 | `Forbidden` | a caller whose roles lack the action, `missing <action>` |
@@ -117,6 +117,16 @@ A group's spaces, and the records in them ([spaces](../design/spaces.md)).
 | `POST fyi.opensocial.deleteSpace` | removes a space, never the meta or members space |
 | `GET fyi.opensocial.listSpaceRecords` | the records in a space, from the host's index of it, for those signed in who may read it |
 | `GET fyi.opensocial.getSpaceBlob` | a file in a space, read from whoever wrote it |
+
+## Sites
+
+A group's website ([sites](../design/sites.md)).
+
+| Method | What it does |
+| --- | --- |
+| `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there; takes a body as large as `BLOB_UPLOAD_LIMIT` |
+| `POST fyi.opensocial.deleteSite` | takes a group's site down |
+| `GET`, `HEAD` `https://<handle>/<path>` | a file of the site of the group whose handle the request's `Host` names, sandboxed; the host keeps `/.well-known/` there for itself |
 
 As the spaces' authority and the PDS of the group's own repo in each, the
 host answers the space alpha's methods:

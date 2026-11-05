@@ -129,6 +129,8 @@ fn says_whether_a_value_is_a_map() {
         Some(Default::default())
     );
     assert_eq!(Value::Null.into_map(), None);
+    assert_eq!(Value::Bytes(vec![1]).into_bytes(), Some(vec![1]));
+    assert_eq!(Value::Null.into_bytes(), None);
 }
 
 #[test]

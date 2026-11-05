@@ -794,3 +794,65 @@ fn reads_its_environment() {
     assert!(env.handle.is_none() && env.seed_invite.is_empty());
     assert_eq!(did_web("https://groups.example/"), "did:web:groups.example");
 }
+
+#[tokio::test]
+async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
+    let h = host().await;
+    let alice = env(&h, 0);
+    let group = "riders.groups.test";
+    ok(&alice, &["group", "create", group]).await;
+    let did = h.host.store.account(group).unwrap().unwrap().did;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("rides")).unwrap();
+    std::fs::create_dir(dir.path().join(".git")).unwrap();
+    std::fs::write(dir.path().join("index.html"), "<h1>Riders</h1>").unwrap();
+    std::fs::write(dir.path().join("rides/index.html"), "<h1>Rides</h1>").unwrap();
+    std::fs::write(dir.path().join("logo.png"), [0x89, b'P', b'N', b'G', 0xff]).unwrap();
+    std::fs::write(dir.path().join(".env"), "SECRET=1").unwrap();
+    std::fs::write(dir.path().join(".git/HEAD"), "ref").unwrap();
+    let folder = dir.path().to_str().unwrap();
+
+    let args = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--not-found",
+        "index.html",
+        "--fallback",
+        "rides/index.html",
+    ];
+    let made = said(&ok(&alice, &args).await);
+    assert_eq!(made["uploaded"], 3, "{made}");
+    assert_eq!(made["url"], format!("http://{group}/"));
+    let record = h
+        .host
+        .store
+        .record(&did, "fyi.opensocial.site", "self")
+        .unwrap()
+        .unwrap();
+    let site = atproto::drisl::decode(&record.value).unwrap().to_json();
+    let paths: Vec<&str> = site["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths, ["index.html", "logo.png", "rides/index.html"]);
+    assert_eq!(
+        (site["notFound"].as_str(), site["fallback"].as_str()),
+        (Some("index.html"), Some("rides/index.html"))
+    );
+
+    let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
+    assert!(missing.contains("reading /no/such/folder"), "{missing}");
+
+    ok(&alice, &["site", "delete", group]).await;
+    assert!(
+        h.host
+            .store
+            .record(&did, "fyi.opensocial.site", "self")
+            .unwrap()
+            .is_none()
+    );
+}
