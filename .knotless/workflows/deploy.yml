@@ -1,10 +1,11 @@
 # Deploys main to next.opensocial.fyi on each push.
 #
-# Main takes pulls only through the merge queue, which lands a pull once
-# its batch, the commit that lands, passes every check; so what reaches
-# main has passed, and this does not wait for main's own checks. It
-# couldn't: a step can't read a private repository's checks (knotless
-# issue at://did:plc:bcgltzqazw5tb6k2g3ttenbj/dev.knotless.issue/3mzlv5ic46umh).
+# A pull is merged into main once its checks pass on it merged with main,
+# and the review bot approves it, so this does not wait for main's own
+# checks. It couldn't: a step can't read a private repository's checks
+# (knotless issue at://did:plc:bcgltzqazw5tb6k2g3ttenbj/dev.knotless.issue/3mzlv5ic46umh).
+# The merge queue is off while knotless can't land a private repository's
+# queue through its gateway.
 #
 # The host runs on the grain box as the compose project /etc/group-host
 # (hetzner-infra's stacks/opensocial). This run reaches it with
