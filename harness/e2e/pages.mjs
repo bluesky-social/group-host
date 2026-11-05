@@ -70,7 +70,7 @@ export const signIn = async (page, name, from = page.getByRole('banner').getByRo
 /// Who the header says is signed in: nothing for no one.
 export const signedInAs = (page) =>
   page
-    .locator('.sign-out .mono')
+    .locator('.user-menu summary .handle')
     .textContent({ timeout: 1000 })
     .then((t) => t.trim(), () => '')
 

@@ -30,7 +30,7 @@ just look /g/lanterns.groups.test --as alice --seed full   # a group with everyt
 just look /g/riders.groups.test --as bob      # a group bob is not in
 just look /g/lanterns.groups.test --as alice --click 'button[popovertarget=invite]'  # a dialog open
 just look /g/lanterns.groups.test/settings --as alice --element .group-card --all   # one element, in all four
-just look / --phone --dark --click 'header [popovertarget=sign-in]'                # a dialog, on a phone
+just look / --as alice --phone --dark --click '.user-menu summary'                 # a menu, on a phone
 just look /new --as alice --type '[name=displayName]=A name long enough to wrap twice over on a phone'  # typed into, then shot
 just look /g/lanterns.groups.test --as alice --out target/look/before --name group  # pictures to keep apart
 ```
@@ -77,11 +77,27 @@ harness/layers.mjs` holds each to its layer:
 
 - `atoms`: one element (`Avatar`, `Tag`, `Copy`).
 - `molecules`: a few atoms that mean something together (`Section`,
-  `Empty`, `Dialog`, `MemberRow`, `GroupRow`).
+  `Empty`, `Dialog`, `FormDialog`, `ConfirmDialog`, `Tabs`, `UserMenu`,
+  `MemberRow`, `GroupRow`, `HandleInput`).
 - `organisms`: a part of a page (`MemberList`, `GroupCard`,
-  `SiteHeader`).
+  `SiteHeader`, `RulesEditor`).
 - `templates`: a page's layout, without its data (`Page`, `GroupPage`,
   `Welcome`).
+
+The pieces every page is made of:
+
+- **A page** is `Page`: where it is under (`back`, a group's page), its
+  heading, the one act on the whole page across from it (`actions`),
+  and its parts' `Tabs` (`nav`) when it has more than one.
+- **A page with many parts** is a page per part under it, reached by
+  `Tabs`, as a group's settings are (`/g/<handle>/settings`, `/rules`,
+  `/roles`, `/apps`, `/recovery`, laid out by its `+layout.svelte`), and
+  the moderation queue's statuses: not one long page.
+- **A part** is `Section`: a card, its title and count, one quiet act on
+  the whole of it (`actions`), a line on what it is (`intro`), then its
+  rows or its `Empty`.
+- **What is yours** is under your handle in the header, `UserMenu`:
+  your groups, starting one, moving an account here, then signing out.
 
 Look in `web/src/lib` before making one; a component made for one page
 is made at the layer it belongs to, for the next page too.
@@ -114,11 +130,14 @@ opensocial, handles, roles such as `admin`. No `text-transform`.
 
 **Empty states.** One component, `Empty.svelte`, for every empty list or
 part, drawn where the list's rows would be: inside the part's card, in
-the same box, never as loose text under its heading. Its title says what
-is empty in the reader's terms ("Nobody is asking to join", not "No
-data"); its line says why, or what will fill it; and where there is a
-way out (invite someone, start a group), it carries it as its action.
-The same title, body, spacing and box on every page.
+the same dashed box, never as loose text under its heading. Its title
+says what is empty in the reader's terms ("Nobody is asking to join",
+not "No data"); its line says why, or what will fill it; and where
+there is a way out that the part's heading does not already carry, it
+carries it as its `action`. The same title, body, spacing and box on
+every page, a page with nothing for the reader (a settings page for a
+plain member, an error) included. Never style an empty state of your
+own.
 
 **Space.** Every block stacked on another has a gap from the space
 scale; text never touches a row of controls. Things that belong together
@@ -126,39 +145,58 @@ sit closer than things that do not: a heading to its list, less than the
 list to the next part.
 
 **Weight.** One primary button on a view at most, for the act the view
-is for. What undoes, removes or turns down is `class="quiet"` (Leave,
-Take back, Turn down, Cancel, Sign out), and a quiet button never
-outweighs what it sits beside: leaving a group is there, never the
-loudest thing on the card. Quiet what is said about a thing (`.mute`,
-`.small`) next to the thing itself.
+is for (Start a group, Join, Save the profile, a dialog's act). What
+undoes, removes or turns down is `class="quiet"` (Leave, Take back,
+Turn down, Cancel, Sign out), and a quiet button never outweighs what it
+sits beside: leaving a group is a small quiet button at the end of the
+member's standing, never the loudest thing on the card. A list whose
+rows each wait on an act (letting someone in, taking up an invite) may
+carry it on each row, `small`, the one thing in the row that is not
+quiet. What cannot be undone is `class="danger"`, and only as the act of
+a `ConfirmDialog`. A link that goes where a button would act (Start a
+group, Settings) is `a.button`, quiet or not by the same rule. Quiet
+what is said about a thing (`.mute`, `.what`, `.small`) next to the
+thing itself.
 
 **The same act, the same way.** A thing done on two pages is done the
 same way on both: the same component, the same words, the same order of
 controls.
 
 - *Asking for input.* An act that takes a form (inviting, adding a
-  rule, a role, a link, a recovery key, an app password) is a button that
-  opens a dialog (`Dialog.svelte`) holding the form, as "Invite someone"
-  does: never a form inline on one page and a dialog on another. Editing
-  what is already there (a profile, its pictures) may be a form in place.
+  rule, a link, a role, a recovery key, an app password, labelling,
+  giving roles, a picture, resolving) is a button that opens a
+  `FormDialog` holding the form, as "Invite someone" does: its title the
+  act, a line on what it does, the fields, then a quiet Cancel and the
+  act. Never a form inline on one page and a dialog on another. Only
+  editing what is already there field by field (a group's profile, who
+  sees it) is a form in place, and finding (a search box) is never a
+  dialog. A handle is typed into `HandleInput`, wherever it is asked for.
 - *Confirming.* An act that cannot be undone (leaving, putting someone
-  out, deleting, ending) asks in the same kind of dialog: what will
-  happen, in a sentence; a quiet Cancel; the act, as the dialog's one
-  button that acts.
-- *Lists.* Rows in the part's card, each with its avatar or mark, its
-  name, what is said about it, and its acts at the row's end, quiet ones
-  before the one that acts; the empty state in the rows' place; "Show
-  more" under the last row when there are more.
-- *A part's heading.* `Section.svelte`: its title, with how many when
-  that is worth saying, and the one act on the whole part (Invite
-  someone, Add a rule) across from it, as a quiet button; never a link
-  or a button lower down the card doing the same.
-- *Where to go.* Ways to a group's other pages sit together, as the
-  group's nav, never floating where a banner meets a card.
+  out, taking a rule, role or key away, revoking, ending an app's
+  access, disconnecting) opens a `ConfirmDialog`: its title the question
+  ("Leave Riders?"), what will happen in a sentence, a quiet Cancel, and
+  the act in `danger`. What is undone by doing it again (taking back an
+  invite, taking a picture away) needs no asking.
+- *Lists.* `ul` or `ol` with a class, a row per thing, inside the part's
+  card: its `Avatar`, `ordinal` or picture first; its name, and under it
+  what is said about it (`.row-main` with `.what`); its acts at the
+  row's end in `.row-actions`, `small`, quiet ones before the one that
+  acts. A person is `MemberRow`, a group `GroupRow`. Times by
+  `#lib/dates.ts`, never as a record holds them. The empty state in the
+  rows' place; a quiet "Show more" under the last row while there are
+  more, a page at a time, never every row at once.
+- *A part's heading.* `Section`: its title, with its count when that is
+  worth saying, and the one act on the whole part (Invite someone, Add a
+  rule, Make an app password) across from it, as a quiet button; never
+  a link or a button lower down the card doing the same.
+- *Where to go.* A group's own pages (Moderation, Settings) sit together
+  beside its name, as quiet small `a.button`s; a page under a group says
+  so with `Page`'s `back`, its name, above its heading.
 
-**Pictures.** A group or person with no picture is drawn as one with
-none is meant to look (its initial on its colour), never a blank disc;
-a group with no banner shows no banner block.
+**Pictures.** `Avatar` is given the name of whom it draws: with no
+picture, it draws their initial on a hue their name gives them, never a
+blank disc. A group with no banner shows no banner block: its picture,
+name and nav sit at the top of its card.
 
 **People.** A person is their avatar and handle, by `MemberRow` or the
 header's menu, never a bare DID where a handle is known.

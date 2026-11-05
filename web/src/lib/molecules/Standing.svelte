@@ -1,11 +1,19 @@
 <script lang="ts">
-	import Tag from '#lib/atoms/Tag.svelte';
-	/** A member's standing in the group: the roles they hold there, and the way to leave it. */
-	let { roles }: { roles: string[] } = $props();
+	import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
+	/**
+	 * A member's standing in the group (`name`): the roles they hold there
+	 * beyond being a member, which everyone is, in a sentence; and the way
+	 * to leave it, asked to be sure of.
+	 */
+	let { name, roles }: { name: string; roles: string[] } = $props();
+	const held = $derived(roles.filter((r) => r !== 'member'));
+	const as = $derived(held.length ? `, as ${held.length > 1 ? `${held.slice(0, -1).join(', ')} and ${held.at(-1)}` : held[0]}` : '');
 </script>
 
-<form class="standing" method="post" action="?/leave">
-	<span class="mute">You're a member, as</span>
-	{#each roles as role (role)}<Tag text={role} />{/each}
-	<button class="quiet" type="submit">Leave the group</button>
-</form>
+<div class="standing">
+	<span class="mute">You're a member{as}.</span>
+	<button class="quiet small" type="button" popovertarget="leave">Leave the group</button>
+</div>
+<ConfirmDialog id="leave" title={`Leave ${name}?`} action="?/leave" confirm="Leave the group">
+	You'll no longer be a member, nor see what only members see. To come back, you join again as anyone does.
+</ConfirmDialog>

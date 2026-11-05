@@ -71,7 +71,7 @@ spaces through the atproto methods below.
 | `POST fyi.opensocial.cancelJoinRequest` | withdraws it |
 | `GET fyi.opensocial.listJoinRequests` | the requests waiting, for those who admit |
 | `POST fyi.opensocial.denyJoinRequest` | turns a request down |
-| `GET fyi.opensocial.listInvites` | the group's invites still waiting |
+| `GET fyi.opensocial.listInvites` | the group's invites still waiting, each with whom it invites by their handle |
 | `GET fyi.opensocial.getActorInvites` | the caller's own invites from groups here |
 | `POST fyi.opensocial.declineInvite` | turns an invite down |
 | `GET com.atproto.managedspace.checkUserAccess` | whether someone may read or write an inbox the host keeps, asked by its authority |

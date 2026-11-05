@@ -28,6 +28,11 @@
         "createdAt": {
           "type": "string",
           "format": "datetime"
+        },
+        "actor": {
+          "type": "ref",
+          "ref": "#actorView",
+          "description": "Whom it invites, with their handle where it can be read: on listInvites."
         }
       }
     },

@@ -392,7 +392,18 @@ pub async fn list_invites(
         .last()
         .filter(|_| waiting.len() == limit as usize)
         .map(|i| i.seq.to_string());
-    let invites: Vec<Value> = waiting.iter().map(view).collect();
+    // Each with whom it invites, by their handle where it can be read.
+    let actors = waiting.iter().map(|i| host.actor_view(&i.invitee));
+    let actors = futures::future::join_all(actors).await;
+    let invites: Vec<Value> = waiting
+        .iter()
+        .zip(actors)
+        .map(|(i, actor)| {
+            let mut view = view(i);
+            view["actor"] = actor;
+            view
+        })
+        .collect();
     Ok(Json(json!({"invites": invites, "cursor": cursor})))
 }
 

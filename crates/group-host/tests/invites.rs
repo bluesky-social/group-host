@@ -108,9 +108,14 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
     assert_eq!(
         (
             page["invites"][0]["invitee"].clone(),
-            page["invites"][0]["expiresAt"].clone()
+            page["invites"][0]["expiresAt"].clone(),
+            page["invites"][0]["actor"]["did"].clone()
         ),
-        (json!(carol.did), json!("2099-01-01T00:00:00.500Z"))
+        (
+            json!(carol.did),
+            json!("2099-01-01T00:00:00.500Z"),
+            json!(carol.did)
+        )
     );
     let cursor = page["cursor"].as_str().unwrap();
     let (_, rest) = ask(

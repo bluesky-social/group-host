@@ -50,9 +50,9 @@ asked about. The same holds once the DID has been ended.
 
 Adding, listing and removing keys all need `group.configure`, the action
 that lets a member change the group's settings (see
-[membership](membership.md)). The console's settings page for the group
-lists the keys, to whoever configures it, with forms to add and take off
-one. These methods are not among the MCP tools (see
+[membership](membership.md)). The console's settings for the group
+list the keys on a page of their own, to whoever configures it, with a
+dialog to add one and another to be sure before taking one off. These methods are not among the MCP tools (see
 [MCP](mcp.md)).
 
 The PLC directory says which keys a group has, so each method reads the

@@ -90,7 +90,7 @@
 		<div id={list} class="handle-list" role="listbox" aria-label="Accounts">
 			{#each found as a, i (a.did)}
 				<div id="{list}-{i}" class="handle-option" role="option" tabindex="-1" aria-selected={i === at} onmousedown={(e) => press(e, a)} onmouseenter={() => (at = i)}>
-					<Avatar src={a.avatar} />
+					<Avatar src={a.avatar} name={a.handle} />
 					<span class="who">
 						{#if a.displayName}<strong>{a.displayName}</strong>{/if}
 						<span class="mute">@{a.handle}</span>

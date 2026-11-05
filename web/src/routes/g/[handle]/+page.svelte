@@ -40,16 +40,16 @@
 			<GroupCard handle={g.handle} name={g.displayName} description={g.description} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} links={g.links} rules={g.rules}>
 				{#snippet nav()}
 					{#if member}
-						<nav class="links" aria-label="The group">
-							{#if may.includes('mod.read')}<a href={`/g/${g.handle}/moderation`}>Moderation</a>{/if}
-							<a href={`/g/${g.handle}/settings`}>Settings</a>
+						<nav class="group-nav" aria-label="The group">
+							{#if may.includes('mod.read')}<a class="button quiet small" href={`/g/${g.handle}/moderation`}>Moderation</a>{/if}
+							<a class="button quiet small" href={`/g/${g.handle}/settings`}>Settings</a>
 						</nav>
 					{/if}
 				{/snippet}
 				{#if g.deactivated}
 					<p>This group is switched off.</p>
 				{:else if member}
-					<Standing roles={g.viewer?.roles.map((r) => r.role) ?? []} />
+					<Standing {name} roles={g.viewer?.roles.map((r) => r.role) ?? []} />
 				{:else if g.displayName}
 					<p class="mute small">{joining[g.joinPolicy ?? 'approval'] ?? joining.approval}</p>
 				{/if}
@@ -62,7 +62,7 @@
 				<JoinPanel {name} joined />
 			{/if}
 			{#if data.joinRequests}
-				<Section title="Asking to join">
+				<Section title="Asking to join" count={data.joinRequests.length}>
 					<JoinRequests requests={data.joinRequests} />
 				</Section>
 			{/if}
@@ -77,7 +77,7 @@
 			{#if data.invites}
 				<InviteDialog id="invite" {name} />
 				{#if data.invites.length}
-					<Section title="Invites waiting">
+					<Section title="Invites waiting" count={data.invites.length}>
 						<Invites invites={data.invites} />
 					</Section>
 				{/if}

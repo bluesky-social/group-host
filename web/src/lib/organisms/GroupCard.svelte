@@ -4,11 +4,12 @@
 	import Links from '#lib/molecules/Links.svelte';
 	import Rules from '#lib/molecules/Rules.svelte';
 	/**
-	 * A group as its profile shows it: its banner, its picture over the
-	 * banner's foot, `nav` beside that, its name and handle, its words,
-	 * its links and its rules; then `children`, where the person looking
-	 * stands with it. With no `name`, its profile is not theirs to see, and
-	 * it is its handle alone.
+	 * A group as its profile shows it: its banner, when it has one; its
+	 * picture (over the banner's foot), its name and handle beside it, and
+	 * `nav`, the ways to its other pages, across from them; its words, its
+	 * links and its rules; then `children`, where the person looking stands
+	 * with it. With no `name`, its profile is not theirs to see, and it is
+	 * its handle alone.
 	 */
 	let {
 		handle,
@@ -34,18 +35,16 @@
 </script>
 
 <section class="group-card">
-	{#if name}
-		{#if banner}<img class="banner" src={banner} alt="" />{:else}<div class="banner" aria-hidden="true"></div>{/if}
-	{/if}
+	{#if name && banner}<img class="banner" src={banner} alt="" />{/if}
 	<div class="group-card-body">
 		{#if name}
 			<div class="identity">
-				<Avatar src={avatar} size="lg" />
+				<Avatar src={avatar} size="lg" {name} />
+				<div class="identity-name">
+					<h1>{name}</h1>
+					<p class="mute mono">{handle}</p>
+				</div>
 				{@render nav?.()}
-			</div>
-			<div>
-				<h1>{name}</h1>
-				<p class="mute mono">{handle}</p>
 			</div>
 			{#if description}<p class="mute description">{description}</p>{/if}
 			<Links {name} {links} />

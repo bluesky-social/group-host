@@ -11,5 +11,5 @@
 	<label><input type="radio" name="seen" value="public" checked={listed} /> Anyone, and found on the network</label>
 	<label><input type="radio" name="seen" value="members" checked={!listed} /> Its members alone: to others, just its handle</label>
 	<p class="mute">Hiding it stops it being found from now on. It cannot take back what someone has already seen.</p>
-	<button type="submit">Save who sees it</button>
+	<button class="quiet" type="submit">Save who sees it</button>
 </form>

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import SignIn from '#lib/molecules/SignIn.svelte';
 	import SignInDialog from '#lib/organisms/SignInDialog.svelte';
-	import SignOut from '#lib/molecules/SignOut.svelte';
+	import UserMenu from '#lib/molecules/UserMenu.svelte';
 	import { page } from '$app/state';
-	/** The top of every page: the way home, and who is signed in, or the way in. */
+	/** The top of every page: the way home, and the menu of whoever is signed in, or the way in. */
 	let { viewer }: { viewer: { did: string; handle?: string } | null } = $props();
 </script>
 
@@ -11,9 +11,9 @@
 	<div class="wrap">
 		<a class="brand" href="/">opensocial</a>
 		{#if viewer}
-			<SignOut did={viewer.did} handle={viewer.handle} />
+			<UserMenu did={viewer.did} handle={viewer.handle} />
 		{:else}
-			<div class="sign-in"><SignIn /></div>
+			<div class="sign-in"><SignIn quiet /></div>
 		{/if}
 	</div>
 </header>

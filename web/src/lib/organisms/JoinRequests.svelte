@@ -9,12 +9,10 @@
 	<ul class="requests">
 		{#each requests as r (r.member)}
 			<li>
-				<MemberRow actor={r.actor ?? { did: r.member }} />
-				<span class="row-actions">
-					<form method="post" action="?/deny"><input type="hidden" name="did" value={r.member} /><button class="quiet" type="submit">Turn down</button></form>
-					<form method="post" action="?/admit"><input type="hidden" name="did" value={r.member} /><button type="submit">Let in</button></form>
-				</span>
-				{#if r.message}<p class="mute">{r.message}</p>{/if}
+				<MemberRow actor={r.actor ?? { did: r.member }} note={r.message}>
+					<form method="post" action="?/deny"><input type="hidden" name="did" value={r.member} /><button class="quiet small" type="submit">Turn down</button></form>
+					<form method="post" action="?/admit"><input type="hidden" name="did" value={r.member} /><button class="small" type="submit">Let in</button></form>
+				</MemberRow>
 			</li>
 		{/each}
 	</ul>

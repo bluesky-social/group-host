@@ -45,10 +45,16 @@
 	/* What dims the page behind a dialog. */
 	--scrim: rgb(42 33 25 / 35%);
 
+	/* A picture's stand-in, where there is none: its initial, on a wash of
+	   a hue of its own (a lightness and chroma, the hue its name's). */
+	--initial-wash: 90% 0.045;
+	--initial-ink: 42% 0.09;
+
 	/* What a colour is for, over the hues above: the pages take these, never a hue. */
 	--success: var(--green);
 	--danger: var(--red);
 	--danger-soft: #f9e2df;
+	--on-danger: #fff;
 	--attention: var(--yellow);
 	--done: var(--purple);
 	--neutral: var(--gray);
@@ -79,6 +85,9 @@
 		--shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
 		--scrim: rgb(0 0 0 / 55%);
 		--danger-soft: #3d1d19;
+		--on-danger: #23120a;
+		--initial-wash: 34% 0.05;
+		--initial-ink: 86% 0.07;
 	}
 }
 
@@ -106,6 +115,9 @@
 	--shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
 	--scrim: rgb(0 0 0 / 55%);
 	--danger-soft: #3d1d19;
+	--on-danger: #23120a;
+	--initial-wash: 34% 0.05;
+	--initial-ink: 86% 0.07;
 }
 
 :root {
@@ -149,6 +161,8 @@
 	--radius-pill: 999px;
 
 	--control: 40px;
+	/* A button in a row of a list, beside what it acts on. */
+	--control-sm: 32px;
 	--avatar: 24px;
 	--avatar-md: 44px;
 	--avatar-lg: 88px;
@@ -161,6 +175,8 @@
 	--header: 4rem;
 	--page: 46rem;
 	--dialog: 26rem;
+	/* A menu dropped from the header. */
+	--menu: 15rem;
 	/* A line of prose at its longest, set larger than the body. */
 	--measure: 32rem;
 	--ring: 3px;

@@ -60,7 +60,7 @@
 	<label class="field">
 		How people join
 		<select name="joinPolicy">
-			<option value="approval">They ask, and a member who may admits them</option>
+			<option value="approval">They ask, and someone who may lets them in</option>
 			<option value="open">Anyone signed in, at once</option>
 			<option value="invite">Only by invitation</option>
 		</select>
