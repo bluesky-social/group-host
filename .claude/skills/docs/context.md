@@ -57,3 +57,9 @@ Design: `README.md` (overview), `spaces.md`, `groups.md`,
 `recovery.md`, `moving.md`. Reference: `../reference/api.md`, `mcp.md`,
 `cli.md`, `config.md`. `../development.md`. Link to them rather than
 restating them.
+
+A method is named in code, never linked by hand: the docs site links it
+to its entry in `../reference/api.md`. Its name alone (`addRecoveryKey`)
+does when only one method listed there has it; where two share it
+(`applyWrites`, `putRecord`, `getRepo`), write it whole
+(`com.atproto.space.putRecord`).

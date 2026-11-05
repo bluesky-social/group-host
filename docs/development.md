@@ -101,7 +101,9 @@ repository (`plugins.mjs`). On a reference page, a table of routes or
 methods is drawn as a list, each with its HTTP method, and each
 `fyi.opensocial` method, or MCP tool, with its lexicon from `lexicons/`
 under it, so what it takes and answers cannot drift from the page
-(`reference.mjs`). Its look is the console's, from `web/src/tokens.css`.
+(`reference.mjs`). A method named in code on any page links to its entry
+there, by its whole NSID, or by its name alone where no other method
+listed has that name. Its look is the console's, from `web/src/tokens.css`.
 
 `just docs-site` serves it as it changes, at http://localhost:4321/. A
 new page goes in the sidebar in `docs-site/astro.config.mjs`.

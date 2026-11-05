@@ -4,7 +4,9 @@
 // badge; and an XRPC method of the host's own has its lexicon under it,
 // parameters, input and output, read from lexicons/ so it cannot drift. An
 // MCP tool has the lexicon its table's Lexicon column names: the method it
-// asks, or the record it writes.
+// asks, or the record it writes. Each method there is an anchor, its NSID,
+// and a method named in code on any page, `fyi.opensocial.addRecoveryKey` or
+// `addRecoveryKey`, links to it.
 // docs/ stays plain Markdown: all of this happens as the site is built.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -24,6 +26,25 @@ const lexicons = new Map(
         .map((l) => [l.id, l])
     : []
 );
+
+/** Every method the API page lists, by NSID; and by its name alone, where only one has that name. */
+const API = join(here, '../docs/reference/api.md');
+const listed = existsSync(API)
+  ? new Set(
+      [
+        ...readFileSync(API, 'utf8').matchAll(
+          /`(?:GET|POST) ((?:[a-z][a-z0-9-]*\.){2,}[a-zA-Z][a-zA-Z0-9]*)`/g
+        )
+      ].map((m) => m[1])
+    )
+  : new Set();
+const short = new Map();
+for (const nsid of listed) {
+  const name = nsid.split('.').pop();
+  short.set(name, short.has(name) ? null : nsid);
+}
+/** The NSID a span of code names, if it is a method the API page lists. */
+const named = (code) => (listed.has(code) ? code : (short.get(code) ?? undefined));
 
 const METHOD = { query: 'GET', procedure: 'POST', subscription: 'WS' };
 
@@ -155,6 +176,15 @@ const signature = (code) => ({
 /** A cell's code, if the cell starts with some. */
 const lead = (cell) => (cell.children[0]?.type === 'inlineCode' ? cell.children[0].value : null);
 
+/** A method's term on the API page is its anchor, its NSID; once on a page, where it is listed twice. */
+const anchored = new Set();
+function anchor(code) {
+  const nsid = code.match(/^(?:GET|POST)\s+(\S+)$/)?.[1];
+  if (!nsid || !listed.has(nsid) || anchored.has(nsid)) return {};
+  anchored.add(nsid);
+  return { id: nsid };
+}
+
 /** A table of names, each with a sentence or more about it, rather than a grid of values. */
 function definitional(table) {
   const [, ...rows] = table.children;
@@ -184,7 +214,7 @@ function asList(table) {
     const terms = routes
       ? codes.map(({ code, method }) => ({
           type: 'refTerm',
-          data: { hName: 'dt' },
+          data: { hName: 'dt', hProperties: anchor(code) },
           children: [
             ...(method ? [badge(method), gap] : []),
             signature(code.replace(/^[A-Z]+\s+/, ''))
@@ -245,8 +275,20 @@ function asList(table) {
   };
 }
 
-export function remarkReference() {
+/** A method named in code, outside a link or heading, links to its entry on the API page. */
+function linkMethods(node, api) {
+  if (node.type === 'link' || node.type === 'heading' || node.type === 'refTerm') return;
+  node.children?.forEach((child, i) => {
+    const nsid = child.type === 'inlineCode' && named(child.value);
+    if (nsid) node.children[i] = { type: 'link', url: `${api}#${nsid}`, children: [child] };
+    else linkMethods(child, api);
+  });
+}
+
+export function remarkReference({ base = '/' } = {}) {
+  const api = `${base}reference/api/`;
   return (tree) => {
+    anchored.clear();
     const visit = (parent) => {
       parent.children?.forEach((node, i) => {
         if (node.type === 'table' && definitional(node)) parent.children[i] = asList(node);
@@ -283,5 +325,6 @@ export function remarkReference() {
       });
     };
     visit(tree);
+    linkMethods(tree, api);
   };
 }

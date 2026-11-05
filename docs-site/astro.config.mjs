@@ -12,7 +12,14 @@ const page = (label, slug) => ({ label, slug });
 
 export default defineConfig({
   base,
-  markdown: { processor: unified({ remarkPlugins: [[remarkLinks, { base }], remarkReference] }) },
+  markdown: {
+    processor: unified({
+      remarkPlugins: [
+        [remarkLinks, { base }],
+        [remarkReference, { base }]
+      ]
+    })
+  },
   integrations: [
     starlight({
       title: 'group-host docs',
