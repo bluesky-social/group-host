@@ -3,7 +3,7 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, McpClient, approve, didKey, joins, signIn, signInDialog, signedInAs, url, who, world } from './pages.mjs'
+import { App, McpClient, approve, didKey, joins, signIn, signInDialog, signedInAs, suggests, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -14,6 +14,8 @@ let bob
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage()
   bob = await (await browser.newContext()).newPage()
+  await suggests(page.context())
+  await suggests(bob.context())
 })
 
 test.afterAll(async () => {
@@ -36,8 +38,25 @@ test('coming to the host signed out', async () => {
   await expect(dialog).toBeVisible()
   await expect(dialog.locator('.apps img')).toHaveCount(40)
   await expect(dialog.getByRole('link', { name: 'What is an Atmosphere account?' })).toHaveAttribute('href', 'https://atmosphereaccount.com/')
-  await expect(dialog.getByRole('textbox', { name: 'Handle' })).toBeFocused()
+  await expect(dialog.getByRole('combobox', { name: 'Handle' })).toBeFocused()
   await expect(dialog.getByRole('link', { name: 'Create one' })).toHaveAttribute('href', 'https://bsky.app/')
+  // Two letters of a handle suggest the accounts it is part of; one, none.
+  const handle = dialog.getByRole('combobox', { name: 'Handle' })
+  await handle.pressSequentially('a')
+  await expect(handle).toHaveAttribute('aria-expanded', 'false')
+  await handle.pressSequentially('l')
+  await expect(dialog.getByRole('option')).toHaveText(['Alice @alice.test'])
+  await expect(handle).toHaveAttribute('aria-expanded', 'true')
+  // Escape closes the list, not the dialog; what the arrows chose is let
+  // go, so Enter after more typing sends what is typed.
+  await handle.press('ArrowDown')
+  await expect(dialog.getByRole('option')).toHaveAttribute('aria-selected', 'true')
+  await handle.press('Escape')
+  await expect(dialog.getByRole('listbox')).toBeHidden()
+  await expect(dialog).toBeVisible()
+  await handle.pressSequentially('i')
+  await expect(dialog.getByRole('option')).toHaveAttribute('aria-selected', 'false')
+  await handle.press('Escape')
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).toBeHidden()
 })
@@ -55,8 +74,17 @@ test("a group's page signed out", async () => {
 })
 
 test("signing in at her own PDS, from a group's page", async () => {
-  // Signed in from the page, back on it, as she may see it.
-  await signIn(page, 'alice', page.getByRole('main').getByRole('button', { name: 'Sign in' }))
+  // Signed in from the page by picking her account as she types it, with
+  // the arrows and Enter; back on it, as she may see it.
+  await page.getByRole('main').getByRole('button', { name: 'Sign in' }).click()
+  const handle = signInDialog(page).getByRole('combobox', { name: 'Handle' })
+  await handle.pressSequentially('alic')
+  await expect(signInDialog(page).getByRole('option', { name: 'Alice @alice.test' })).toBeVisible()
+  await handle.press('ArrowDown')
+  await expect(signInDialog(page).getByRole('option', { name: 'Alice @alice.test' })).toHaveAttribute('aria-selected', 'true')
+  await handle.press('Enter')
+  await approve(page, 'alice')
+  await page.waitForURL(url('/g/riders.groups.test'))
   await expect(page).toHaveURL(url('/g/riders.groups.test'))
   await expect.poll(() => signedInAs(page)).toBe('@alice.test')
   await expect(page.getByText('Sign in to see this group.')).toHaveCount(0)
@@ -143,7 +171,7 @@ test('inviting someone from the dialog', async () => {
   const invite = page.getByRole('button', { name: 'Invite someone' })
   await invite.click()
   await expect(dialog.getByText("They'll see it the next time they sign in, here or in any app that shows invites.")).toBeVisible()
-  await dialog.getByRole('textbox', { name: 'Their handle' }).fill('nobody.test')
+  await dialog.getByRole('combobox', { name: 'Their handle' }).fill('nobody.test')
   await dialog.getByRole('button', { name: 'Send invite' }).click()
   await expect(page.getByText('We cannot find nobody.test.')).toBeVisible()
   // Cancelled, it sends nothing.
@@ -154,7 +182,12 @@ test('inviting someone from the dialog', async () => {
   // Sent, with a note; taken back; and sent again.
   const send = async () => {
     await invite.click()
-    await dialog.getByRole('textbox', { name: 'Their handle' }).fill('@bob.test')
+    // Picked from the accounts suggested as part of his handle is typed.
+    const handle = dialog.getByRole('combobox', { name: 'Their handle' })
+    await handle.pressSequentially('bo')
+    await dialog.getByRole('option', { name: 'Bob @bob.test' }).click()
+    await expect(handle).toHaveValue('bob.test')
+    await expect(dialog.getByRole('listbox')).toBeHidden()
     await dialog.getByRole('textbox', { name: 'A note, if you like' }).fill('Come walk with us.')
     await dialog.getByRole('button', { name: 'Send invite' }).click()
     await expect(page.locator('.invites', { hasText: who.bob.did })).toBeVisible()
@@ -384,7 +417,7 @@ test('moderating: a label, and the queue', async () => {
   const ejected = page.locator('.subject', { hasText: who.bob.did })
   await expect(ejected.locator('.status')).toHaveText('open')
   await expect(ejected.locator('.events')).toContainText('eject')
-  await page.getByRole('textbox', { name: 'Their handle' }).fill('bob.test')
+  await page.getByRole('combobox', { name: 'Their handle' }).fill('bob.test')
   await page.getByRole('textbox', { name: 'Label' }).fill('troll')
   await page.getByRole('button', { name: 'Label them' }).click()
   const subject = page.locator('.subject', { hasText: who.bob.did })
@@ -468,8 +501,9 @@ test('coming to a request that has lapsed', async () => {
 test('moving an account here to become a group', async () => {
   await page.goto(url('/new'))
   await page.getByRole('link', { name: 'move an account you already have' }).click()
-  await page.getByRole('textbox', { name: 'The account to move' }).fill(who.harbor.handle)
-  await page.getByRole('button', { name: 'Sign in to it' }).click()
+  const moving = page.getByRole('combobox', { name: 'The account to move' })
+  await moving.fill(who.harbor.handle)
+  await moving.press('Enter')
   // At its own server, as itself; then back, still alice.
   await approve(page, 'harbor')
   await page.waitForURL(url('/move'))

@@ -126,6 +126,17 @@ ol > li::marker{color:var(--primary);font-weight:var(--weight-bold);font-family:
 .group-row a{color:var(--fg);font:var(--weight-bold) var(--text-lg) var(--font-round);text-decoration:none}
 .group-row a:hover{color:var(--primary)}
 .standing form{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+/* A field for someone's handle, the accounts matching what is typed
+   dropping down over what is under it, as a menu does; in a dialog, past
+   its edge. */
+.handle-input{position:relative}
+.dialog:has(.handle-input){overflow:visible}
+.handle-list{position:absolute;z-index:1;top:calc(100% + var(--space-1));left:0;right:0;padding:var(--space-1);background:var(--panel);border:var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-pop);font-weight:var(--weight-normal)}
+.handle-option{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);cursor:pointer}
+.handle-option[aria-selected='true']{background:var(--soft)}
+.handle-option .av{width:var(--avatar-pick);height:var(--avatar-pick)}
+.handle-option .who{display:flex;flex-direction:column;min-width:0;font-size:var(--text-sm);line-height:var(--leading-tight);gap:var(--space-1)}
+.handle-option .who > *{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ── Templates ────────────────────────────────────────────────────── */
 

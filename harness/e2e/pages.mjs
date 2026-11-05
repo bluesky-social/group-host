@@ -35,18 +35,34 @@ export const joins = async (name, handle) => {
   expect(said.status, JSON.stringify(said)).toBe('admitted')
 }
 
+/// Stands in for typeahead.waow.tech in the browser `context`, which
+/// cannot know the reference PDS's accounts: the world's accounts whose
+/// handle holds what is typed, named for themselves.
+export const suggests = (context) =>
+  context.route('https://typeahead.waow.tech/xrpc/tech.waow.typeahead.searchActors?*', (route) => {
+    const asked = new URL(route.request().url()).searchParams
+    const q = asked.get('q').toLowerCase()
+    const actors = world.accounts
+      .filter((a) => a.handle.includes(q))
+      .slice(0, Number(asked.get('limit')))
+      .map((a) => ({ did: a.did, handle: a.handle, displayName: a.handle[0].toUpperCase() + a.handle.split('.')[0].slice(1) }))
+    return route.fulfill({ json: { actors }, headers: { 'access-control-allow-origin': '*' } })
+  })
+
 /// The sign-in dialog, wherever it was opened from.
 export const signInDialog = (page) => page.getByRole('dialog', { name: 'Sign in with your Atmosphere account' })
 
 /// Signs in to the console as `name` from the dialog, opened by the
 /// header's button or by `from`: their handle, then their PDS's page,
-/// which sends the browser back.
+/// which sends the browser back. Enter sends it as typed, under any
+/// accounts the field suggests.
 export const signIn = async (page, name, from = page.getByRole('banner').getByRole('button', { name: 'Sign in' })) => {
   const back = page.url()
   await from.click()
   const dialog = signInDialog(page)
-  await dialog.getByRole('textbox', { name: 'Handle' }).fill(who[name].handle)
-  await dialog.getByRole('button', { name: 'Sign in' }).click()
+  const handle = dialog.getByRole('combobox', { name: 'Handle' })
+  await handle.fill(who[name].handle)
+  await handle.press('Enter')
   await approve(page, name)
   await page.waitForURL(back)
 }

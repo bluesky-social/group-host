@@ -51,6 +51,20 @@ authorization server, pushes the request with PKCE and a fresh DPoP key,
 and sends the browser there. On return it exchanges the code, checks the
 token names the DID that started, and revokes the access token at once.
 
+As they type, the field suggests the accounts whose handle or name
+matches, with each one's picture, name and handle; picking one signs in
+as it at once. The suggestions come from typeahead.waow.tech, a service
+outside this host that knows the accounts of the whole network, so the
+browser sends it what is typed, from two letters on. It is the one
+server besides this host that the console's scripts may reach, as its
+content security policy says. When it cannot answer, the field is a
+plain one.
+
+Every other field for someone's handle suggests accounts the same way,
+a pick only filling it in: inviting someone, labelling someone, and the
+account to move here. The handle is resolved when the form is sent, so
+an invite is still written to the account's DID.
+
 What it keeps is a cookie, `group_host_session`: the DID and its times,
 signed with an HMAC under another key derived from the rotation secret,
 good for 30 days. Signing out records the time in `console_logout`, and

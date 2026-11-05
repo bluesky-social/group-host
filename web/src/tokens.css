@@ -152,6 +152,8 @@
 	--avatar: 24px;
 	--avatar-md: 44px;
 	--avatar-lg: 88px;
+	/* An account suggested under a field for a handle. */
+	--avatar-pick: 32px;
 	/* A small picture set in a line of text: a link's mark. */
 	--icon: 14px;
 	/* A group's banner: as wide as its card, a third as high. */
