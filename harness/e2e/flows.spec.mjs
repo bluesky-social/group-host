@@ -572,7 +572,16 @@ test('signing an app in as her group', async () => {
   const app = await new App('atproto repo:app.bsky.feed.post').listen()
   await page.goto(await app.push())
   await expect(page.getByRole('heading', { name: 'Sign in an app' })).toBeVisible()
-  await expect(page.getByText('repo:app.bsky.feed.post').first()).toBeVisible()
+  // Said as her PDS says it: Bluesky, and in its details, the posts.
+  const riders = page.locator('form', { hasText: '@riders.groups.test' })
+  await expect(riders.getByText("Use parts of the group's Bluesky account")).toBeVisible()
+  await riders.getByRole('button', { name: 'Details' }).click()
+  const details = page.getByRole('dialog', { name: 'Bluesky' }).filter({ visible: true })
+  await expect(details.getByRole('row', { name: /app\.bsky\.feed\.post/ })).toBeVisible()
+  await details.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Technical details' }).click()
+  await expect(page.getByRole('dialog', { name: 'Technical details' })).toContainText('repo:app.bsky.feed.post')
+  await page.getByRole('dialog', { name: 'Technical details' }).getByRole('button', { name: 'Close' }).click()
   await page.getByRole('button', { name: 'Sign it in as Riders' }).click()
   const back = await app.back
   app.close()

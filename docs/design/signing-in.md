@@ -148,9 +148,13 @@ The approval page asks `getAuthorization` what the request is: the
 client, the scopes asked, and the groups offered. If the app's
 `login_hint` names a switched-on group here, that group is offered;
 otherwise every switched-on group where the member holds a role. For
-each, the page shows the member's roles and which asked scopes they
-would grant or withhold, and each of the host's permission sets asked
-for in its own words, the `detail` of its lexicon.
+each, the page shows what the app would get and what it would not, as an
+account's PDS shows a request on its consent page: the scopes read by
+the same parser (`@atproto/oauth-scopes`) and listed as its rows, in its
+order (Bluesky, chat, each permission set, the repository, calling
+services, spaces), each with its details a dialog away, and the scopes
+as asked behind "Technical details". Each of the host's permission sets
+is named in its own words, the `title` and `detail` of its lexicon.
 
 `approveAuthorization` requires the member to hold a role in the chosen
 group, and that group to be the one the app named, if it named one. The

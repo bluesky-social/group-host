@@ -125,10 +125,11 @@ impl Host {
     }
 }
 
-/// What each of this host's permission sets asked for says it is for.
+/// What each of this host's permission sets asked for is called, and
+/// says it is for.
 fn labels(requested: &[String]) -> Value {
     let ours = requested.iter().filter_map(|s| Some((s, set_of(s)?)));
-    ours.map(|(s, set)| json!({"scope": s, "text": set["detail"]}))
+    ours.map(|(s, set)| json!({"scope": s, "title": set["title"], "text": set["detail"]}))
         .collect()
 }
 

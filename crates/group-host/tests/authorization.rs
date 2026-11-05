@@ -101,8 +101,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     assert_eq!(
         offered["labels"],
         json!([
-            {"scope": "include:fyi.opensocial.configure", "text": "Edit the group's profile, rules, and roles, and decide what each role can do."},
-            {"scope": "include:fyi.opensocial.moderate", "text": "Review reports and moderation history, and label members."},
+            {"scope": "include:fyi.opensocial.configure", "title": "Group settings", "text": "Edit the group's profile, rules, and roles, and decide what each role can do."},
+            {"scope": "include:fyi.opensocial.moderate", "title": "Group moderation", "text": "Review reports and moderation history, and label members."},
         ])
     );
     let mut theirs = dids(&offered);

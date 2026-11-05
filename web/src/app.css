@@ -292,3 +292,25 @@ ul.chosen[class] > li{padding:0;border:0}
 .well{background:var(--soft);border-radius:var(--radius-md);padding:var(--space-4)}
 .connect .address code{flex:1;min-width:0;overflow-wrap:anywhere;user-select:all}
 .asks li{color:var(--mute)}
+
+/* What an app would get, as an account's PDS lists it: a row for each kind
+   of thing, its icon, its title and a line on it, its details at the end;
+   what it would not get, quieter. The details' tables tick each write. */
+.app-asks{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-3);flex-wrap:wrap}
+.icon-lg{width:var(--icon-lg);height:var(--icon-lg);stroke:var(--fg)}
+.icon-filled{fill:var(--fg);stroke:none}
+.permissions[class] > li{flex-wrap:nowrap}
+.permissions.withheld .icon-lg{stroke:var(--faint)}
+.permissions.withheld .icon-filled{fill:var(--faint)}
+.permissions.withheld .who{color:var(--mute)}
+.withheld-part{gap:var(--space-3);margin-top:var(--space-2)}
+.ticks{width:100%;border-collapse:collapse;font-size:var(--text-sm)}
+.ticks th{padding:0 0 var(--space-1);color:var(--mute);font-weight:var(--weight-normal);text-align:center}
+.ticks td{padding:var(--space-2) 0;border-top:var(--border);text-align:center}
+.ticks :is(th,td):first-child{text-align:left}
+.ticks :is(th,td):not(:first-child){width:var(--tick-column)}
+.ticks.calls :is(th,td):not(:first-child){width:auto;text-align:left;padding-left:var(--space-3)}
+.ticks code{overflow-wrap:break-word}
+.ticks .icon{stroke:var(--fg)}
+.space-access{display:flex;flex-direction:column;gap:var(--space-2)}
+pre.scopes{margin:0;font:var(--text-sm)/var(--leading) var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere}
