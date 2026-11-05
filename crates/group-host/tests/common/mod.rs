@@ -10,7 +10,7 @@ pub mod oauth;
 pub mod spaces;
 
 use atproto::plc::Signed;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -29,6 +29,10 @@ use std::sync::{Arc, Mutex};
 #[derive(Default)]
 pub struct Plc {
     pub ops: Mutex<HashMap<String, Vec<Signed>>>,
+    /// Every operation taken, in order, as `/export` lists them.
+    pub exported: Mutex<Vec<Value>>,
+    /// How many times `/export` was asked.
+    pub exports: std::sync::atomic::AtomicUsize,
     pub refuse: AtomicBool,
     pub refuse_ends: AtomicBool,
     pub slow: AtomicBool,
@@ -80,8 +84,29 @@ async fn publish(
     if on(&plc.refuse) || (ending && on(&plc.refuse_ends)) || !signed || !keys_taken {
         return StatusCode::BAD_REQUEST;
     }
+    let mut exported = plc.exported.lock().unwrap();
+    let at = exported.len();
+    exported.push(json!({
+        "did": did,
+        "operation": op.to_json(),
+        "cid": op.cid().to_string(),
+        "nullified": false,
+        "createdAt": format!("2026-01-01T{:02}:{:02}:{:02}.000Z", at / 3600, at / 60 % 60, at % 60),
+    }));
     log.push(op);
     StatusCode::OK
+}
+
+/// The operations taken after `after`, as JSON lines, two at most: a page
+/// shorter than any a reader asks for, so it reads on to an empty one.
+async fn export(State(plc): State<Arc<Plc>>, Query(q): Query<HashMap<String, String>>) -> String {
+    plc.exports.fetch_add(1, Ordering::SeqCst);
+    let after = q.get("after").cloned().unwrap_or_default();
+    let exported = plc.exported.lock().unwrap();
+    let later = exported
+        .iter()
+        .filter(|e| e["createdAt"].as_str().unwrap() > after.as_str());
+    later.take(2).map(|e| format!("{e}\n")).collect()
 }
 
 async fn document(
@@ -148,6 +173,7 @@ pub async fn start_plc(refuse: bool) -> (Arc<Plc>, String) {
     let router = Router::new()
         .route("/{did}", get(document).post(publish))
         .route("/{did}/log/last", get(last))
+        .route("/export", get(export))
         .with_state(plc.clone());
     (plc, serve(router).await)
 }

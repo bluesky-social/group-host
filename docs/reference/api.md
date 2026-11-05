@@ -104,6 +104,7 @@ same writes ([membership](../design/membership.md#invites)).
 | `GET fyi.opensocial.getViewer` | who is asking, by the console's cookie or service auth |
 | `GET fyi.opensocial.getActor` | a person's DID and handle, to someone signed in: themselves, or anyone the host shows (a member of a group here, or someone asking to join one); to themselves also whether they may start a group |
 | `GET fyi.opensocial.getActorGroups` | the groups here a person is in, as far as the caller shares them |
+| `GET fyi.opensocial.searchActors` | accounts whose handle matches what is typed, from where `ACTOR_SEARCH` says; anyone may ask |
 | `GET /img/<did>/<cid>` | a group's or a person's image, for whoever may see it: anyone, for one in a public repo; otherwise only someone signed in to the console |
 
 ## Spaces

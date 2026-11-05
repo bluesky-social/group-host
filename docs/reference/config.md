@@ -22,6 +22,7 @@ trimmed of spaces and a trailing `/`.
 | `BLOB_UPLOAD_LIMIT` | the most bytes one blob may be, uploaded, or brought with a group, an account or a space; `describeServer` answers it | 52428800 (50 MiB) |
 | `CONSOLE_URL` | where the console is: where the host sends a member to approve an app or an MCP client (`/authorize`), the console's OAuth client id and callback when people sign in (`/console/…`), and, when `https`, whether the session cookie is `Secure` | `PUBLIC_URL` |
 | `PROVISIONING_CLIENTS` | the apps the host makes groups for with `provisionGroup`, comma-separated OAuth client ids, each matched as written, a trailing `/` included; `*` for any | none |
+| `ACTOR_SEARCH` | where `searchActors` looks for a handle being typed: `plc`, the handles in `PLC_URL`'s own export, read a page at a time and kept a minute; or the URL of a service answering `tech.waow.typeahead.searchActors` | typeahead.waow.tech's, when `PLC_URL` is `https://plc.directory`; else `plc` |
 | `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated, a trailing `/` dropped: at most every 20 minutes, and the first time after a start | none |
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON | `info` |
 

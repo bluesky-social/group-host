@@ -1,13 +1,14 @@
-// Finding an account by what has been typed of its handle or name, from the
-// typeahead service typeahead.waow.tech, which knows everyone on the
-// Atmosphere. What is typed goes to it; the console's CSP lets it.
+// Finding an account by what has been typed of its handle, from the host
+// (fyi.opensocial.searchActors), which asks a typeahead service that knows
+// everyone on the Atmosphere, or on a network of its own reads its own
+// directory's handles. What is typed goes only to the host.
 
-/** An account the typeahead service matched. */
+/** An account the host matched. */
 export type Actor = { did: string; handle: string; displayName?: string; avatar?: string };
 
-const SEARCH = 'https://typeahead.waow.tech/xrpc/tech.waow.typeahead.searchActors';
+const SEARCH = '/xrpc/fyi.opensocial.searchActors';
 
-/** Who matches what is typed, best first: none for under two letters, or when the service cannot say. */
+/** Who matches what is typed, best first: none for under two letters, or when the host cannot say. */
 export async function findActors(q: string, signal?: AbortSignal, limit = 6): Promise<Actor[]> {
 	const text = q.trim().replace(/^@/, '');
 	if (text.length < 2) return [];

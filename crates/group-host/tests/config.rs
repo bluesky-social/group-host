@@ -106,3 +106,22 @@ fn refuses_what_does_not_read() {
         "CONSOLE_URL is no URL: console"
     );
 }
+
+#[test]
+fn a_handle_is_looked_for_where_the_directory_is() {
+    let typeahead = "https://typeahead.waow.tech/xrpc/tech.waow.typeahead.searchActors";
+    assert_eq!(config(&[]).unwrap().actor_search, typeahead);
+    let own = config(&[("PLC_URL", "http://plc.next.test")]).unwrap();
+    assert_eq!(own.actor_search, "plc");
+    let told = [
+        ("PLC_URL", "http://plc.next.test"),
+        ("ACTOR_SEARCH", "https://find.test/x"),
+    ];
+    assert_eq!(config(&told).unwrap().actor_search, "https://find.test/x");
+    assert_eq!(
+        config(&[("ACTOR_SEARCH", "plc")]).unwrap().actor_search,
+        "plc"
+    );
+    let refused = config(&[("ACTOR_SEARCH", "somewhere")]).unwrap_err();
+    assert!(refused.to_string().contains("ACTOR_SEARCH"), "{refused}");
+}

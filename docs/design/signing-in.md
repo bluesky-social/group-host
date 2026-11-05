@@ -51,13 +51,18 @@ authorization server, pushes the request with PKCE and a fresh DPoP key,
 and sends the browser there. On return it exchanges the code, checks the
 token names the DID that started, and revokes the access token at once.
 
-As they type, the field suggests the accounts whose handle or name
-matches, with each one's picture, name and handle; picking one signs in
-as it at once. The suggestions come from typeahead.waow.tech, a service
-outside this host that knows the accounts of the whole network, so the
-browser sends it what is typed, from two letters on. It is the one
-server besides this host that the console's scripts may reach, as its
-content security policy says. When it cannot answer, the field is a
+As they type, the field suggests the accounts whose handle matches,
+with each one's picture, name and handle where they are known; picking
+one signs in as it at once. The browser asks the host
+(`fyi.opensocial.searchActors`), from two letters on, and the host asks
+where `ACTOR_SEARCH` says. On the network everyone is on, that is
+typeahead.waow.tech, a service that knows the accounts of the whole
+network, so what is typed reaches it from the host and from no browser.
+On a network of its own, whose PLC directory is not plc.directory, the
+host reads the handles that directory names from its export, kept a
+minute, and suggests those by handle alone: a directory has no names or
+pictures. The console's scripts reach no server but the host, as its
+content security policy says. When the host cannot say, the field is a
 plain one.
 
 Every other field for someone's handle suggests accounts the same way,

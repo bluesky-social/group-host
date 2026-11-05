@@ -1,0 +1,51 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.searchActors",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Accounts whose handle matches what is typed, best first, for a field where a handle is typed. Where the host looks is its ACTOR_SEARCH: a typeahead service that knows the whole network, or, on a network of its own, the handles its PLC directory names. Anyone may ask. Under two letters, or when the host cannot look, none.",
+      "parameters": {
+        "type": "params",
+        "required": ["q"],
+        "properties": {
+          "q": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "What has been typed of a handle, a leading @ let go."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 6
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["actors"],
+          "properties": {
+            "actors": {
+              "type": "array",
+              "items": { "type": "ref", "ref": "#actor" }
+            }
+          }
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "description": "An account that matched: its DID and handle, and its name and picture where the service knows them; a directory knows neither.",
+      "required": ["did", "handle"],
+      "properties": {
+        "did": { "type": "string", "format": "did" },
+        "handle": { "type": "string", "format": "handle" },
+        "displayName": { "type": "string", "maxLength": 640, "description": "Its name, as its profile gives it." },
+        "avatar": { "type": "string", "format": "uri", "description": "Its picture's address." }
+      }
+    }
+  }
+}

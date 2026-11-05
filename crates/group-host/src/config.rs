@@ -44,7 +44,16 @@ pub struct Config {
     /// `provisionGroup`, `PROVISIONING_CLIENTS`, comma-separated client
     /// ids, `*` for any: none unless set.
     pub provisioning_clients: Vec<String>,
+    /// Where a handle being typed is looked for, `ACTOR_SEARCH`: `plc`,
+    /// the handles in `PLC_URL`'s own export, or the URL of a service
+    /// answering `tech.waow.typeahead.searchActors`. The typeahead service
+    /// typeahead.waow.tech for plc.directory, which knows the whole
+    /// network; `plc` for any other directory, a network of its own.
+    pub actor_search: String,
 }
+
+/// The service that finds anyone on the network by what is typed.
+pub const TYPEAHEAD: &str = "https://typeahead.waow.tech/xrpc/tech.waow.typeahead.searchActors";
 
 impl Config {
     /// The config `var` names, as `std::env::var` would read it; the
@@ -110,6 +119,12 @@ impl Config {
             None => 50 * 1024 * 1024,
         };
         let provisioning_clients = list("PROVISIONING_CLIENTS");
+        let actor_search = match var("ACTOR_SEARCH") {
+            Some(s) if s == "plc" || reqwest::Url::parse(&s).is_ok() => s,
+            Some(s) => bail!("ACTOR_SEARCH is neither plc nor a URL: {s}"),
+            None if plc_url == "https://plc.directory" => TYPEAHEAD.into(),
+            None => "plc".into(),
+        };
         let console_url = var("CONSOLE_URL").unwrap_or_else(|| public_url.clone());
         let console_url = console_url.trim_end_matches('/').to_string();
         if reqwest::Url::parse(&console_url).is_err() {
@@ -129,6 +144,7 @@ impl Config {
             blob_upload_limit,
             console_url,
             provisioning_clients,
+            actor_search,
         })
     }
 

@@ -35,18 +35,20 @@ export const joins = async (name, handle) => {
   expect(said.status, JSON.stringify(said)).toBe('admitted')
 }
 
-/// Stands in for typeahead.waow.tech in the browser `context`, which
-/// cannot know the reference PDS's accounts: the world's accounts whose
-/// handle holds what is typed, named for themselves.
+/// Stands in for the host's handle search (fyi.opensocial.searchActors)
+/// in the browser `context`, as the typeahead service it asks would on the
+/// whole network, with names and pictures the reference directory has
+/// none of: the world's accounts whose handle holds what is typed, named
+/// for themselves. The host's own search is tested in its own tests.
 export const suggests = (context) =>
-  context.route('https://typeahead.waow.tech/xrpc/tech.waow.typeahead.searchActors?*', (route) => {
+  context.route('**/xrpc/fyi.opensocial.searchActors?*', (route) => {
     const asked = new URL(route.request().url()).searchParams
     const q = asked.get('q').toLowerCase()
     const actors = world.accounts
       .filter((a) => a.handle.includes(q))
       .slice(0, Number(asked.get('limit')))
       .map((a) => ({ did: a.did, handle: a.handle, displayName: a.handle[0].toUpperCase() + a.handle.split('.')[0].slice(1) }))
-    return route.fulfill({ json: { actors }, headers: { 'access-control-allow-origin': '*' } })
+    return route.fulfill({ json: { actors } })
   })
 
 /// The sign-in dialog, wherever it was opened from.

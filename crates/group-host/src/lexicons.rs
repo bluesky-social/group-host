@@ -109,6 +109,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/revokeGroupToken"),
     lexicon!("fyi/opensocial/role"),
     lexicon!("fyi/opensocial/rule"),
+    lexicon!("fyi/opensocial/searchActors"),
     lexicon!("fyi/opensocial/site"),
     lexicon!("fyi/opensocial/space"),
     lexicon!("fyi/opensocial/startAccountMove"),

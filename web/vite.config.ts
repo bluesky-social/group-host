@@ -33,8 +33,8 @@ export default defineConfig({
 					// Avatars take their hue from a style attribute.
 					'style-src': ['unsafe-inline'],
 					'script-src': ['self'],
-					// Handles suggested as they are typed (lib/typeahead.ts).
-					'connect-src': ['self', 'https://typeahead.waow.tech'],
+					// Handles suggested as they are typed ask the host (lib/typeahead.ts).
+					'connect-src': ['self'],
 					'base-uri': ['none'],
 					'form-action': ['self'],
 					'frame-ancestors': ['none']

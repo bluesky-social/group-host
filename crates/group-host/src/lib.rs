@@ -4,6 +4,7 @@
 //! says how it is built and what is still to come.
 
 pub mod account_move;
+pub mod actor_search;
 pub mod actors;
 pub mod api;
 pub mod app_passwords;
@@ -88,6 +89,8 @@ pub struct Host {
     index_wake: tokio::sync::Notify,
     /// The OAuth clients' metadata, as read.
     pub(crate) clients: oauth_clients::Clients,
+    /// The handles the directory names, as last read for a search.
+    pub(crate) handles: actor_search::Handles,
 }
 
 impl Host {
@@ -114,6 +117,7 @@ impl Host {
             indexing: Default::default(),
             index_wake: Default::default(),
             clients: Default::default(),
+            handles: Default::default(),
         })
     }
 }
@@ -144,6 +148,10 @@ pub fn router(host: Arc<Host>) -> Router {
             get(api::describe_server),
         )
         .route("/xrpc/fyi.opensocial.checkAddress", get(api::check_address))
+        .route(
+            "/xrpc/fyi.opensocial.searchActors",
+            get(actor_search::search_actors),
+        )
         .route("/xrpc/com.atproto.repo.getRecord", get(api::get_record))
         .route("/xrpc/com.atproto.repo.listRecords", get(api::list_records))
         .route("/xrpc/com.atproto.sync.getRepo", get(api::get_repo))
