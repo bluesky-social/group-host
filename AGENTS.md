@@ -189,8 +189,8 @@ Two more check nothing. `mirror`: each push to `main` or a tag pushes
 the same commit to a private copy on GitHub
 (github.com/bluesky-social/group-host), for those who read the code
 there. Nothing is pushed to that copy but from here. `deploy`: each push
-to `main` is built on the machine serving next.opensocial.fyi while the
-checks run, and goes up there once they all pass
+to `main`, which takes pulls only once the merge queue's checks pass,
+is built on the machine serving next.opensocial.fyi and goes up there
 (`docs/deploying.md`). Every workflow but `deploy` names
 `runner.knotless.dev`; `deploy` alone runs on `ci.knotless.dev`, which
 runs only its owner's repositories, and holds its secrets.
