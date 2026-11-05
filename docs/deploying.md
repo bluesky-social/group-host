@@ -139,7 +139,15 @@ docker compose up -d host
 docker compose up -d console
 ```
 
-On SIGTERM the host answers the requests already under way, within its 30-second grace period, then exits. The proxy holds new requests until the new host answers. Compose replaces the console the same way. It keeps no state, so a rollout could start a new console beside the old one instead; neither service sets `container_name`, which leaves that possible. Stopped, the console finishes its requests within a 35-second grace period. Scripts to build on the machine and roll out, and a workflow that deploys, are not in the repository yet.
+On SIGTERM the host answers the requests already under way, within its 30-second grace period, then exits. The proxy holds new requests until the new host answers. Compose replaces the console the same way. It keeps no state, so a rollout could start a new console beside the old one instead; neither service sets `container_name`, which leaves that possible. Stopped, the console finishes its requests within a 35-second grace period.
+
+## Deploying on each merge
+
+The host at next.opensocial.fyi deploys itself: `.knotless/workflows/deploy.yml` runs on each push to `main`. It sends a `git archive` of the commit to the machine over SSH, which builds it as a candidate image, `group-host:build-<commit>`, while the commit's checks run. Nothing that runs changes until then. Once `check`, `test`, `web`, `lexicons`, `e2e` and `docs` have all passed for the commit, the candidate becomes `group-host:current`, the image it replaces is kept as `group-host:before-<commit>`, and compose brings the host and the console up from the compose file at that commit, as the upgrade above does. The deploy then checks that `/xrpc/_health` names the commit. A check that fails throws the candidate away.
+
+One deploy runs at a time, and a newer commit's waits for the one before it to finish rather than cutting it off. A deploy whose commit is no longer `main`'s tip, before it builds or before it goes up, stops and leaves the deploy to the newer commit.
+
+The workflow runs only on `ci.knotless.dev`, the runner that runs its owner's repositories alone; every other workflow names `runner.knotless.dev`. Two secrets are sealed to `ci.knotless.dev` for `refs/heads/main`: `GROUP_HOST_DEPLOY_KEY`, an SSH key the machine accepts only to run its deploy command, which can build, bring up or throw away a group-host image and do nothing else; and `KNOTLESS_PASSWORD`, an app password of the repository's owner, for reading `main` and its checks, as the repository is private. The deploy command, how its key is installed, and how to roll back are in the machine's own configuration (hetzner-infra's `stacks/opensocial`).
 
 ## Backing up
 

@@ -1,0 +1,108 @@
+# Deploys main to next.opensocial.fyi once this commit's checks all pass.
+#
+# The host runs on the grain box as the compose project /etc/group-host
+# (hetzner-infra's stacks/opensocial). This run reaches it with
+# GROUP_HOST_DEPLOY_KEY, a key the box takes only for its forced command,
+# group-host-deploy, which can build group-host from an archive, bring a
+# build up, or drop one, and nothing else (hetzner-infra's
+# stacks/opensocial/files/group-host-deploy.sh). The key is sealed to
+# ci.knotless.dev, the runner that runs only its owner's repositories, for
+# pushes to main alone, so no other run sees it.
+#
+# The image is built first, while the checks run, as a candidate,
+# group-host:build-<commit>, which changes nothing that runs. Once every
+# check passes it goes up: the running image is kept as
+# group-host:before-<commit> to roll back to, and the host must then name
+# this commit in /xrpc/_health. A check that fails drops the candidate.
+#
+# A newer commit's deploy waits for this one (superseded: finish), so a
+# deploy is never cut off halfway. Before the build and again before going
+# up, this one asks where main is: once main has moved past it, it drops
+# its candidate and passes, leaving the deploy to the newer one.
+#
+# group-host is private, so reading main and its checks signs in as the
+# owner, KNOTLESS_IDENTIFIER, with KNOTLESS_PASSWORD, an app password of
+# theirs, granted as the key is.
+on:
+  push:
+    refs: [refs/heads/main]
+superseded: finish
+runners: [ci.knotless.dev]
+image: alpine:3.22
+secrets: [GROUP_HOST_DEPLOY_KEY, KNOTLESS_PASSWORD]
+env:
+  # The grain box, which serves next.opensocial.fyi, and its host key, as
+  # hetzner-infra's ci/known_hosts pins it.
+  GROUP_HOST_BOX: root@opensocial.fyi
+  GRAIN_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaUk4YyxTjCsPg1XOsCIJiB1NlEakc9/tnS+QeYRRNQ
+  GROUP_HOST_URL: https://next.opensocial.fyi
+  KNOTLESS_IDENTIFIER: chadtmiller.com
+  # The checks that must pass, each this repository's workflow of that name.
+  CHECKS: check test web lexicons e2e docs
+steps:
+  - name: tools
+    run: |
+      apk add --no-cache curl git openssh-client >/dev/null
+      curl -fsSL https://knotless.dev/install.sh | KNOTLESS_INSTALL_DIR=/usr/local/bin sh
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+      printf '%s\n' "$GROUP_HOST_DEPLOY_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+      echo "opensocial.fyi $GRAIN_HOST_KEY" > ~/.ssh/known_hosts
+      printf 'Host *\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n' > ~/.ssh/config
+      # The box's forced command, given what to do and this commit.
+      cat > /usr/local/bin/box <<'EOF'
+      #!/bin/sh
+      exec ssh "$GROUP_HOST_BOX" "$1 $KNOTLESS_RUN_SHA"
+      EOF
+      # Whether main has moved past this commit: 0 if it has, 1 if not, 2
+      # if it cannot tell.
+      cat > /usr/local/bin/moved <<'EOF'
+      #!/bin/sh
+      tip=$(knotless refs "knotless://$KNOTLESS_RUN_REPO" | awk -F '\t' -v ref="$KNOTLESS_RUN_REF" '$2 == ref { print $1 }')
+      [ -n "$tip" ] || exit 2
+      [ "$tip" != "$KNOTLESS_RUN_SHA" ] || exit 1
+      echo "$KNOTLESS_RUN_REF is at $tip now, not $KNOTLESS_RUN_SHA: the newer commit deploys"
+      EOF
+      chmod +x /usr/local/bin/box /usr/local/bin/moved
+  - name: build
+    run: |
+      moved && { touch ~/.moved; exit 0; } || true
+      git config --global --add safe.directory "$PWD"
+      git archive --format=tar "$KNOTLESS_RUN_SHA" | box build
+    timeout: 30
+  - name: checks
+    run: |
+      [ ! -e ~/.moved ] || exit 0
+      end=$(($(date +%s) + 1500))
+      for wf in $CHECKS; do
+        left=$((end - $(date +%s)))
+        [ "$left" -gt 0 ] || left=1
+        out=$(knotless checks "knotless://$KNOTLESS_RUN_REPO" --ref "$KNOTLESS_RUN_REF" \
+          --commit "$KNOTLESS_RUN_SHA" --workflow "$wf" --wait "$left") || true
+        echo "$out"
+        case "$out" in
+          success*) ;;
+          *) echo "$wf has not passed: not deploying"; box drop; exit 1 ;;
+        esac
+      done
+    timeout: 30
+  - name: deploy
+    run: |
+      [ ! -e ~/.moved ] || exit 0
+      at=0
+      moved || at=$?
+      case $at in
+        0) box drop; exit 0 ;;
+        2) echo "cannot tell where $KNOTLESS_RUN_REF is: not deploying"; box drop; exit 1 ;;
+      esac
+      box up
+      # As the network reaches it, through the proxy: the host names this
+      # commit within a minute, as it restarts, or the deploy fails.
+      for i in $(seq 30); do
+        health=$(curl -fsS "$GROUP_HOST_URL/xrpc/_health" || true)
+        case "$health" in *"\"$KNOTLESS_RUN_SHA\""*) echo "$health"; exit 0 ;; esac
+        sleep 2
+      done
+      echo "$GROUP_HOST_URL names no $KNOTLESS_RUN_SHA: ${health:-no answer}"
+      echo "the box runs group-host:current at this commit, but it is not healthy;"
+      echo "to roll back: docker tag group-host:before-$(echo "$KNOTLESS_RUN_SHA" | cut -c1-12) group-host:current, then docker compose up -d in /etc/group-host"
+      exit 1

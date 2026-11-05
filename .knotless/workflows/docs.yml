@@ -5,6 +5,8 @@
 # run could sign in with, cannot write. The site's packages are kept
 # between runs and installed again only when its lockfile changes.
 image: node:24.22.1
+# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+runners: [runner.knotless.dev]
 # Pushes to main, and pulls that change the docs, their check, the site,
 # the lexicons and tokens it takes, or this file. A pull changing none
 # passes at once, noted as skipped.

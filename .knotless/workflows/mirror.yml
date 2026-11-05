@@ -10,6 +10,8 @@
 on:
   push: {refs: [refs/heads/main, refs/tags/*]}
 image: debian:stable-slim
+# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+runners: [runner.knotless.dev]
 secrets: [MIRROR_KEY]
 env: {MIRROR: git@github.com:bluesky-social/group-host.git}
 steps:

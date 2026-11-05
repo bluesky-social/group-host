@@ -2,6 +2,8 @@
 # see, and that they only grow from main's (harness/lexicons.mjs). goat is
 # kept between runs.
 image: node:24.22.1
+# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+runners: [runner.knotless.dev]
 on:
   push: {refs: [refs/heads/main]}
   pull:

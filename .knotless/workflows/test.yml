@@ -8,6 +8,8 @@
 # are kept between runs; each is made again only when what it is made from
 # changes.
 image: rust:1.98
+# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+runners: [runner.knotless.dev]
 # A pre-flight, as check is: the merge queue takes a pull into a batch only
 # once this has passed at its head.
 queue: first

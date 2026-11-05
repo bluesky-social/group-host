@@ -185,10 +185,15 @@ pulls into it or into a `feature/` branch:
 - `docs`: `just docs`, every link and anchor landing, and the docs site's
   build.
 
-One more, `mirror`, checks nothing: each push to `main` or a tag pushes
+Two more check nothing. `mirror`: each push to `main` or a tag pushes
 the same commit to a private copy on GitHub
 (github.com/bluesky-social/group-host), for those who read the code
-there. Nothing is pushed to that copy but from here.
+there. Nothing is pushed to that copy but from here. `deploy`: each push
+to `main` is built on the machine serving next.opensocial.fyi while the
+checks run, and goes up there once they all pass
+(`docs/deploying.md`). Every workflow but `deploy` names
+`runner.knotless.dev`; `deploy` alone runs on `ci.knotless.dev`, which
+runs only its owner's repositories, and holds its secrets.
 
 On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
 what they read; otherwise each passes at once, noted as skipped.

@@ -4,6 +4,8 @@
 # which fails on any warning. The packages are kept between runs and
 # installed again only when the lockfile changes.
 image: node:24.22.1
+# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+runners: [runner.knotless.dev]
 # Pushes to main, and pulls that change the pages, the lexicons their types
 # are made from, the layers' or dialogs' check or this file. A pull changing none passes
 # at once, noted as skipped.

@@ -5,6 +5,8 @@
 # lints land on purpose. The build and the toolchain's components are kept
 # between runs, so a push lints only what it changed.
 image: rust:1.98
+# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+runners: [runner.knotless.dev]
 # A pre-flight: the merge queue takes a pull into a batch only once this
 # has passed at its head, so one that does not build fails no batch.
 queue: first
