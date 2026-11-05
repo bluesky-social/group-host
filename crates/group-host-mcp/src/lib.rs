@@ -39,6 +39,8 @@ macro_rules! lexicon {
 /// and atproto's.
 const LEXICONS: &[(&str, &str)] = &[
     lexicon!("getGroup"),
+    lexicon!("deactivateGroup"),
+    lexicon!("activateGroup"),
     lexicon!("listMembers"),
     lexicon!("listJoinRequests"),
     lexicon!("denyJoinRequest"),
@@ -309,6 +311,13 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         &[],
         "The group as the member may see it.",
         Made::Method("getGroup", None),
+    ),
+    (
+        "group_deactivate",
+        &[],
+        "Switches the group off: nobody can read its spaces or write as it until one who \
+         could switch it off switches it back on. With undo, switches it back on.",
+        Made::Method("deactivateGroup", Some("activateGroup")),
     ),
     (
         "profile_set",

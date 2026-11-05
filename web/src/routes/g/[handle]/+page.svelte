@@ -9,6 +9,7 @@
 	import MemberList from '#lib/organisms/MemberList.svelte';
 	import Section from '#lib/molecules/Section.svelte';
 	import Standing from '#lib/molecules/Standing.svelte';
+	import SwitchedOff from '#lib/molecules/SwitchedOff.svelte';
 	import { image } from '#lib/images.ts';
 	import GroupPage from '#lib/templates/GroupPage.svelte';
 	import Welcome from '#lib/templates/Welcome.svelte';
@@ -46,16 +47,16 @@
 						</nav>
 					{/if}
 				{/snippet}
-				{#if g.deactivated}
-					<p>This group is switched off.</p>
-				{:else if member}
+				{#if member}
 					<Standing roles={g.viewer?.roles.map((r) => r.role) ?? []} />
 				{:else if g.displayName}
 					<p class="mute small">{joining[g.joinPolicy ?? 'approval'] ?? joining.approval}</p>
 				{/if}
 			</GroupCard>
 		{/snippet}
-		{#if !g.deactivated}
+		{#if g.deactivated}
+			<SwitchedOff steward={g.viewer?.steward ?? false} />
+		{:else}
 			{#if !member}
 				<JoinPanel {name} joinPolicy={g.joinPolicy} asked={!!g.viewer?.request} invited={data.invited} />
 			{:else if form?.joined}

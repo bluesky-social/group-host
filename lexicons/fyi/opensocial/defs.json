@@ -332,7 +332,7 @@
     },
     "viewerState": {
       "type": "object",
-      "description": "The requesting account's standing in the group. Only present for authed requests.",
+      "description": "The requesting account's standing in the group. Only present for authed requests. For a group switched off, nothing of their standing is read: member is false, roles and actions empty, and steward says whether they may switch it back on.",
       "required": [
         "member",
         "roles",
@@ -365,6 +365,10 @@
           "type": "ref",
           "ref": "#joinRequest",
           "description": "The viewer's own pending request to join, when they are not a member and have one."
+        },
+        "steward": {
+          "type": "boolean",
+          "description": "For a group switched off, whose membership cannot be read: whether the viewer held group.configure when it was switched off, and so may switch it back on or delete it. Absent while the group is on."
         }
       }
     },

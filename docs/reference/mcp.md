@@ -29,8 +29,10 @@ A list the command takes comma-separated, a tool takes as an array.
 `crates/group-host-mcp/src/lib.rs` lists them, and the command reads its
 words by the tool's schema, so the two cannot drift.
 
-The commands with no tool make or move a group or an account: `group
-create`, `group seed`, `group move` and `account import`.
+The commands with no tool make, move or delete a group or an account:
+`group create`, `group seed`, `group move`, `group delete` and `account
+import`. A client connected to a group can switch it off, which its
+stewards undo, but never delete it.
 
 Each tool is asked as the member who connected the client, in that
 group, and does one of four things: asks one of the host's methods, as
@@ -62,6 +64,7 @@ group's as they are.
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
 | `group_show` | `group show` | `fyi.opensocial.getGroup` | the group as the member may see it: its profile, rules, how many are in it, roles and spaces |
+| `group_deactivate` | `group deactivate` | `fyi.opensocial.deactivateGroup` | switches the group off; with `undo`, `fyi.opensocial.activateGroup` switches it back on |
 
 ## profile
 

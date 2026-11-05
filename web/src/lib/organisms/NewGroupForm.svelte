@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { finished, labelOf } from '#lib/handles.ts';
 	/**
 	 * Starting a group: its name, and its address under the host's
@@ -11,6 +12,13 @@
 	let name = $state('');
 	let label = $state('');
 	let edited = $state(false);
+	let address: HTMLInputElement;
+	// An address typed before the page's script ran was typed by hand all the same.
+	onMount(() => {
+		if (!address.value) return;
+		edited = true;
+		label = labelOf(address.value);
+	});
 	// Taken, and the next free one if there is one near: none while free or unasked.
 	let taken = $state<{ label: string; next?: string } | null>(null);
 
@@ -44,7 +52,7 @@
 	<label class="field">
 		Its address
 		<span class="address">
-			<input name="label" required maxlength="63" pattern="[a-z0-9][a-z0-9\-]*" bind:value={label} oninput={() => ((edited = true), (label = labelOf(label)))} />
+			<input name="label" required maxlength="63" pattern="[a-z0-9][a-z0-9\-]*" bind:this={address} bind:value={label} oninput={() => ((edited = true), (label = labelOf(label)))} />
 			<span class="mute mono">{domain}</span>
 		</span>
 	</label>

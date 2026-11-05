@@ -1,6 +1,6 @@
 //! A client for opensocial group hosts, and what the `opensocial` command
 //! does with it. Each command is `opensocial <group> <action>`; all but
-//! those that make or move a group or an account are the twins of the
+//! those that make, move or delete a group or an account are the twins of the
 //! host's MCP tools, made from the same `group_host_mcp::Tool`s and
 //! carried out from the same `Plan`s.
 //!
@@ -30,6 +30,10 @@ group
                          invite for each handle in OPENSOCIAL_SEED_INVITE
   group move <group> --to <address> [--to-did <did>]
                          move a group, whole, from this host to the one at <address>
+  group deactivate <group> [--undo]
+                         switch a group off, so nothing reads or writes it, or with
+                         --undo switch it back on
+  group delete <group>   delete a group, its spaces and its identity, for good
 profile
   profile set <group> [--display-name <name>] [--join-policy <policy>] [--description <words>] …
                          change the group's profile in what is given; \"\" takes a field away
@@ -86,8 +90,8 @@ account
   A group or person is a handle or a DID; a subject an account's DID or a
   record's at:// URI. A flag is a field of what the command writes or asks,
   in kebab case; a list is comma-separated, and anything more than text or
-  a number is JSON. Every command but group create, seed and move and
-  account import is also the MCP tool <group>_<action> (member_assign),
+  a number is JSON. Every command but group create, seed, move and
+  delete and account import is also the MCP tool <group>_<action> (member_assign),
   which an MCP client connected to a group calls there.
 
   You sign in as OPENSOCIAL_AS (a handle) with OPENSOCIAL_PASSWORD, at
@@ -573,6 +577,10 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             };
             migrate(&signed_in(env).await?, &host, &dest, group).await
         }
+        ["group", "delete", rest @ ..] => {
+            let [group] = parse(rest, &[])?.take()?;
+            delete(&signed_in(env).await?, &host, group).await
+        }
         ["account", "import", rest @ ..] => {
             let a = parse(rest, &["address", "code"])?;
             let [account] = a.take()?;
@@ -832,6 +840,18 @@ fn shown(said: &Value, members: &Value) -> String {
 /// A group's members space.
 fn members_of(group: &str) -> String {
     format!("at://{group}/space/{NS}.members/self")
+}
+
+/// Deletes `group`, for good: what went.
+async fn delete(me: &Client, host: &Host, group: &str) -> Result<String> {
+    let group = me.resolve(host, group).await?;
+    let body = json!({"group": group});
+    let done = me.call(host, &m("deleteGroup"), &body).await?;
+    let identity = match done["tombstoned"].as_bool() {
+        Some(true) => "its DID is ended",
+        _ => "its DID is left to the holders of its recovery keys",
+    };
+    Ok(format!("deleted {group}\n{identity}\n"))
 }
 
 async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<String> {

@@ -209,10 +209,14 @@ pub async fn get_group(
         return Ok(Json(json!({ "group": signed_out(group, handle) })));
     };
     // Switched off: nothing in it is read, by members either. Still
-    // answered, so a steward can find the switch.
-    if host.deactivation(group)?.is_some() {
+    // answered, telling a steward of when it went off so, to find the
+    // switch.
+    if let Some(off) = host.deactivation(group)? {
         let mut view = base(&host, group, &handle)?;
         view["deactivated"] = json!(true);
+        let steward = off.stewards.contains(&me);
+        let viewer = json!({"member": false, "roles": [], "actions": [], "steward": steward});
+        view["viewer"] = viewer;
         return Ok(Json(json!({ "group": view })));
     }
     let record = |space: &str, collection: &str, rkey: &str| {

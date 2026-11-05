@@ -121,7 +121,8 @@ Some of what the host does is not a tool. An MCP client cannot list or
 end connections, so it cannot hide itself or end another client's. It
 cannot make a group, move one, or bring an account here, which are
 commands only, nor change the group's recovery keys or delete it (see
-[recovery](recovery.md)); those stay with the member.
+[recovery](recovery.md)); those stay with the member. It can switch the
+group off, as `group_deactivate`, which a steward undoes.
 
 Details:
 

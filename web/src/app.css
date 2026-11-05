@@ -135,6 +135,7 @@ ol > li::marker{color:var(--primary);font-weight:var(--weight-bold);font-family:
 .dialog .field input,.dialog .field textarea,.dialog .field select{width:100%}
 .dialog-wide{width:min(var(--page),calc(100vw - 2 * var(--space-4)))}
 .actions{display:flex;justify-content:flex-end;gap:var(--space-2)}
+.actions.start{justify-content:flex-start;flex-wrap:wrap}
 /* A choice in a card, under what it answers: the quiet way first, then
    the one that acts. */
 .choices{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}

@@ -7,7 +7,7 @@ import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
 import type * as listAppPasswords from '#lib/lexicons/fyi/opensocial/listAppPasswords.ts';
 import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/listGroupTokens.ts';
 import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecoveryKeys.ts';
-import { fail, type Action } from '@sveltejs/kit';
+import { fail, redirect, type Action } from '@sveltejs/kit';
 import { act, xrpc, type Answer } from '#lib/data.ts';
 import { applyAsGroup, membersOf, withGroup, type Done, type GroupSession, type Write } from '#lib/asGroup.ts';
 import { SCOPES } from '#lib/actions.ts';
@@ -303,13 +303,29 @@ const all = {
 	unpassword: async (event) => {
 		const { group, form } = await asked(event);
 		return act(event, 'fyi.opensocial.revokeAppPassword', { group, name: text(form, 'name') });
+	},
+	deactivate: async (event) => {
+		const { group } = await asked(event);
+		// Off, its page is where it is switched back on.
+		return (await act(event, 'fyi.opensocial.deactivateGroup', { group })) ?? redirect(303, `/g/${event.params.handle}`);
+	},
+	activate: async (event) => {
+		const { group } = await asked(event);
+		return act(event, 'fyi.opensocial.activateGroup', { group });
+	},
+	delete: async (event) => {
+		const { group } = await asked(event);
+		// Gone, there is no page of it to come back to.
+		return (await act(event, 'fyi.opensocial.deleteGroup', { group })) ?? redirect(303, '/');
 	}
 } satisfies Record<string, Action<{ handle: string }>>;
 
 /** The writes named, as a page's actions. */
 const pick = <K extends keyof typeof all>(...names: K[]) => Object.fromEntries(names.map((n) => [n, all[n]])) as Pick<typeof all, K>;
 
-export const profileActions = pick('profile', 'link', 'unlink', 'picture', 'unpicture', 'visibility');
+export const profileActions = pick('profile', 'link', 'unlink', 'picture', 'unpicture', 'visibility', 'deactivate', 'delete');
+/** What a group switched off is: switched back on, or deleted, from its own page. */
+export const switchedOffActions = pick('activate', 'delete');
 export const ruleActions = pick('rule', 'unrule');
 export const roleActions = pick('role', 'unrole');
 export const appActions = pick('revoke', 'password', 'unpassword');

@@ -130,7 +130,9 @@ anything yet. Whoever may read `members` gets how many members it has
 (`listMembers` names them, a page at a time), the roles and what each
 may do, and the spaces, with a space's access shown only to
 those who may read it. A holder of `admit` also gets the join requests. A
-switched-off group shows only the first part and `deactivated: true`.
+switched-off group shows only the first part and `deactivated: true`,
+and to one signed in, `viewer.steward`: whether they may switch it back
+on, as nothing else of their standing is read.
 
 A group that wants to be found says so with its declaration, a
 `fyi.opensocial.declaration` record in its public repo pointing at
@@ -250,6 +252,12 @@ to anyone, the group included, and its images are not served.
 A switched-off group's roles cannot decide who may switch it back on, so
 the host keeps who held `group.configure` when it was switched off.
 `activateGroup` is for one of those stewards.
+
+In the console, the profile page of a group's settings switches it off
+or deletes it, each asked to be sure of. Switched off, the group's page
+says so, and to its stewards offers to switch it back on or delete it.
+The commands are `group deactivate` (`--undo` switches it back on) and
+`group delete`; an MCP client can switch the group off, never delete it.
 
 `deleteGroup` is for a holder of `group.configure`, or for a kept steward
 while the group is off. It tells the syncers of each space, ends the

@@ -123,7 +123,12 @@ test('starting a group', async () => {
   await page.getByRole('textbox', { name: 'Name' }).pressSequentially('Hikers')
   await expect(page.getByText('hikers.groups.test is taken.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Use hikers-2.groups.test' })).toBeVisible()
+  // Its answer waited for: the note that it is taken is p.danger already,
+  // and a page left before the answer lands is drawn over by it.
+  const answered = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/new'))
   await page.getByRole('button', { name: 'Start the group' }).click()
+  await answered
+  await page.waitForLoadState()
   await expect(page.locator('p.danger')).toBeVisible()
   // Its address changed by hand stays as it was put, whatever the name.
   await page.goto(url('/new'))
@@ -639,6 +644,33 @@ test('declining an app', async () => {
 test('coming to a request that has lapsed', async () => {
   await page.goto(url('/authorize?request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Areq-gone'))
   await expect(page.getByText('This sign-in request has expired')).toBeVisible()
+})
+
+test('switching a group off, back on, and deleting it', async () => {
+  await page.goto(url('/new'))
+  await page.getByRole('textbox', { name: 'Name' }).pressSequentially('Tandem')
+  await page.getByRole('button', { name: 'Start the group' }).click()
+  await page.waitForURL(url('/g/tandem.groups.test'))
+  // Off from its settings, asked to be sure of; its page then says so.
+  await page.goto(url('/g/tandem.groups.test/settings'))
+  await page.getByRole('button', { name: 'Switch off' }).click()
+  await page.getByRole('dialog', { name: 'Switch this group off?' }).getByRole('button', { name: 'Switch off' }).click()
+  await page.waitForURL(url('/g/tandem.groups.test'))
+  await expect(page.getByText('This group is switched off')).toBeVisible()
+  // Bob, who never ran it, sees only that.
+  await bob.goto(url('/g/tandem.groups.test'))
+  await expect(bob.getByText('This group is switched off')).toBeVisible()
+  await expect(bob.getByRole('button', { name: 'Switch back on' })).toHaveCount(0)
+  // Back on, from its page.
+  await page.getByRole('button', { name: 'Switch back on' }).click()
+  await expect(page.getByText(/You're a member/)).toBeVisible()
+  // Deleted, it is gone, and so is its page.
+  await page.goto(url('/g/tandem.groups.test/settings'))
+  await page.getByRole('button', { name: 'Delete the group' }).click()
+  await page.getByRole('dialog', { name: 'Delete this group?' }).getByRole('button', { name: 'Delete', exact: true }).click()
+  await page.waitForURL(url('/'))
+  const gone = await page.goto(url('/g/tandem.groups.test'))
+  expect(gone.status()).toBe(404)
 })
 
 test('moving an account here to become a group', async () => {

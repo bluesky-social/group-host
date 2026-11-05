@@ -5,10 +5,11 @@
 #[allow(dead_code)]
 mod net;
 
+use atproto::keys::{Curve, Keypair};
 use group_host::Host;
 use group_host::config::Config;
 use net::net;
-use opensocial::{Env, did_web, run};
+use opensocial::{Client, Env, Host as HostAt, did_web, run};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -373,6 +374,48 @@ async fn writes_the_groups_rules_roles_and_profile() {
 }
 
 #[tokio::test]
+async fn switches_a_group_off_and_on_and_deletes_it() {
+    let h = host().await;
+    let (alice, bob) = (env(&h, 0), env(&h, 1));
+    let made = ok(&alice, &["group", "create", "riders.groups.test"]).await;
+    let did = made.split_whitespace().nth(2).unwrap().to_string();
+    // Only one who runs it, switching it off once.
+    let said_so = fails(&bob, &["group", "deactivate", &did]).await;
+    assert!(said_so.contains("403"), "{said_so}");
+    assert_eq!(ok(&alice, &["group", "deactivate", &did]).await, "{}\n");
+    let said_so = fails(&alice, &["group", "deactivate", &did]).await;
+    assert!(said_so.contains("AlreadyDeactivated"), "{said_so}");
+    assert!(h.host.deactivation(&did).unwrap().is_some());
+    ok(&alice, &["group", "deactivate", &did, "--undo"]).await;
+    assert!(h.host.deactivation(&did).unwrap().is_none());
+
+    let said_so = fails(&bob, &["group", "delete", &did]).await;
+    assert!(said_so.contains("403"), "{said_so}");
+    let gone = ok(&alice, &["group", "delete", "riders.groups.test"]).await;
+    assert_eq!(gone, format!("deleted {did}\nits DID is ended\n"));
+    let said_so = fails(&alice, &["group", "show", &did]).await;
+    assert!(said_so.contains("GroupNotFound"), "{said_so}");
+
+    // One whose steward holds a recovery key keeps its DID, for them.
+    let made = ok(&alice, &["group", "create", "tandem.groups.test"]).await;
+    let did = made.split_whitespace().nth(2).unwrap().to_string();
+    let person = &net().accounts[0];
+    let me = Client::sign_in(&net().pds, &person.handle, &person.password);
+    let me = me.await.unwrap();
+    let at = HostAt {
+        url: h.url.clone(),
+        did: did_web(&h.url),
+    };
+    let key = Keypair::generate(Curve::K256).public().did_key();
+    let body = json!({"group": did, "key": key});
+    let added = me.call(&at, "fyi.opensocial.addRecoveryKey", &body).await;
+    added.unwrap();
+    let gone = ok(&alice, &["group", "delete", &did]).await;
+    let left = "its DID is left to the holders of its recovery keys";
+    assert_eq!(gone, format!("deleted {did}\n{left}\n"));
+}
+
+#[tokio::test]
 async fn seeds_a_group_to_try_things_on() {
     let h = host().await;
     let said = ok(&env(&h, 0), &["group", "seed", "trial.groups.test"]).await;
@@ -637,6 +680,7 @@ async fn says_what_is_wrong_with_what_it_is_asked() {
         &["group", "create"][..],
         &["group", "show", "a", "b"],
         &["group", "move", "riders.groups.test"],
+        &["group", "delete"],
         &["member", "assign", "g"],
         &["member", "eject", "g", "m", "extra"],
         &["member"],

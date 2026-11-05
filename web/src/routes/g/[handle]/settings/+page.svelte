@@ -3,6 +3,7 @@
 	import LinksEditor from '#lib/organisms/LinksEditor.svelte';
 	import ProfileForm from '#lib/organisms/ProfileForm.svelte';
 	import ProfilePictures from '#lib/organisms/ProfilePictures.svelte';
+	import SwitchOff from '#lib/organisms/SwitchOff.svelte';
 	import Visibility from '#lib/organisms/Visibility.svelte';
 	import { image } from '#lib/images.ts';
 	let { data, form } = $props();
@@ -26,4 +27,8 @@
 </Section>
 <Section title="Who sees it">
 	<Visibility listed={data.listed} />
+</Section>
+<Section title="Switch off or delete the group">
+	{#snippet intro()}Switching the group off hides it from everyone until an admin switches it back on. Deleting it can't be undone.{/snippet}
+	<SwitchOff />
 </Section>

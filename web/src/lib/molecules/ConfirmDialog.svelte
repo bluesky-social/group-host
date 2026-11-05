@@ -6,7 +6,9 @@
 	/**
 	 * Asking to be sure of what cannot be undone, opened by a button whose
 	 * `popovertarget` is `id`: `children`, what will happen, in a sentence;
-	 * Cancel; and `confirm`, the act, sent to `action` with `fields`.
+	 * Cancel; and `confirm`, the act, sent to `action` with `fields`. One
+	 * that can be undone, though it should not be done lightly, is not
+	 * `danger`, and its act is the dialog's one primary button.
 	 */
 	let {
 		id,
@@ -14,8 +16,9 @@
 		action,
 		confirm,
 		fields = {},
+		danger = true,
 		children
-	}: { id: string; title: string; action: string; confirm: string; fields?: Record<string, string>; children: Snippet } = $props();
+	}: { id: string; title: string; action: string; confirm: string; fields?: Record<string, string>; danger?: boolean; children: Snippet } = $props();
 	let failed = $state<string | null>(null);
 </script>
 
@@ -25,6 +28,6 @@
 	<form method="post" {action} class="actions" use:enhance={inDialog(id, (why) => (failed = why))}>
 		{#each Object.entries(fields) as [name, value] (name)}<input type="hidden" {name} {value} />{/each}
 		<button class="quiet" type="button" popovertarget={id} popovertargetaction="hide">Cancel</button>
-		<button class="danger" type="submit">{confirm}</button>
+		<button class={danger ? 'danger' : undefined} type="submit">{confirm}</button>
 	</form>
 </Dialog>

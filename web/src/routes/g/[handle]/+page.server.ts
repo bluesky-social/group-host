@@ -8,7 +8,7 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
 import { asGroup, membersOf } from '#lib/asGroup.ts';
-import { changes } from '#lib/server/settings.ts';
+import { changes, switchedOffActions } from '#lib/server/settings.ts';
 
 type Handle = `${string}.${string}`;
 
@@ -48,7 +48,7 @@ export const load: PageServerLoad = async (event) => {
 		: null;
 	// The AI apps a member connected here, and where they connect one.
 	const apps = viewer?.member ? (await xrpc<typeof listConnectedApps.main>(event, 'fyi.opensocial.listConnectedApps', { group })).apps : null;
-	const invited = viewer && !viewer.member ? (await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', { group })).invites.length > 0 : false;
+	const invited = viewer && !viewer.member && !view.group.deactivated ? (await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', { group })).invites.length > 0 : false;
 	const { configures, issues } = changes(view);
 	return { ...view, settings: configures || issues, members: page?.members ?? null, more: !!page?.cursor, q, shown, invites, apps, invited, mcp: `${event.url.origin}/mcp` };
 };
@@ -73,6 +73,7 @@ async function membership(event: { fetch: typeof fetch }, group: string, who: st
 
 /** What a person does on a group's page: each drawn again after. */
 export const actions: Actions = {
+	...switchedOffActions,
 	join: async (event) => {
 		const { group, form } = await asked(event);
 		// Their note to whoever looks at the request, if they wrote one.

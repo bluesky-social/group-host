@@ -38,8 +38,10 @@ replaces the record whole, a field not given dropped, but `profile set`,
 which changes only the fields given (`""` takes one away), and `role
 grant`, which adds to a role's grant or with `--undo` takes from it.
 
-The commands with no tool make or move a group or an account: `group
-create`, `group seed`, `group move` and `account import`.
+The commands with no tool make, move or delete a group or an account:
+`group create`, `group seed`, `group move`, `group delete` and `account
+import`. A client connected to a group can switch it off, which its
+stewards undo, but never delete it.
 
 ### group
 
@@ -49,6 +51,8 @@ create`, `group seed`, `group move` and `account import`.
 | `group show <group>` | the group as you may see it: its roles, its first hundred members and its spaces |
 | `group seed <handle>` | a group to try things on, joined by approval: two rules, a moderator role (`mod.read`, `mod.resolve`, `label`) that the founder may give, written as the group, and an invite for each of `OPENSOCIAL_SEED_INVITE` |
 | `group move <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; run again after a run that handed it over but could not switch it on, it switches it on; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
+| `group deactivate <group> [--undo]` | switches the group off, so nothing reads its spaces or writes as it; with `--undo`, switches it back on, for one who held `group.configure` when it went off ([switching off](../design/groups.md#switching-off-on-and-deleting)) |
+| `group delete <group>` | deletes the group, its spaces and its account here, for good, and prints whether its DID was ended or left to the holders of its recovery keys |
 
 ### profile
 

@@ -509,6 +509,30 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
 }
 
 #[tokio::test]
+async fn switches_the_group_off_and_back_on() {
+    let h = start(&[], false).await;
+    let [alice, bob, _] = people(&h).await;
+    let body = json!({"handle": RIDERS, "displayName": "Riders"});
+    let group = start_group(&h, &alice, body).await;
+    make_member(&h, &group, &bob.did).await;
+    // A plain member may not.
+    let (_, tokens) = connect(&h, &bob, &group).await;
+    let access = tokens["access_token"].as_str().unwrap();
+    let got = tool(&h, access, "group_deactivate", json!({})).await;
+    assert_eq!(got["isError"], true, "{got}");
+    assert!(h.host.deactivation(&group).unwrap().is_none());
+    // One who runs it may, and with undo, switch it back on.
+    let (_, tokens) = connect(&h, &alice, &group).await;
+    let access = tokens["access_token"].as_str().unwrap();
+    let got = tool(&h, access, "group_deactivate", json!({})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    assert!(h.host.deactivation(&group).unwrap().is_some());
+    let got = tool(&h, access, "group_deactivate", json!({"undo": true})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    assert!(h.host.deactivation(&group).unwrap().is_none());
+}
+
+#[tokio::test]
 async fn does_only_what_the_members_roles_allow() {
     let h = start(&[], false).await;
     let [alice, bob, _] = people(&h).await;

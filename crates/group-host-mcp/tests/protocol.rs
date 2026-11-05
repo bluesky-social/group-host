@@ -30,6 +30,7 @@ fn names_each_tool_for_its_command() {
         names,
         [
             "group_show",
+            "group_deactivate",
             "profile_set",
             "rule_set",
             "rule_delete",
@@ -189,6 +190,15 @@ fn plans_a_method_asked_with_its_arguments() {
             input: json!({}),
         })
     );
+    // Its opposite, with undo, which takes nothing but the group.
+    let off = |undo: bool| planned("group_deactivate", json!({"undo": undo}));
+    let call = |nsid: &str| Plan::Call {
+        nsid: format!("fyi.opensocial.{nsid}"),
+        procedure: true,
+        input: json!({}),
+    };
+    assert_eq!(off(false), Ok(call("deactivateGroup")));
+    assert_eq!(off(true), Ok(call("activateGroup")));
     let Ok(Plan::Call { input, .. }) = planned("join_list", json!({"limit": 5})) else {
         panic!()
     };

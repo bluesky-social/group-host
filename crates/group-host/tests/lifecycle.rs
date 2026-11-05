@@ -153,6 +153,13 @@ async fn a_group_switched_off_is_read_by_nobody() {
     let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(shown["group"]["deactivated"], true);
     assert_eq!(shown["group"].get("displayName"), None);
+    // Its stewards of then are told they are, to find the switch; a plain
+    // member of then is not, nor is anything of their standing read.
+    let viewer = json!({"member": false, "roles": [], "actions": [], "steward": true});
+    assert_eq!(shown["group"]["viewer"], viewer);
+    let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &carol, &lxm)]).await;
+    let viewer = json!({"member": false, "roles": [], "actions": [], "steward": false});
+    assert_eq!(shown["group"]["viewer"], viewer);
     // To no one signed in, as any other: its DID and handle.
     let (_, shown) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
     assert_eq!(shown["group"].get("deactivated"), None);
