@@ -11,7 +11,7 @@
 
 <form class="stack" method="post" action="?/profile">
 	<label class="field">Name <input name="displayName" required maxlength="64" value={displayName ?? ''} /></label>
-	<label class="field">What it is for <textarea name="description" maxlength="300">{description ?? ''}</textarea></label>
+	<label class="field">What it is for <textarea name="description" maxlength="2000">{description ?? ''}</textarea></label>
 	<label class="field">
 		How people join
 		<select name="joinPolicy" value={policy}>

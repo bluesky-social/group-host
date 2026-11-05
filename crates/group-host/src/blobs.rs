@@ -146,7 +146,7 @@ fn collect(value: &Value, found: &mut Vec<Cid>) {
     }
 }
 
-/// The kinds of image a page may be given, and a group's profile holds.
+/// The kinds of image a page may be given.
 pub(crate) const IMAGES: [&str; 5] = [
     "image/png",
     "image/jpeg",
@@ -154,6 +154,9 @@ pub(crate) const IMAGES: [&str; 5] = [
     "image/gif",
     "image/avif",
 ];
+
+/// The kinds of image a group's avatar and banner may be.
+pub(crate) const PROFILE_IMAGES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
 
 impl Store {
     /// Whether a record in `did`'s public repo holds the blob `cid`.

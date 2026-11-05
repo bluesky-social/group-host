@@ -228,7 +228,7 @@ async fn refuses_a_profile_it_should_not_keep() {
         ),
         (
             &alice,
-            json!({"group": did, "displayName": "Riders", "description": "x".repeat(301)}),
+            json!({"group": did, "displayName": "Riders", "description": "x".repeat(2001)}),
             (400, "InvalidRequest"),
         ),
         // An image that is not the group's.
@@ -252,6 +252,13 @@ async fn refuses_a_profile_it_should_not_keep() {
     for (who, bytes, mime, refused) in [
         (&bob, b"face".to_vec(), "image/png", (403, "Forbidden")),
         (&alice, vec![], "image/png", (400, "InvalidRequest")),
+        // A picture of a kind a profile does not take.
+        (
+            &alice,
+            b"GIF89a".to_vec(),
+            "image/gif",
+            (400, "InvalidRequest"),
+        ),
         (
             &alice,
             vec![0; 1_000_001],

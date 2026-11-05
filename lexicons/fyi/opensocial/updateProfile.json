@@ -26,8 +26,8 @@
             },
             "description": {
               "type": "string",
-              "maxGraphemes": 300,
-              "maxLength": 3000
+              "maxGraphemes": 2000,
+              "maxLength": 20000
             },
             "joinPolicy": {
               "type": "string",
@@ -79,9 +79,7 @@
               "accept": [
                 "image/png",
                 "image/jpeg",
-                "image/webp",
-                "image/gif",
-                "image/avif"
+                "image/webp"
               ],
               "maxSize": 1000000,
               "description": "The group's avatar, as returned by uploadImage. Omit to keep the current one; removeAvatar clears it."
@@ -95,9 +93,7 @@
               "accept": [
                 "image/png",
                 "image/jpeg",
-                "image/webp",
-                "image/gif",
-                "image/avif"
+                "image/webp"
               ],
               "maxSize": 1000000,
               "description": "The group's banner, as returned by uploadImage. Omit to keep the current one; removeBanner clears it."

@@ -56,7 +56,7 @@
 	{:else}
 		<p class="mute small">Made from its name; change it if you like. It is the group's handle, and where its pages are.</p>
 	{/if}
-	<label class="field">What it is for <textarea name="description" maxlength="300"></textarea></label>
+	<label class="field">What it is for <textarea name="description" maxlength="2000"></textarea></label>
 	<label class="field">
 		How people join
 		<select name="joinPolicy">

@@ -4,7 +4,7 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
-use crate::blobs::IMAGES;
+use crate::blobs::PROFILE_IMAGES;
 use crate::group::{join_policy, members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::{NS, actions_for, grants, listed};
@@ -168,7 +168,7 @@ fn image(host: &Host, group: &str, key: &str, asked: &Value) -> Result<Value, Xr
         return Err(not_one);
     };
     let kept = host.store.blob(group, &cid).map_err(XrpcError::internal)?;
-    let kept = kept.filter(|b| IMAGES.contains(&b.mime_type.as_str()));
+    let kept = kept.filter(|b| PROFILE_IMAGES.contains(&b.mime_type.as_str()));
     let kept = kept.ok_or(not_one)?;
     let (mime, size) = (kept.mime_type, kept.size);
     Ok(json!({"$type": "blob", "ref": {"$link": link}, "mimeType": mime, "size": size}))
@@ -273,8 +273,11 @@ pub async fn upload_image(
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
-    if !IMAGES.contains(&mime) {
-        return Err(invalid(format!("an image is one of {}", IMAGES.join(", "))));
+    if !PROFILE_IMAGES.contains(&mime) {
+        return Err(invalid(format!(
+            "an image is one of {}",
+            PROFILE_IMAGES.join(", ")
+        )));
     }
     let blob = host.upload_blob(&group, &bytes, mime)?;
     Ok(Json(json!({ "blob": blob })))

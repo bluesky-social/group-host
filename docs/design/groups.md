@@ -54,9 +54,7 @@ Details:
 - A membership's record key is the member's DID.
 - Text is held to its lexicon's length, here and in every method that
   writes it, and refused with `InvalidRequest` past it: a group's display
-  name 64 characters, its description 300. The host counts characters,
-  so a text of combined characters may be refused a little short of the
-  lexicon's grapheme limit.
+  name 64 graphemes, its description 2,000.
 
 ## Its address
 
@@ -161,8 +159,8 @@ its URI, which no longer resolves ([moderation](moderation.md)).
 
 Details:
 
-- `uploadImage` takes at most 1,000,000 bytes, of a PNG, JPEG, WebP, GIF
-  or AVIF image as its `Content-Type` says, and refuses any other type.
+- `uploadImage` takes at most 1,000,000 bytes, of a PNG, JPEG or WebP
+  image as its `Content-Type` says, and refuses any other type.
 - `updateProfile` takes a picture's type and size from the upload the
   host kept, not from what the caller writes, and refuses a blob that is
   not one of the group's images.

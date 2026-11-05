@@ -20,17 +20,15 @@
           },
           "description": {
             "type": "string",
-            "maxGraphemes": 300,
-            "maxLength": 3000
+            "maxGraphemes": 2000,
+            "maxLength": 20000
           },
           "avatar": {
             "type": "blob",
             "accept": [
               "image/png",
               "image/jpeg",
-              "image/webp",
-              "image/gif",
-              "image/avif"
+              "image/webp"
             ],
             "maxSize": 1000000
           },
@@ -39,9 +37,7 @@
             "accept": [
               "image/png",
               "image/jpeg",
-              "image/webp",
-              "image/gif",
-              "image/avif"
+              "image/webp"
             ],
             "maxSize": 1000000
           },

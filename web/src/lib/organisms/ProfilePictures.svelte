@@ -17,7 +17,7 @@
 		<form class="stack" method="post" action="?/picture" enctype="multipart/form-data">
 			<input type="hidden" name="slot" value={s.slot} />
 			{#if s.slot === 'avatar'}<Avatar src={s.src} size="md" />{:else if s.src}<img class="banner" src={s.src} alt="" />{/if}
-			<label class="field">{s.name} <input name="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" required /></label>
+			<label class="field">{s.name} <input name="file" type="file" accept="image/png,image/jpeg,image/webp" required /></label>
 			<button type="submit">Upload the {s.name.toLowerCase()}</button>
 		</form>
 		{#if s.src}

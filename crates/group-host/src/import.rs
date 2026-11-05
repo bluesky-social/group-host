@@ -56,7 +56,7 @@ const CREATE_ACCOUNT: &str = "com.atproto.server.createAccount";
 /// characters: no more graphemes than its lexicon lets it have, and so no
 /// more bytes.
 const NAME_MAX: usize = 64;
-const DESCRIPTION_MAX: usize = 300;
+const DESCRIPTION_MAX: usize = 2000;
 
 fn refused(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)

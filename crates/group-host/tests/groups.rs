@@ -467,7 +467,7 @@ async fn refuses_a_group_it_should_not_start() {
             (400, "InvalidRequest"),
         ),
         (
-            body(json!({"description": "x".repeat(301)})),
+            body(json!({"description": "x".repeat(2001)})),
             me.to_vec(),
             (400, "InvalidRequest"),
         ),
