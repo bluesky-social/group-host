@@ -51,6 +51,16 @@ authorization server, pushes the request with PKCE and a fresh DPoP key,
 and sends the browser there. On return it exchanges the code, checks the
 token names the DID that started, and revokes the access token at once.
 
+Someone with no account follows "Create one", which makes one at the
+host's `SIGNUP_PDS` (Bluesky's, unless set) and signs them in with it.
+The host pushes a request to that PDS's authorization server as for a
+sign-in, with `prompt=create` and no handle, and the server shows its
+sign-up. On return the token's `sub` is the account it made, which no
+one named before: the host resolves it, as it would a handle typed, and
+signs them in only if that account's own authorization server is the one
+that answered. The sign-in field's example handle is under the sign-up
+PDS's own name, `you.bsky.social` or `you.pds.next.opensocial.fyi`.
+
 As they type, the field suggests the accounts whose handle matches,
 with each one's picture, name and handle where they are known; picking
 one signs in as it at once. The browser asks the host

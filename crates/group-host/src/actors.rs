@@ -21,15 +21,16 @@ type Answer = Result<Json<Value>, XrpcError>;
 /// Who is asking, by the console's cookie or service auth: nothing, for
 /// no one.
 pub async fn get_viewer(State(host): State<Arc<Host>>, headers: HeaderMap) -> Answer {
+    let signup = host.config.signup_pds.as_str();
     let Some(me) = caller(&host, &headers, &format!("{NS}.getViewer")).await? else {
-        return Ok(Json(json!({})));
+        return Ok(Json(json!({ "signUpAt": signup })));
     };
     let mut actor = json!({"did": me, "canCreateGroup": host.may_found(&me)});
     let doc = host.identity.document(&me).await.ok();
     if let Some(handle) = doc.as_ref().and_then(did::handle) {
         actor["handle"] = json!(handle);
     }
-    Ok(Json(json!({ "actor": actor })))
+    Ok(Json(json!({ "actor": actor, "signUpAt": signup })))
 }
 
 impl Host {

@@ -499,3 +499,128 @@ async fn reaches_only_public_servers_for_a_host_on_the_internet() {
     let set = out.headers()["set-cookie"].to_str().unwrap();
     assert!(set.ends_with("; Secure"), "{set}");
 }
+
+/// A PDS and its authorization server, standing alone: for a host whose
+/// `SIGNUP_PDS` it is, made before the host is.
+async fn signup_pds() -> Arc<Pds> {
+    let pds = Arc::new(Pds::default());
+    let router = Router::new()
+        .route("/.well-known/oauth-protected-resource", get(resource))
+        .route("/.well-known/oauth-authorization-server", get(server))
+        .route("/par", post(par))
+        .route("/authorize", get(authorize))
+        .route("/token", post(token))
+        .route("/revoke", post(revoke))
+        .with_state(pds.clone());
+    *pds.base.lock().unwrap() = serve(router).await;
+    pds
+}
+
+/// An account at `pds`, as signing up there makes one: its DID.
+async fn account_at(h: &Running, pds: &str) -> String {
+    let key = Keypair::generate(Curve::K256);
+    let rotation = Keypair::generate(Curve::K256);
+    let op = Op::atproto(
+        &key.public().did_key(),
+        &[rotation.public().did_key()],
+        "new.test",
+        pds,
+    );
+    let genesis = op.sign(None, &rotation);
+    let url = format!("{}/{}", plc_url(h), genesis.did());
+    let res = h
+        .http
+        .post(url)
+        .json(&genesis.to_json())
+        .send()
+        .await
+        .unwrap();
+    assert!(res.status().is_success());
+    genesis.did()
+}
+
+/// Signs someone up from the console, going back to `back`: the last
+/// answer.
+async fn sign_up(h: &Running, back: &str) -> reqwest::Response {
+    let b = browser();
+    let url = reqwest::Url::parse_with_params(
+        &format!("{}/console/login", h.url),
+        &[("create", ""), ("back", back)],
+    )
+    .unwrap();
+    let started = b.get(url).send().await.unwrap();
+    if started.status() != 303 {
+        return started;
+    }
+    let login = set_cookie(&started, "group_host_login").unwrap();
+    let approved = b.get(location(&started)).send().await.unwrap();
+    b.get(location(&approved))
+        .header("cookie", login)
+        .send()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn signs_someone_up_at_the_sign_up_pds() {
+    let pds = signup_pds().await;
+    let h = start_reachable(&[("SIGNUP_PDS", &format!("{}/", pds.base()))]).await;
+    assert_eq!(h.host.config.signup_pds, pds.base());
+    let did = account_at(&h, &pds.base()).await;
+    pds.said.lock().unwrap()["sub"] = json!(did);
+
+    let back = sign_up(&h, "/new").await;
+    assert_eq!(
+        (back.status().as_u16(), location(&back)),
+        (303, "/new".to_string())
+    );
+    // Asked to make an account, for no one in particular.
+    let pushed = pds.pushed.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(pushed["prompt"], "create");
+    assert!(!pushed.contains_key("login_hint"));
+    let session = set_cookie(&back, COOKIE_NAME).unwrap();
+    let (status, view) = viewer(&h, &session).await;
+    assert_eq!((status, view["actor"]["did"].clone()), (200, json!(did)));
+    assert_eq!(view["signUpAt"], pds.base());
+}
+
+#[tokio::test]
+async fn refuses_a_sign_up_it_cannot_trust() {
+    let pds = signup_pds().await;
+    let h = start_reachable(&[("SIGNUP_PDS", &pds.base())]).await;
+    // An account another server answers for, though this one said it made it.
+    let (elsewhere, _other) = person(&h, true).await;
+    pds.said.lock().unwrap()["sub"] = json!(elsewhere);
+    let res = sign_up(&h, "/").await;
+    assert_eq!(res.status().as_u16(), 403);
+    assert!(text(res).await.contains("signs in at"));
+    // No account at all.
+    pds.said.lock().unwrap()["sub"] = json!("");
+    let res = sign_up(&h, "/").await;
+    assert_eq!(res.status().as_u16(), 403);
+
+    // A sign-up PDS that cannot be reached.
+    let away = start_reachable(&[("SIGNUP_PDS", "http://127.0.0.1:9")]).await;
+    let res = sign_up(&away, "/").await;
+    assert_eq!(res.status().as_u16(), 400);
+    // Neither who they are nor that they are new.
+    let res = browser()
+        .get(format!("{}/console/login", h.url))
+        .send()
+        .await
+        .unwrap();
+    assert!(text(res).await.contains("say who you are"));
+}
+
+const COOKIE_NAME: &str = "group_host_session";
+
+async fn viewer(h: &Running, cookie: &str) -> (u16, Json_) {
+    let res = h
+        .http
+        .get(format!("{}/xrpc/{NS}.getViewer", h.url))
+        .header("cookie", cookie)
+        .send()
+        .await
+        .unwrap();
+    (res.status().as_u16(), res.json().await.unwrap_or_default())
+}

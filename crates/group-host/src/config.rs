@@ -50,6 +50,10 @@ pub struct Config {
     /// typeahead.waow.tech for plc.directory, which knows the whole
     /// network; `plc` for any other directory, a network of its own.
     pub actor_search: String,
+    /// Where someone with no account makes one, `SIGNUP_PDS`, with no
+    /// trailing slash: the PDS the console's "Create one" signs them up at,
+    /// by its authorization server's sign-up (`prompt=create`).
+    pub signup_pds: String,
 }
 
 /// The service that finds anyone on the network by what is typed.
@@ -130,6 +134,11 @@ impl Config {
         if reqwest::Url::parse(&console_url).is_err() {
             bail!("CONSOLE_URL is no URL: {console_url}");
         }
+        let signup_pds = var("SIGNUP_PDS").unwrap_or_else(|| "https://bsky.social".into());
+        let signup_pds = signup_pds.trim_end_matches('/').to_string();
+        if reqwest::Url::parse(&signup_pds).is_err() {
+            bail!("SIGNUP_PDS is no URL: {signup_pds}");
+        }
         Ok(Config {
             port,
             public_url,
@@ -145,6 +154,7 @@ impl Config {
             console_url,
             provisioning_clients,
             actor_search,
+            signup_pds,
         })
     }
 

@@ -101,7 +101,7 @@ same writes ([membership](../design/membership.md#invites)).
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.getViewer` | who is asking, by the console's cookie or service auth |
+| `GET fyi.opensocial.getViewer` | who is asking, by the console's cookie or service auth, and where someone with no account makes one (`signUpAt`, `SIGNUP_PDS`) |
 | `GET fyi.opensocial.getActor` | a person's DID and handle, to someone signed in: themselves, or anyone the host shows (a member of a group here, or someone asking to join one); to themselves also whether they may start a group |
 | `GET fyi.opensocial.getActorGroups` | the groups here a person is in, as far as the caller shares them |
 | `GET fyi.opensocial.searchActors` | accounts whose handle matches what is typed, from where `ACTOR_SEARCH` says; anyone may ask |
@@ -235,7 +235,7 @@ Groups between hosts, and accounts here to become groups ([moving](../design/mov
 
 | Route | What it does |
 | --- | --- |
-| `GET /console/login`, `GET /console/callback`, `POST /console/logout` | signing in to the console as oneself, and out |
+| `GET /console/login`, `GET /console/callback`, `POST /console/logout` | signing in to the console as oneself (`?handle=`), or signing up at `SIGNUP_PDS` (`?create`), and out |
 | `GET /console/move/login` | signing in to an account to move here |
 | `GET /console/client-metadata.json` | the host's metadata as the console's OAuth client |
 

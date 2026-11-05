@@ -309,6 +309,12 @@ impl Host {
             .await
             .map_err(|e| format!("{did}: {e:#}"))?;
         let pds = did::pds(&doc).ok_or_else(|| format!("{did} names no PDS"))?;
+        let server = self.authorization_server(&pds).await?;
+        Ok((did, pds, server))
+    }
+
+    /// The metadata of the authorization server `pds` names.
+    async fn authorization_server(&self, pds: &str) -> Result<Value, String> {
         let resource = self
             .public_json(
                 &format!("{pds}/.well-known/oauth-protected-resource"),
@@ -326,7 +332,21 @@ impl Host {
         if server["issuer"] != issuer {
             return Err(format!("{issuer} calls itself {}", server["issuer"]));
         }
-        Ok((did, pds, server))
+        Ok(server)
+    }
+
+    /// A sign-up at `p`'s server come back with `sub`, the account made:
+    /// the sign-in, now naming it, once the account's own authorization
+    /// server is the one that answered, as a sign-in checks it before.
+    async fn signed_up(&self, p: Pending, sub: &str) -> Result<Pending, String> {
+        let (did, pds, server) = self.sign_in_at(sub).await?;
+        if server["issuer"] != p.issuer.as_str() {
+            return Err(format!(
+                "{did} signs in at {}, not {}",
+                server["issuer"], p.issuer
+            ));
+        }
+        Ok(Pending { did, pds, ..p })
     }
 }
 
@@ -353,7 +373,8 @@ pub async fn client_metadata(State(host): State<Arc<Host>>) -> Json<Value> {
 }
 
 /// Starts signing `handle` in: pushes the request to their PDS's
-/// authorization server, and sends the browser there to approve it.
+/// authorization server, and sends the browser there to approve it. With
+/// `create`, and no handle, signs someone up instead, at `SIGNUP_PDS`.
 pub async fn login(
     State(host): State<Arc<Host>>,
     Query(q): Query<HashMap<String, String>>,
@@ -369,10 +390,20 @@ pub(crate) async fn sign_in(
     scope: &str,
     mover: Option<String>,
 ) -> Result<Response, XrpcError> {
-    let Some(identifier) = q.get("handle").filter(|h| !h.trim().is_empty()) else {
-        return Ok(failed(StatusCode::BAD_REQUEST, "say who you are"));
+    let identifier = q.get("handle").filter(|h| !h.trim().is_empty());
+    // A sign-up names no one yet: the account it makes is checked as it
+    // comes back. Never for an account being moved, which is someone's.
+    let create = identifier.is_none() && q.contains_key("create") && mover.is_none();
+    let found = match (identifier, create) {
+        (Some(who), _) => host.sign_in_at(who).await,
+        (None, true) => {
+            let pds = host.config.signup_pds.clone();
+            let server = host.authorization_server(&pds).await;
+            server.map(|s| (String::new(), pds, s))
+        }
+        (None, false) => return Ok(failed(StatusCode::BAD_REQUEST, "say who you are")),
     };
-    let (did, pds, server) = match host.sign_in_at(identifier).await {
+    let (did, pds, server) = match found {
         Ok(found) => found,
         Err(why) => return Ok(failed(StatusCode::BAD_REQUEST, why)),
     };
@@ -382,6 +413,10 @@ pub(crate) async fn sign_in(
     let (verifier, state) = (jose::random(32), jose::random(16));
     let callback = host.console_callback();
     let challenge = jose::sha256(&verifier);
+    let hint = match identifier {
+        Some(who) => ("login_hint", who.as_str()),
+        None => ("prompt", "create"),
+    };
     let form = [
         ("response_type", "code"),
         ("code_challenge", challenge.as_str()),
@@ -389,7 +424,7 @@ pub(crate) async fn sign_in(
         ("redirect_uri", callback.as_str()),
         ("scope", scope),
         ("state", state.as_str()),
-        ("login_hint", identifier.as_str()),
+        hint,
     ];
     let pushed = host
         .console_post(
@@ -487,8 +522,16 @@ pub async fn callback(
         Ok(t) => t,
         Err(why) => return Ok(failed(StatusCode::BAD_GATEWAY, why)),
     };
-    if tokens["sub"] != p.did.as_str() {
-        let why = format!("signed in as {}, not {}", tokens["sub"], p.did);
+    let sub = tokens["sub"].as_str().unwrap_or_default();
+    let p = match p.did.is_empty() {
+        true => match host.signed_up(p, sub).await {
+            Ok(p) => p,
+            Err(why) => return Ok(failed(StatusCode::FORBIDDEN, why)),
+        },
+        false => p,
+    };
+    if sub != p.did {
+        let why = format!("signed in as {sub:?}, not {}", p.did);
         return Ok(failed(StatusCode::FORBIDDEN, why));
     }
     let done = cookie(&host, STARTED, "", 0);

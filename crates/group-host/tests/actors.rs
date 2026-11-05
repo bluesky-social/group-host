@@ -49,11 +49,14 @@ fn dids(said: &Json) -> Vec<&str> {
 async fn says_who_is_asking() {
     let h = start(&[], false).await;
     let [alice, ..] = people(&h).await;
-    assert_eq!(viewer(&h, None).await, json!({}));
+    // No one, and where someone with no account makes one.
+    let signup = json!("https://bsky.social");
+    assert_eq!(viewer(&h, None).await, json!({"signUpAt": signup}));
     let said = viewer(&h, Some(&alice)).await;
     assert_eq!(said["actor"]["did"], alice.did.as_str());
     assert_eq!(said["actor"]["handle"], "authority.test");
     assert_eq!(said["actor"]["canCreateGroup"], true);
+    assert_eq!(said["signUpAt"], signup);
     let h = start(&[("GROUP_FOUNDERS", "did:plc:someone")], false).await;
     let [alice, ..] = people(&h).await;
     assert_eq!(

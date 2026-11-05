@@ -125,3 +125,12 @@ fn a_handle_is_looked_for_where_the_directory_is() {
     let refused = config(&[("ACTOR_SEARCH", "somewhere")]).unwrap_err();
     assert!(refused.to_string().contains("ACTOR_SEARCH"), "{refused}");
 }
+
+#[test]
+fn someone_signs_up_at_bluesky_unless_told() {
+    assert_eq!(config(&[]).unwrap().signup_pds, "https://bsky.social");
+    let told = config(&[("SIGNUP_PDS", "https://pds.next.test/")]).unwrap();
+    assert_eq!(told.signup_pds, "https://pds.next.test");
+    let refused = config(&[("SIGNUP_PDS", "not a url")]).unwrap_err();
+    assert!(refused.to_string().contains("SIGNUP_PDS"), "{refused}");
+}

@@ -18,6 +18,11 @@
               "type": "ref",
               "ref": "fyi.opensocial.defs#actorView",
               "description": "Who is asking, with the handle their DID document names and canCreateGroup; absent when no one is."
+            },
+            "signUpAt": {
+              "type": "string",
+              "format": "uri",
+              "description": "The PDS this host signs someone with no account up at (SIGNUP_PDS), as the console's sign-in offers it."
             }
           }
         }

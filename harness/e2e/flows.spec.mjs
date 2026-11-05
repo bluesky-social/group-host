@@ -39,7 +39,9 @@ test('coming to the host signed out', async () => {
   await expect(dialog.locator('.apps img')).toHaveCount(40)
   await expect(dialog.getByRole('link', { name: 'What is an Atmosphere account?' })).toHaveAttribute('href', 'https://atmosphereaccount.com/')
   await expect(dialog.getByRole('combobox', { name: 'Handle' })).toBeFocused()
-  await expect(dialog.getByRole('link', { name: 'Create one' })).toHaveAttribute('href', 'https://bsky.app/')
+  // Made at the host's sign-up PDS, coming back here signed in.
+  await expect(dialog.getByRole('link', { name: 'Create one' })).toHaveAttribute('href', '/console/login?create&back=%2F')
+  await expect(dialog.getByRole('combobox', { name: 'Handle' })).toHaveAttribute('placeholder', 'you.bsky.social')
   // Two letters of a handle suggest the accounts it is part of; one, none.
   const handle = dialog.getByRole('combobox', { name: 'Handle' })
   await handle.pressSequentially('a')
