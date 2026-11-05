@@ -214,10 +214,6 @@ pub fn router(host: Arc<Host>) -> Router {
             get(group_api::list_members),
         )
         .route(
-            "/xrpc/fyi.opensocial.listGroups",
-            get(group_api::list_groups),
-        )
-        .route(
             "/xrpc/fyi.opensocial.deactivateGroup",
             post(group_lifecycle::deactivate_group),
         )

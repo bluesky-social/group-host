@@ -9,5 +9,5 @@
 {#if groups.length}
 	<div class="group-list">{#each groups as g (g.did)}<GroupRow name={g.displayName ?? g.handle} handle={g.handle} avatar={image(g.did, g.avatar)} />{/each}</div>
 {:else}
-	<Empty title="No groups here yet">A group started on this host shows here once its profile is public.</Empty>
+	<Empty title="No groups yet">Start one, or join one you are invited to.</Empty>
 {/if}

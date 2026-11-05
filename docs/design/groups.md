@@ -117,9 +117,9 @@ Details:
 ## What each person sees, and finding a group
 
 Someone not signed in learns of a group only what anyone can already
-learn of it from its DID document: its DID and handle. `getGroup` and
-`listGroups` tell them that and nothing more, whatever the group's access
-records say, since `public` means anyone signed in.
+learn of it from its DID document: its DID and handle. `getGroup` tells
+them that and nothing more, whatever the group's access records say,
+since `public` means anyone signed in.
 
 `getGroup` gives more to those allowed more. Everyone signed in gets the
 group's DID, handle, address, and the URIs of its two spaces. Whoever may
@@ -135,11 +135,9 @@ switched-off group shows only the first part and `deactivated: true`.
 A group that wants to be found says so with its declaration, a
 `fyi.opensocial.declaration` record in its public repo pointing at
 `meta`. The host writes it when `public` is among `meta`'s readers and
-removes it when not. `listGroups` lists every group on the host to
-someone signed in, adding the profile and rules of those whose `meta` is
-readable by `public`. A hidden group still appears with its DID, handle,
-address and space URIs. To someone not signed in, it lists each group by
-its DID and handle alone.
+removes it when not. The host keeps no list of its groups for people to
+browse: how groups are found across the network is still to be decided,
+and the declaration is what such a list would read.
 
 `getActorGroups` lists the switched-on groups a person is in that the
 caller is in too, with each group's member count, and its display name and

@@ -25,13 +25,8 @@
 			{#if data.mine.length}
 				<GroupList groups={data.mine} />
 			{:else}
-				<Empty title="You are in no group here yet">Join one below, or start one.</Empty>
+				<Empty title="You are in no group here yet">Start one, or join one you are invited to.</Empty>
 			{/if}
-		</Page>
-	{/if}
-	{#if data.groups}
-		<Page title="Groups on this host">
-			<GroupList groups={data.groups} />
 		</Page>
 	{/if}
 {/if}

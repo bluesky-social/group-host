@@ -53,7 +53,6 @@ spaces through the atproto methods below.
 | --- | --- |
 | `POST fyi.opensocial.createGroup` | starts a group, the caller its founder and first admin |
 | `GET fyi.opensocial.getGroup` | a group as the caller may see it: its profile and rules, and to a member who may read them how many members it has, its roles and spaces; to someone not signed in, its DID and handle alone |
-| `GET fyi.opensocial.listGroups` | the groups hosted here, to anyone; to someone signed in, the profile and rules of those anyone signed in may read, and to someone not, each by its DID and handle alone |
 | `GET fyi.opensocial.checkAddress` | whether an address, one label under `HANDLE_DOMAIN`, is free for a new group; anyone may ask |
 | `GET fyi.opensocial.checkGroupHandle` | whether a domain names the group yet, to be its handle |
 | `POST fyi.opensocial.updateGroupHandle` | gives the group a handle on its own domain, or its address back |

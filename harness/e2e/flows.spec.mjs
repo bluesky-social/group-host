@@ -288,12 +288,14 @@ test("giving a group a picture, and taking it away", async () => {
 })
 
 test("hiding a group's profile, and showing it again", async () => {
-  // The host lists every group of its own to someone signed in, as bob
-  // is, a member of none; a hidden one by its handle alone.
-  const listed = async () => {
-    const { groups } = await bob.evaluate(() => fetch('/xrpc/fyi.opensocial.listGroups').then((r) => r.json()))
-    return groups.find((g) => g.handle === 'hikers.groups.test')?.displayName !== undefined
-  }
+  // Found on the network while its declaration is in its public repo,
+  // which anyone may read.
+  const listed = async () =>
+    bob.evaluate(async () => {
+      const { did } = await fetch('/xrpc/com.atproto.identity.resolveHandle?handle=hikers.groups.test').then((r) => r.json())
+      const res = await fetch(`/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=fyi.opensocial.declaration&rkey=self`)
+      return res.ok
+    })
   expect(await listed()).toBe(true)
   await page.goto(url('/g/hikers.groups.test/settings'))
   // Saved, and the page opened afresh as the host has it: not reloaded,
