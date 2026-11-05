@@ -173,6 +173,15 @@ controls.
   editing what is already there field by field (a group's profile, who
   sees it) is a form in place, and finding (a search box) is never a
   dialog. A handle is typed into `HandleInput`, wherever it is asked for.
+- *In place.* An act on the page you are on keeps you where you are:
+  its form is sent with `use:enhance`, by `inPlace` from
+  `#lib/forms.ts`, and `FormDialog` and `ConfirmDialog` send theirs by
+  `inDialog`. Done, the page is drawn again where it was, and a dialog
+  closes. Refused, a dialog stays open with what was typed and says why
+  inside it; elsewhere the page's notice says why, scrolled to. Never
+  a plain post that reloads the page at its top. Only a form that goes
+  somewhere else (signing out, starting a group, approving an app) may
+  post plainly.
 - *Confirming.* An act that cannot be undone (leaving, removing
   someone, deleting a rule or role, removing a key, revoking,
   disconnecting) opens a `ConfirmDialog`: its title the question

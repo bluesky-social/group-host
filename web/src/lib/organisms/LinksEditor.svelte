@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { inPlace } from '#lib/forms.ts';
 	import Empty from '#lib/molecules/Empty.svelte';
 	import FormDialog from '#lib/molecules/FormDialog.svelte';
 	/**
@@ -15,7 +17,7 @@
 		{#each links as l, i (i)}
 			<li>
 				<span class="row-main"><strong>{l.title ?? shown(l.url)}</strong><span class="what">{l.url}</span></span>
-				<form class="row-actions" method="post" action="?/unlink">
+				<form class="row-actions" method="post" action="?/unlink" use:enhance={inPlace}>
 					<input type="hidden" name="index" value={i} />
 					<button class="quiet small" type="submit" aria-label={`Remove ${l.title ?? shown(l.url)}`}>Remove</button>
 				</form>

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { inPlace } from '#lib/forms.ts';
 	import Avatar from '#lib/atoms/Avatar.svelte';
 	import FormDialog from '#lib/molecules/FormDialog.svelte';
 	/**
@@ -27,7 +29,7 @@
 			<span class="row-main"><strong>{s.name}</strong><span class="what">{s.src ? 'Shown on its page' : 'None yet'}</span></span>
 			<span class="row-actions">
 				{#if s.src}
-					<form method="post" action="?/unpicture"><input type="hidden" name="slot" value={s.slot} /><button class="quiet small" type="submit">Remove the {s.name.toLowerCase()}</button></form>
+					<form method="post" action="?/unpicture" use:enhance={inPlace}><input type="hidden" name="slot" value={s.slot} /><button class="quiet small" type="submit">Remove the {s.name.toLowerCase()}</button></form>
 				{/if}
 				<button class="quiet small" type="button" popovertarget={`picture-${s.slot}`}>{s.act}</button>
 			</span>

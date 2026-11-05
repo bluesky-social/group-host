@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { inPlace } from '#lib/forms.ts';
 	import PickMany from '#lib/molecules/PickMany.svelte';
 	import { ADDRESS, COUNTRIES, LANGUAGES, languageName, type Place } from '#lib/places.ts';
 	/**
@@ -44,7 +46,7 @@
 	const choices = $derived([...LANGUAGES.map((l) => ({ value: l.tag, name: l.name })), ...languages.filter((l) => !LANGUAGES.some((o) => o.tag === l.language)).map((l) => ({ value: l.language, name: languageName(l.language) }))]);
 </script>
 
-<form class="stack" method="post" action="?/profile">
+<form class="stack" method="post" action="?/profile" use:enhance={inPlace}>
 	<label class="field">Name <input name="displayName" required maxlength="64" value={displayName ?? ''} /></label>
 	<label class="field">What it is for <textarea name="description" maxlength="2000">{description ?? ''}</textarea></label>
 	<div class="pair">

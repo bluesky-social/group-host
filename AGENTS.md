@@ -117,6 +117,8 @@ host's own command, `group-host move-host`, stands alone.
   for what it means is its role (`--danger`, `--success`, `--attention`,
   `--done`, `--neutral`), never the hue under it.
 - In Svelte markup, keep a run of inline text one expression or one line.
+- An act on a page is sent in place (`use:enhance` with `#lib/forms.ts`),
+  never a plain post that reloads it at its top; the ui skill says how.
 - A dialog's title is fixed words ("Remove this member?"), never a name,
   handle or anything typed, which can be any length; the body says which
   thing. `node harness/dialogs.mjs` checks it.

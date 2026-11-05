@@ -193,9 +193,10 @@ test('inviting someone from the dialog', async () => {
   await expect(dialog.getByText("They'll see it the next time they sign in, here or in any app that shows invites.")).toBeVisible()
   await dialog.getByRole('combobox', { name: 'Their handle' }).fill('nobody.test')
   await dialog.getByRole('button', { name: 'Send invite' }).click()
-  await expect(page.getByText("We can't find nobody.test.")).toBeVisible()
+  // Refused, it stays open, saying why, with what was typed.
+  await expect(dialog.getByText("We can't find nobody.test.")).toBeVisible()
+  await expect(dialog.getByRole('combobox', { name: 'Their handle' })).toHaveValue('nobody.test')
   // Cancelled, it sends nothing.
-  await invite.click()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.locator('.invites')).toHaveCount(0)
@@ -272,8 +273,13 @@ test('giving roles, and putting someone out', async () => {
   await row().getByRole('button', { name: "Change bob.test's roles" }).click()
   const roles = page.getByRole('dialog', { name: 'Change roles' }).filter({ visible: true })
   await expect(roles.getByRole('checkbox', { name: 'member' })).toBeChecked()
+  // Saved in place: the dialog closes, and the page stays where it was.
+  const at = await page.evaluate(() => scrollY)
+  expect(at).toBeGreaterThan(0)
   await roles.getByRole('button', { name: 'Save' }).click()
+  await expect(roles).toBeHidden()
   await expect(row()).toContainText('member')
+  expect(await page.evaluate(() => scrollY)).toBe(at)
   // Removed, once she is sure.
   await row().getByRole('button', { name: 'Remove bob.test' }).click()
   const sure = page.getByRole('dialog', { name: 'Remove this member?' }).filter({ visible: true })
@@ -406,7 +412,11 @@ test("giving a group a picture, and taking it away", async () => {
   await page.goto(url('/g/hikers.groups.test/settings'))
   await page.getByRole('button', { name: 'Add the avatar' }).click()
   await page.getByLabel('Avatar', { exact: true }).setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PIXEL })
-  await page.getByRole('dialog', { name: 'Add the avatar' }).getByRole('button', { name: 'Add the avatar' }).click()
+  const adding = page.getByRole('dialog', { name: 'Add the avatar' })
+  await adding.getByRole('button', { name: 'Add the avatar' }).click()
+  // Sent in place: done, the dialog closes and the page offers to remove it.
+  await expect(adding).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Remove the avatar' })).toBeVisible()
   // Drawn on its page, from the host, as the image it is: one pixel wide.
   await page.goto(url('/g/hikers.groups.test'))
   const avatar = page.locator('.identity img.av')
@@ -414,6 +424,7 @@ test("giving a group a picture, and taking it away", async () => {
   await expect.poll(() => avatar.evaluate((img) => img.naturalWidth)).toBe(1)
   await page.goto(url('/g/hikers.groups.test/settings'))
   await page.getByRole('button', { name: 'Remove the avatar' }).click()
+  await expect(page.getByRole('button', { name: 'Add the avatar' })).toBeVisible()
   await page.goto(url('/g/hikers.groups.test'))
   await expect(page.locator('.identity img.av')).toHaveCount(0)
 })
@@ -551,7 +562,8 @@ test('moderating: a label, and the queue', async () => {
   await page.getByRole('navigation', { name: 'The queue' }).getByRole('link', { name: 'Escalated' }).click()
   await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.events')).toContainText('Escalated: Asked him to stop')
   await page.locator('.subject', { hasText: who.bob.did }).getByRole('button', { name: 'Resolve' }).click()
-  await page.getByRole('dialog', { name: 'Resolve or escalate' }).filter({ visible: true }).getByRole('button', { name: 'Resolve' }).click()
+  await resolving.getByRole('button', { name: 'Resolve' }).click()
+  await expect(resolving).toHaveCount(0)
   await page.goto(url('/g/hikers.groups.test/moderation?status=resolved'))
   await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.events')).toContainText('Resolved')
 })
