@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PickMany from '#lib/molecules/PickMany.svelte';
 	import { ADDRESS, COUNTRIES, LANGUAGES, languageName, type Place } from '#lib/places.ts';
 	/**
 	 * A group's profile, to change: its name, its words, where it meets
@@ -39,12 +40,8 @@
 	$effect.pre(() => {
 		spoken = languages.map((l) => l.language);
 	});
-	const left = $derived(LANGUAGES.filter((l) => !spoken.includes(l.tag)));
-	function add(event: Event & { currentTarget: HTMLSelectElement }) {
-		const tag = event.currentTarget.value;
-		if (tag) spoken = [...spoken, tag];
-		event.currentTarget.value = '';
-	}
+	// Those offered, and any it has that are not, by name.
+	const choices = $derived([...LANGUAGES.map((l) => ({ value: l.tag, name: l.name })), ...languages.filter((l) => !LANGUAGES.some((o) => o.tag === l.language)).map((l) => ({ value: l.language, name: languageName(l.language) }))]);
 </script>
 
 <form class="stack" method="post" action="?/profile">
@@ -67,22 +64,7 @@
 		<input name="topics" maxlength="700" value={topics.map((t) => t.topic).join(', ')} aria-describedby="topics-hint" />
 		<span class="mute small" id="topics-hint">Separate up to ten with commas, like climbing, choir or renters' union.</span>
 	</label>
-	<div class="field" role="group" aria-labelledby="languages-label">
-		<span id="languages-label">Languages it uses</span>
-		<input type="hidden" name="language" value="" />
-		<div class="choices">
-			{#each spoken as tag (tag)}
-				<input type="hidden" name="language" value={tag} />
-				<span class="chip">{languageName(tag)}<button class="quiet" type="button" aria-label={`Remove ${languageName(tag)}`} onclick={() => (spoken = spoken.filter((t) => t !== tag))}>×</button></span>
-			{/each}
-			{#if spoken.length < 5}
-				<select aria-label="Add a language" onchange={add}>
-					<option value="">Add a language</option>
-					{#each left as l (l.tag)}<option value={l.tag}>{l.name}</option>{/each}
-				</select>
-			{/if}
-		</div>
-	</div>
+	<PickMany id="languages" label="Languages it uses" name="language" options={choices} bind:chosen={spoken} max={5} most="five" placeholder="Type a language" />
 	<label class="field">
 		How people join
 		<select name="joinPolicy" value={policy}>

@@ -350,17 +350,28 @@ test("changing a group's profile", async () => {
   await page.getByRole('combobox', { name: 'Country' }).selectOption({ label: 'Poland' })
   await page.getByRole('checkbox', { name: 'It meets online' }).check()
   await page.getByRole('textbox', { name: 'Topics' }).fill('hiking, , ridge walks, hiking')
-  // Its languages, each added from a list and taken off by its ×.
-  const add = page.getByRole('combobox', { name: 'Add a language' })
-  for (const language of ['Polish', 'English', 'German']) await add.selectOption({ label: language })
+  // Its languages: typed and picked from what matches, by Enter or by a
+  // click, the field cleared for the next; each taken off by its button.
+  const languages = page.getByRole('combobox', { name: 'Languages it uses' })
+  await languages.fill('pol')
+  await languages.press('Enter')
+  await expect(languages).toHaveValue('')
+  await languages.fill('eng')
+  await page.getByRole('option', { name: 'English' }).click()
+  await languages.fill('Germ')
+  await languages.press('Enter')
+  await expect(page.getByText('Choose up to five.')).toBeVisible()
   await page.getByRole('button', { name: 'Remove German' }).click()
+  // Focus comes back to the field, but its list stays shut, off the form below.
+  await expect(languages).toBeFocused()
+  await expect(page.getByRole('listbox', { name: 'Languages it uses' })).toHaveCount(0)
   const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/profile'))
   await page.locator('form[action="?/profile"]').getByRole('button', { name: 'Save' }).click()
   await saved
   // Drawn again as saved: each topic once, none blank.
   await expect(page.getByRole('textbox', { name: 'Topics' })).toHaveValue('hiking, ridge walks')
   await expect(page.getByRole('combobox', { name: 'Country' })).toHaveValue('PL')
-  await expect(page.getByRole('button', { name: /^Remove / })).toHaveText(['×', '×'])
+  await expect(page.getByRole('list', { name: 'Chosen' }).getByRole('button')).toHaveText([/^Polish/, /^English/])
   // Its links, each added from a dialog: with what it is, or without.
   const addLink = async (address, title) => {
     await page.getByRole('button', { name: 'Add a link' }).click()

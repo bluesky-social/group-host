@@ -87,9 +87,9 @@
 	<input bind:this={field} {id} {name} {placeholder} {autocomplete} autocapitalize="none" spellcheck="false" required role="combobox" aria-expanded={showing} aria-controls={list} aria-autocomplete="list" aria-activedescendant={showing && at >= 0 ? `${list}-${at}` : undefined} bind:value oninput={typed} onfocus={() => (open = true)} onblur={close} onkeydown={keydown} />
 	{#if showing}
 		<!-- Over what is under the field, rather than pushing it down. -->
-		<div id={list} class="handle-list" role="listbox" aria-label="Accounts">
+		<div id={list} class="drop-list" role="listbox" aria-label="Accounts">
 			{#each found as a, i (a.did)}
-				<div id="{list}-{i}" class="handle-option" role="option" tabindex="-1" aria-selected={i === at} onmousedown={(e) => press(e, a)} onmouseenter={() => (at = i)}>
+				<div id="{list}-{i}" class="drop-option" role="option" tabindex="-1" aria-selected={i === at} onmousedown={(e) => press(e, a)} onmouseenter={() => (at = i)}>
 					<Avatar src={a.avatar} name={a.handle} />
 					<span class="who">
 						{#if a.displayName}<strong>{a.displayName}</strong>{/if}

@@ -183,6 +183,7 @@
 	--dialog: 26rem;
 	/* A menu dropped from the header. */
 	--menu: 15rem;
+	--drop-list: 16rem;
 	/* A line of prose at its longest, set larger than the body. */
 	--measure: 32rem;
 	--ring: 3px;
