@@ -33,7 +33,7 @@
 </ul>
 <FormDialog id="define-role" title="Create a role" action="?/role" submit="Create" wide>
 	{#snippet intro()}Choose what people with this role can do, and which roles they can give. You give roles to members from the group's page.{/snippet}
-	<div class="link-rows">
+	<div class="pair">
 		<label class="field">Its key <input name="role" required pattern="[a-z0-9-]+" maxlength="64" placeholder="moderator" /></label>
 		<label class="field">Its name <input name="name" required maxlength="64" placeholder="Moderator" /></label>
 	</div>

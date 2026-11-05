@@ -37,7 +37,7 @@
 			{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 		{/snippet}
 		{#snippet card()}
-			<GroupCard handle={g.handle} name={g.displayName} description={g.description} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} links={g.links} rules={g.rules}>
+			<GroupCard handle={g.handle} name={g.displayName} description={g.description} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} location={g.location} online={g.online} languages={g.languages} topics={g.topics} links={g.links} rules={g.rules}>
 				{#snippet nav()}
 					{#if member && (data.settings || may.includes('mod.read'))}
 						<nav class="group-nav" aria-label="The group">

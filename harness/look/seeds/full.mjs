@@ -1,7 +1,7 @@
 // A group in full: Lantern Hikers (lanterns.groups.test), alice's, with a
-// banner and a picture, words, links, two rules and a moderator role;
-// bob, carol (its moderator), dan, erin and frank in it, more than a page
-// of members; harbor asking to join with a note; and an invite waiting
+// banner and a picture, words, a place, topics, languages, links, two rules
+// and a moderator role; bob, carol (its moderator), dan, erin and frank in
+// it, more than a page of members; harbor asking to join with a note; and an invite waiting
 // for maximilianaquinces.
 
 export default async ({ world, opensocial, ask, page, picture, who, exists }) => {
@@ -9,7 +9,11 @@ export default async ({ world, opensocial, ask, page, picture, who, exists }) =>
   if (!(await exists(g))) opensocial('alice', 'group', 'seed', g)
   const links = [{ url: 'https://chat.lanterns.example', title: 'Our chat' }, { url: 'https://maps.lanterns.example/routes' }]
   const about = 'Evening walks on the ridge trails, lanterns lit, every Thursday from April to October.'
-  opensocial('alice', 'profile', 'set', g, '--display-name', 'Lantern Hikers', '--description', about, '--links', JSON.stringify(links))
+  const where = { $type: 'community.lexicon.location.address', locality: 'Ljubljana', country: 'SI' }
+  const topics = ['night hikes', 'ridge trails', 'lanterns'].map((topic) => ({ topic }))
+  const languages = ['sl', 'en'].map((language) => ({ language }))
+  opensocial('alice', 'profile', 'set', g, '--display-name', 'Lantern Hikers', '--description', about, '--links', JSON.stringify(links),
+    '--location', JSON.stringify(where), '--online', '--topics', JSON.stringify(topics), '--languages', JSON.stringify(languages))
   for (const name of ['bob', 'carol', 'dan', 'erin', 'frank']) {
     await ask(name, g)
     opensocial('alice', 'member', 'assign', g, who[name].handle, name === 'carol' ? 'member,moderator' : 'member')

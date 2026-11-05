@@ -344,11 +344,25 @@ test("changing a group's profile", async () => {
   await page.goto(url('/g/hikers.groups.test'))
   await page.getByRole('link', { name: 'Settings' }).click()
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Hikers of the Hills')
+  // Where it meets: a town asks for its country.
+  await page.getByRole('textbox', { name: 'Town or city it meets in' }).fill('Kraków')
+  await expect(page.getByRole('combobox', { name: 'Country' })).toHaveAttribute('required', '')
+  await page.getByRole('combobox', { name: 'Country' }).selectOption({ label: 'Poland' })
+  await page.getByRole('checkbox', { name: 'It meets online' }).check()
+  await page.getByRole('textbox', { name: 'Topics' }).fill('hiking, , ridge walks, hiking')
+  // Its languages, each added from a list and taken off by its ×.
+  const add = page.getByRole('combobox', { name: 'Add a language' })
+  for (const language of ['Polish', 'English', 'German']) await add.selectOption({ label: language })
+  await page.getByRole('button', { name: 'Remove German' }).click()
   const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/profile'))
   await page.locator('form[action="?/profile"]').getByRole('button', { name: 'Save' }).click()
   await saved
+  // Drawn again as saved: each topic once, none blank.
+  await expect(page.getByRole('textbox', { name: 'Topics' })).toHaveValue('hiking, ridge walks')
+  await expect(page.getByRole('combobox', { name: 'Country' })).toHaveValue('PL')
+  await expect(page.getByRole('button', { name: /^Remove / })).toHaveText(['×', '×'])
   // Its links, each added from a dialog: with what it is, or without.
-  const add = async (address, title) => {
+  const addLink = async (address, title) => {
     await page.getByRole('button', { name: 'Add a link' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add a link' })
     await dialog.getByRole('textbox', { name: 'Its address' }).fill(address)
@@ -356,14 +370,17 @@ test("changing a group's profile", async () => {
     await dialog.getByRole('button', { name: 'Add', exact: true }).click()
     await expect(page.locator('.link-list', { hasText: address })).toBeVisible()
   }
-  await add('https://chat.hikers.example', 'Our chat')
-  await add('https://walks.example/')
-  await add('https://gone.example/')
+  await addLink('https://chat.hikers.example', 'Our chat')
+  await addLink('https://walks.example/')
+  await addLink('https://gone.example/')
   await page.getByRole('button', { name: 'Remove gone.example' }).click()
   await expect(page.locator('.link-list', { hasText: 'gone.example' })).toHaveCount(0)
   await page.goto(url('/g/hikers.groups.test'))
   await expect(page.getByRole('heading', { name: 'Hikers of the Hills' })).toBeVisible()
   await expect(page.getByText('Walks on Sundays.')).toBeVisible()
+  // Where it meets, its languages and what it is about, under its words.
+  await expect(page.locator('.facts')).toHaveText('Meets in Kraków, Poland, and online. Speaks Polish and English.')
+  await expect(page.locator('.group-card .tag')).toHaveText(['hiking', 'ridge walks'])
   // Its links, in a row: by title, or by address.
   const links = page.getByRole('navigation', { name: "Hikers of the Hills's links" })
   await expect(links.getByRole('link', { name: 'Our chat' })).toHaveAttribute('href', 'https://chat.hikers.example')

@@ -247,8 +247,18 @@ code.key,.activity .mono{overflow-wrap:anywhere;min-width:0}
 .row-main .what{overflow-wrap:anywhere}
 /* A banner, small, in a row about it. */
 .banner-thumb{display:block;flex:none;width:calc(var(--avatar-md) * 3);aspect-ratio:var(--banner-ratio);object-fit:cover;border:var(--border);border-radius:var(--radius-sm);background:var(--soft)}
-.link-rows{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
-@media (max-width: 640px){.link-rows{grid-template-columns:1fr}}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
+.pair > *{min-width:0}
+.pair :is(input,select){width:100%}
+@media (max-width: 640px){.pair{grid-template-columns:1fr}}
+/* What has been chosen of a few, each taken off by its ×, beside a list to add another. */
+.chip{display:inline-flex;align-items:center;gap:var(--space-1);min-height:var(--control-sm);padding:0 var(--space-1) 0 var(--space-3);border:var(--border);border-radius:var(--radius-pill);background:var(--soft);font-size:var(--text-sm)}
+.chip button{min-height:0;width:var(--space-6);height:var(--space-6);padding:0;border:0;border-radius:50%;background:transparent;color:var(--mute);font-weight:var(--weight-normal)}
+.chip button:hover{background:var(--line);color:var(--fg)}
+/* What a group is about, where it meets and what it speaks, under its words. */
+.facts{font-size:var(--text-sm);color:var(--mute)}
+/* What a group is about: tags, set apart from the roles people hold. */
+.topics .tag{background:var(--soft);border:var(--border)}
 
 /* ── A page's head and its tabs ───────────────────────────────────── */
 

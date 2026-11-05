@@ -13,7 +13,7 @@
 
 {#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 <Section title="About it">
-	<ProfileForm displayName={g.displayName} description={g.description} joinPolicy={g.joinPolicy} url={g.url} />
+	<ProfileForm displayName={g.displayName} description={g.description} joinPolicy={g.joinPolicy} url={g.url} location={g.location} online={g.online} topics={g.topics} languages={g.languages} />
 </Section>
 <Section title="Links" count={g.links?.length ?? 0}>
 	{#snippet actions()}

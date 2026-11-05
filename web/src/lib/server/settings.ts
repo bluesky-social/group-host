@@ -11,6 +11,7 @@ import { fail, type Action } from '@sveltejs/kit';
 import { act, xrpc, type Answer } from '#lib/data.ts';
 import { applyAsGroup, membersOf, withGroup, type Done, type GroupSession, type Write } from '#lib/asGroup.ts';
 import { SCOPES } from '#lib/actions.ts';
+import { ADDRESS, type Place } from '#lib/places.ts';
 
 type Handle = `${string}.${string}`;
 type Event = { fetch: typeof fetch; params: { handle?: string } };
@@ -69,8 +70,27 @@ const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim()
 
 const PROFILE = 'fyi.opensocial.profile';
 const RULE = 'fyi.opensocial.rule';
-/** How many links a profile holds, as its lexicon says. */
+/** How many links, topics and languages a profile holds, and how long a topic is, as its lexicon says. */
 const MAX_LINKS = 5;
+const MAX_TOPICS = 10;
+const MAX_LANGUAGES = 5;
+const TOPIC_AT_MOST = 64;
+const segments = new Intl.Segmenter();
+
+/**
+ * Where the form says the group meets, as an address: its town and
+ * country, over what else the address it had says; none, with neither; a
+ * place of another kind kept, while the form gives neither in its place;
+ * or why not, a town with no country.
+ */
+function whereFrom(form: FormData, was?: Place): Place | string | undefined {
+	const town = text(form, 'town');
+	const country = text(form, 'country');
+	if (town && !country) return 'Choose the country the town is in.';
+	if (!country) return was && was.$type !== ADDRESS ? was : undefined;
+	const { locality: _, ...kept } = was?.$type === ADDRESS ? was : {};
+	return { ...kept, $type: ADDRESS, country, ...(town ? { locality: town } : {}) };
+}
 
 type Did = `did:${string}:${string}`;
 type Bindings = Answer<typeof getGroup.main>['bindings'];
@@ -167,6 +187,29 @@ const all = {
 			for (const k of ['description', 'url']) {
 				if (text(form, k)) profile[k] = text(form, k);
 				else delete profile[k];
+			}
+			if (form.has('country')) {
+				const place = whereFrom(form, now.location as Place | undefined);
+				if (typeof place === 'string') return fail(400, { failed: place });
+				if (place) profile.location = place;
+				else delete profile.location;
+			}
+			if (form.has('topics')) {
+				const topics = [...new Set(text(form, 'topics').split(',').map((t) => t.trim()).filter(Boolean))];
+				if (topics.length > MAX_TOPICS) return fail(400, { failed: `A group can list up to ${MAX_TOPICS} topics.` });
+				if (topics.some((t) => [...segments.segment(t)].length > TOPIC_AT_MOST)) return fail(400, { failed: `Keep each topic to ${TOPIC_AT_MOST} characters.` });
+				if (topics.length) profile.topics = topics.map((topic) => ({ topic }));
+				else delete profile.topics;
+			}
+			// Each sent with a blank first, so a form with none chosen still says so.
+			if (form.has('language')) {
+				const languages = [...new Set(form.getAll('language').map(String).filter(Boolean))].slice(0, MAX_LANGUAGES);
+				if (languages.length) profile.languages = languages.map((language) => ({ language }));
+				else delete profile.languages;
+			}
+			if (form.has('online')) {
+				if (form.getAll('online').includes('on')) profile.online = true;
+				else delete profile.online;
 			}
 			return putProfile(session, profile);
 		});
