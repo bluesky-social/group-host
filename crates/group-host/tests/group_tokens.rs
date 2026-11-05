@@ -16,7 +16,6 @@ const EVENT: &str = "com.example.event";
 const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
     let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
         collection: format!("{NS}.membership"),

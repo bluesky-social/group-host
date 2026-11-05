@@ -8,7 +8,7 @@ use common::spaces::*;
 use common::{Running, start};
 use group_host::group::members_space;
 use group_host::oauth_scope::{SpaceScope, concrete};
-use group_host::rbac::Access;
+use group_host::rbac::{Access, Grant};
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
 
@@ -415,6 +415,90 @@ fn makes_a_grant_concrete() {
             "space:com.example.calendar?authority=did:plc:riders&skey=rides&collection=*",
             "space:com.example.calendar?collection=*",
             "space:com.example.calendar?action=read",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn keeps_a_permission_set_for_roles_holding_all_it_covers() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    let space = members_space(&did);
+    let collection = format!("{NS}.permissions");
+    let found = h.host.group_record(&did, &space, &collection, "self");
+    let mut permissions = found.unwrap().unwrap();
+    let grants = permissions["grants"].as_array_mut().unwrap();
+    for (role, actions) in [
+        ("moderator", &["mod.read", "mod.resolve", "label"][..]),
+        ("doorkeeper", &["admit", "eject", "role.assign"][..]),
+        ("steward", &["space.configure"][..]),
+    ] {
+        grants.push(Grant::with(role, actions, &[], &[]).to_json());
+    }
+    write(&h, &did, &space, &collection, "self", permissions).await;
+    let sets = asked(&[
+        "include:fyi.opensocial.configure",
+        "include:fyi.opensocial.manageMembers",
+        "include:fyi.opensocial.manageSpaces",
+        "include:fyi.opensocial.moderate",
+        // For a person's own session, never a group's.
+        "include:fyi.opensocial.participate",
+        // Not a permission set.
+        "include:fyi.opensocial.profile",
+        "blob:*/*",
+    ]);
+    let narrow = |r: &[&str]| h.host.narrow(&did, &roles(r), &alice.did, &sets).unwrap();
+    assert_eq!(narrow(&["admin"]), {
+        let mut all = sets[..4].to_vec();
+        all.push("blob:*/*".into());
+        all
+    });
+    assert_eq!(
+        narrow(&["moderator"]),
+        asked(&["include:fyi.opensocial.moderate", "blob:*/*"])
+    );
+    assert_eq!(
+        narrow(&["steward"]),
+        asked(&["include:fyi.opensocial.manageSpaces", "blob:*/*"])
+    );
+    // Admitting and ejecting without inviting is not all of managing members.
+    assert_eq!(narrow(&["doorkeeper"]), Vec::<String>::new());
+    assert_eq!(narrow(&["member"]), Vec::<String>::new());
+}
+
+#[test]
+fn makes_a_permission_set_concrete() {
+    let did = "did:plc:riders";
+    let scope = concrete(
+        &asked(&[
+            "include:fyi.opensocial.manageMembers",
+            "include:fyi.opensocial.manageSpaces",
+            "include:fyi.opensocial.moderate",
+        ]),
+        did,
+    );
+    let scopes: Vec<&str> = scope.split(' ').collect();
+    let all = "action=read&action=create&action=update&action=delete";
+    assert_eq!(
+        scopes,
+        [
+            format!("space:fyi.opensocial.members?authority={did}&skey=self&collection=fyi.opensocial.membership&{all}"),
+            "space:fyi.opensocial.invites?authority=*&skey=self&collection=fyi.opensocial.invite&action=read_self&action=create&action=update&action=delete".into(),
+            "rpc:fyi.opensocial.listJoinRequests?aud=*".into(),
+            "rpc:fyi.opensocial.denyJoinRequest?aud=*".into(),
+            "rpc:fyi.opensocial.admitMember?aud=*".into(),
+            "rpc:fyi.opensocial.assignRoles?aud=*".into(),
+            "rpc:fyi.opensocial.ejectMember?aud=*".into(),
+            "rpc:fyi.opensocial.createInvite?aud=*".into(),
+            "rpc:fyi.opensocial.listInvites?aud=*".into(),
+            "rpc:fyi.opensocial.revokeInvite?aud=*".into(),
+            format!("space:fyi.opensocial.meta?authority={did}&skey=self&collection=fyi.opensocial.access&{all}"),
+            format!("space:fyi.opensocial.members?authority={did}&skey=self&collection=fyi.opensocial.space&collection=fyi.opensocial.access&{all}"),
+            format!("space:fyi.opensocial.meta?authority={did}&skey=self&collection=fyi.opensocial.label&{all}"),
+            format!("space:fyi.opensocial.members?authority={did}&skey=self&collection=fyi.opensocial.label&{all}"),
+            "rpc:fyi.opensocial.listSubjects?aud=*".into(),
+            "rpc:fyi.opensocial.getSubjectHistory?aud=*".into(),
+            "rpc:fyi.opensocial.resolveSubject?aud=*".into(),
         ]
     );
 }

@@ -15,7 +15,8 @@ there, and no one outside the group can. The group writes three kinds of
 record:
 
 - `fyi.opensocial.membership`, one per member, keyed by their DID: the
-  `roles` they hold.
+  `roles` they hold, each by its id (`["member", "admin"]`), at most
+  100.
 - `fyi.opensocial.role`, one per role, keyed by its id: its name,
   description, and whether it is a `default` or `bot` role.
 - `fyi.opensocial.permissions`, one record: a grant per role, with the
@@ -75,11 +76,16 @@ Details:
 
 The profile's `joinPolicy` decides how people get in: `open`, `approval`
 (the default) or `invite`. Someone asks with `requestJoin`. With `open`
-they are in at once. With `invite` they are refused (`InviteRequired`)
+they are in at once. With `invite` they are refused (`JoinClosed`)
 unless invited. With `approval` their request waits, with an optional
 message, until someone holding `admit` calls `admitMember` or
 `denyJoinRequest`. A live invite admits whatever the policy, since the
-group has already said yes.
+group has already said yes. The asker may name it (`invite`, its at-uri);
+one named that is not their live invite from this group is refused
+(`InvalidInvite`). Unnamed, a live invite admits them all the same.
+
+`requestJoin` answers `status`: `admitted`, with the `membership` it
+wrote (its `uri` and `cid`), or `pending`, with the `request` waiting.
 
 A newcomer gets the default roles: those marked `default`, or `member` if
 none is. An admitter may name other roles, but only ones the group
@@ -93,7 +99,7 @@ the asker may ask again.
 Details:
 
 - Asking again while a request waits keeps the first message and time.
-- A request's message is 300 characters at most.
+- A request's message is 2,000 characters at most.
 - Getting in by any route ends a waiting request; `admitMember` then
   answers `AlreadyMember`.
 - The asker sees their request with `getJoinRequest` and withdraws it
@@ -130,7 +136,7 @@ Details:
 
 - `expiresAt` is an atproto datetime, in UTC or at an offset from it, and
   must be still to come.
-- An invite's message is 300 characters at most.
+- An invite's message is 2,000 characters at most.
 
 ## Leaving and being put out
 

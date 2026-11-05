@@ -1,0 +1,47 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.manageMembers",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "description": "For group-DID sessions.",
+      "title": "Group members",
+      "detail": "Approve and remove members, change their roles, and send invites.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "fyi.opensocial.members",
+          "authority": "self",
+          "skey": "self",
+          "collection": ["fyi.opensocial.membership"],
+          "action": ["read", "create", "update", "delete"]
+        },
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "fyi.opensocial.invites",
+          "authority": "*",
+          "skey": "self",
+          "collection": ["fyi.opensocial.invite"],
+          "action": ["read_self", "create", "update", "delete"]
+        },
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "aud": "*",
+          "lxm": [
+            "fyi.opensocial.listJoinRequests",
+            "fyi.opensocial.denyJoinRequest",
+            "fyi.opensocial.admitMember",
+            "fyi.opensocial.assignRoles",
+            "fyi.opensocial.ejectMember",
+            "fyi.opensocial.createInvite",
+            "fyi.opensocial.listInvites",
+            "fyi.opensocial.revokeInvite"
+          ]
+        }
+      ]
+    }
+  }
+}

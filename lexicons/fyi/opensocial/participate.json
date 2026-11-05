@@ -1,0 +1,54 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.participate",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "description": "For personal sessions.",
+      "title": "Groups",
+      "detail": "See groups and your invites, join or leave groups, and report content.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "fyi.opensocial.meta",
+          "authority": "*",
+          "skey": "self",
+          "action": ["read"]
+        },
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "fyi.opensocial.members",
+          "authority": "*",
+          "skey": "self",
+          "collection": ["fyi.opensocial.acceptance"],
+          "action": ["read", "create", "update", "delete"]
+        },
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "fyi.opensocial.invites",
+          "authority": "self",
+          "skey": "self",
+          "action": ["read"],
+          "manage": ["create"]
+        },
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "aud": "*",
+          "lxm": [
+            "fyi.opensocial.requestJoin",
+            "fyi.opensocial.cancelJoinRequest",
+            "fyi.opensocial.getJoinRequest",
+            "fyi.opensocial.leaveGroup",
+            "fyi.opensocial.getActorInvites",
+            "fyi.opensocial.declineInvite",
+            "fyi.opensocial.createReport"
+          ]
+        }
+      ]
+    }
+  }
+}

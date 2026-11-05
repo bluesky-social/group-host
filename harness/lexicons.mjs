@@ -42,17 +42,20 @@ const base = process.argv[2] ?? (() => {
 // Once the base has none of it, an entry matches nothing and can go.
 // - What the host never answered or read, taken out before any client
 //   was written to it: actorView's profile fields (it answers a DID and a
-//   handle, from the DID document), listSpaceRecords' `rev` and `actors`,
-//   and requestJoin's `invite` (an invite is redeemed from the host's own
-//   list, whatever is named).
+//   handle, from the DID document), and listSpaceRecords' `rev` and
+//   `actors`.
 const retracted = new Set([
   ...['displayName', 'description', 'avatar', 'pronouns', 'links', 'bot'].map((f) => `fyi.opensocial.defs#actorView.${f}`),
   'fyi.opensocial.defs#actorLink',
   'fyi.opensocial.listSpaceRecords#main.output.rev',
   'fyi.opensocial.listSpaceRecords#main.output.actors',
-  'fyi.opensocial.requestJoin#main.input.invite',
   'fyi.opensocial.invite#main.record.by',
   'fyi.opensocial.getActorInvites#actorInvite.by',
+  ...['createGroup#main.input', 'updateProfile#main.input', 'profile#main.record'].map((at) => `fyi.opensocial.${at}.joinPolicy`),
+  'fyi.opensocial.defs#viewerState.request',
+  'fyi.opensocial.getGroup#main.output.joinRequests[]',
+  'fyi.opensocial.getJoinRequest#main.output.request',
+  'fyi.opensocial.listJoinRequests#main.output.requests[]',
   'fyi.opensocial.defs#subjectView',
   'fyi.opensocial.defs#subjectView.subject',
   'fyi.opensocial.defs#subjectView.status',
@@ -78,14 +81,17 @@ const retracted = new Set([
 // from the style above: each finding, exactly as said. A space grant's
 // scopes are bare strings, as OAuth scopes are; createSpace names a
 // space's `type` so; and the access record and createSpace require what
-// the proposal's do. A moderation subject's status is a closed set, and
-// a report's and an event's `id` is the proposal's name for it.
+// the proposal's do. A membership's roles are bare role ids, at most 100;
+// a moderation subject's status is a closed set; and a report's and an
+// event's `id` is the proposal's name for it.
 const proposal = new Set([
   'fyi.opensocial.defs#spaceGrant.scopes: an array holds objects, which can grow, not bare values',
   'fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type',
   'fyi.opensocial.access#main.record: grants is required now: only new optional fields',
   ...['type', 'access'].map((f) => `fyi.opensocial.createSpace#main.input: ${f} is required now: only new optional fields`),
   ...['space', 'access'].map((f) => `fyi.opensocial.createSpace#main.output: ${f} is required now: only new optional fields`),
+  'fyi.opensocial.membership#main.record.roles: maxLength went from none to 100: what was valid must stay so',
+  'fyi.opensocial.membership#main.record.roles[]: was {"type":"ref","ref":"fyi.opensocial.defs#roleRef"}, now {"type":"ref","ref":"fyi.opensocial.defs#roleId"}: a field is never retyped',
   ...['createReport', 'defs'].map((n) => `fyi.opensocial.${n}: field-name-syntax: name is a commonly reserved keyword: id`),
   ...['defs#subjectStatus', 'listSubjects#main.parameters.status', 'resolveSubject#main.input.status'].map(
     (p) => `fyi.opensocial.${p}: knownValues, not enum: an enum can never grow`,

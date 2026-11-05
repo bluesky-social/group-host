@@ -10,10 +10,9 @@ use common::spaces::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const SCOPE: &str = "atproto repo:app.bsky.feed.post include:fyi.opensocial.configure";
+const SCOPE: &str = "atproto repo:app.bsky.feed.post include:fyi.opensocial.configure include:fyi.opensocial.moderate";
 
 async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
     let membership = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let write = group_host::repo::Write::Create {
         collection: format!("{NS}.membership"),
@@ -101,7 +100,10 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     );
     assert_eq!(
         offered["labels"],
-        json!([{"scope": "include:fyi.opensocial.configure", "text": "Edit the group's profile, rules and roles"}])
+        json!([
+            {"scope": "include:fyi.opensocial.configure", "text": "Edit the group's profile, rules, and roles, and decide what each role can do."},
+            {"scope": "include:fyi.opensocial.moderate", "text": "Review reports and moderation history, and label members."},
+        ])
     );
     let mut theirs = dids(&offered);
     theirs.sort();
@@ -134,7 +136,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
         scopes(&at_riders["withheld"]),
         [
             "repo:app.bsky.feed.post",
-            "include:fyi.opensocial.configure"
+            "include:fyi.opensocial.configure",
+            "include:fyi.opensocial.moderate"
         ]
     );
 
@@ -332,13 +335,17 @@ async fn approves_only_for_a_member_of_the_group_the_app_asked_for() {
 }
 
 #[tokio::test]
-async fn gives_the_configure_set_as_the_scopes_it_lists() {
+async fn gives_each_permission_set_as_the_scopes_it_lists() {
     let h = start(&[], false).await;
     let (riders, _, [alice, ..]) = groups(&h).await;
     let tokens = App::loopback(SCOPE).sign_in(&h, &alice, &riders).await;
     let scope = tokens["scope"].as_str().unwrap();
     assert!(!scope.contains("include:"), "{scope}");
     assert!(scope.contains(&format!("space:fyi.opensocial.meta?authority={riders}&skey=self&collection=fyi.opensocial.profile")), "{scope}");
+    assert!(
+        scope.contains("rpc:fyi.opensocial.listSubjects?aud=*"),
+        "{scope}"
+    );
 }
 
 #[tokio::test]

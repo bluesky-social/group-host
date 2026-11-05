@@ -5,7 +5,8 @@
 //! Roles compose by union: no deny, no precedence, no hierarchy.
 //!
 //! The records' lists are of objects (`{role}`, `{scope}`), but for an
-//! access record's grants, whose scopes are strings.
+//! access record's grants, whose scopes are strings, and a membership's
+//! roles, which are role ids alone, as the proposal has them.
 
 use crate::scopes::{Permissions, decoded};
 use atproto::space::SpaceRef;
@@ -44,6 +45,13 @@ pub fn listed(record: &Value, key: &str, field: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// The roles a membership record gives, each by its id, as the
+/// opensocial proposal lists them: `["member", "admin"]`.
+pub fn roles_of(membership: &Value) -> Vec<String> {
+    let roles = membership["roles"].as_array().into_iter().flatten();
+    roles.filter_map(Value::as_str).map(String::from).collect()
 }
 
 /// A role's grant in a space's access record: the OAuth scopes it holds

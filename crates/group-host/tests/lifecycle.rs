@@ -40,7 +40,7 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
             &[Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: carol.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": carol.did, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await

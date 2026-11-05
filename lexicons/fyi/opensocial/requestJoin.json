@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Ask to join. An invite the group has sent the caller, neither taken back nor past its expiresAt, admits them at once, whatever the group's join policy: the host redeems it from its own list, so no invite is named. No role required; authenticated as the requester.",
+      "description": "Ask to join a group, optionally redeeming an invitation. An invite the group has sent the caller, neither taken back nor past its expiresAt, admits them at once, whatever the group's join policy, with the group's default roles; one named that is not such an invite is refused. Unnamed, a waiting invite is redeemed all the same. No role required; authenticated as the requester.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -18,10 +18,15 @@
               "format": "did",
               "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
             },
+            "invite": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "An invitation from this group to the caller."
+            },
             "message": {
               "type": "string",
-              "maxLength": 3000,
-              "maxGraphemes": 300
+              "maxGraphemes": 2000,
+              "maxLength": 20000
             }
           }
         }
@@ -37,19 +42,39 @@
             "status": {
               "type": "string",
               "knownValues": [
-                "admitted",
-                "pending"
+                "pending",
+                "admitted"
               ]
+            },
+            "request": {
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#joinRequest",
+              "description": "Present when pending."
+            },
+            "membership": {
+              "type": "ref",
+              "ref": "com.atproto.repo.strongRef",
+              "description": "Present when admitted."
             }
           }
         }
       },
       "errors": [
         {
-          "name": "InviteRequired"
+          "name": "GroupNotFound",
+          "description": "The group isn't hosted here."
         },
         {
-          "name": "AlreadyMember"
+          "name": "InvalidInvite",
+          "description": "The invitation is expired, revoked, or not addressed to the caller."
+        },
+        {
+          "name": "JoinClosed",
+          "description": "The group requires an invitation."
+        },
+        {
+          "name": "AlreadyMember",
+          "description": "The caller is a member already."
         }
       ]
     }

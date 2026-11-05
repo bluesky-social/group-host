@@ -20,9 +20,11 @@
           },
           "roles": {
             "type": "array",
+            "maxLength": 100,
+            "description": "Distinct roles declared by this group.",
             "items": {
               "type": "ref",
-              "ref": "fyi.opensocial.defs#roleRef"
+              "ref": "fyi.opensocial.defs#roleId"
             }
           },
           "createdAt": {

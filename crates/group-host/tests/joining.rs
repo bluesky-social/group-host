@@ -6,6 +6,7 @@ mod common;
 use common::groups::*;
 use common::spaces::*;
 use common::{Running, start};
+use group_host::group::members_space;
 use serde_json::{Value as Json, json};
 
 const NS: &str = "fyi.opensocial";
@@ -38,11 +39,14 @@ async fn an_open_group_admits_at_once() {
     let h = start(&[], false).await;
     let [alice, bob, _] = people(&h).await;
     let did = group(&h, &alice, "open").await;
-    // Its default roles, or member when none is marked.
-    assert_eq!(
-        call(&h, &bob, "requestJoin", json!({"group": did})).await,
-        (200, json!({"status": "admitted"}))
-    );
+    // Its default roles, or member when none is marked; the answer names
+    // the membership made.
+    let (status, said) = call(&h, &bob, "requestJoin", json!({"group": did})).await;
+    assert_eq!((status, &said["status"]), (200, &json!("admitted")));
+    let uri = format!("{}/{did}/{NS}.membership/{}", members_space(&did), bob.did);
+    assert_eq!(said["membership"]["uri"], uri);
+    assert_eq!(said["membership"]["cid"].as_str().map(str::len), Some(59));
+    assert_eq!(said.as_object().unwrap().len(), 2);
     assert_eq!(h.host.roles(&did, &bob.did).unwrap(), ["member"]);
     assert_eq!(
         error(&call(&h, &bob, "requestJoin", json!({"group": did})).await),
@@ -86,7 +90,7 @@ async fn an_invite_only_group_needs_an_invite() {
     let did = group(&h, &alice, "invite").await;
     assert_eq!(
         error(&call(&h, &bob, "requestJoin", json!({"group": did})).await),
-        (400, "InviteRequired")
+        (400, "JoinClosed")
     );
     for body in [json!({}), json!({"group": "did:plc:nobody"})] {
         assert_eq!(call(&h, &bob, "requestJoin", body).await.0, 400);
@@ -110,7 +114,12 @@ async fn a_group_that_approves_its_members_keeps_requests() {
         json!({"group": did, "message": "I ride too."}),
     )
     .await;
-    assert_eq!(asked, (200, json!({"status": "pending"})));
+    assert_eq!(asked.0, 200);
+    assert_eq!(asked.1["status"], "pending");
+    assert_eq!(asked.1["request"]["member"], bob.did);
+    assert_eq!(asked.1["request"]["message"], "I ride too.");
+    assert!(asked.1["request"]["createdAt"].is_string());
+    assert_eq!(asked.1.get("membership"), None);
     // Asked twice, still one.
     call(
         &h,
@@ -125,7 +134,7 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     let (_, mine) = ask(&h, &bob, "getJoinRequest", &format!("group={did}")).await;
     assert_eq!(
         (
-            mine["request"]["did"].clone(),
+            mine["request"]["member"].clone(),
             mine["request"]["message"].clone()
         ),
         (json!(bob.did), json!("I ride too."))
@@ -138,7 +147,7 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     // And getGroup shows it to them, and all of them to whoever admits.
     let lxm = format!("{NS}.getGroup");
     let (_, theirs) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &bob, &lxm)]).await;
-    assert_eq!(theirs["group"]["viewer"]["request"]["did"], bob.did);
+    assert_eq!(theirs["group"]["viewer"]["request"]["member"], bob.did);
     let (_, admins) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     let waiting: Vec<&str> = admins["joinRequests"]
         .as_array()
@@ -160,7 +169,7 @@ async fn a_group_that_approves_its_members_keeps_requests() {
         &format!("group={did}&limit=1"),
     )
     .await;
-    assert_eq!(page["requests"][0]["did"], carol.did);
+    assert_eq!(page["requests"][0]["member"], carol.did);
     let cursor = page["cursor"].as_str().unwrap();
     let (_, rest) = ask(
         &h,
@@ -170,7 +179,10 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     )
     .await;
     assert_eq!(
-        (rest["requests"][0]["did"].clone(), rest["cursor"].clone()),
+        (
+            rest["requests"][0]["member"].clone(),
+            rest["cursor"].clone()
+        ),
         (json!(bob.did), Json::Null)
     );
     assert_eq!(
@@ -235,11 +247,11 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     h.host
         .space_write(
             &did,
-            &group_host::group::members_space(&did),
+            &members_space(&did),
             &[group_host::repo::Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: eve.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": eve.did, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "member": eve.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await
@@ -293,15 +305,11 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     assert_eq!(error(&said), (400, "InvalidRequest"));
     // A message is as long as the lexicon says.
     let frank = authority(&h, false, true).await;
-    let long = "x".repeat(301);
-    let said = call(
-        &h,
-        &frank,
-        "requestJoin",
-        json!({"group": did, "message": long}),
-    )
-    .await;
+    let ask_with = |words: String| json!({"group": did, "message": words});
+    let said = call(&h, &frank, "requestJoin", ask_with("ü".repeat(2001))).await;
     assert_eq!(error(&said), (400, "InvalidRequest"));
+    let said = call(&h, &frank, "requestJoin", ask_with("ü".repeat(2000))).await;
+    assert_eq!(said.1["status"], "pending");
 
     // A member who may not admit, may not.
     let said = call(
@@ -395,11 +403,11 @@ async fn admitting_takes_admit_and_gives_member() {
     h.host
         .space_write(
             &did,
-            &group_host::group::members_space(&did),
+            &members_space(&did),
             &[group_host::repo::Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: bob.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": [{"role": "member"}, {"role": "gatekeeper"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": ["member", "gatekeeper"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await

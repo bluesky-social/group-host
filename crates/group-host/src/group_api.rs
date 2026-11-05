@@ -7,7 +7,7 @@
 use crate::Host;
 use crate::api::{Params, param};
 use crate::group::{Made, NewGroup, members_space, meta_space};
-use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for};
+use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for, roles_of};
 use crate::space_api::{service_caller, unauthorized};
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -265,7 +265,7 @@ pub async fn get_group(
     out["members"] = memberships
         .iter()
         .zip(actors)
-        .map(|((_, m), actor)| json!({"actor": actor, "roles": objects("role", listed(m, "roles", "role"))}))
+        .map(|((_, m), actor)| json!({"actor": actor, "roles": objects("role", roles_of(m))}))
         .collect();
     out["roles"] = records("role")?
         .into_iter()

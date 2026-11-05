@@ -31,27 +31,41 @@
         }
       }
     },
-    "joinRequestView": {
+    "roleId": {
+      "type": "string",
+      "format": "record-key",
+      "maxLength": 512,
+      "description": "The rkey of a role record in the group's members space."
+    },
+    "joinPolicy": {
+      "type": "string",
+      "knownValues": [
+        "open",
+        "approval",
+        "invite"
+      ],
+      "description": "open admits anyone; approval queues a join request; invite requires an invitation. An invitation admits its recipient under any policy."
+    },
+    "joinRequest": {
       "type": "object",
+      "description": "A request to join, waiting in the host.",
       "required": [
-        "did",
+        "member",
         "createdAt"
       ],
       "properties": {
-        "did": {
+        "member": {
           "type": "string",
           "format": "did"
-        },
-        "message": {
-          "type": "string"
-        },
-        "invite": {
-          "type": "string",
-          "format": "at-uri"
         },
         "createdAt": {
           "type": "string",
           "format": "datetime"
+        },
+        "message": {
+          "type": "string",
+          "maxGraphemes": 2000,
+          "maxLength": 20000
         },
         "actor": {
           "type": "ref",
@@ -298,7 +312,7 @@
         },
         "request": {
           "type": "ref",
-          "ref": "#joinRequestView",
+          "ref": "#joinRequest",
           "description": "The viewer's own pending request to join, when they are not a member and have one."
         }
       }

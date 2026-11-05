@@ -194,20 +194,15 @@ fn roles_compose_by_union() {
 }
 
 #[test]
-fn reads_a_join_policy_in_either_words() {
+fn reads_a_join_policy_as_the_lexicon_words_it() {
     assert_eq!(join_policy(None).unwrap(), "approval");
-    assert_eq!(
-        join_policy(Some("fyi.opensocial.profile#request")).unwrap(),
-        "approval"
-    );
     assert_eq!(join_policy(Some("approval")).unwrap(), "approval");
-    assert_eq!(
-        join_policy(Some("fyi.opensocial.profile#open")).unwrap(),
-        "open"
-    );
+    assert_eq!(join_policy(Some("open")).unwrap(), "open");
     assert_eq!(join_policy(Some("invite")).unwrap(), "invite");
-    assert_eq!(
-        join_policy(Some("sometimes")).unwrap_err().message,
-        "joinPolicy is open, approval or invite, not sometimes"
-    );
+    for other in ["sometimes", "fyi.opensocial.profile#open", "request"] {
+        assert_eq!(
+            join_policy(Some(other)).unwrap_err().message,
+            format!("joinPolicy is open, approval or invite, not {other}")
+        );
+    }
 }

@@ -3,13 +3,15 @@
 //! group, then made concrete, so the token never depends on how a scope
 //! is read later.
 //!
-//! No lexicon is resolved: the only permission set a token keeps is this host's own
-//! (`fyi.opensocial.configure`), read from its lexicon here, and a space
-//! scope naming no collection keeps every one, which narrowing allowed
-//! only to roles that may write every one there.
+//! No lexicon is resolved: the only permission sets a token keeps are
+//! this host's own for a group's session (`fyi.opensocial.configure`,
+//! `manageMembers`, `manageSpaces`, `moderate`), read from their lexicons
+//! here, and a space scope naming no collection keeps every one, which
+//! narrowing allowed only to roles that may write every one there.
 
 use crate::Host;
 use crate::group::members_space;
+use crate::lexicons::lexicons;
 use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
@@ -19,9 +21,31 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use crate::rbac::WRITES;
 
-/// The permission set that lets an app configure the group.
-pub fn configure() -> String {
-    format!("include:{NS}.configure")
+/// This host's permission sets for a group's session, each by its name,
+/// with the actions a member's roles must hold, every one, to give it.
+pub const SETS: [(&str, &[&str]); 4] = [
+    ("configure", &["group.configure"]),
+    (
+        "manageMembers",
+        &["admit", "eject", "role.assign", "invite"],
+    ),
+    ("manageSpaces", &["space.configure"]),
+    ("moderate", &["mod.read", "mod.resolve", "label"]),
+];
+
+/// The permission set of this host's that `scope` includes, from its
+/// lexicon, if it is one: `include:fyi.opensocial.manageMembers`.
+pub fn set_of(scope: &str) -> Option<&'static Value> {
+    let name = scope.strip_prefix(&format!("include:{NS}."))?;
+    let set = lexicons().def(&format!("{NS}.{name}"));
+    set.filter(|d| d["type"] == "permission-set")
+}
+
+/// The actions a member's roles must hold to give an app `scope`, if it
+/// is one of [`SETS`].
+fn needs(scope: &str) -> Option<&'static [&'static str]> {
+    let name = scope.strip_prefix(&format!("include:{NS}."))?;
+    SETS.iter().find(|(n, _)| *n == name).map(|(_, a)| *a)
 }
 
 /// The parts of a `space:` scope that decide whether a role may have it.
@@ -179,7 +203,8 @@ impl Host {
     /// may give an app acting as the group:
     ///
     /// - `atproto`, always;
-    /// - the configure permission set, for roles that configure the group;
+    /// - one of this host's permission sets for a group's session, for
+    ///   roles holding every action it needs ([`SETS`]);
     /// - `repo:C`, for roles whose grants hold `repo:C` or `repo:*`;
     /// - `rpc:M`, a method of another service, for roles with `repo:*`,
     ///   never one of this host's own;
@@ -210,15 +235,15 @@ impl Host {
         let grants = grants(&permissions);
         let repo = repo_collections_for(&grants, roles);
         let everything = repo.contains("*");
-        let configures = actions_for(&grants, roles).contains("group.configure");
+        let held = actions_for(&grants, roles);
         let rooms = self.rooms(group, roles, member, everything)?;
         let (mut kept, mut made) = (Vec::new(), Vec::new());
         for s in requested {
             let space = SpaceScope::parse(s).filter(|w| w.for_group(group));
             let keep = if s == "atproto" {
                 true
-            } else if *s == configure() {
-                configures
+            } else if let Some(needs) = needs(s) {
+                needs.iter().all(|a| held.contains(a))
             } else if let Some(named) = repo_collections(s) {
                 let each = !named.is_empty() && named.iter().all(|c| repo.contains(c));
                 everything || each
@@ -238,7 +263,7 @@ impl Host {
             }
         }
         let writes = |s: &String| {
-            *s == configure()
+            needs(s).is_some()
                 || repo_collections(s).is_some()
                 || SpaceScope::parse(s).is_some_and(|w| !w.read_only)
         };
@@ -330,16 +355,15 @@ fn any_kind(group: &str, want: &SpaceScope, rooms: &[Room]) -> Vec<String> {
     out
 }
 
-/// A granted scope as the token carries it: the configure set as the
-/// space scopes its lexicon lists, `authority=self` as the group, and a
+/// A granted scope as the token carries it: a permission set of ours as
+/// the scopes its lexicon lists, `authority=self` as the group, and a
 /// space scope naming no collection as naming every one.
 pub fn concrete(granted: &[String], group: &str) -> String {
     let mut out: Vec<String> = Vec::new();
     for s in granted {
-        let scopes = if *s == configure() {
-            configure_scopes()
-        } else {
-            vec![s.clone()]
+        let scopes = match set_of(s) {
+            Some(set) => scopes_of(set),
+            None => vec![s.clone()],
         };
         for s in scopes {
             let mut s = s.replace("authority=self", &format!("authority={group}"));
@@ -358,28 +382,27 @@ pub fn concrete(granted: &[String], group: &str) -> String {
     out.join(" ")
 }
 
-/// The space scopes the configure permission set lists, from its lexicon.
-fn configure_scopes() -> Vec<String> {
-    let lexicon: Value = serde_json::from_str(include_str!(
-        "../../../lexicons/fyi/opensocial/configure.json"
-    ))
-    .expect("the configure lexicon is JSON");
-    let permissions = lexicon["defs"]["main"]["permissions"]
-        .as_array()
-        .into_iter()
-        .flatten();
-    permissions
-        .map(|p| {
-            let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
-            let mut q = vec![
-                format!("authority={}", text("authority")),
-                format!("skey={}", text("skey")),
-            ];
-            q.extend(strings(&p["collection"]).map(|c| format!("collection={c}")));
-            q.extend(strings(&p["action"]).map(|a| format!("action={a}")));
-            format!("space:{}?{}", text("spaceType"), q.join("&"))
-        })
-        .collect()
+/// The scopes a permission set lists: a space permission as a space
+/// scope, and an rpc one as a scope for each of its methods.
+fn scopes_of(set: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for p in set["permissions"].as_array().into_iter().flatten() {
+        let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+        if p["resource"] == "rpc" {
+            let aud = text("aud");
+            out.extend(strings(&p["lxm"]).map(|m| format!("rpc:{m}?aud={aud}")));
+            continue;
+        }
+        let mut q = vec![
+            format!("authority={}", text("authority")),
+            format!("skey={}", text("skey")),
+        ];
+        for key in ["collection", "action", "manage"] {
+            q.extend(strings(&p[key]).map(|v| format!("{key}={v}")));
+        }
+        out.push(format!("space:{}?{}", text("spaceType"), q.join("&")));
+    }
+    out
 }
 
 fn strings(value: &Value) -> impl Iterator<Item = &str> {

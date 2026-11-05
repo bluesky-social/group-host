@@ -8,8 +8,8 @@
 		asked,
 		joinPolicy
 	}: { member: boolean; asked: boolean; joinPolicy?: string } = $props();
-	const invited = $derived(joinPolicy?.endsWith('invite'));
-	const open = $derived(joinPolicy?.endsWith('open'));
+	const invited = $derived(joinPolicy === 'invite');
+	const open = $derived(joinPolicy === 'open');
 </script>
 
 <div class="standing">

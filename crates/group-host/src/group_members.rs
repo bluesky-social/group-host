@@ -16,7 +16,9 @@ use crate::group::{did_rkey, members_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
 use crate::moderation::Event;
-use crate::rbac::{ACTIONS, Grant, NS, actions_for, actions_of, grants, listed, scope_of};
+use crate::rbac::{
+    ACTIONS, Grant, NS, actions_for, actions_of, grants, listed, roles_of, scope_of,
+};
 use crate::repo::Write;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -76,7 +78,7 @@ impl<'a> Members<'a> {
                 &did_rkey(did),
             )
             .map_err(XrpcError::internal)?;
-        Ok(record.map(|m| listed(&m, "roles", "role")))
+        Ok(record.map(|m| roles_of(&m)))
     }
 
     pub(crate) fn can(&self, roles: &[String], action: &str) -> bool {
@@ -109,12 +111,13 @@ impl<'a> Members<'a> {
     }
 
     /// Writes `did`'s membership, holding `roles`, and `member` among them
-    /// whatever they name: everyone in the group holds it.
+    /// whatever they name: everyone in the group holds it. Its `uri` and
+    /// `cid`, as a strong reference names it.
     pub(crate) async fn put_membership(
         &self,
         did: &str,
         roles: &[String],
-    ) -> Result<(), XrpcError> {
+    ) -> Result<Value, XrpcError> {
         let mut held = roles.to_vec();
         if !held.iter().any(|r| r == "member") {
             held.insert(0, "member".into());
@@ -122,7 +125,7 @@ impl<'a> Members<'a> {
         let membership = json!({
             "$type": format!("{NS}.membership"),
             "member": did,
-            "roles": objects("role", &held),
+            "roles": held,
             "createdAt": iso(now_millis()),
         });
         let (collection, key) = (format!("{NS}.membership"), did_rkey(did));
@@ -134,8 +137,8 @@ impl<'a> Members<'a> {
             &key,
             membership,
         );
-        let _written = put.await?;
-        Ok(())
+        let Json(written) = put.await?;
+        Ok(written)
     }
 
     /// Refuses `roles` unless the group defines each.
@@ -151,7 +154,7 @@ impl<'a> Members<'a> {
     /// Whether any member holds one of `roles`.
     fn held(&self, roles: &BTreeSet<String>) -> Result<bool, XrpcError> {
         let memberships = self.records("membership")?;
-        let holds = |m: &Value| listed(m, "roles", "role").iter().any(|r| roles.contains(r));
+        let holds = |m: &Value| roles_of(m).iter().any(|r| roles.contains(r));
         Ok(memberships.iter().any(|(_, m)| holds(m)))
     }
 
@@ -161,10 +164,7 @@ impl<'a> Members<'a> {
         let configuring = self.configuring();
         let theirs = roles.iter().any(|r| configuring.contains(r));
         let others = self.records("membership")?.into_iter().any(|(_, m)| {
-            m["member"] != who
-                && listed(&m, "roles", "role")
-                    .iter()
-                    .any(|r| configuring.contains(r))
+            m["member"] != who && roles_of(&m).iter().any(|r| configuring.contains(r))
         });
         if theirs || others {
             return Ok(());
@@ -210,10 +210,6 @@ pub(crate) async fn acting<'a>(
         return Err(forbidden(format!("missing {action}")));
     }
     Ok((members, me, roles))
-}
-
-fn objects(field: &str, items: &[String]) -> Value {
-    items.iter().map(|i| json!({ field: i })).collect()
 }
 
 /// Defines a role, or changes one: its name, words, whether its people
@@ -357,7 +353,7 @@ pub async fn delete_role(
     let held = members
         .records("membership")?
         .iter()
-        .any(|(_, m)| listed(m, "roles", "role").iter().any(|r| r == role));
+        .any(|(_, m)| roles_of(m).iter().any(|r| r == role));
     if held {
         return Err(bad(
             "RoleInUse",

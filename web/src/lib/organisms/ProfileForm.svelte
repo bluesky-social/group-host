@@ -6,7 +6,7 @@
 		joinPolicy,
 		url
 	}: { displayName?: string; description?: string; joinPolicy?: string; url?: string } = $props();
-	const policy = $derived(joinPolicy?.split('#').pop() ?? 'approval');
+	const policy = $derived(joinPolicy ?? 'approval');
 </script>
 
 <form class="stack" method="post" action="?/profile">

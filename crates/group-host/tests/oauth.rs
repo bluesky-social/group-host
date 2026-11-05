@@ -15,7 +15,6 @@ const SCOPE: &str = "atproto repo:app.bsky.feed.post";
 
 /// `who` made a member of `did` with `roles`, as admitting them would.
 async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
     let membership = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let write = group_host::repo::Write::Create {
         collection: format!("{NS}.membership"),

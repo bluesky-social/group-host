@@ -59,7 +59,7 @@
               "description": "Pending requests, newest first. Present only for a viewer holding `admit`.",
               "items": {
                 "type": "ref",
-                "ref": "fyi.opensocial.defs#joinRequestView"
+                "ref": "fyi.opensocial.defs#joinRequest"
               }
             }
           }

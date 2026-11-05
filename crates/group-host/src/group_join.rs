@@ -12,6 +12,7 @@ use crate::Host;
 use crate::api::{Params, invalid, page, param};
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
+use crate::group_invites::invite_uri;
 use crate::group_members::{Members, acting};
 use crate::rbac::{NS, listed};
 use crate::store::JoinRequest;
@@ -33,18 +34,30 @@ fn no_request() -> XrpcError {
     bad("JoinRequestNotFound", "no request from them is waiting")
 }
 
-/// A request as a view shows it.
+/// A request as the lexicons' `joinRequest` has it.
 pub fn request_view(r: &JoinRequest) -> Value {
-    let mut view = json!({"did": r.did, "createdAt": iso(r.created_at)});
+    let mut view = json!({"member": r.did, "createdAt": iso(r.created_at)});
     if let Some(message) = &r.message {
         view["message"] = json!(message);
     }
     view
 }
 
+/// `did` admitted to `group` with its default roles, a request they made
+/// before waiting no more: the answer, naming their membership.
+async fn admitted(members: &Members<'_>, did: &str) -> Answer {
+    let roles = members.default_roles()?;
+    let membership = members.put_membership(did, &roles).await?;
+    let decided = members.host.store.decide(&members.group, did);
+    decided.map_err(XrpcError::internal)?;
+    Ok(Json(
+        json!({"status": "admitted", "membership": membership}),
+    ))
+}
+
 /// Asks to join: admitted at once to a group open to all, queued for one
 /// that approves its members, refused without an invite for one that
-/// invites them.
+/// invites them. An invite admits them whatever the policy.
 pub async fn request_join(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -58,35 +71,38 @@ pub async fn request_join(
     if members.membership(&me)?.is_some() {
         return Err(bad("AlreadyMember", "you are a member already"));
     }
+    let waiting = host.waiting_invite(group, &me).await?;
+    if let Some(named) = body["invite"].as_str()
+        && waiting.as_ref().is_none_or(|w| invite_uri(w) != named)
+    {
+        return Err(bad(
+            "InvalidInvite",
+            "that invite is not one from this group to you, waiting",
+        ));
+    }
     // An invite is pre-approval: redeemed, whatever the policy. It is
     // taken back once they are a member, so a membership not written
     // leaves it waiting.
-    if let Some(invite) = host.waiting_invite(group, &me).await? {
-        let roles = members.default_roles()?;
-        members.put_membership(&me, &roles).await?;
+    if let Some(invite) = waiting {
+        let answer = admitted(&members, &me).await?;
         host.take_back(&invite).await?;
-        host.store.decide(group, &me).map_err(XrpcError::internal)?;
-        return Ok(Json(json!({"status": "admitted"})));
+        return Ok(answer);
     }
     let profile = host
         .group_record(group, &meta_space(group), &format!("{NS}.profile"), "self")
         .map_err(XrpcError::internal)?
         .unwrap_or_default();
     match profile["joinPolicy"].as_str() {
-        Some("open") => {
-            let roles = members.default_roles()?;
-            members.put_membership(&me, &roles).await?;
-            // A request they made before the group opened waits no more.
-            host.store.decide(group, &me).map_err(XrpcError::internal)?;
-            Ok(Json(json!({"status": "admitted"})))
-        }
-        Some("invite") => Err(bad("InviteRequired", "this group joins by invite")),
+        Some("open") => admitted(&members, &me).await,
+        Some("invite") => Err(bad("JoinClosed", "this group joins by invite")),
         _ => {
             let message = body["message"].as_str();
             host.store
                 .ask(group, &me, message, now_millis())
                 .map_err(XrpcError::internal)?;
-            Ok(Json(json!({"status": "pending"})))
+            let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
+            let request = request_view(&asked.expect("the request just made"));
+            Ok(Json(json!({"status": "pending", "request": request})))
         }
     }
 }

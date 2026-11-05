@@ -23,7 +23,7 @@ async fn starts_a_group_with_its_spaces() {
         "handle": RIDERS,
         "displayName": "Riders",
         "description": "We ride.",
-        "joinPolicy": "fyi.opensocial.profile#request",
+        "joinPolicy": "approval",
         "stewards": [{"did": bob.did}, {"did": alice.did}],
     });
     let (status, made) = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
@@ -216,7 +216,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
                 Write::Create {
                     collection: format!("{NS}.membership"),
                     rkey: carol.did.clone(),
-                    value: json!({"$type": format!("{NS}.membership"), "member": carol.did, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                    value: json!({"$type": format!("{NS}.membership"), "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
                 },
             ],
         )

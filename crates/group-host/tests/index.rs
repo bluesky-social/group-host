@@ -58,7 +58,7 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
             &[Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: member.into(),
-                value: json!({"$type": format!("{NS}.membership"), "member": member, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "member": member, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await

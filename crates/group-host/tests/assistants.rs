@@ -39,7 +39,7 @@ fn query(url: &str) -> HashMap<String, String> {
 
 async fn make_member(h: &Running, group: &str, who: &str) {
     let collection = format!("{NS}.membership");
-    let value = json!({"$type": collection, "member": who, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"});
+    let value = json!({"$type": collection, "member": who, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
         collection,
         rkey: who.to_string(),

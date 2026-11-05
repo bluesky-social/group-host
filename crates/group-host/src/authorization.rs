@@ -9,7 +9,7 @@ use crate::api::{Params, param};
 use crate::assistants;
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
-use crate::oauth_scope::{concrete, configure};
+use crate::oauth_scope::{concrete, set_of};
 use crate::oauth_store::Request;
 use crate::rbac::{Access, NS};
 use crate::time::now_millis;
@@ -125,15 +125,11 @@ impl Host {
     }
 }
 
-/// What the configure permission set says it is for.
+/// What each of this host's permission sets asked for says it is for.
 fn labels(requested: &[String]) -> Value {
-    let lexicon: Value = serde_json::from_str(include_str!(
-        "../../../lexicons/fyi/opensocial/configure.json"
-    ))
-    .expect("the configure lexicon is JSON");
-    let text = &lexicon["defs"]["main"]["detail"];
-    let ours = requested.iter().filter(|s| **s == configure());
-    ours.map(|s| json!({"scope": s, "text": text})).collect()
+    let ours = requested.iter().filter_map(|s| Some((s, set_of(s)?)));
+    ours.map(|(s, set)| json!({"scope": s, "text": set["detail"]}))
+        .collect()
 }
 
 /// An app's pending request to sign in as a group, as the caller would

@@ -25,8 +25,8 @@
             },
             "message": {
               "type": "string",
-              "maxLength": 3000,
-              "maxGraphemes": 300
+              "maxLength": 20000,
+              "maxGraphemes": 2000
             },
             "expiresAt": {
               "type": "string",

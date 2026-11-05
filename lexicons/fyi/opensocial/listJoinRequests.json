@@ -37,7 +37,7 @@
               "type": "array",
               "items": {
                 "type": "ref",
-                "ref": "fyi.opensocial.defs#joinRequestView"
+                "ref": "fyi.opensocial.defs#joinRequest"
               }
             }
           }

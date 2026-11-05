@@ -17,7 +17,6 @@ const CALENDAR: &str = "com.example.calendar";
 const EVENT: &str = "com.example.event";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
     let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let rkey = who.to_string();
     let exists = h

@@ -6,7 +6,7 @@
       "type": "permission-set",
       "description": "For group-DID sessions.",
       "title": "Group settings",
-      "detail": "Edit the group's profile, rules and roles",
+      "detail": "Edit the group's profile, rules, and roles, and decide what each role can do.",
       "permissions": [
         {
           "type": "permission",

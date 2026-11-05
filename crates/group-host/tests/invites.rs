@@ -120,11 +120,35 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
 
     // A request of theirs from before, gone once they are in.
     h.host.store.ask(&did, &bob.did, None, 0).unwrap();
-    // Redeemed by asking to join: admitted, though the group invites only,
-    // and the invite taken back.
-    assert_eq!(
-        call(&h, &bob, "requestJoin", json!({"group": did})).await,
-        (200, json!({"status": "admitted"}))
+    // Redeemed by asking to join, naming it: admitted, though the group
+    // invites only, and the invite taken back. One named that is not the
+    // invite waiting for them is refused.
+    for named in [
+        format!("{inbox}/{did}/{NS}.invite/3zzzzzzzzzzzz"),
+        uri.replace(&bob.did, &carol.did),
+    ] {
+        let said = call(
+            &h,
+            &bob,
+            "requestJoin",
+            json!({"group": did, "invite": named}),
+        )
+        .await;
+        assert_eq!(error(&said), (400, "InvalidInvite"));
+    }
+    let said = call(
+        &h,
+        &bob,
+        "requestJoin",
+        json!({"group": did, "invite": uri}),
+    )
+    .await;
+    assert_eq!((said.0, &said.1["status"]), (200, &json!("admitted")));
+    assert!(
+        said.1["membership"]["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with(&bob.did)
     );
     assert_eq!(h.host.roles(&did, &bob.did).unwrap(), ["member"]);
     assert_eq!(
@@ -162,7 +186,7 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         ),
         (
             &alice,
-            json!({"group": did, "invitee": carol.did, "message": "x".repeat(301)}),
+            json!({"group": did, "invitee": carol.did, "message": "ü".repeat(2001)}),
             (400, "InvalidRequest"),
         ),
         (
@@ -252,7 +276,7 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     );
     assert_eq!(
         error(&call(&h, &bob, "requestJoin", json!({"group": did})).await),
-        (400, "InviteRequired")
+        (400, "JoinClosed")
     );
 
     // Turned down by its invitee.
@@ -293,7 +317,7 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     );
     assert_eq!(
         error(&call(&h, &carol, "requestJoin", json!({"group": did})).await),
-        (400, "InviteRequired")
+        (400, "JoinClosed")
     );
     let gone = |made: &Json, invitee: &str| {
         let rkey = made["uri"].as_str().unwrap().rsplit('/').next().unwrap();
@@ -310,12 +334,13 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 1);
     assert!(gone(&made, &bob.did));
     assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 0);
-    // Invited again, a fresh invite, which admits.
+    // Invited again, a fresh invite, which admits; its message as long as
+    // the lexicon lets it be.
     let (_, again) = call(
         &h,
         &alice,
         "createInvite",
-        json!({"group": did, "invitee": carol.did}),
+        json!({"group": did, "invitee": carol.did, "message": "ü".repeat(2000)}),
     )
     .await;
     let listed = ask(&h, &alice, "listInvites", &format!("group={did}"))

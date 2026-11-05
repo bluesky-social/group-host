@@ -37,12 +37,9 @@
               "maxLength": 20000
             },
             "joinPolicy": {
-              "type": "string",
-              "knownValues": [
-                "fyi.opensocial.profile#open",
-                "fyi.opensocial.profile#request",
-                "fyi.opensocial.profile#invite"
-              ]
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#joinPolicy",
+              "description": "Defaults to approval."
             },
             "metaReadableBy": {
               "type": "array",

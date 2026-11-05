@@ -12,8 +12,8 @@
         "properties": {
           "message": {
             "type": "string",
-            "maxGraphemes": 300,
-            "maxLength": 3000
+            "maxGraphemes": 2000,
+            "maxLength": 20000
           },
           "expiresAt": {
             "type": "string",

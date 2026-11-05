@@ -30,12 +30,8 @@
               "maxLength": 20000
             },
             "joinPolicy": {
-              "type": "string",
-              "knownValues": [
-                "fyi.opensocial.profile#open",
-                "fyi.opensocial.profile#request",
-                "fyi.opensocial.profile#invite"
-              ]
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#joinPolicy"
             },
             "url": {
               "type": "string",
@@ -81,7 +77,7 @@
                 "image/jpeg",
                 "image/webp"
               ],
-              "maxSize": 1000000,
+              "maxSize": 2000000,
               "description": "The group's avatar, as returned by uploadImage. Omit to keep the current one; removeAvatar clears it."
             },
             "removeAvatar": {
@@ -95,7 +91,7 @@
                 "image/jpeg",
                 "image/webp"
               ],
-              "maxSize": 1000000,
+              "maxSize": 2000000,
               "description": "The group's banner, as returned by uploadImage. Omit to keep the current one; removeBanner clears it."
             },
             "removeBanner": {

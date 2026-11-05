@@ -129,7 +129,8 @@ client, the scopes asked, and the groups offered. If the app's
 `login_hint` names a switched-on group here, that group is offered;
 otherwise every switched-on group where the member holds a role. For
 each, the page shows the member's roles and which asked scopes they
-would grant or withhold.
+would grant or withhold, and each of the host's permission sets asked
+for in its own words, the `detail` of its lexicon.
 
 `approveAuthorization` requires the member to hold a role in the chosen
 group, and that group to be the one the app named, if it named one. The
@@ -149,8 +150,18 @@ At every write, both that scope and the roles as they are now are asked.
 ### Narrowing at approval
 
 - `atproto` is always kept.
-- `include:fyi.opensocial.configure` is kept if the roles hold
-  `group.configure`.
+- One of the host's permission sets for a group's session is kept if
+  the roles hold every action it covers:
+
+  | Set | Kept for roles holding |
+  | --- | --- |
+  | `include:fyi.opensocial.configure` | `group.configure` |
+  | `include:fyi.opensocial.manageMembers` | `admit`, `eject`, `role.assign` and `invite` |
+  | `include:fyi.opensocial.manageSpaces` | `space.configure` |
+  | `include:fyi.opensocial.moderate` | `mod.read`, `mod.resolve` and `label` |
+
+  `include:fyi.opensocial.participate` is for a person's own session, at
+  their PDS, and never kept for a group's.
 - `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
 - `rpc:M` is kept only if the roles hold `repo:*`, and `M` is neither
   `*` nor a `fyi.opensocial.*` method.
@@ -162,9 +173,16 @@ At every write, both that scope and the roles as they are now are asked.
 
 Everything else is withheld: other `include:` sets, `transition:*`,
 `identity:` and `account:` scopes, and space scopes for another
-authority. The kept scope is then made concrete. The configure set
-becomes the space scopes its lexicon lists, compiled into the host, and
-`authority=self` becomes the group's DID. A grant keeps this scope
+authority. The kept scope is then made concrete. Each permission set
+becomes the scopes its lexicon lists, compiled into the host: a space
+scope for each space permission, and an `rpc:` scope for each method.
+`authority=self` becomes the group's DID.
+
+A token calls none of the host's own methods, which take a member's
+service auth, and writes in the meta and members spaces only what the
+configure set is for (below). So of the four sets only configure's
+writes can be made with a token now; the others' scopes say what an app
+was given, as the opensocial proposal lists them. A grant keeps this scope
 through every refresh; refreshing does not ask the roles again, because
 each write does.
 

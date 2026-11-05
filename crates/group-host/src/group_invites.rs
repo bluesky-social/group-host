@@ -41,7 +41,8 @@ pub fn inbox_of(did: &str) -> String {
     format!("at://{did}/space/{NS}.invites/self")
 }
 
-fn uri_of(invite: &Invite) -> String {
+/// Where `invite` is: the group's record in the invitee's inbox.
+pub(crate) fn invite_uri(invite: &Invite) -> String {
     format!(
         "{}/{}/{NS}.invite/{}",
         inbox_of(&invite.invitee),
@@ -52,7 +53,7 @@ fn uri_of(invite: &Invite) -> String {
 
 fn view(invite: &Invite) -> Value {
     let mut view = json!({
-        "uri": uri_of(invite),
+        "uri": invite_uri(invite),
         "invitee": invite.invitee,
         "createdAt": iso(invite.created_at),
     });
@@ -212,7 +213,7 @@ pub async fn create_invite(
     // One waiting is the one answered; one lapsed is taken back, and a
     // fresh one written.
     if let Some(waiting) = host.waiting_invite(&group, invitee).await? {
-        return Ok(Json(json!({ "uri": uri_of(&waiting) })));
+        return Ok(Json(json!({ "uri": invite_uri(&waiting) })));
     }
     let invite = Invite {
         seq: 0,
@@ -240,7 +241,7 @@ pub async fn create_invite(
     let written = host.space_write(&group, &inbox, std::slice::from_ref(&write));
     written.await?;
     host.store.invite(&invite).map_err(XrpcError::internal)?;
-    Ok(Json(json!({ "uri": uri_of(&invite) })))
+    Ok(Json(json!({ "uri": invite_uri(&invite) })))
 }
 
 /// The group's invites waiting, newest first, for one holding `invite`.

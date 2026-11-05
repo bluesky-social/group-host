@@ -9,7 +9,7 @@ use common::groups::*;
 use common::spaces::*;
 use common::{Running, start};
 use group_host::group::members_space;
-use group_host::rbac::{grants, listed};
+use group_host::rbac::{grants, roles_of};
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
 
@@ -38,7 +38,6 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
 }
 
 async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
     h.host
         .space_write(
             did,
@@ -549,11 +548,7 @@ async fn members_leave_but_the_last_who_runs_it_stays() {
             .0,
         200
     );
-    let roles = listed(
-        &record(&h, &did, "membership", &carol.did).unwrap(),
-        "roles",
-        "role",
-    );
+    let roles = roles_of(&record(&h, &did, "membership", &carol.did).unwrap());
     assert_eq!(roles, ["admin", "member"]);
     assert_eq!(
         error(&call(&h, &alice, "leaveGroup", json!({})).await),

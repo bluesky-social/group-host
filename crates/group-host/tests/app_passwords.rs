@@ -16,7 +16,6 @@ use serde_json::{Value as Json, json};
 const POST: &str = "app.bsky.feed.post";
 
 async fn put_membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
     let collection = format!("{NS}.membership");
     let value = json!({"$type": collection, "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let rkey = who.to_string();

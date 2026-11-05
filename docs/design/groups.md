@@ -166,7 +166,7 @@ its URI, which no longer resolves ([moderation](moderation.md)).
 
 Details:
 
-- `uploadImage` takes at most 1,000,000 bytes, of a PNG, JPEG or WebP
+- `uploadImage` takes at most 2,000,000 bytes, of a PNG, JPEG or WebP
   image as its `Content-Type` says, and refuses any other type.
 - `updateProfile` takes a picture's type and size from the upload the
   host kept, not from what the caller writes, and refuses a blob that is

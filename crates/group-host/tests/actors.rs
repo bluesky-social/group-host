@@ -10,7 +10,7 @@ use group_host::repo::Write;
 use serde_json::{Value as Json, json};
 
 async fn join(h: &Running, did: &str, who: &str) {
-    let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"});
+    let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
         collection: format!("{NS}.membership"),
         rkey: who.into(),

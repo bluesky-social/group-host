@@ -29,7 +29,7 @@ async fn group() -> (common::Running, String, [Authority; 3]) {
             &[Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: bob.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await
@@ -77,9 +77,12 @@ async fn upload(
 async fn an_admin_changes_the_profile() {
     let (h, did, [alice, _, _]) = group().await;
     let created = profile(&h, &did)["createdAt"].clone();
-    let (status, image) = upload(&h, &alice, &did, b"face".to_vec(), "image/webp").await;
+    // As large as a profile's picture may be.
+    let face = vec![7; 2_000_000];
+    let (status, image) = upload(&h, &alice, &did, face, "image/webp").await;
     assert_eq!(status, 200, "{image}");
     let avatar = image["blob"].clone();
+    assert_eq!(avatar["size"], 2_000_000);
     assert_eq!(avatar["mimeType"], "image/webp");
     // Its type and size are the upload's, whatever the caller says of them.
     let mut said = avatar.clone();
@@ -131,7 +134,7 @@ async fn an_admin_changes_the_profile() {
         &h,
         &alice,
         "updateProfile",
-        json!({"group": did, "displayName": "Riders", "joinPolicy": "fyi.opensocial.profile#invite"}),
+        json!({"group": did, "displayName": "Riders", "joinPolicy": "invite"}),
     )
     .await;
     assert_eq!(status, 200);
@@ -204,6 +207,12 @@ async fn refuses_a_profile_it_should_not_keep() {
             json!({"group": did, "displayName": "Riders", "avatar": {"ref": "x"}}),
             (400, "InvalidRequest"),
         ),
+        // A join policy is one of the words the lexicon knows.
+        (
+            &alice,
+            json!({"group": did, "displayName": "Riders", "joinPolicy": "fyi.opensocial.profile#invite"}),
+            (400, "InvalidRequest"),
+        ),
         // An image whose CID the host never keeps.
         (
             &alice,
@@ -261,7 +270,7 @@ async fn refuses_a_profile_it_should_not_keep() {
         ),
         (
             &alice,
-            vec![0; 1_000_001],
+            vec![0; 2_000_001],
             "image/png",
             (400, "InvalidRequest"),
         ),

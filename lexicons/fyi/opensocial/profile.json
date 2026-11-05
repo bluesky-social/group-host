@@ -30,7 +30,7 @@
               "image/jpeg",
               "image/webp"
             ],
-            "maxSize": 1000000
+            "maxSize": 2000000
           },
           "banner": {
             "type": "blob",
@@ -39,7 +39,7 @@
               "image/jpeg",
               "image/webp"
             ],
-            "maxSize": 1000000
+            "maxSize": 2000000
           },
           "url": {
             "type": "string",
@@ -47,14 +47,8 @@
             "description": "The group's own site, if it keeps one. A third-party app that shows the group can link back to it."
           },
           "joinPolicy": {
-            "type": "string",
-            "knownValues": [
-              "open",
-              "approval",
-              "invite"
-            ],
-            "description": "How new members get in: open admits anyone, approval queues a join request for review, invite requires an invitation. An invitation admits its recipient under any policy.",
-            "maxLength": 128
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#joinPolicy"
           },
           "location": {
             "type": "union",

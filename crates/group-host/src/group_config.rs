@@ -7,7 +7,7 @@ use crate::api::{Params, invalid, param};
 use crate::blobs::PROFILE_IMAGES;
 use crate::group::{join_policy, members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
-use crate::rbac::{NS, actions_for, grants, listed};
+use crate::rbac::{NS, actions_for, grants, roles_of};
 use crate::repo::Write;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -22,7 +22,7 @@ use std::sync::Arc;
 type Answer = Result<Json<Value>, XrpcError>;
 
 /// The most bytes an image may be, as the profile's lexicon has it.
-pub const IMAGE_AT_MOST: usize = 1_000_000;
+pub const IMAGE_AT_MOST: usize = 2_000_000;
 
 /// Where a group meets: the places `community.lexicon.location` has.
 const PLACES: [&str; 4] = [
@@ -84,9 +84,7 @@ impl Host {
             .map_err(XrpcError::internal)?;
         Ok(memberships
             .iter()
-            .filter(|(_, m)| {
-                actions_for(&granted, &listed(m, "roles", "role")).contains("group.configure")
-            })
+            .filter(|(_, m)| actions_for(&granted, &roles_of(m)).contains("group.configure"))
             .filter_map(|(_, m)| m["member"].as_str().map(String::from))
             .collect())
     }

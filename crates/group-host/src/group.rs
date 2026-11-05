@@ -6,7 +6,7 @@
 //! access record, against the reader's roles.
 
 use crate::Host;
-use crate::rbac::{ACTIONS, Grant, NS, PUBLIC, listed};
+use crate::rbac::{ACTIONS, Grant, NS, PUBLIC, roles_of};
 use crate::repo::{Write, invalid};
 use crate::store::Record;
 use crate::time::{iso, now_millis};
@@ -46,14 +46,11 @@ fn labeler(at: &str) -> Value {
     })
 }
 
-/// How a new group lets people in, as its profile says it: `open`,
-/// `approval` or `invite`, from either the profile's words or
-/// `createGroup`'s (`fyi.opensocial.profile#request`, …); `approval`
-/// unless it says.
+/// How a group lets people in, as its profile says it (`defs#joinPolicy`):
+/// `open`, `approval` or `invite`; `approval` unless it says.
 pub fn join_policy(asked: Option<&str>) -> Result<&'static str, XrpcError> {
-    let word = asked.map(|a| a.rsplit('#').next().unwrap_or(a));
-    match word {
-        None | Some("approval") | Some("request") => Ok("approval"),
+    match asked {
+        None | Some("approval") => Ok("approval"),
         Some("open") => Ok("open"),
         Some("invite") => Ok("invite"),
         Some(other) => Err(invalid(format!(
@@ -255,7 +252,7 @@ impl Host {
             members_writes.push(put(
                 &c("membership"),
                 &did_rkey(steward),
-                json!({"$type": c("membership"), "member": steward, "roles": [{"role": "admin"}, {"role": "member"}], "createdAt": at}),
+                json!({"$type": c("membership"), "member": steward, "roles": ["admin", "member"], "createdAt": at}),
             ));
         }
         self.space_write(&did, &members, &members_writes).await?;
@@ -322,9 +319,7 @@ impl Host {
     pub fn roles(&self, group: &str, did: &str) -> Result<Vec<String>> {
         let (members, membership) = (members_space(group), format!("{NS}.membership"));
         let membership = self.group_record(group, &members, &membership, &did_rkey(did))?;
-        Ok(membership
-            .map(|m| listed(&m, "roles", "role"))
-            .unwrap_or_default())
+        Ok(membership.map(|m| roles_of(&m)).unwrap_or_default())
     }
 }
 
