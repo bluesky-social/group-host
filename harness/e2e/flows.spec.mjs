@@ -3,7 +3,7 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, Assistant, approve, didKey, joins, signIn, signInDialog, signedInAs, url, who, world } from './pages.mjs'
+import { App, McpClient, approve, didKey, joins, signIn, signInDialog, signedInAs, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -427,26 +427,26 @@ test('signing an app in as her group', async () => {
 })
 
 test('connecting an AI app, and disconnecting it', async () => {
-  const assistant = await new Assistant().listen()
-  await page.goto(await assistant.authorize('Pocket assistant'))
+  const client = await new McpClient().listen()
+  await page.goto(await client.authorize('Pocket helper'))
   await expect(page.getByText('wants to act as you in one of your groups')).toBeVisible()
   await expect(page.getByText('That name is its own word for itself')).toBeVisible()
   await page.getByRole('button', { name: 'Connect it to Riders' }).click()
-  const back = await assistant.back
-  assistant.close()
+  const back = await client.back
+  client.close()
   expect(new URL(back).searchParams.get('state')).toBe('st4te')
-  const tokens = await assistant.exchange(back)
+  const tokens = await client.exchange(back)
 
   // It acts as her, in Riders, without saying which.
-  const got = await assistant.tool(tokens.access_token, 'getGroup', {})
+  const got = await client.tool(tokens.access_token, 'group_show', {})
   expect(got.status).toBe(200)
   expect(got.result.structuredContent.group.did).toBe(world.riders)
 
   await page.goto(url('/g/riders.groups.test'))
-  await expect(page.locator('.ai-apps', { hasText: 'Pocket assistant' })).toBeVisible()
-  await page.getByRole('button', { name: 'Disconnect Pocket assistant' }).click()
+  await expect(page.locator('.ai-apps', { hasText: 'Pocket helper' })).toBeVisible()
+  await page.getByRole('button', { name: 'Disconnect Pocket helper' }).click()
   await expect(page.getByText('No AI app connected yet')).toBeVisible()
-  expect((await assistant.tool(tokens.access_token, 'getGroup', {})).status).toBe(401)
+  expect((await client.tool(tokens.access_token, 'group_show', {})).status).toBe(401)
 })
 
 test('declining an app', async () => {

@@ -13,25 +13,111 @@ Anything else fails with its usage.
 
 It acts as a person: it signs in to their own PDS and asks it for a
 service token for each method it calls, as an app does, so an account on
-any PDS may run it against any host. To write as a group, as an invite
-is written, it takes a group token from the host (`getGroupAuth`).
+any PDS may run it against any host. To write as a group, as an invite,
+a rule or a membership is written, it takes a group token from the host
+for that space (`getGroupAuth`).
+
+Every command is `opensocial <group> <action>`, then the group it acts
+in, a handle or a DID resolved by the host's `resolveHandle` as you,
+then the arguments the command takes in order, then its flags. The
+groups are singular nouns for what they act on: `group`, `profile`,
+`rule`, `role`, `member`, `join`, `invite`, `space`, `mod` and
+`account`. An action with an opposite takes `--undo` (`invite send
+--undo`). `help`, `--help`, `-h` or nothing prints the usage, by group.
+
+Each command that acts in a group is the twin of an MCP tool,
+`<group>_<action>` ([MCP tools](mcp.md)), and reads its words by that
+tool's schema: a flag is a field of what it writes or asks, in kebab
+case (`--display-name` for `displayName`); one that is yes or no is
+`--name` or `--no-name`; a number is a number; a list is
+comma-separated (`member,admin`); anything more than that is JSON
+(`--access '{"grants": []}'`). A person (`<member>`, `<person>`) may be
+a handle, which it resolves. Such a command prints what the host
+answered, as JSON, but `group show`, which prints lines. A write
+replaces the record whole: a field not given is dropped.
+
+The commands with no tool make or move a group or an account: `group
+create`, `group seed`, `group move` and `account import`.
+
+### group
 
 | Command | What it does |
 | --- | --- |
-| `help`, `--help`, `-h`, or none | prints its usage |
-| `create-group <handle> [--name] [--description] [--join open\|approval\|invite]` | starts a group, run by you; `--name` is the handle's first label if not given, and the join policy `approval` |
-| `inspect <group>` | the group as you may see it: its roles, members and spaces |
-| `membership assign <group> <member> <role,role…>` | writes their membership as the group, with a group token for its members space: lets in someone waiting to join, or gives a member these roles in place of theirs (`member` among them) |
-| `membership eject <group> <member>` | deletes their membership as the group, putting them out |
-| `membership invite <group> <person> [--message]` | invites someone in, as the group: an invite written in their inbox with a group token for it |
-| `migrate <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; run again after a run that handed it over but could not switch it on, it switches it on; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
-| `import <account> [--address <label>]` | moves an account from its server here, its spaces with it, to become a group run by you; its server emails a code ([moving](../design/moving.md#bringing-an-account-here-as-a-group)) |
-| `import <account> --code <code>` | with that code, has its server sign its identity over, and finishes, whatever `--address` the start was given |
-| `seed <handle>` | a group to try things on, joined by approval: two rules, a moderator role (`mod.read`, `mod.resolve`, `label`) that the founder may give, written as the group, and an invite for each of `OPENSOCIAL_SEED_INVITE` |
+| `group create <handle> [--display-name] [--description] [--join-policy open\|approval\|invite]` | starts a group, run by you; its name is the handle's first label if not given, and its join policy `approval` |
+| `group show <group>` | the group as you may see it: its roles, its first hundred members and its spaces |
+| `group seed <handle>` | a group to try things on, joined by approval: two rules, a moderator role (`mod.read`, `mod.resolve`, `label`) that the founder may give, written as the group, and an invite for each of `OPENSOCIAL_SEED_INVITE` |
+| `group move <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; run again after a run that handed it over but could not switch it on, it switches it on; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
 
-A group or person is a handle or a DID, resolved by the host's
-`resolveHandle` as you. An unknown command or flag fails with its usage;
-any failure exits 1.
+### profile
+
+| Command | What it does |
+| --- | --- |
+| `profile set <group> --display-name <name> --join-policy <policy> [--description] [--url] [--online] [--topics <json>] [--languages <json>] [--location <json>]` | replaces the group's profile, as the group |
+
+### rule
+
+| Command | What it does |
+| --- | --- |
+| `rule set <group> --title <title> --text <words> [--order <n>] [--rule <key>]` | writes a rule as the group: the one `--rule` names, or a new one |
+| `rule delete <group> <rule>` | deletes a rule, by its key |
+
+### role
+
+| Command | What it does |
+| --- | --- |
+| `role set <group> <role> --display-name <name> [--description] [--default] [--bot]` | writes a role as the group, at its id |
+| `role delete <group> <role>` | deletes a role nobody holds or is granted |
+| `role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]` | sets what a role may do, in place of its grant in the permissions record: its scopes, and the roles its holders may assign, each none if not given; with `--undo`, drops its grant |
+
+### member
+
+| Command | What it does |
+| --- | --- |
+| `member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]` | who is in the group, and their roles, a page at a time; with `--q`, those whose handle or DID holds it |
+| `member assign <group> <member> <role,role…>` | writes their membership as the group: lets in someone waiting to join, or gives a member these roles in place of theirs (`member` among them) |
+| `member eject <group> <member>` | deletes their membership as the group, putting them out |
+
+### join
+
+| Command | What it does |
+| --- | --- |
+| `join list <group> [--limit <n>] [--cursor <cursor>]` | the requests to join waiting |
+| `join deny <group> <member>` | turns down a request to join |
+
+### invite
+
+| Command | What it does |
+| --- | --- |
+| `invite send <group> <person> [--message <words>] [--expires-at <time>] [--undo]` | invites someone in, as the group: an invite written in their inbox; with `--undo`, takes back the one waiting for them |
+| `invite list <group> [--limit <n>] [--cursor <cursor>]` | the invites waiting |
+
+### space
+
+| Command | What it does |
+| --- | --- |
+| `space create <group> <type> --access <json> [--name] [--skey] [--no-index]` | adds a space to the group |
+| `space records <group> <space> [--collection] [--field <path> --equals <value>] [--uri] [--limit] [--cursor]` | the records in one of the group's spaces |
+
+### mod
+
+A subject is an account's DID or a record's `at://` URI, with `--cid`
+where a version is asked for, as a label on a record asks.
+
+| Command | What it does |
+| --- | --- |
+| `mod list <group> [--status open\|escalated\|resolved] [--limit] [--cursor]` | the moderation queue |
+| `mod history <group> <subject> [--cid] [--limit] [--cursor]` | what was done about a subject |
+| `mod resolve <group> <subject> --status resolved\|escalated [--note] [--cid]` | resolves or escalates a subject |
+| `mod label <group> <subject> <val> [--cid] [--rule <uri>] [--undo]` | labels a subject; with `--undo`, takes the label back |
+
+### account
+
+| Command | What it does |
+| --- | --- |
+| `account import <account> [--address <label>]` | moves an account from its server here, its spaces with it, to become a group run by you; its server emails a code ([moving](../design/moving.md#bringing-an-account-here-as-a-group)) |
+| `account import <account> --code <code>` | with that code, has its server sign its identity over, and finishes, whatever `--address` the start was given |
+
+An unknown command or flag fails with its usage; any failure exits 1.
 
 | Variable | What it is |
 | --- | --- |
@@ -39,8 +125,8 @@ any failure exits 1.
 | `PDS_URL` | where you sign in; `http://localhost:2583` |
 | `OPENSOCIAL_HOST` | the host; `http://localhost:2600` |
 | `OPENSOCIAL_HOST_DID` | its DID; the did:web of its address |
-| `OPENSOCIAL_SEED_INVITE` | who `seed` invites, comma-separated |
-| `OPENSOCIAL_IMPORT_PASSWORD` | the password of the account `import` moves, at its own server: its own, as its server signs its identity over for no app password |
+| `OPENSOCIAL_SEED_INVITE` | who `group seed` invites, comma-separated |
+| `OPENSOCIAL_IMPORT_PASSWORD` | the password of the account `account import` moves, at its own server: its own, as its server signs its identity over for no app password |
 
 ## `just`
 

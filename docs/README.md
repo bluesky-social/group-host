@@ -8,7 +8,7 @@ atproto. It implements the opensocial proposal
   part works as it does: [spaces](design/spaces.md),
   [groups](design/groups.md), [membership](design/membership.md),
   [signing in](design/signing-in.md), [moderation](design/moderation.md),
-  [assistants](design/assistants.md), [recovery](design/recovery.md) and
+  [MCP](design/mcp.md), [recovery](design/recovery.md) and
   [moving](design/moving.md).
 - Reference: [the HTTP and XRPC API](reference/api.md), [the MCP
   tools](reference/mcp.md), [the commands and recipes](reference/cli.md)

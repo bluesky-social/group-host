@@ -121,7 +121,7 @@ So the group is whole on one host at every step. Before the hand-over,
 the host it leaves controls it, and a failed receive left nothing at the
 new one. After it, the new host holds it, switched off until activated.
 
-The `opensocial migrate` command makes the four calls in order
+The `opensocial group move` command makes the four calls in order
 ([cli](../reference/cli.md)). Run again after it handed the group over
 but could not switch it on, it does only that. The console has no page for this move.
 
@@ -209,7 +209,7 @@ gives them back. "Copy it here" copies the account and its spaces and
 has the code emailed; "Finish moving it" takes the code and completes
 the move; "Stop, and sign out of it" discards an unfinished copy.
 
-`opensocial import` does the same from a terminal, signing in to the
+`opensocial account import` does the same from a terminal, signing in to the
 account with its password, and finishes with the emailed code
 ([cli](../reference/cli.md)).
 

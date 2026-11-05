@@ -4,7 +4,7 @@ A group is an atproto account with no password and no single owner. Apps
 still need to sign in as it, to write its records and act in its spaces.
 Whatever an app gets must never exceed what the member who let it in may
 do, both when they approve it and at every write after. This page
-explains how the host signs people, apps and assistants in, and how it
+explains how the host signs people, apps and MCP clients in, and how it
 keeps each token inside its member's roles. Roles are in
 [membership](membership.md), spaces in [spaces](spaces.md), and exact
 methods and parameters in [the API reference](../reference/api.md).
@@ -16,17 +16,17 @@ methods and parameters in [the API reference](../reference/api.md).
 | A person, in the console | themselves | OAuth at their own PDS | a session cookie |
 | An app | a group | OAuth at this host, or an app password | a group grant |
 | The console | a group | `fyi.opensocial.getGroupAuth` | a 15-minute group token |
-| An assistant | a member | OAuth at `/mcp` | an assistant grant |
+| An MCP client | a member | OAuth at `/mcp` | an MCP grant |
 
 Members keep their accounts on their own PDSes, so the host only needs
 to learn who a person is. A group's repo is here, so this host is its
 PDS and its OAuth authorization server, the server an app signs in at.
 
-An assistant, an AI client speaking MCP, acts as a member, not as the
+An MCP client, an AI app speaking MCP, acts as a member, not as the
 group. The host runs a separate OAuth server for it, with issuer
 `<PUBLIC_URL>/mcp`, whose Bearer tokens are good only at `/mcp` and are
-kept apart from group grants. A member approves an assistant on the same
-console page as an app. [assistants](assistants.md) covers the rest.
+kept apart from group grants. A member approves an MCP client on the
+same console page as an app. [MCP](mcp.md) covers the rest.
 
 ## Signing people in to the console
 
@@ -294,7 +294,7 @@ write the group's profile, pictures and rules. The console ends each
 token at `/oauth/revoke` once its writes are made, so none is left
 among the group's sessions.
 
-An assistant connected over MCP writes the profile and rules the same
+An MCP client writes the profile and rules the same
 way, inside the host: each such tool call is made as a grant for its
 member, with the scope `getGroupAuth` would give them for `meta` at that
 moment, and checked as any write is ([MCP](../reference/mcp.md)).
@@ -306,7 +306,7 @@ Every grant records its member, its client, its source (`oauth`,
 was made, and when it was last used. Members who hold `group.configure`
 list every grant in force with `fyi.opensocial.listGroupTokens` and end
 any one with `fyi.opensocial.revokeGroupToken`. An app ends its own at
-`/oauth/revoke`. Assistant grants are listed apart, with
+`/oauth/revoke`. MCP grants are listed apart, with
 `listConnectedApps`.
 
 `listGroupTokens` also returns the group's latest 20 log entries, each

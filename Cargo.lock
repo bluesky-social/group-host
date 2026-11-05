@@ -1072,6 +1072,7 @@ dependencies = [
  "atproto",
  "axum",
  "group-host",
+ "group-host-mcp",
  "reqwest",
  "serde",
  "serde_json",

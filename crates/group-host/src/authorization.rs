@@ -6,9 +6,9 @@
 
 use crate::Host;
 use crate::api::{Params, param};
-use crate::assistants;
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
+use crate::mcp;
 use crate::oauth_scope::{concrete, set_of};
 use crate::oauth_store::Request;
 use crate::rbac::{Access, NS};
@@ -142,8 +142,8 @@ pub async fn get_authorization(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.getAuthorization")).await?;
     let uri = param(&p, "requestUri")?;
-    if uri.starts_with(assistants::PREFIX) {
-        return Ok(Json(assistants::assistant_view(&host, uri, &me)?));
+    if uri.starts_with(mcp::PREFIX) {
+        return Ok(Json(mcp::mcp_view(&host, uri, &me)?));
     }
     let request = pending(&host, uri)?;
     let requested = requested(&request);
@@ -191,8 +191,8 @@ pub async fn approve_authorization(
     let uri = uri.expect("its lexicon requires it");
     let group = body["group"].as_str();
     let group = group.expect("its lexicon requires it");
-    if uri.starts_with(assistants::PREFIX) {
-        let redirect = assistants::approve(&host, uri, &me, group)?;
+    if uri.starts_with(mcp::PREFIX) {
+        let redirect = mcp::approve(&host, uri, &me, group)?;
         return Ok(Json(json!({ "redirectUrl": redirect })));
     }
     let request = pending(&host, uri)?;
@@ -231,8 +231,8 @@ pub async fn decline_authorization(
     signed_in(&host, &headers, &format!("{NS}.declineAuthorization")).await?;
     let uri = body["requestUri"].as_str();
     let uri = uri.expect("its lexicon requires it");
-    if uri.starts_with(assistants::PREFIX) {
-        let redirect = assistants::decline(&host, uri)?;
+    if uri.starts_with(mcp::PREFIX) {
+        let redirect = mcp::decline(&host, uri)?;
         return Ok(Json(json!({ "redirectUrl": redirect })));
     }
     let request = pending(&host, uri)?;

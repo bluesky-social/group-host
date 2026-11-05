@@ -1,4 +1,4 @@
-//! Assistants: an MCP client, signed in at the host as MCP's authorization
+//! MCP: a client, signed in at the host as MCP's authorization
 //! spec has it, acting as the member who connected it, in the one group
 //! they chose, with what their roles allow and nothing more.
 
@@ -51,7 +51,7 @@ async fn make_member(h: &Running, group: &str, who: &str) {
         .unwrap();
 }
 
-/// An assistant, registered: its client ID.
+/// An MCP client, registered: its client ID.
 async fn register(h: &Running) -> String {
     let res = h
         .http
@@ -73,7 +73,7 @@ fn pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-/// The assistant's authorization request, with `extra` changes: where
+/// The MCP client's authorization request, with `extra` changes: where
 /// the browser is sent.
 async fn authorize(
     h: &Running,
@@ -129,7 +129,7 @@ async fn token(h: &Running, form: &[(&str, &str)]) -> (u16, Json) {
     (res.status().as_u16(), res.json().await.unwrap())
 }
 
-/// Connects an assistant as `who`, in `group`: its client ID and tokens.
+/// Connects an MCP client as `who`, in `group`: its client ID and tokens.
 async fn connect(h: &Running, who: &Authority, group: &str) -> (String, Json) {
     let client = register(h).await;
     let (verifier, challenge) = pkce();
@@ -177,7 +177,7 @@ async fn tool(h: &Running, token: &str, name: &str, arguments: Json) -> Json {
 }
 
 #[tokio::test]
-async fn says_where_an_assistant_signs_in() {
+async fn says_where_an_mcp_client_signs_in() {
     let h = start(&[], false).await;
     let (_, resource) = h
         .get_path("/.well-known/oauth-protected-resource/mcp")
@@ -225,7 +225,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     let (_, challenge) = pkce();
     let uri = requested(&h, &client, &challenge).await;
 
-    // The approval page reads it as an assistant's.
+    // The approval page reads it as an MCP client's.
     let lxm = format!("{NS}.getAuthorization");
     let (status, view) = get(
         &h,
@@ -235,7 +235,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     )
     .await;
     assert_eq!(status, 200, "{view}");
-    assert_eq!(view["assistant"], true);
+    assert_eq!(view["mcp"], true);
     assert_eq!(view["client"]["name"], "Claude");
     assert_eq!(view["groups"][0]["did"], group.as_str());
     assert_eq!(view["groups"][0]["granted"], json!([]));
@@ -259,21 +259,21 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     assert!(said["result"]["tools"].as_array().unwrap().len() > 15);
 
     // A query, in her group, without saying which.
-    let got = tool(&h, access, "getGroup", json!({})).await;
+    let got = tool(&h, access, "group_show", json!({})).await;
     assert_eq!(
         got["structuredContent"]["group"]["did"],
         group.as_str(),
         "{got}"
     );
     // Who is in it, found by part of their DID.
-    let got = tool(&h, access, "listMembers", json!({"q": &alice.did[8..]})).await;
+    let got = tool(&h, access, "member_list", json!({"q": &alice.did[8..]})).await;
     let found = &got["structuredContent"]["members"];
     assert_eq!(found[0]["actor"]["did"], alice.did.as_str(), "{got}");
     assert_eq!(found.as_array().unwrap().len(), 1, "{got}");
     let got = tool(
         &h,
         access,
-        "listInvites",
+        "invite_list",
         json!({"limit": 5, "also": ["a", "b"]}),
     )
     .await;
@@ -282,8 +282,8 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     let got = tool(
         &h,
         access,
-        "sendInvite",
-        json!({"invitee": bob.did, "message": "Ride with us", "expiresAt": "2099-01-01T00:00:00Z"}),
+        "invite_send",
+        json!({"person": bob.did, "message": "Ride with us", "expires_at": "2099-01-01T00:00:00Z"}),
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
@@ -292,7 +292,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
         .unwrap()
         .to_string();
     assert!(uri.contains(&format!("/{group}/{NS}.invite/")), "{uri}");
-    let got = tool(&h, access, "sendInvite", json!({"invitee": "bob"})).await;
+    let got = tool(&h, access, "invite_send", json!({"person": "bob"})).await;
     assert_eq!(got["isError"], true, "{got}");
     let lxm = format!("{NS}.listInvites");
     let (_, invites) = get(
@@ -311,9 +311,21 @@ async fn acts_as_the_member_in_the_group_they_chose() {
         "{invites}"
     );
     // Taken back; then there is none.
-    let got = tool(&h, access, "takeBackInvite", json!({"invitee": bob.did})).await;
+    let got = tool(
+        &h,
+        access,
+        "invite_send",
+        json!({"person": bob.did, "undo": true}),
+    )
+    .await;
     assert_eq!(got["structuredContent"]["uri"], uri.as_str(), "{got}");
-    let got = tool(&h, access, "takeBackInvite", json!({"invitee": bob.did})).await;
+    let got = tool(
+        &h,
+        access,
+        "invite_send",
+        json!({"person": bob.did, "undo": true}),
+    )
+    .await;
     let said = got["content"][0]["text"].as_str().unwrap();
     assert!(said.contains("InviteNotFound"), "{got}");
     // What the host refuses, it says why.
@@ -325,25 +337,25 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     let got = tool(
         &h,
         access,
-        "putMembership",
-        json!({"rkey": carol.did, "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+        "member_assign",
+        json!({"member": carol.did, "roles": ["member"]}),
     )
     .await;
     refused(&got, "JoinRequestNotFound");
-    let got = tool(&h, access, "deleteMembership", json!({"rkey": alice.did})).await;
+    let got = tool(&h, access, "member_eject", json!({"member": alice.did})).await;
     refused(&got, "LastConfigurer");
-    let got = tool(&h, access, "deleteRole", json!({"rkey": "member"})).await;
+    let got = tool(&h, access, "role_delete", json!({"role": "member"})).await;
     refused(&got, "RoleInUse");
     // A method of the host's refused says why in its words.
-    let got = tool(&h, access, "denyJoinRequest", json!({"member": carol.did})).await;
+    let got = tool(&h, access, "join_deny", json!({"member": carol.did})).await;
     refused(&got, "JoinRequestNotFound");
     // The group's records, written as the group, as she may: a role, what
     // it may do, and who holds it.
     let got = tool(
         &h,
         access,
-        "putRole",
-        json!({"rkey": "leader", "displayName": "Ride leader"}),
+        "role_set",
+        json!({"role": "leader", "display_name": "Ride leader"}),
     )
     .await;
     let uri = format!(
@@ -359,19 +371,28 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     };
     let leader = kept("role", "leader").unwrap();
     assert_eq!(leader.get("rkey"), None);
-    let mut permissions = kept("permissions", "self").unwrap();
-    permissions["grants"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!({"role": "leader", "scopes": [], "assignable": []}));
+    let grants = |p: Json| p["grants"].as_array().unwrap().clone();
+    let before = grants(kept("permissions", "self").unwrap());
     let got = tool(
         &h,
         access,
-        "putPermissions",
-        json!({"grants": permissions["grants"]}),
+        "role_grant",
+        json!({"role": "leader", "assignable": []}),
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
+    let mut after = before.clone();
+    after.push(json!({"role": "leader", "scopes": [], "assignable": []}));
+    assert_eq!(grants(kept("permissions", "self").unwrap()), after);
+    // Dropped, it would be a grant of a role she may not assign: refused,
+    // as any write of the record is.
+    let undo = json!({"role": "leader", "undo": true});
+    let got = tool(&h, access, "role_grant", undo).await;
+    refused(&got, "NotAssignable");
+    assert_eq!(grants(kept("permissions", "self").unwrap()), after);
+    // What a tool is not given, it says it wants.
+    let got = tool(&h, access, "role_grant", json!({})).await;
+    refused(&got, "role is required");
     let lxm = format!("{NS}.requestJoin");
     post(
         &h,
@@ -383,13 +404,13 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     let got = tool(
         &h,
         access,
-        "putMembership",
-        json!({"rkey": carol.did, "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+        "member_assign",
+        json!({"member": carol.did, "roles": ["member"]}),
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
     assert!(kept("membership", &carol.did).is_some());
-    let got = tool(&h, access, "deleteMembership", json!({"rkey": carol.did})).await;
+    let got = tool(&h, access, "member_eject", json!({"member": carol.did})).await;
     assert!(got.get("isError").is_none(), "{got}");
     assert!(kept("membership", &carol.did).is_none());
     // Another group's, never: the group is the one she chose.
@@ -399,7 +420,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
-    let got = tool(&h, access, "getGroup", json!({"group": other})).await;
+    let got = tool(&h, access, "group_show", json!({"group": other})).await;
     assert_eq!(got["structuredContent"]["group"]["did"], group.as_str());
 }
 
@@ -422,8 +443,8 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     };
 
     // The profile, at its one key, replaced whole.
-    let profile = json!({"displayName": "Riders United", "joinPolicy": "open"});
-    let got = tool(&h, access, "putProfile", profile).await;
+    let profile = json!({"display_name": "Riders United", "join_policy": "open"});
+    let got = tool(&h, access, "profile_set", profile).await;
     assert!(got.get("isError").is_none(), "{got}");
     let uri = format!("{meta}/{group}/{NS}.profile/self");
     assert_eq!(got["structuredContent"]["uri"], uri);
@@ -438,7 +459,7 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     let got = tool(
         &h,
         access,
-        "putRule",
+        "rule_set",
         json!({"title": "Be kind", "text": ""}),
     )
     .await;
@@ -446,11 +467,11 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     let made = got["structuredContent"]["uri"].as_str().unwrap();
     let rkey = made.rsplit('/').next().unwrap().to_string();
     assert_eq!(kept("rule", &rkey).unwrap()["title"], "Be kind");
-    let again = json!({"rkey": rkey, "title": "Be very kind", "text": "Always."});
-    let got = tool(&h, access, "putRule", again).await;
+    let again = json!({"rule": rkey, "title": "Be very kind", "text": "Always."});
+    let got = tool(&h, access, "rule_set", again).await;
     assert_eq!(got["structuredContent"]["uri"], made, "{got}");
     assert_eq!(kept("rule", &rkey).unwrap()["title"], "Be very kind");
-    let got = tool(&h, access, "deleteRule", json!({"rkey": rkey})).await;
+    let got = tool(&h, access, "rule_delete", json!({"rule": rkey})).await;
     assert_eq!(got["structuredContent"], json!({"uri": made}), "{got}");
     assert_eq!(kept("rule", &rkey), None);
 
@@ -458,8 +479,8 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     let got = tool(
         &h,
         access,
-        "putProfile",
-        json!({"displayName": " ", "joinPolicy": "open"}),
+        "profile_set",
+        json!({"display_name": " ", "join_policy": "open"}),
     )
     .await;
     assert_eq!(got["isError"], true, "{got}");
@@ -468,13 +489,13 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     let got = tool(
         &h,
         access,
-        "putRule",
-        json!({"rkey": "chosen", "title": "x", "text": ""}),
+        "rule_set",
+        json!({"rule": "chosen", "title": "x", "text": ""}),
     )
     .await;
     assert_eq!(got["isError"], true, "{got}");
 
-    // What it did is in the group's log, as the assistant's.
+    // What it did is in the group's log, as the MCP client's.
     let lxm = format!("{NS}.listGroupTokens");
     let (_, listed) = get(
         &h,
@@ -514,18 +535,18 @@ async fn does_only_what_the_members_roles_allow() {
     make_member(&h, &group, &bob.did).await;
     let (_, tokens) = connect(&h, &bob, &group).await;
     let access = tokens["access_token"].as_str().unwrap();
-    let got = tool(&h, access, "putRule", json!({"title": "No spam"})).await;
+    let got = tool(&h, access, "rule_set", json!({"title": "No spam"})).await;
     assert_eq!(got["isError"], true, "{got}");
     // Nor may it write what his roles do not: he may give nobody roles.
     let got = tool(
         &h,
         access,
-        "putMembership",
-        json!({"rkey": bob.did, "member": bob.did, "roles": ["member", "admin"], "createdAt": "2026-11-03T00:00:00Z"}),
+        "member_assign",
+        json!({"member": bob.did, "roles": ["member", "admin"]}),
     )
     .await;
     assert_eq!(got["isError"], true, "{got}");
-    // Put out, his assistant acts as him there no more.
+    // Put out, his MCP client acts as him there no more.
     let runs = common::members::Session::runs(&h, &alice, &group).await;
     let said = runs.delete(&h, "membership", &bob.did).await;
     assert_eq!(said.status, 200, "{}", said.body);
@@ -625,7 +646,7 @@ async fn refreshes_lists_and_disconnects() {
 }
 
 #[tokio::test]
-async fn sends_a_declined_assistant_back_saying_so() {
+async fn sends_a_declined_mcp_client_back_saying_so() {
     let h = start(&[], false).await;
     let [alice, ..] = people(&h).await;
     let group = start_group(
@@ -783,7 +804,7 @@ async fn refuses_a_request_it_cannot_trust() {
         .unwrap();
     assert_eq!(res.status(), 201);
     let said: Json = res.json().await.unwrap();
-    assert_eq!(said["client_name"], "An assistant");
+    assert_eq!(said["client_name"], "An AI app");
 }
 
 /// A client metadata document, served at a URL `make` is given: the URL.
@@ -881,11 +902,11 @@ async fn says_what_it_cannot_do_as_json_rpc_does() {
     );
     assert_eq!(ask(call(json!({"name": "nothing"}))).await, Some(-32602));
     assert_eq!(
-        ask(call(json!({"name": "getGroup", "arguments": 1}))).await,
+        ask(call(json!({"name": "group_show", "arguments": 1}))).await,
         Some(-32602)
     );
     // No arguments at all is none to give.
-    let said: Json = mcp(h, Some(access), call(json!({"name": "getGroup"})))
+    let said: Json = mcp(h, Some(access), call(json!({"name": "group_show"})))
         .await
         .json()
         .await
@@ -904,16 +925,16 @@ async fn forgets_a_client_that_never_connected() {
     let now = 10 * day;
     let back = vec![BACK.to_string()];
     store
-        .register_assistant("old", "Old", &back, now - 2 * day)
+        .register_mcp_client("old", "Old", &back, now - 2 * day)
         .unwrap();
-    store.register_assistant("new", "New", &back, now).unwrap();
-    assert!(store.registered_assistant("old").unwrap().is_none());
-    assert!(store.registered_assistant("new").unwrap().is_some());
+    store.register_mcp_client("new", "New", &back, now).unwrap();
+    assert!(store.registered_mcp_client("old").unwrap().is_none());
+    assert!(store.registered_mcp_client("new").unwrap().is_some());
 }
 
 #[tokio::test]
 async fn keeps_a_client_once_connected_and_forgets_a_lapsed_connection() {
-    use group_host::assistants::Connected;
+    use group_host::mcp::McpGrant;
     let h = start(&[], false).await;
     let [alice, ..] = people(&h).await;
     let group = start_group(
@@ -927,7 +948,7 @@ async fn keeps_a_client_once_connected_and_forgets_a_lapsed_connection() {
     let now = 100 * day;
     let back = vec![BACK.to_string()];
     let connect = |id: &str, client: &str, at: i64| {
-        let c = Connected {
+        let c = McpGrant {
             id: id.into(),
             group: group.clone(),
             member: alice.did.clone(),
@@ -937,21 +958,21 @@ async fn keeps_a_client_once_connected_and_forgets_a_lapsed_connection() {
             used_at: at,
         };
         store
-            .connect_assistant(&c, &format!("a-{id}"), &format!("r-{id}"), at)
+            .connect_mcp_client(&c, &format!("a-{id}"), &format!("r-{id}"), at)
             .unwrap();
     };
     // Connected, then disconnected: kept, to connect again.
     store
-        .register_assistant("kept", "Kept", &back, now - 2 * day)
+        .register_mcp_client("kept", "Kept", &back, now - 2 * day)
         .unwrap();
     connect("one", "kept", now - 2 * day);
     store
-        .disconnect_assistant(&group, &alice.did, "kept")
+        .disconnect_mcp_client(&group, &alice.did, "kept")
         .unwrap();
     // A connection whose refresh token lapsed long ago.
     connect("two", "lapsed", now - 40 * day);
-    store.register_assistant("new", "New", &back, now).unwrap();
-    assert!(store.registered_assistant("kept").unwrap().is_some());
-    let lapsed = store.disconnect_assistant(&group, &alice.did, "lapsed");
+    store.register_mcp_client("new", "New", &back, now).unwrap();
+    assert!(store.registered_mcp_client("kept").unwrap().is_some());
+    let lapsed = store.disconnect_mcp_client(&group, &alice.did, "lapsed");
     assert_eq!(lapsed.unwrap(), 0);
 }

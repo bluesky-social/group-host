@@ -183,15 +183,15 @@ export const didKey = () => {
   return `did:key:z${out}`
 }
 
-/// An assistant on this machine, as an MCP client signs in: it finds the
+/// An MCP client on this machine, as an AI app signs in: it finds the
 /// host's authorization server from the MCP server's metadata, registers
 /// itself, and sends the browser to say yes, with PKCE; then calls tools
 /// with the Bearer token it is given.
-export class Assistant {
+export class McpClient {
   async listen() {
     this.back = new Promise((done) => {
       this.server = createServer((req, res) => {
-        res.end('back at the assistant')
+        res.end('back at the app')
         done(`http://127.0.0.1:${this.server.address().port}${req.url}`)
       })
     })

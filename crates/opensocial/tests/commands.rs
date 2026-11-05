@@ -80,21 +80,27 @@ async fn fails(env: &Env, args: &[&str]) -> String {
     format!("{:#}", opensocial(env, args).await.unwrap_err())
 }
 
+/// What a command printed, as JSON.
+fn said(printed: &str) -> Value {
+    serde_json::from_str(printed).unwrap_or_else(|e| panic!("{printed}: {e}"))
+}
+
 #[tokio::test]
-async fn starts_inspects_and_runs_a_group() {
+async fn starts_shows_and_runs_a_group() {
     let h = host().await;
     let alice = env(&h, 0);
     let bob = &net().accounts[1].handle;
     let made = ok(
         &alice,
         &[
-            "create-group",
+            "group",
+            "create",
             "riders.groups.test",
-            "--name",
+            "--display-name",
             "Riders",
             "--description",
             "Saturdays.",
-            "--join",
+            "--join-policy",
             "invite",
         ],
     )
@@ -105,66 +111,232 @@ async fn starts_inspects_and_runs_a_group() {
     );
     let did = made.split_whitespace().nth(2).unwrap().to_string();
 
-    let seen = ok(&alice, &["inspect", "riders.groups.test"]).await;
+    let seen = ok(&alice, &["group", "show", "riders.groups.test"]).await;
     assert!(seen.contains("name     Riders\n"), "{seen}");
     assert!(seen.contains("joining  invite\n"), "{seen}");
     assert!(seen.contains("admin        Admin\n"), "{seen}");
     assert!(seen.contains(&net().accounts[0].handle), "{seen}");
     assert!(seen.contains("fyi.opensocial.members/self"), "{seen}");
 
-    let said = ok(
+    // An invite, written as the group in Bob's inbox, named by his handle;
+    // listed; taken back.
+    let sent = ok(
         &alice,
-        &[
-            "membership",
-            "invite",
-            &did,
-            bob,
-            "--message",
-            "Ride with us",
-        ],
+        &["invite", "send", &did, bob, "--message", "Ride with us"],
     )
     .await;
-    assert_eq!(said, format!("{bob}: invited\n"));
+    let uri = said(&sent)["uri"].as_str().unwrap().to_string();
+    let bob_did = &net().accounts[1].did;
+    assert!(
+        uri.starts_with(&format!(
+            "at://{bob_did}/space/fyi.opensocial.invites/self/{did}/fyi.opensocial.invite/"
+        )),
+        "{uri}"
+    );
+    let listed = said(&ok(&alice, &["invite", "list", &did, "--limit", "5"]).await);
+    assert_eq!(listed["invites"][0]["uri"], uri.as_str(), "{listed}");
+    ok(&alice, &["invite", "send", &did, bob, "--undo"]).await;
+    let listed = said(&ok(&alice, &["invite", "list", &did]).await);
+    assert_eq!(listed["invites"], json!([]), "{listed}");
+    // None waiting, there is none to take back.
+    let said_so = fails(&alice, &["invite", "send", &did, bob, "--undo"]).await;
+    assert!(said_so.contains("InviteNotFound"), "{said_so}");
+
     let me = net().accounts[0].did.clone();
-    let said = ok(
-        &alice,
-        &["membership", "assign", &did, &me, "admin,member,"],
-    )
-    .await;
-    assert_eq!(said, format!("{me}: admin, member\n"));
+    let assigned = ok(&alice, &["member", "assign", &did, &me, "admin,member,"]).await;
+    let membership = format!("{did}/fyi.opensocial.membership/{me}");
+    assert!(
+        said(&assigned)["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with(&membership)
+    );
+    // Who is in it, found by part of a DID.
+    let listed = said(&ok(&alice, &["member", "list", &did, "--q", &me[8..]]).await);
+    assert_eq!(
+        listed["members"][0]["actor"]["did"],
+        me.as_str(),
+        "{listed}"
+    );
     // Bob has not asked to join, so is given no roles; and the last who
     // runs the group is not put out: the host says why.
-    let said = fails(&alice, &["membership", "assign", &did, bob, "member"]).await;
+    let said_so = fails(&alice, &["member", "assign", &did, bob, "member"]).await;
     assert!(
-        said.starts_with("com.atproto.space.putRecord: 400 Bad Request JoinRequestNotFound"),
-        "{said}"
+        said_so.starts_with("com.atproto.space.putRecord: 400 Bad Request JoinRequestNotFound"),
+        "{said_so}"
     );
-    let said = fails(&alice, &["membership", "eject", &did, &me]).await;
+    let said_so = fails(&alice, &["member", "eject", &did, &me]).await;
     assert!(
-        said.starts_with("com.atproto.space.deleteRecord: 400 Bad Request LastConfigurer"),
-        "{said}"
+        said_so.starts_with("com.atproto.space.deleteRecord: 400 Bad Request LastConfigurer"),
+        "{said_so}"
     );
-    // Once he asks, he may be let in, and put out.
-    h.host
-        .store
-        .ask(&did, &net().accounts[1].did, None, 0)
-        .unwrap();
-    let said = ok(&alice, &["membership", "assign", &did, bob, "member"]).await;
-    assert_eq!(said, format!("{bob}: member\n"));
-    let said = ok(&alice, &["membership", "eject", &did, bob]).await;
-    assert_eq!(said, format!("{bob}: put out\n"));
+    // Once he asks, he is listed, may be let in, and put out.
+    h.host.store.ask(&did, bob_did, None, 0).unwrap();
+    let waiting = said(&ok(&alice, &["join", "list", &did]).await);
+    assert_eq!(
+        waiting["requests"][0]["member"],
+        bob_did.as_str(),
+        "{waiting}"
+    );
+    ok(&alice, &["member", "assign", &did, bob, "member"]).await;
+    ok(&alice, &["member", "eject", &did, bob]).await;
     // Out, he does not act as the group.
-    let said = fails(&env(&h, 1), &["membership", "eject", &did, &me]).await;
+    let said_so = fails(&env(&h, 1), &["member", "eject", &did, &me]).await;
     assert!(
-        said.starts_with("fyi.opensocial.getGroupAuth: 403"),
-        "{said}"
+        said_so.starts_with("fyi.opensocial.getGroupAuth: 403"),
+        "{said_so}"
     );
+    // A request turned down is no request at all.
+    h.host.store.ask(&did, bob_did, None, 0).unwrap();
+    ok(&alice, &["join", "deny", &did, bob]).await;
+    let said_so = fails(&alice, &["join", "deny", &did, bob]).await;
+    assert!(said_so.contains("JoinRequestNotFound"), "{said_so}");
+}
+
+#[tokio::test]
+async fn writes_the_groups_rules_roles_and_profile() {
+    let h = host().await;
+    let alice = env(&h, 0);
+    ok(&alice, &["group", "create", "riders.groups.test"]).await;
+    let group = "riders.groups.test";
+    let did = h.host.store.account(group).unwrap().unwrap().did;
+    let meta = group_host::group::meta_space(&did);
+    let members = group_host::group::members_space(&did);
+    let kept = |space: &str, kind: &str, rkey: &str| {
+        let collection = format!("fyi.opensocial.{kind}");
+        h.host.group_record(&did, space, &collection, rkey).unwrap()
+    };
+
+    // A rule, new at a key of the clock's; changed at it; deleted.
+    let made = ok(
+        &alice,
+        &["rule", "set", group, "--title", "Be kind", "--text", ""],
+    )
+    .await;
+    let uri = said(&made)["uri"].as_str().unwrap().to_string();
+    let rkey = uri.rsplit('/').next().unwrap().to_string();
+    assert_eq!(kept(&meta, "rule", &rkey).unwrap()["title"], "Be kind");
+    let again = [
+        "rule",
+        "set",
+        group,
+        "--rule",
+        &rkey,
+        "--title",
+        "Be very kind",
+        "--text",
+        "Always.",
+        "--order",
+        "1",
+    ];
+    ok(&alice, &again).await;
+    let rule = kept(&meta, "rule", &rkey).unwrap();
+    assert_eq!(
+        (rule["title"].clone(), rule["order"].clone()),
+        (json!("Be very kind"), json!(1))
+    );
+    ok(&alice, &["rule", "delete", group, &rkey]).await;
+    assert_eq!(kept(&meta, "rule", &rkey), None);
+
+    // A role, a bot's; what it may do; and back.
+    let role = [
+        "role",
+        "set",
+        group,
+        "leader",
+        "--display-name",
+        "Ride leader",
+        "--bot",
+        "--no-default",
+    ];
+    ok(&alice, &role).await;
+    let leader = kept(&members, "role", "leader").unwrap();
+    assert_eq!(
+        (leader["bot"].clone(), leader["default"].clone()),
+        (json!(true), json!(false))
+    );
+    let grants = || kept(&members, "permissions", "self").unwrap()["grants"].clone();
+    let before = grants();
+    ok(
+        &alice,
+        &["role", "grant", group, "leader", "--assignable", ""],
+    )
+    .await;
+    let leaders: Vec<Value> = grants()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|g| g["role"] == "leader")
+        .cloned()
+        .collect();
+    assert_eq!(
+        leaders,
+        [json!({"role": "leader", "scopes": [], "assignable": []})]
+    );
+    let said_so = fails(&alice, &["role", "grant", group, "leader", "--undo"]).await;
+    assert!(said_so.contains("NotAssignable"), "{said_so}");
+    assert_ne!(grants(), before);
+    let said_so = fails(&alice, &["role", "delete", group, "leader"]).await;
+    assert!(said_so.contains("RoleInUse"), "{said_so}");
+
+    // The profile, replaced whole.
+    let profile = [
+        "profile",
+        "set",
+        group,
+        "--display-name",
+        "Riders United",
+        "--join-policy",
+        "open",
+        "--topics",
+        r#"[{"topic": "cycling"}]"#,
+    ];
+    ok(&alice, &profile).await;
+    let written = kept(&meta, "profile", "self").unwrap();
+    assert_eq!(written["displayName"], "Riders United");
+    assert_eq!(written["topics"], json!([{"topic": "cycling"}]));
+    assert_eq!(written.get("description"), None);
+
+    // The queue; a label on an account, and taken back, in its history.
+    let queue = said(&ok(&alice, &["mod", "list", group, "--status", "open"]).await);
+    assert_eq!(queue["subjects"], json!([]), "{queue}");
+    let bob = &net().accounts[1].did;
+    let label = said(&ok(&alice, &["mod", "label", group, bob, "spam"]).await);
+    assert!(
+        label["uri"]
+            .as_str()
+            .unwrap()
+            .contains("/fyi.opensocial.label/"),
+        "{label}"
+    );
+    ok(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
+    let history = said(&ok(&alice, &["mod", "history", group, bob]).await);
+    let deleted: Vec<&Value> = history["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| &e["event"]["deleted"])
+        .collect();
+    assert_eq!(deleted, [false, true], "{history}");
+    let resolve = [
+        "mod",
+        "resolve",
+        group,
+        bob,
+        "--status",
+        "resolved",
+        "--note",
+        "Spoke to them",
+    ];
+    let resolved = said(&ok(&alice, &resolve).await);
+    assert_eq!(resolved["status"], "resolved", "{resolved}");
+    assert_eq!(resolved["subject"]["did"], bob.as_str(), "{resolved}");
 }
 
 #[tokio::test]
 async fn seeds_a_group_to_try_things_on() {
     let h = host().await;
-    let said = ok(&env(&h, 0), &["seed", "trial.groups.test"]).await;
+    let said = ok(&env(&h, 0), &["group", "seed", "trial.groups.test"]).await;
     let bob = &net().accounts[1].handle;
     assert!(said.contains("rule       Be kind\n"), "{said}");
     assert!(said.contains("role       moderator\n"), "{said}");
@@ -183,7 +355,7 @@ async fn seeds_a_group_to_try_things_on() {
     assert_eq!(titles, ["Be kind", "Stay on topic"]);
     let h2 = host().await;
     let alice = env(&h2, 0);
-    ok(&alice, &["create-group", "quiet.groups.test"]).await;
+    ok(&alice, &["group", "create", "quiet.groups.test"]).await;
     let group = h2
         .host
         .store
@@ -191,10 +363,10 @@ async fn seeds_a_group_to_try_things_on() {
         .unwrap()
         .unwrap()
         .did;
-    let seen = ok(&alice, &["inspect", &group]).await;
+    let seen = ok(&alice, &["group", "show", &group]).await;
     assert!(seen.contains("name     quiet\n"), "{seen}");
     // Someone outside it sees no members, and is told so.
-    let seen = ok(&env(&h2, 1), &["inspect", &group]).await;
+    let seen = ok(&env(&h2, 1), &["group", "show", &group]).await;
     assert!(seen.contains("members\n  none\n"), "{seen}");
 }
 
@@ -202,16 +374,17 @@ async fn seeds_a_group_to_try_things_on() {
 async fn moves_a_group_to_another_host() {
     let (a, b) = (host().await, host().await);
     let alice = env(&a, 0);
-    ok(&alice, &["create-group", "riders.groups.test"]).await;
+    ok(&alice, &["group", "create", "riders.groups.test"]).await;
     // Only one who runs it may move it.
     let bob = env(&a, 1);
     let to = format!("{}/", b.url);
-    let said = fails(&bob, &["migrate", "riders.groups.test", "--to", &to]).await;
+    let said = fails(&bob, &["group", "move", "riders.groups.test", "--to", &to]).await;
     assert!(said.contains("fyi.opensocial.migratePrepare"), "{said}");
     let said = ok(
         &alice,
         &[
-            "migrate",
+            "group",
+            "move",
             "riders.groups.test",
             "--to",
             &format!("{}/", b.url),
@@ -229,19 +402,24 @@ async fn moves_a_group_to_another_host() {
         .did;
     assert!(b.host.deactivation(&did).unwrap().is_none());
     // Run again, it picks up at switching it on, which is done.
-    let again = ["migrate", "riders.groups.test", "--to", &b.url];
+    let again = ["group", "move", "riders.groups.test", "--to", &b.url];
     let said = ok(&alice, &again).await;
     assert_eq!(said.lines().nth(3), Some("handed over already"), "{said}");
     assert!(said.ends_with("switched on\n"), "{said}");
     // Towards a host that never took it in, it says it is not on yet.
     let c = host().await;
-    let said = fails(&alice, &["migrate", "riders.groups.test", "--to", &c.url]).await;
+    let said = fails(
+        &alice,
+        &["group", "move", "riders.groups.test", "--to", &c.url],
+    )
+    .await;
     assert!(said.contains("not switched on yet"), "{said}");
     // Named by its DID, to a host that is not there: not on yet.
     let said = fails(
         &alice,
         &[
-            "migrate",
+            "group",
+            "move",
             &did,
             "--to",
             "http://127.0.0.1:1",
@@ -351,26 +529,32 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
     let plain = env(&h, 0);
     let mut mover = plain.clone();
     mover.import_password = Some(password.into());
-    let said = fails(&plain, &["import", &handle]).await;
+    let said = fails(&plain, &["account", "import", &handle]).await;
     assert!(said.contains("set OPENSOCIAL_IMPORT_PASSWORD"), "{said}");
-    let said = fails(&mover, &["import", &handle, "--address", "-"]).await;
+    let said = fails(&mover, &["account", "import", &handle, "--address", "-"]).await;
     assert!(said.contains("can't move here"), "{said}");
-    let said = fails(&mover, &["import", &handle, "--code", "nothing-sent"]).await;
+    let said = fails(
+        &mover,
+        &["account", "import", &handle, "--code", "nothing-sent"],
+    )
+    .await;
     assert!(said.contains("no move of"), "{said}");
     // Its own label taken here, it is brought under another, and finished
     // with the code alone.
-    ok(&plain, &["create-group", &format!("{name}.groups.test")]).await;
-    let said = fails(&mover, &["import", &handle]).await;
+    ok(&plain, &["group", "create", &format!("{name}.groups.test")]).await;
+    let said = fails(&mover, &["account", "import", &handle]).await;
     assert!(said.contains("can't move here"), "{said}");
     let club = format!("{name}-club");
-    let said = ok(&mover, &["import", &handle, "--address", &club]).await;
+    let said = ok(&mover, &["account", "import", &handle, "--address", &club]).await;
     assert!(said.contains(&format!("as   {club}.groups.test")), "{said}");
     assert!(
         said.contains("brought   3 spaces: 2 records, 1 files"),
         "{said}"
     );
     assert!(
-        said.ends_with(&format!("opensocial import {handle} --code <code>\n")),
+        said.ends_with(&format!(
+            "opensocial account import {handle} --code <code>\n"
+        )),
         "{said}"
     );
 
@@ -380,7 +564,7 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
         .unwrap();
     let code: Value = mail.json().await.unwrap();
     let code = code["code"].as_str().unwrap();
-    let said = ok(&mover, &["import", &handle, "--code", code]).await;
+    let said = ok(&mover, &["account", "import", &handle, "--code", code]).await;
     assert_eq!(
         said,
         format!("moved: {club}.groups.test is a group here, run by you\n")
@@ -411,37 +595,45 @@ async fn says_what_is_wrong_with_what_it_is_asked() {
     let h = host().await;
     let alice = env(&h, 0);
     for args in [
-        &["create-group"][..],
-        &["inspect", "a", "b"],
-        &["migrate", "riders.groups.test"],
-        &["membership"],
-        &["membership", "assign", "g"],
-        &["membership", "frob", "g", "m"],
-        &["membership", "eject", "g", "m", "extra"],
+        &["group", "create"][..],
+        &["group", "show", "a", "b"],
+        &["group", "move", "riders.groups.test"],
+        &["member", "assign", "g"],
+        &["member", "eject", "g", "m", "extra"],
+        &["member"],
     ] {
-        assert!(fails(&alice, args).await.starts_with("usage:"), "{args:?}");
+        let said = fails(&alice, args).await;
+        assert!(
+            said.starts_with("usage:") || said.starts_with("no command member\n"),
+            "{args:?}: {said}"
+        );
     }
     assert!(
-        fails(&alice, &["create-group", "x", "--colour", "red"])
+        fails(&alice, &["group", "create", "x", "--colour", "red"])
             .await
             .starts_with("no option --colour")
     );
     assert!(
         fails(
             &alice,
-            &["membership", "assign", "g", "m", "r", "--reason", "x"]
+            &["member", "assign", "g", "m", "r", "--reason", "x"]
         )
         .await
         .starts_with("no option --reason")
     );
     assert_eq!(
-        fails(&alice, &["create-group", "x", "--name"]).await,
-        "--name wants a value"
+        fails(&alice, &["group", "create", "x", "--display-name"]).await,
+        "--display-name wants a value"
     );
     assert!(
         fails(&alice, &["frob"])
             .await
-            .starts_with("no command frob")
+            .starts_with("no command frob\n")
+    );
+    assert!(
+        fails(&alice, &["member", "frob", "g", "m"])
+            .await
+            .starts_with("no command member frob\n")
     );
     for args in [&[][..], &["help"], &["--help"], &["-h"]] {
         assert_eq!(ok(&alice, args).await, opensocial::USAGE);
@@ -450,29 +642,29 @@ async fn says_what_is_wrong_with_what_it_is_asked() {
     let mut nobody = alice.clone();
     nobody.password = None;
     assert!(
-        fails(&nobody, &["inspect", "x"])
+        fails(&nobody, &["group", "show", "x"])
             .await
             .contains("set OPENSOCIAL_AS and OPENSOCIAL_PASSWORD")
     );
     let mut wrong = alice.clone();
     wrong.password = Some("not it".into());
     assert!(
-        fails(&wrong, &["inspect", "x"])
+        fails(&wrong, &["group", "show", "x"])
             .await
             .starts_with("signing in as ")
     );
     let mut unreachable = alice.clone();
     unreachable.pds = "http://127.0.0.1:1".into();
     assert!(
-        fails(&unreachable, &["inspect", "x"])
+        fails(&unreachable, &["group", "show", "x"])
             .await
             .starts_with("reaching http://127.0.0.1:1")
     );
     let mut gone = alice.clone();
     gone.host = "http://127.0.0.1:1".into();
     for args in [
-        &["inspect", "x.test"][..],
-        &["create-group", "x.groups.test"],
+        &["group", "show", "x.test"][..],
+        &["group", "create", "x.groups.test"],
     ] {
         let said = fails(&gone, args).await;
         assert!(said.starts_with("reaching http://127.0.0.1:1"), "{said}");

@@ -90,7 +90,7 @@ roles it may assign. Each of the host's twelve actions, such as `invite`,
 `eject`, `space.create` or `group.configure`, is answered by one scope.
 Roles compose by union: a person may do whatever any of their roles
 grants, with no deny, precedence or hierarchy. The same scopes bound an
-app or assistant a member signs in ([signing in](signing-in.md)).
+app or MCP client a member signs in ([signing in](signing-in.md)).
 
 As made, `admin` holds every action, may write any public-repo collection
 as the group, and may assign `admin` and `member`. `member` holds
@@ -197,8 +197,9 @@ Details:
   with a token `getGroupAuth` gives for `meta`, and set visibility by
   making `meta` public or not through `updateSpace`, members granted
   `read` there either way.
-- An assistant connected over MCP changes them with the `putProfile`,
-  `putRule` and `deleteRule` tools, the same writes made as its member
+- An MCP client changes them with the `profile_set`, `rule_set` and
+  `rule_delete` tools, and a person with the `opensocial` commands of
+  the same names, the same writes made as its member
   ([MCP](../reference/mcp.md)).
 
 ## More spaces

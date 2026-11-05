@@ -399,8 +399,8 @@ impl Store {
     /// no more once they are out of it.
     pub fn revoke_member_grants(&self, group: &str, member: &str) -> Result<usize> {
         let conn = self.conn();
-        // Their assistants, too, act as them no more.
-        let sql = "DELETE FROM assistant_grant WHERE grp = ?1 AND member = ?2";
+        // Their MCP clients, too, act as them no more.
+        let sql = "DELETE FROM mcp_grant WHERE grp = ?1 AND member = ?2";
         conn.execute(sql, [group, member])?;
         Ok(conn.execute(REVOKE_MEMBER, [group, member])?)
     }

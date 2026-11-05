@@ -46,8 +46,11 @@ const base = process.argv[2] ?? (() => {
 //   `actors`.
 // - getGroup's whole roster, which outgrows one answer: it counts its
 //   members, and listMembers gives them a page at a time.
+// - getAuthorization's `assistant`, named `mcp` as the host names its MCP
+//   server, while the console here was the only client reading it.
 const retracted = new Set([
   'fyi.opensocial.getGroup#main.output.members',
+  'fyi.opensocial.getAuthorization#main.output.assistant',
   ...['displayName', 'description', 'avatar', 'pronouns', 'links', 'bot'].map((f) => `fyi.opensocial.defs#actorView.${f}`),
   'fyi.opensocial.defs#actorLink',
   'fyi.opensocial.listSpaceRecords#main.output.rev',

@@ -1,21 +1,22 @@
-//! Assistants: an AI app, as an MCP client, acting as a member in one of
-//! their groups, with what the member's roles there allow and nothing
-//! more.
+//! The MCP server: an MCP client, as an AI app is, acting as a member in
+//! one of their groups, with what the member's roles there allow and
+//! nothing more. Its tools are `group_host_mcp`'s, each carried out here
+//! as the member.
 //!
-//! The host is the assistant's MCP server, at `/mcp`, and the OAuth server
+//! The host is the client's MCP server, at `/mcp`, and the OAuth server
 //! it signs in at, as MCP's authorization spec has it: OAuth 2.1 with PKCE,
 //! Bearer tokens for that one resource, the server found from the
 //! resource's metadata (RFC 9728) and named by its own (RFC 8414, at the
-//! issuer `<PUBLIC_URL>/mcp`). An assistant names itself by a client ID
+//! issuer `<PUBLIC_URL>/mcp`). An MCP client names itself by a client ID
 //! metadata document, its client ID the URL of one, or registers itself
 //! (RFC 7591). This is not the host's atproto OAuth server, where apps
 //! sign in *as* a group, and their tokens are not each other's.
 //!
 //! Where the member says yes is the console's approval page, signed in as
-//! themselves: the assistant's request is one more the page reads with
+//! themselves: the MCP client's request is one more the page reads with
 //! `getAuthorization`, and the member picks the group. Each tool call is
 //! then the member's own, in that group, as the console's are: the host
-//! asks itself, as them. Put out of the group, they and their assistants
+//! asks itself, as them. Put out of the group, they and their MCP clients
 //! can do nothing there, and its grants end.
 
 use crate::Host;
@@ -37,16 +38,16 @@ use axum::extract::{Query, State};
 use axum::http::{HeaderMap, Request, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::{Form, Json};
-use group_host_mcp::{Kind, Tool};
+use group_host_mcp::{Plan, Tool};
 use rusqlite::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use tower::ServiceExt;
 
-/// What a request an assistant made is named by, on the approval page.
-pub const PREFIX: &str = "urn:group-host:assistant:";
-/// How long an assistant's request waits to be approved, and its code to
+/// What a request an MCP client made is named by, on the approval page.
+pub const PREFIX: &str = "urn:group-host:mcp:";
+/// How long an MCP client's request waits to be approved, and its code to
 /// be exchanged.
 const REQUEST_FOR: i64 = 10 * 60_000;
 /// How long its access token lasts, and its refresh token unused.
@@ -58,10 +59,10 @@ const UNUSED_FOR: i64 = 24 * 60 * 60_000;
 /// The tools, made once.
 static TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(group_host_mcp::tools);
 
-/// An assistant's request to act as a member: who it is, where to send
+/// An MCP client's request to act as a member: who it is, where to send
 /// the browser back to, and once approved, the group and member.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Asked {
+pub struct McpRequest {
     pub id: String,
     pub client_id: String,
     pub client_name: String,
@@ -73,9 +74,9 @@ pub struct Asked {
     pub member: Option<String>,
 }
 
-/// An assistant connected: the member it acts as, in the group, and when.
+/// An MCP client connected: the member it acts as, in the group, and when.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Connected {
+pub struct McpGrant {
     pub id: String,
     pub group: String,
     pub member: String,
@@ -85,8 +86,8 @@ pub struct Connected {
     pub used_at: i64,
 }
 
-fn asked(r: &Row) -> rusqlite::Result<Asked> {
-    Ok(Asked {
+fn asked(r: &Row) -> rusqlite::Result<McpRequest> {
+    Ok(McpRequest {
         id: r.get(0)?,
         client_id: r.get(1)?,
         client_name: r.get(2)?,
@@ -99,8 +100,8 @@ fn asked(r: &Row) -> rusqlite::Result<Asked> {
     })
 }
 
-fn connected(r: &Row) -> rusqlite::Result<Connected> {
-    Ok(Connected {
+fn connected(r: &Row) -> rusqlite::Result<McpGrant> {
+    Ok(McpGrant {
         id: r.get(0)?,
         group: r.get(1)?,
         member: r.get(2)?,
@@ -111,14 +112,14 @@ fn connected(r: &Row) -> rusqlite::Result<Connected> {
     })
 }
 
-const ASKED: &str = "SELECT id, client_id, client_name, redirect_uri, state, code_challenge, expires_at, grp, member FROM assistant_request";
+const ASKED: &str = "SELECT id, client_id, client_name, redirect_uri, state, code_challenge, expires_at, grp, member FROM mcp_request";
 const CONNECTED: &str =
-    "SELECT id, grp, member, client_id, client_name, created_at, used_at FROM assistant_grant";
+    "SELECT id, grp, member, client_id, client_name, created_at, used_at FROM mcp_grant";
 
 impl Store {
-    /// Keeps a client an assistant registered: its name, and where it
+    /// Keeps a client that registered itself: its name, and where it
     /// may be sent back to.
-    pub fn register_assistant(
+    pub fn register_mcp_client(
         &self,
         id: &str,
         name: &str,
@@ -128,11 +129,12 @@ impl Store {
         // Registering is anyone's: one never connected goes after a day.
         // One a member connected stays, to connect again; its connections
         // go once their refresh tokens lapse.
-        let stale = "DELETE FROM assistant_client WHERE created_at < ?1 AND connected = 0";
+        let stale = "DELETE FROM mcp_client WHERE created_at < ?1 AND connected = 0";
         self.conn().execute(stale, [now - UNUSED_FOR])?;
-        let lapsed = "DELETE FROM assistant_grant WHERE expires_at <= ?1";
+        let lapsed = "DELETE FROM mcp_grant WHERE expires_at <= ?1";
         self.conn().execute(lapsed, [now])?;
-        let sql = "INSERT INTO assistant_client (id, name, redirect_uris, created_at) VALUES (?1, ?2, ?3, ?4)";
+        let sql =
+            "INSERT INTO mcp_client (id, name, redirect_uris, created_at) VALUES (?1, ?2, ?3, ?4)";
         let redirects = serde_json::to_string(redirects)?;
         self.conn()
             .execute(sql, params![id, name, redirects, now])?;
@@ -140,8 +142,8 @@ impl Store {
     }
 
     /// A registered client's name and redirect URIs.
-    pub fn registered_assistant(&self, id: &str) -> Result<Option<(String, Vec<String>)>> {
-        let sql = "SELECT name, redirect_uris FROM assistant_client WHERE id = ?1";
+    pub fn registered_mcp_client(&self, id: &str) -> Result<Option<(String, Vec<String>)>> {
+        let sql = "SELECT name, redirect_uris FROM mcp_client WHERE id = ?1";
         let found = self.conn().query_row(sql, [id], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
         });
@@ -149,9 +151,9 @@ impl Store {
         Ok(found.map(|(name, uris)| (name, serde_json::from_str(&uris).unwrap_or_default())))
     }
 
-    /// Keeps an assistant's request, until it is answered or lapses.
-    pub fn ask_for_assistant(&self, a: &Asked) -> Result<()> {
-        let sql = "INSERT INTO assistant_request (id, client_id, client_name, redirect_uri, state, code_challenge, expires_at)
+    /// Keeps an MCP client's request, until it is answered or lapses.
+    pub fn keep_mcp_request(&self, a: &McpRequest) -> Result<()> {
+        let sql = "INSERT INTO mcp_request (id, client_id, client_name, redirect_uri, state, code_challenge, expires_at)
                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
         let row = params![
             a.id,
@@ -166,57 +168,57 @@ impl Store {
         Ok(())
     }
 
-    /// An assistant's request, unanswered and unlapsed at `now`.
-    pub fn assistant_request(&self, id: &str, now: i64) -> Result<Option<Asked>> {
+    /// An MCP client's request, unanswered and unlapsed at `now`.
+    pub fn mcp_request(&self, id: &str, now: i64) -> Result<Option<McpRequest>> {
         let sql = format!("{ASKED} WHERE id = ?1 AND expires_at > ?2 AND grp IS NULL");
         let found = self.conn().query_row(&sql, params![id, now], asked);
         Ok(found.optional()?)
     }
 
-    /// Approves an assistant's request for `member` in `group`, its code
+    /// Approves an MCP client's request for `member` in `group`, its code
     /// kept by its hash: the request, if it was there to approve.
-    pub fn approve_assistant(
+    pub fn approve_mcp_request(
         &self,
         id: &str,
         group: &str,
         member: &str,
         code: &str,
         now: i64,
-    ) -> Result<Option<Asked>> {
-        let sql = "UPDATE assistant_request SET grp = ?2, member = ?3, code_hash = ?4
+    ) -> Result<Option<McpRequest>> {
+        let sql = "UPDATE mcp_request SET grp = ?2, member = ?3, code_hash = ?4
                    WHERE id = ?1 AND grp IS NULL AND expires_at > ?5
                    RETURNING id, client_id, client_name, redirect_uri, state, code_challenge, expires_at, grp, member";
         let row = params![id, group, member, code, now];
         Ok(self.conn().query_row(sql, row, asked).optional()?)
     }
 
-    /// An assistant's request, gone: whether it was there.
-    pub fn drop_assistant_request(&self, id: &str) -> Result<bool> {
-        let sql = "DELETE FROM assistant_request WHERE id = ?1";
+    /// An MCP client's request, gone: whether it was there.
+    pub fn drop_mcp_request(&self, id: &str) -> Result<bool> {
+        let sql = "DELETE FROM mcp_request WHERE id = ?1";
         Ok(self.conn().execute(sql, [id])? == 1)
     }
 
     /// The approved request whose code hashes to `code`, once: it is gone
     /// as it is taken.
-    pub fn redeem_assistant_code(&self, code: &str, now: i64) -> Result<Option<Asked>> {
+    pub fn redeem_mcp_code(&self, code: &str, now: i64) -> Result<Option<McpRequest>> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let sql = format!("{ASKED} WHERE code_hash = ?1 AND expires_at > ?2 AND grp IS NOT NULL");
         let found = tx.query_row(&sql, params![code, now], asked).optional()?;
-        tx.execute("DELETE FROM assistant_request WHERE code_hash = ?1", [code])?;
+        tx.execute("DELETE FROM mcp_request WHERE code_hash = ?1", [code])?;
         tx.commit()?;
         Ok(found)
     }
 
-    /// Keeps an assistant connected, its tokens by their hashes.
-    pub fn connect_assistant(
+    /// Keeps an MCP client connected, its tokens by their hashes.
+    pub fn connect_mcp_client(
         &self,
-        c: &Connected,
+        c: &McpGrant,
         access: &str,
         refresh: &str,
         now: i64,
     ) -> Result<()> {
-        let sql = "INSERT INTO assistant_grant (id, grp, member, client_id, client_name, access_hash, access_expires, refresh_hash, expires_at, created_at, used_at)
+        let sql = "INSERT INTO mcp_grant (id, grp, member, client_id, client_name, access_hash, access_expires, refresh_hash, expires_at, created_at, used_at)
                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)";
         let row = params![
             c.id,
@@ -231,21 +233,21 @@ impl Store {
             now
         ];
         self.conn().execute(sql, row)?;
-        let connected = "UPDATE assistant_client SET connected = 1 WHERE id = ?1";
+        let connected = "UPDATE mcp_client SET connected = 1 WHERE id = ?1";
         self.conn().execute(connected, [&c.client_id])?;
         Ok(())
     }
 
     /// The connection whose access token hashes to `access`, unlapsed,
     /// marked as used `now`.
-    pub fn assistant_by_access(&self, access: &str, now: i64) -> Result<Option<Connected>> {
+    pub fn mcp_grant_by_access(&self, access: &str, now: i64) -> Result<Option<McpGrant>> {
         let sql = format!("{CONNECTED} WHERE access_hash = ?1 AND access_expires > ?2");
         let found = self
             .conn()
             .query_row(&sql, params![access, now], connected)
             .optional()?;
         if let Some(c) = &found {
-            let sql = "UPDATE assistant_grant SET used_at = ?2 WHERE id = ?1";
+            let sql = "UPDATE mcp_grant SET used_at = ?2 WHERE id = ?1";
             self.conn().execute(sql, params![c.id, now])?;
         }
         Ok(found)
@@ -254,15 +256,15 @@ impl Store {
     /// `client`'s connection whose refresh token hashes to `refresh`, its
     /// tokens changed to `access` and `next`: none if there is none, or it
     /// lapsed.
-    pub fn refresh_assistant(
+    pub fn refresh_mcp_grant(
         &self,
         client: &str,
         refresh: &str,
         access: &str,
         next: &str,
         now: i64,
-    ) -> Result<Option<Connected>> {
-        let sql = "UPDATE assistant_grant SET access_hash = ?3, access_expires = ?4, refresh_hash = ?5, expires_at = ?6
+    ) -> Result<Option<McpGrant>> {
+        let sql = "UPDATE mcp_grant SET access_hash = ?3, access_expires = ?4, refresh_hash = ?5, expires_at = ?6
                    WHERE refresh_hash = ?1 AND client_id = ?2 AND expires_at > ?7";
         let row = params![
             refresh,
@@ -280,9 +282,9 @@ impl Store {
         Ok(self.conn().query_row(&sql, [next], connected).optional()?)
     }
 
-    /// The assistants `member` connected to `group`, the most lately used
+    /// The MCP clients `member` connected to `group`, the most lately used
     /// first.
-    pub fn assistants_of(&self, group: &str, member: &str, now: i64) -> Result<Vec<Connected>> {
+    pub fn mcp_clients_of(&self, group: &str, member: &str, now: i64) -> Result<Vec<McpGrant>> {
         let sql = format!(
             "{CONNECTED} WHERE grp = ?1 AND member = ?2 AND expires_at > ?3 ORDER BY used_at DESC, id"
         );
@@ -293,8 +295,8 @@ impl Store {
     }
 
     /// `member`'s connections of `client` in `group`, ended: how many.
-    pub fn disconnect_assistant(&self, group: &str, member: &str, client: &str) -> Result<usize> {
-        let sql = "DELETE FROM assistant_grant WHERE grp = ?1 AND member = ?2 AND client_id = ?3";
+    pub fn disconnect_mcp_client(&self, group: &str, member: &str, client: &str) -> Result<usize> {
+        let sql = "DELETE FROM mcp_grant WHERE grp = ?1 AND member = ?2 AND client_id = ?3";
         Ok(self.conn().execute(sql, params![group, member, client])?)
     }
 }
@@ -315,7 +317,7 @@ impl Host {
         format!("{}/mcp", self.config.public_url)
     }
 
-    /// Where an assistant finds out how to sign in.
+    /// Where an MCP client finds out how to sign in.
     fn resource_metadata_url(&self) -> String {
         format!(
             "{}/.well-known/oauth-protected-resource/mcp",
@@ -325,7 +327,7 @@ impl Host {
 
     /// A client's name, and the redirect URIs it may use: by its metadata
     /// document if its ID is the URL of one, or as it registered.
-    async fn assistant_client(&self, client_id: &str) -> Option<(String, Vec<String>)> {
+    async fn mcp_client(&self, client_id: &str) -> Option<(String, Vec<String>)> {
         // Over https, or http for a host on http, as on a dev network.
         let on_http = self.config.public_url.starts_with("http://");
         if client_id.starts_with("https://") || (on_http && client_id.starts_with("http://")) {
@@ -346,7 +348,7 @@ impl Host {
             // sent back to, and it is no client.
             return redirects_ok(&uris).then_some((name, uris));
         }
-        self.store.registered_assistant(client_id).ok().flatten()
+        self.store.registered_mcp_client(client_id).ok().flatten()
     }
 }
 
@@ -377,7 +379,7 @@ pub async fn server_metadata(State(host): State<Arc<Host>>) -> Json<Value> {
     }))
 }
 
-/// Whether an assistant may be sent back to `uri`: over https, to a
+/// Whether an MCP client may be sent back to `uri`: over https, to a
 /// loopback address over http, or to an app's own scheme; never with a
 /// fragment (RFC 6749 §3.1.2).
 fn may_return_to(uri: &str) -> bool {
@@ -409,7 +411,7 @@ fn redirects_ok(uris: &[String]) -> bool {
         .all(|u| u.len() <= REDIRECT_MAX && may_return_to(u))
 }
 
-/// Registers an assistant (RFC 7591): a public client, by its name and
+/// Registers an MCP client (RFC 7591): a public client, by its name and
 /// where it may be sent back to.
 pub async fn register(
     State(host): State<Arc<Host>>,
@@ -425,12 +427,12 @@ pub async fn register(
         let said = "redirect_uris are https, http to a loopback address, or an app's own scheme";
         return Ok(bad("invalid_redirect_uri", said));
     }
-    let name = body["client_name"].as_str().unwrap_or("An assistant");
+    let name = body["client_name"].as_str().unwrap_or("An AI app");
     let name: String = name.chars().take(100).collect();
     let id = jose::random(16);
     let kept = host
         .store
-        .register_assistant(&id, &name, &uris, now_millis());
+        .register_mcp_client(&id, &name, &uris, now_millis());
     kept.map_err(XrpcError::internal)?;
     let out = json!({
         "client_id": id,
@@ -450,7 +452,7 @@ fn with_query(uri: &str, query: &[(&str, &str)]) -> String {
     url.to_string()
 }
 
-/// An assistant's authorization request: checked, kept, and the browser
+/// An MCP client's authorization request: checked, kept, and the browser
 /// sent to the console to say yes to it.
 pub async fn authorize(
     State(host): State<Arc<Host>>,
@@ -460,7 +462,7 @@ pub async fn authorize(
     let (Some(client_id), Some(redirect_uri)) = (p.get("client_id"), p.get("redirect_uri")) else {
         return refused("client_id and redirect_uri are required");
     };
-    let Some((name, uris)) = host.assistant_client(client_id).await else {
+    let Some((name, uris)) = host.mcp_client(client_id).await else {
         return refused("no client by that client_id");
     };
     if !uris.contains(redirect_uri) {
@@ -486,7 +488,7 @@ pub async fn authorize(
     if !s256 || !(43..=128).contains(&challenge.len()) || !resource {
         return back("invalid_request");
     }
-    let request = Asked {
+    let request = McpRequest {
         id: format!("{PREFIX}{}", jose::random(24)),
         client_id: client_id.clone(),
         client_name: name,
@@ -497,7 +499,7 @@ pub async fn authorize(
         group: None,
         member: None,
     };
-    let kept = host.store.ask_for_assistant(&request);
+    let kept = host.store.keep_mcp_request(&request);
     kept.map_err(XrpcError::internal)?;
     let console = &host.config.console_url;
     let approve = with_query(
@@ -509,8 +511,8 @@ pub async fn authorize(
 
 /// The pending request `uri` names, for the console: the client, and the
 /// groups the member could connect it to.
-pub(crate) fn assistant_view(host: &Host, uri: &str, me: &str) -> Result<Value, XrpcError> {
-    let request = host.store.assistant_request(uri, now_millis());
+pub(crate) fn mcp_view(host: &Host, uri: &str, me: &str) -> Result<Value, XrpcError> {
+    let request = host.store.mcp_request(uri, now_millis());
     let request = request.map_err(XrpcError::internal)?.ok_or_else(expired)?;
     let mut groups = Vec::new();
     // It asks for no scope: it does what the member's roles allow.
@@ -522,7 +524,7 @@ pub(crate) fn assistant_view(host: &Host, uri: &str, me: &str) -> Result<Value, 
         "requested": [],
         "labels": [],
         "groups": groups,
-        "assistant": true,
+        "mcp": true,
     }))
 }
 
@@ -534,7 +536,7 @@ pub(crate) fn expired() -> XrpcError {
     )
 }
 
-/// Approves an assistant's request for `me` in `group`: where to send the
+/// Approves an MCP client's request for `me` in `group`: where to send the
 /// browser back to, with its code.
 pub(crate) fn approve(host: &Host, uri: &str, me: &str, group: &str) -> Result<String, XrpcError> {
     group_of(host, group)?;
@@ -548,13 +550,13 @@ pub(crate) fn approve(host: &Host, uri: &str, me: &str, group: &str) -> Result<S
     let hash = jose::sha256(&code);
     let approved = host
         .store
-        .approve_assistant(uri, group, me, &hash, now_millis());
+        .approve_mcp_request(uri, group, me, &hash, now_millis());
     let request = approved.map_err(XrpcError::internal)?.ok_or_else(expired)?;
     tracing::info!(
         member = me,
         client = request.client_id,
         group,
-        "an assistant connected"
+        "an MCP client connected"
     );
     let iss = host.mcp_url();
     let mut query = vec![("code", code.as_str()), ("iss", iss.as_str())];
@@ -564,12 +566,12 @@ pub(crate) fn approve(host: &Host, uri: &str, me: &str, group: &str) -> Result<S
     Ok(with_query(&request.redirect_uri, &query))
 }
 
-/// Declines an assistant's request: where to send the browser back to.
+/// Declines an MCP client's request: where to send the browser back to.
 pub(crate) fn decline(host: &Host, uri: &str) -> Result<String, XrpcError> {
-    let request = host.store.assistant_request(uri, now_millis());
+    let request = host.store.mcp_request(uri, now_millis());
     let request = request.map_err(XrpcError::internal)?.ok_or_else(expired)?;
     host.store
-        .drop_assistant_request(uri)
+        .drop_mcp_request(uri)
         .map_err(XrpcError::internal)?;
     let iss = host.mcp_url();
     let mut query = vec![("error", "access_denied"), ("iss", iss.as_str())];
@@ -609,7 +611,7 @@ pub async fn token(
         "authorization_code" => {
             let redeemed = host
                 .store
-                .redeem_assistant_code(&jose::sha256(field("code")), now);
+                .redeem_mcp_code(&jose::sha256(field("code")), now);
             let Some(request) = redeemed.map_err(XrpcError::internal)? else {
                 return Ok(bad("invalid_grant", "an unknown or used code"));
             };
@@ -623,7 +625,7 @@ pub async fn token(
                 let said = "the code is not this client's, or not for this verifier";
                 return Ok(bad("invalid_grant", said));
             }
-            let connection = Connected {
+            let connection = McpGrant {
                 id: jose::random(16),
                 group: request.group.unwrap_or_default(),
                 member: request.member.unwrap_or_default(),
@@ -634,7 +636,7 @@ pub async fn token(
             };
             let kept = host
                 .store
-                .connect_assistant(&connection, &access_hash, &refresh_hash, now);
+                .connect_mcp_client(&connection, &access_hash, &refresh_hash, now);
             kept.map_err(XrpcError::internal)?;
             Ok(issued(&access, &refresh))
         }
@@ -643,7 +645,7 @@ pub async fn token(
             let client = field("client_id");
             let rotated =
                 host.store
-                    .refresh_assistant(client, &old, &access_hash, &refresh_hash, now);
+                    .refresh_mcp_grant(client, &old, &access_hash, &refresh_hash, now);
             match rotated.map_err(XrpcError::internal)? {
                 Some(_) => Ok(issued(&access, &refresh)),
                 None => Ok(bad(
@@ -659,7 +661,7 @@ pub async fn token(
     }
 }
 
-/// The challenge an assistant without a current token is answered with.
+/// The challenge an MCP client without a current token is answered with.
 fn challenge(host: &Host, error: Option<&str>) -> Response {
     let meta = host.resource_metadata_url();
     let said = match error {
@@ -670,7 +672,7 @@ fn challenge(host: &Host, error: Option<&str>) -> Response {
     (
         StatusCode::UNAUTHORIZED,
         headers,
-        "an assistant's token is required",
+        "an MCP client's token is required",
     )
         .into_response()
 }
@@ -695,29 +697,22 @@ fn query_of(args: &Value) -> Vec<(String, String)> {
     out
 }
 
-/// A record tool's write: the record's kind, the type of the group's
-/// space it is kept in, the one key it is kept at if one, and whether it
-/// goes.
-struct RecordAsked<'a> {
-    collection: &'a str,
-    space: &'a str,
-    literal: Option<&'a str>,
-    delete: bool,
-}
-
 impl Host {
-    /// Writes the record `asked` names, its key and value `args`, as the
-    /// group, in `who`'s group: what a group session `who`'s member
-    /// approved for that space would write, its scope what their roles
-    /// there grant now, kept to the same rules.
+    /// Writes a record of `who`'s group as the group, as `Plan::Write`
+    /// says: `record` at `rkey`, or at a new key, or with none deletes the
+    /// one at `rkey`, in its space of the type `space`. What a group
+    /// session `who`'s member approved for that space would write, its
+    /// scope what their roles there grant now, kept to the same rules.
     async fn record_as(
         &self,
-        who: &Connected,
-        asked: &RecordAsked<'_>,
-        mut args: Value,
+        who: &McpGrant,
+        space: &str,
+        collection: String,
+        rkey: Option<String>,
+        record: Option<Value>,
     ) -> Result<Value, XrpcError> {
         let group = &who.group;
-        let uri = format!("at://{group}/space/{}/self", asked.space);
+        let uri = format!("at://{group}/space/{space}/self");
         let space = SpaceRef::parse(&uri).expect("a group's own space is a space");
         let (_, _, scope) = self.group_scope(group, &who.member, &uri, &space)?;
         let now = now_millis();
@@ -739,78 +734,85 @@ impl Host {
             permissions: Permissions::new(&scope, group),
             grant,
         };
-        let fields = args
-            .as_object_mut()
-            .expect("a tool's arguments are an object");
-        let named = fields.remove("rkey");
-        let rkey = match (asked.literal, named.as_ref().and_then(Value::as_str)) {
-            (Some(key), _) => key.to_string(),
-            (None, Some(key)) => key.to_string(),
-            (None, None) => self.clock.next(),
-        };
-        let collection = asked.collection.to_string();
-        let write = match asked.delete {
-            true => Write::Delete { collection, rkey },
-            false => {
-                fields.insert("$type".into(), json!(collection));
-                Write::Update {
-                    collection,
-                    rkey,
-                    value: args.clone(),
-                }
-            }
+        let rkey = rkey.unwrap_or_else(|| self.clock.next());
+        let write = match &record {
+            None => Write::Delete { collection, rkey },
+            Some(value) => Write::Update {
+                collection,
+                rkey,
+                value: value.clone(),
+            },
         };
         let writes = std::slice::from_ref(&write);
         let written = self.write_as(&acting, &uri, &space, writes, true);
         written.await?;
         let (collection, rkey) = write.path();
         let mut out = json!({"uri": format!("{uri}/{group}/{collection}/{rkey}")});
-        if !asked.delete {
-            out["cid"] = json!(record_cid(collection, &args)?.to_string());
+        if let Some(value) = &record {
+            out["cid"] = json!(record_cid(collection, value)?.to_string());
         }
         Ok(out)
     }
 
-    /// Calls `tool` with `args` as `who`, in their group: as the console
-    /// does, the host asking itself as them. A tool that writes an invite
-    /// makes the write their own session for the group would.
-    async fn call_as(
-        self: &Arc<Self>,
-        who: &Connected,
-        tool: Tool,
-        mut args: Value,
-    ) -> Result<Value, String> {
-        if let Kind::Record {
-            space,
-            literal,
-            delete,
-        } = &tool.kind
-        {
-            let asked = RecordAsked {
-                collection: &tool.nsid,
+    /// Carries out `plan` as `who`, in their group: a method asked as the
+    /// console asks it, a record written as their own session for the
+    /// group would.
+    async fn carry_out(self: &Arc<Self>, who: &McpGrant, plan: Plan) -> Result<Value, String> {
+        let said = |e: XrpcError| format!("{}: {}", e.error, e.message);
+        match plan {
+            Plan::Call {
+                nsid,
+                procedure,
+                mut input,
+            } => {
+                input["group"] = json!(who.group);
+                self.ask_as(who, &nsid, procedure, &input).await
+            }
+            Plan::Write {
                 space,
-                literal: literal.as_deref(),
-                delete: *delete,
-            };
-            let written = self.record_as(who, &asked, args).await;
-            return written.map_err(|e| format!("{}: {}", e.error, e.message));
+                collection,
+                rkey,
+                record,
+            } => {
+                let written = self.record_as(who, &space, collection, rkey, record);
+                written.await.map_err(said)
+            }
+            Plan::Invite { person, record } => {
+                let written = self.invite_as(who, &person, record).await;
+                written.map_err(said)
+            }
+            Plan::Grant { role, grant } => {
+                let members = crate::group::members_space(&who.group);
+                let collection = format!("{NS}.permissions");
+                let kept = self.group_record(&who.group, &members, &collection, "self");
+                let kept = kept.map_err(XrpcError::internal).map_err(said)?;
+                let kept = kept.unwrap_or_default();
+                let write = group_host_mcp::regrant(&kept, &role, grant);
+                Box::pin(self.carry_out(who, write)).await
+            }
         }
-        if tool.nsid.starts_with("com.atproto.space.") {
-            let made = self.invite_as(who, &tool.name, &args).await;
-            return made.map_err(|e| format!("{}: {}", e.error, e.message));
-        }
-        args["group"] = json!(who.group);
+    }
+
+    /// Asks the method `nsid` with `input` as `who`'s member, as the
+    /// console does: the host asking itself as them.
+    async fn ask_as(
+        self: &Arc<Self>,
+        who: &McpGrant,
+        nsid: &str,
+        procedure: bool,
+        input: &Value,
+    ) -> Result<Value, String> {
         let cookie = self.session_cookie(&who.member, now_millis());
         let cookie = format!("{}={cookie}", crate::console_login::COOKIE);
-        let path = format!("/xrpc/{}", tool.nsid);
-        let request = match tool.kind == Kind::Procedure {
+        let path = format!("/xrpc/{nsid}");
+        let request = match procedure {
             true => Request::post(path)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(args.to_string())),
+                .body(Body::from(input.to_string())),
             false => {
                 let mut url = reqwest::Url::parse("http://host/").expect("a URL");
                 url.set_path(&path);
-                url.query_pairs_mut().extend_pairs(query_of(&args));
+                url.query_pairs_mut().extend_pairs(query_of(input));
                 let at = format!("{}?{}", url.path(), url.query().unwrap_or_default());
                 Request::get(at).body(Body::empty())
             }
@@ -820,22 +822,34 @@ impl Host {
         request.headers_mut().insert(header::COOKIE, value);
         let res = crate::router(self.clone()).oneshot(request).await;
         let res = res.expect("the router answers every request");
-        let ok = res.status().is_success();
+        let status = res.status();
         let bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await;
         let body: Value = bytes
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
-        if !ok {
+        if !status.is_success() {
             let error = body["error"].as_str().unwrap_or("Error");
             let message = body["message"].as_str().unwrap_or_default();
             return Err(format!("{error}: {message}"));
         }
         Ok(body)
     }
+
+    /// Calls `tool` with `args` as `who`, in their group: what it comes
+    /// to, carried out; or why not, in the host's words.
+    async fn call_as(
+        self: &Arc<Self>,
+        who: &McpGrant,
+        tool: Tool,
+        args: Value,
+    ) -> Result<Value, String> {
+        let planned = group_host_mcp::plan(&tool, &args, &iso(now_millis()));
+        self.carry_out(who, planned?).await
+    }
 }
 
-/// The MCP server: each message an assistant sends, answered as the
+/// The MCP server: each message an MCP client sends, answered as the
 /// member it acts as, in their group.
 pub async fn mcp(
     State(host): State<Arc<Host>>,
@@ -851,7 +865,7 @@ pub async fn mcp(
     };
     let found = host
         .store
-        .assistant_by_access(&jose::sha256(token), now_millis());
+        .mcp_grant_by_access(&jose::sha256(token), now_millis());
     let Some(who) = found.map_err(XrpcError::internal)? else {
         return Ok(challenge(&host, Some("invalid_token")));
     };
@@ -866,7 +880,7 @@ pub async fn mcp(
     })
 }
 
-/// The assistants the caller connected to a group.
+/// The MCP clients the caller connected to a group.
 pub async fn list_connected_apps(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
@@ -875,7 +889,7 @@ pub async fn list_connected_apps(
     let me = signed_in(&host, &headers, &format!("{NS}.listConnectedApps")).await?;
     let group = param(&p, "group")?;
     group_of(&host, group)?;
-    let connected = host.store.assistants_of(group, &me, now_millis());
+    let connected = host.store.mcp_clients_of(group, &me, now_millis());
     let apps: Vec<Value> = connected
         .map_err(XrpcError::internal)?
         .iter()
@@ -891,7 +905,7 @@ pub async fn list_connected_apps(
     Ok(Json(json!({ "apps": apps })))
 }
 
-/// Disconnects an assistant the caller connected to a group.
+/// Disconnects an MCP client the caller connected to a group.
 pub async fn revoke_connected_app(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -902,7 +916,7 @@ pub async fn revoke_connected_app(
     let client = body["clientId"].as_str();
     let client = client.expect("its lexicon requires it");
     group_of(&host, group)?;
-    let ended = host.store.disconnect_assistant(group, &me, client);
+    let ended = host.store.disconnect_mcp_client(group, &me, client);
     ended.map_err(XrpcError::internal)?;
     Ok(Json(json!({})))
 }

@@ -16,7 +16,7 @@
 	{:else if data.expired}
 		<Empty title="This sign-in request has expired">Go back to the app and try again.</Empty>
 	{:else if data.request}
-		<AuthorizeRequest client={data.request.client} groups={data.request.groups} labels={data.request.labels ?? []} requestUri={data.requestUri} assistant={data.request.assistant ?? false} />
+		<AuthorizeRequest client={data.request.client} groups={data.request.groups} labels={data.request.labels ?? []} requestUri={data.requestUri} mcp={data.request.mcp ?? false} />
 	{:else}
 		<p>An app wants to sign in as one of your groups. Sign in first, as yourself.</p>
 		<p><SignIn /></p>

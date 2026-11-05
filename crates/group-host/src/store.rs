@@ -414,6 +414,14 @@ pub const MIGRATIONS: &[&str] = &[
         WHERE p.grp = mod_event.grp AND p.subject = mod_event.subject AND p.seq < mod_event.seq
         AND p.status IS NOT NULL ORDER BY p.seq DESC LIMIT 1), 'open') WHERE kind = 'note';
 ",
+    // The MCP server's clients, requests and grants, named for it.
+    "
+    ALTER TABLE assistant_client RENAME TO mcp_client;
+    ALTER TABLE assistant_request RENAME TO mcp_request;
+    ALTER TABLE assistant_grant RENAME TO mcp_grant;
+    DROP INDEX IF EXISTS assistant_grant_member;
+    CREATE INDEX IF NOT EXISTS mcp_grant_member ON mcp_grant (grp, member);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -532,8 +540,8 @@ const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did 
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
 /// What goes with an account, in an order its references allow.
 const FORGET_ACCOUNT: &[&str] = &[
-    "DELETE FROM assistant_grant WHERE grp = ?1",
-    "DELETE FROM assistant_request WHERE grp = ?1",
+    "DELETE FROM mcp_grant WHERE grp = ?1",
+    "DELETE FROM mcp_request WHERE grp = ?1",
     "DELETE FROM account_import WHERE did = ?1",
     "DELETE FROM migration_export WHERE did = ?1",
     "DELETE FROM recovery_key WHERE grp = ?1",

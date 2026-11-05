@@ -12,11 +12,11 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
-use crate::assistants::Connected;
 use crate::group::meta_space;
 use crate::group_api::{caller, group_of, signed_in};
 use crate::group_members::{Members, acting};
 use crate::lexicons::check_record;
+use crate::mcp::McpGrant;
 use crate::oauth_resource::Acting;
 use crate::oauth_store::Grant;
 use crate::rbac::NS;
@@ -319,21 +319,21 @@ impl Host {
         Ok(made)
     }
 
-    /// What an assistant's invite tool does, as the member who connected
+    /// What an MCP client's `invite_send` does, as the member who connected
     /// it, in their group: the write the member's own group session for
-    /// the invitee's inbox would make (`sendInvite`, or `takeBackInvite`
-    /// for the one waiting), logged as the assistant's. The invite's URI.
+    /// `person`'s inbox would make, `record` written there, or with none
+    /// the invite waiting taken back, logged as the MCP client's. The invite's
+    /// URI.
     pub(crate) async fn invite_as(
         &self,
-        who: &Connected,
-        tool: &str,
-        args: &Value,
+        who: &McpGrant,
+        person: &str,
+        record: Option<Value>,
     ) -> Result<Value, XrpcError> {
-        let invitee = args["invitee"].as_str().unwrap_or_default();
-        let inbox = SpaceRef::parse(&inbox_of(invitee)).map_err(|e| invalid(e.to_string()))?;
+        let inbox = SpaceRef::parse(&inbox_of(person)).map_err(|e| invalid(e.to_string()))?;
         let now = now_millis();
         let grant = Grant {
-            id: format!("assistant-{}", who.id),
+            id: who.id.clone(),
             group: who.group.clone(),
             member: who.member.clone(),
             client_id: who.client_id.clone(),
@@ -343,29 +343,20 @@ impl Host {
             access_expires: now,
             expires_at: now,
             created_at: now,
-            source: "assistant".into(),
+            source: "mcp".into(),
             used_at: None,
         };
         let permissions = Permissions::new(&grant.scope, &grant.group);
         let acting = Acting { grant, permissions };
         let collection = format!("{NS}.invite");
-        let write = match tool {
-            "sendInvite" => {
-                let mut value = json!({"$type": collection, "createdAt": iso(now)});
-                for field in ["message", "expiresAt"] {
-                    if let Some(given) = args.get(field) {
-                        value[field] = given.clone();
-                    }
-                }
-                let rkey = self.clock.next();
-                Write::Create {
-                    collection,
-                    rkey,
-                    value,
-                }
-            }
-            _ => {
-                let waiting = self.store.invited(&who.group, invitee);
+        let write = match record {
+            Some(value) => Write::Create {
+                collection,
+                rkey: self.clock.next(),
+                value,
+            },
+            None => {
+                let waiting = self.store.invited(&who.group, person);
                 let waiting = waiting.map_err(XrpcError::internal)?;
                 let rkey = waiting.map(|w| w.rkey).unwrap_or_default();
                 Write::Delete { collection, rkey }
@@ -473,7 +464,7 @@ pub async fn decline_invite(
 
 /// Whether a user may read or write a space this host manages for its
 /// authority: someone's inbox, which its owner reads and groups here
-/// write their invites in. Asked by the space's authority, with service
+/// write their invites in. McpRequest by the space's authority, with service
 /// auth for this host.
 pub async fn check_user_access(
     State(host): State<Arc<Host>>,

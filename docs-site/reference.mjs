@@ -2,7 +2,9 @@
 // whose rows are a name and what it does becomes a list of them, each name
 // on a line of its own; a route or XRPC method shows its HTTP method as a
 // badge; and an XRPC method of the host's own has its lexicon under it,
-// parameters, input and output, read from lexicons/ so it cannot drift.
+// parameters, input and output, read from lexicons/ so it cannot drift. An
+// MCP tool has the lexicon its table's Lexicon column names: the method it
+// asks, or the record it writes.
 // docs/ stays plain Markdown: all of this happens as the site is built.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -96,6 +98,7 @@ function lexicon(nsid, named = false) {
   const lex = lexicons.get(nsid)
   const main = lex.defs.main
   const body =
+    fields('Record', main.record) +
     fields('Parameters', main.parameters) +
     fields('Input', main.input?.schema) +
     fields('Output', main.output?.schema) +
@@ -149,10 +152,9 @@ function asList(table) {
   const items = rows.flatMap((row) => {
     const [first, ...rest] = row.children
     // A cell naming several routes, `GET a`, `GET b`: each its own term, with its badge.
-    // An MCP tool is the method of its name: `getGroup`, fyi.opensocial.getGroup.
+    // An MCP tool, `member_assign`, is no route: its lexicon is the one its row's Lexicon cell names.
     const tool = heads[0] === 'Tool'
-    const named = (code) => (tool && lexicons.has(`fyi.opensocial.${code}`) ? { nsid: `fyi.opensocial.${code}` } : route(code))
-    const codes = first.children.filter((c) => c.type === 'inlineCode').map((c) => ({ code: c.value, ...named(c.value) }))
+    const codes = first.children.filter((c) => c.type === 'inlineCode').map((c) => ({ code: c.value, ...(tool ? {} : route(c.value)) }))
     const routes = tool || codes.some((c) => c.method)
     const terms = routes
       ? codes.map(({ code, method }) => ({
@@ -161,7 +163,10 @@ function asList(table) {
           children: [...(method ? [badge(method), gap] : []), signature(code.replace(/^[A-Z]+\s+/, ''))],
         }))
       : [{ type: 'refTerm', data: { hName: 'dt' }, children: [signature(first.children[0].value), ...first.children.slice(1)] }]
-    const nsids = codes.map((c) => c.nsid).filter(Boolean)
+    const named = row.children[heads.indexOf('Lexicon')]?.children ?? []
+    const nsids = tool
+      ? named.filter((c) => c.type === 'inlineCode' && lexicons.has(c.value)).map((c) => c.value)
+      : codes.map((c) => c.nsid).filter(Boolean)
     const middle = rest.slice(0, -1).flatMap((cell, i) =>
       text(cell).trim()
         ? [{ type: 'refMeta', data: { hName: 'p', hProperties: { className: ['ref-meta'] } }, children: [{ type: 'html', value: `<span class="ref-label">${escape(heads[i + 1])}</span> ` }, ...cell.children] }]

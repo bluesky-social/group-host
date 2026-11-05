@@ -66,7 +66,7 @@ one question per mechanism.
 6. Where is membership recorded (the members space: membership, role and
    permissions records), and what does each hold?
 7. What does putting someone out take with them: credentials, the OAuth
-   grants they approved, their assistants, their app passwords and
+   grants they approved, their MCP clients, their app passwords and
    sessions?
 8. How long does the host keep trying to deliver an invite to someone's
    inbox?
@@ -75,7 +75,7 @@ one question per mechanism.
 ## signing-in.md
 
 1. Who signs in to what: a person to the console, an app as a group, an
-   assistant as a member?
+   MCP client as a member?
 2. How does the console sign people in, and what does it keep?
 3. How does an app sign in as a group, when a group has no password?
 4. Who approves, and what does the app then get?
@@ -95,7 +95,7 @@ one question per mechanism.
 12. What happens to an app's tokens when the group is switched off
     (tokens still refresh; writes refused; getSession says
     `deactivated`)?
-13. How do assistant grants relate to group grants: separate server,
+13. How do MCP grants relate to group grants: separate server,
     separate table, not in `listGroupTokens` — where does the reader go
     to see them?
 14. What may a confidential client vs a public client do differently
@@ -118,14 +118,15 @@ one question per mechanism.
    group starts with hold?
 7. What happens to the queue when a group is deleted?
 
-## assistants.md
+## mcp.md
 
-1. What is an assistant, and what may it do in a group?
+1. What is an MCP client, and what may it do in a group? Which
+   command is each tool the twin of?
 2. How does it connect and sign in, and how is that kept apart from apps
    signing in as a group?
 3. What are its tools, and how is each call decided?
 4. How does a member see and disconnect one?
-5. How long do an assistant's tokens last, and what ends a connection?
+5. How long do an MCP client's tokens last, and what ends a connection?
 
 ## recovery.md
 

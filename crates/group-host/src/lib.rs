@@ -7,7 +7,6 @@ pub mod account_move;
 pub mod actors;
 pub mod api;
 pub mod app_passwords;
-pub mod assistants;
 pub mod authority;
 pub mod authority_api;
 pub mod authorization;
@@ -32,6 +31,7 @@ pub mod index;
 pub mod index_api;
 pub mod lexicons;
 pub mod lifecycle;
+pub mod mcp;
 pub mod member_writes;
 pub mod migration;
 pub mod moderation;
@@ -458,23 +458,23 @@ fn oauth_routes() -> Router<Arc<Host>> {
         .route("/oauth/revoke", post(oauth::revoke))
         .route(
             "/.well-known/oauth-protected-resource/mcp",
-            get(assistants::resource_metadata),
+            get(mcp::resource_metadata),
         )
         .route(
             "/.well-known/oauth-authorization-server/mcp",
-            get(assistants::server_metadata),
+            get(mcp::server_metadata),
         )
-        .route("/mcp", post(assistants::mcp))
-        .route("/mcp/register", post(assistants::register))
-        .route("/mcp/authorize", get(assistants::authorize))
-        .route("/mcp/token", post(assistants::token))
+        .route("/mcp", post(mcp::mcp))
+        .route("/mcp/register", post(mcp::register))
+        .route("/mcp/authorize", get(mcp::authorize))
+        .route("/mcp/token", post(mcp::token))
         .route(
             "/xrpc/fyi.opensocial.listConnectedApps",
-            get(assistants::list_connected_apps),
+            get(mcp::list_connected_apps),
         )
         .route(
             "/xrpc/fyi.opensocial.revokeConnectedApp",
-            post(assistants::revoke_connected_app),
+            post(mcp::revoke_connected_app),
         )
         .layer(axum::middleware::from_fn(oauth::cors))
 }

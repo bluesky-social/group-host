@@ -1,16 +1,18 @@
-//! An MCP server for a group on an opensocial host. Its tools are the
-//! core's methods, and the records the member's own session for the
-//! group would write as it, each asked as the member who connected it, so
-//! an assistant may do only what that member's roles allow: read the
-//! group, change its profile and rules, and run its members, roles,
-//! invites and moderation.
+//! An MCP server for a group on an opensocial host, and the tools it
+//! offers: each the twin of a command of `opensocial`, named
+//! `<group>_<action>` as the command is `opensocial <group> <action>`, and
+//! taking what the command takes. Each is asked as the member who
+//! connected the MCP client, so it may do only what that member's roles
+//! allow: read the group, change its profile and rules, and run its
+//! members, roles, invites, spaces and moderation.
 //!
-//! This crate is the protocol and the tools: what an assistant may call,
-//! made from the lexicons, and the answer to each message it sends
-//! (JSON-RPC, over MCP's Streamable HTTP, each answered on its own). The
-//! host serves it at `/mcp`, signs assistants in, and makes each call: as
-//! the member, in the one group they connected the assistant to, which is
-//! why no tool asks which group.
+//! This crate is the protocol and the tools: what an MCP client may call, made
+//! from the lexicons; what each call comes to (`plan`), which the host and
+//! the command both carry out; and the answer to each message an MCP client
+//! sends (JSON-RPC, over MCP's Streamable HTTP, each answered on its own).
+//! The host serves it at `/mcp`, signs MCP clients in, and makes each call: as
+//! the member, in the one group they connected the MCP client to, which is why
+//! no tool asks which group.
 
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -18,10 +20,11 @@ use std::collections::HashMap;
 /// The versions of MCP this server speaks, the latest first.
 pub const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
-/// What the server tells an assistant of itself as it connects.
+/// What the server tells an MCP client of itself as it connects.
 const INSTRUCTIONS: &str = "The tools act as the person who connected you, in the one group \
 they chose, with what their roles there allow: read the group, change its profile and rules, \
-and run its members, roles, invites, spaces and moderation. Anything their roles do not allow is refused.";
+and run its members, roles, invites, spaces and moderation. Each is a command of `opensocial`, \
+`<group> <action>`, named `<group>_<action>`. Anything their roles do not allow is refused.";
 
 macro_rules! lexicon {
     ($name:literal) => {
@@ -32,8 +35,9 @@ macro_rules! lexicon {
     };
 }
 
-/// The methods an assistant may call, by their lexicons.
-const METHODS: &[(&str, &str)] = &[
+/// The lexicons the tools are made from, and what they refer to: ours,
+/// and atproto's.
+const LEXICONS: &[(&str, &str)] = &[
     lexicon!("getGroup"),
     lexicon!("listMembers"),
     lexicon!("listJoinRequests"),
@@ -46,65 +50,6 @@ const METHODS: &[(&str, &str)] = &[
     lexicon!("applyLabel"),
     lexicon!("negateLabel"),
     lexicon!("resolveSubject"),
-];
-
-/// The group's records an assistant may write as the group: each tool's
-/// name, the record's kind, the type of the group's space it is kept in,
-/// and whether the tool deletes one rather than puts it.
-const RECORDS: &[(&str, &str, &str, bool)] = &[
-    (
-        "putProfile",
-        "fyi.opensocial.profile",
-        "fyi.opensocial.meta",
-        false,
-    ),
-    (
-        "putRule",
-        "fyi.opensocial.rule",
-        "fyi.opensocial.meta",
-        false,
-    ),
-    (
-        "deleteRule",
-        "fyi.opensocial.rule",
-        "fyi.opensocial.meta",
-        true,
-    ),
-    (
-        "putRole",
-        "fyi.opensocial.role",
-        "fyi.opensocial.members",
-        false,
-    ),
-    (
-        "deleteRole",
-        "fyi.opensocial.role",
-        "fyi.opensocial.members",
-        true,
-    ),
-    (
-        "putPermissions",
-        "fyi.opensocial.permissions",
-        "fyi.opensocial.members",
-        false,
-    ),
-    (
-        "putMembership",
-        "fyi.opensocial.membership",
-        "fyi.opensocial.members",
-        false,
-    ),
-    (
-        "deleteMembership",
-        "fyi.opensocial.membership",
-        "fyi.opensocial.members",
-        true,
-    ),
-];
-
-/// The records, and what the methods and records refer to: ours, and
-/// atproto's.
-const REFERRED: &[(&str, &str)] = &[
     lexicon!("profile"),
     lexicon!("rule"),
     lexicon!("role"),
@@ -123,41 +68,81 @@ const REFERRED: &[(&str, &str)] = &[
     ),
 ];
 
-/// What calling a tool does.
+const NS: &str = "fyi.opensocial";
+/// The group's spaces a tool writes its records in, by their types.
+const META: &str = "fyi.opensocial.meta";
+const MEMBERS: &str = "fyi.opensocial.members";
+
+/// Where a record a tool writes is kept in its space.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Kind {
-    /// Asks a query of the host's (a GET).
-    Query,
-    /// Asks a procedure of the host's (a POST of JSON).
-    Procedure,
-    /// Writes a record of the group's, of the kind the tool's NSID names,
-    /// as the group, in its space of the type `space` (keyed `self`): puts
-    /// the record its arguments are, but `rkey`, or deletes the one at
-    /// `rkey`. A kind kept at one key, `literal`, takes no `rkey`.
-    Record {
-        space: String,
-        literal: Option<String>,
-        delete: bool,
-    },
+pub enum Key {
+    /// At this one key, as its lexicon has it: `self`.
+    Literal(String),
+    /// At the key this argument names, which the tool requires.
+    Named(String),
+    /// At the key this field of the record names, which the tool
+    /// requires: a membership's member.
+    Field(String),
+    /// At the key this argument names if given; else a new one.
+    New(String),
 }
 
-/// A tool: a method of the host's, or a record of the group's, asked in
-/// the group the assistant was connected to.
+/// What calling a tool does.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Action {
+    /// Asks a method of the host's, a query or a procedure; with `undo`,
+    /// its opposite. A method whose `subject` is a union of an account and
+    /// a record takes it as text, a DID or an `at://` URI, with a `cid`.
+    Method {
+        nsid: String,
+        procedure: bool,
+        undo: Option<String>,
+        subject: Option<[String; 2]>,
+    },
+    /// Puts a record of the group's, of the kind `collection`, in its
+    /// space of the type `space`, replacing it whole; saying when it was
+    /// made if its kind requires that.
+    Put {
+        collection: String,
+        space: String,
+        key: Key,
+        stamp: bool,
+    },
+    /// Deletes one.
+    Delete {
+        collection: String,
+        space: String,
+        key: Key,
+    },
+    /// Writes an invite as the group in the invitee's inbox; with `undo`,
+    /// takes back the one waiting.
+    Invite,
+    /// Sets a role's grant in the permissions record; with `undo`, drops
+    /// it.
+    Grant,
+}
+
+/// A tool, asked in the group the MCP client was connected to; and a
+/// command, asked in the group named first.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tool {
-    /// Its name: the method's, `getGroup`, or what it does to a record,
-    /// `putRule`.
+    /// Its name, `<group>_<action>`: `member_assign`.
     pub name: String,
-    /// The method, `fyi.opensocial.getGroup`; for a tool that writes an
-    /// invite, the write it makes, `com.atproto.space.createRecord`; for
-    /// one that writes the group's own record, the record's kind,
-    /// `fyi.opensocial.rule`.
-    pub nsid: String,
-    pub kind: Kind,
+    /// The arguments its command takes in order, after the group, rather
+    /// than as flags: `member`, `roles`.
+    pub args: Vec<String>,
+    pub action: Action,
     pub description: String,
-    /// What it takes, as JSON Schema: the method's parameters or input,
-    /// but the group; or the record, and its key.
+    /// What it takes, as JSON Schema: its arguments and flags, named in
+    /// snake case, made from the lexicons.
     pub input_schema: Value,
+}
+
+impl Tool {
+    /// Its command's words: `member assign`.
+    pub fn command(&self) -> String {
+        self.name.replacen('_', " ", 1).replace('_', "-")
+    }
 }
 
 /// The lexicons by NSID, to resolve references in.
@@ -174,7 +159,7 @@ fn copy(from: &Value, to: &mut Value, fields: &[(&str, &str)]) {
 
 impl Docs {
     fn load() -> Docs {
-        let all = METHODS.iter().chain(REFERRED);
+        let all = LEXICONS.iter();
         let parsed = all.map(|(nsid, text)| {
             let doc = serde_json::from_str(text).expect("a lexicon is JSON");
             (nsid.to_string(), doc)
@@ -288,122 +273,536 @@ impl Docs {
 /// How deep the tools' schemas follow references.
 const DEPTH: u8 = 6;
 
-/// The key a record tool is told of: which one to change, or delete.
-fn rkey(described: &str) -> Value {
-    json!({"type": "string", "format": "record-key", "description": described})
+/// Where a record a tool writes is kept, as `TOOLS` says it.
+enum At {
+    /// At this one key.
+    Literal(&'static str),
+    /// At the key this argument names, which is not the record's own.
+    Named(&'static str),
+    /// At the key this field of the record names: a membership's member.
+    Field(&'static str),
+    /// At the key this argument names if given; else a new one.
+    New(&'static str),
 }
 
-/// The tool that puts or deletes `nsid`'s records, as `RECORDS` has it.
-fn record_tool(docs: &Docs, (name, nsid, space, delete): (&str, &str, &str, bool)) -> Tool {
-    let main = &docs.0[nsid]["defs"]["main"];
-    let key = main["key"].as_str().unwrap_or_default();
-    let literal = key.strip_prefix("literal:").map(String::from);
-    let about = main["description"].as_str().unwrap_or_default();
-    let (description, input_schema) = match delete {
-        true => (
-            format!("Deletes one, by its key, as the group. {about}"),
-            json!({"type": "object", "properties": {"rkey": rkey("The key of the one to delete.")}, "required": ["rkey"]}),
-        ),
-        false => {
-            let mut input = docs.object(nsid, &main["record"], DEPTH);
-            if literal.is_none() {
-                let which = "The key of the one to change; left out, a new one.";
-                input["properties"]["rkey"] = rkey(which);
-            }
-            let whole = "Puts one as the group, replacing it whole.";
-            (format!("{whole} {about}"), input)
+/// What a tool is made of, as `TOOLS` says it.
+enum Made {
+    /// A method of ours, by the last part of its NSID; and its opposite's.
+    Method(&'static str, Option<&'static str>),
+    /// A record of ours put, or deleted, in the group's space of a type.
+    Put(&'static str, &'static str, At),
+    Delete(&'static str, &'static str, At),
+    Invite,
+    Grant,
+}
+
+/// The tools, by group: each its name, the arguments its command takes in
+/// order after the group, what it does, and what it is made of.
+const TOOLS: &[(&str, &[&str], &str, Made)] = &[
+    (
+        "group_show",
+        &[],
+        "The group as the member may see it.",
+        Made::Method("getGroup", None),
+    ),
+    (
+        "profile_set",
+        &[],
+        "Replaces the group's profile as the group, whole: a field not given is dropped, and a \
+         picture is kept only by naming a blob the group holds.",
+        Made::Put("profile", META, At::Literal("self")),
+    ),
+    (
+        "rule_set",
+        &[],
+        "Writes a rule as the group: the one `rule` names, replaced whole, or a new one.",
+        Made::Put("rule", META, At::New("rule")),
+    ),
+    (
+        "rule_delete",
+        &["rule"],
+        "Deletes a rule as the group.",
+        Made::Delete("rule", META, At::Named("rule")),
+    ),
+    (
+        "role_set",
+        &["role"],
+        "Writes a role as the group, at its id, replaced whole.",
+        Made::Put("role", MEMBERS, At::Named("role")),
+    ),
+    (
+        "role_delete",
+        &["role"],
+        "Deletes a role nobody holds or is granted, as the group.",
+        Made::Delete("role", MEMBERS, At::Named("role")),
+    ),
+    (
+        "role_grant",
+        &["role"],
+        "Sets what a role may do, as the group: its scopes, and the roles its holders may assign, \
+         in place of its grant in the permissions record; with undo, drops its grant.",
+        Made::Grant,
+    ),
+    (
+        "member_list",
+        &[],
+        "Who is in the group, and their roles, a page at a time.",
+        Made::Method("listMembers", None),
+    ),
+    (
+        "member_assign",
+        &["member", "roles"],
+        "Gives a member these roles in place of theirs, as the group (`member` among them), or \
+         lets in someone waiting to join.",
+        Made::Put("membership", MEMBERS, At::Field("member")),
+    ),
+    (
+        "member_eject",
+        &["member"],
+        "Puts a member out, as the group.",
+        Made::Delete("membership", MEMBERS, At::Field("member")),
+    ),
+    (
+        "join_list",
+        &[],
+        "The requests to join waiting.",
+        Made::Method("listJoinRequests", None),
+    ),
+    (
+        "join_deny",
+        &["member"],
+        "Turns down a request to join.",
+        Made::Method("denyJoinRequest", None),
+    ),
+    (
+        "invite_send",
+        &["person"],
+        "Invites someone not yet a member, as the group: an invite written in their own inbox \
+         (fyi.opensocial.invites); one already waiting for them is the one answered. With undo, \
+         takes back the invite waiting for them.",
+        Made::Invite,
+    ),
+    (
+        "invite_list",
+        &[],
+        "The invites waiting.",
+        Made::Method("listInvites", None),
+    ),
+    (
+        "space_create",
+        &["type"],
+        "Adds a space to the group.",
+        Made::Method("createSpace", None),
+    ),
+    (
+        "space_records",
+        &["space"],
+        "The records in one of the group's spaces.",
+        Made::Method("listSpaceRecords", None),
+    ),
+    (
+        "mod_list",
+        &[],
+        "The moderation queue.",
+        Made::Method("listSubjects", None),
+    ),
+    (
+        "mod_history",
+        &["subject"],
+        "What was done about a subject.",
+        Made::Method("getSubjectHistory", None),
+    ),
+    (
+        "mod_resolve",
+        &["subject"],
+        "Resolves or escalates a subject.",
+        Made::Method("resolveSubject", None),
+    ),
+    (
+        "mod_label",
+        &["subject", "val"],
+        "Labels a subject; with undo, takes the label back.",
+        Made::Method("applyLabel", Some("negateLabel")),
+    ),
+];
+
+/// `displayName` as `display_name`.
+pub fn snake(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_ascii_uppercase() {
+            out.push('_');
         }
-    };
-    Tool {
-        name: name.into(),
-        nsid: nsid.into(),
-        kind: Kind::Record {
-            space: space.into(),
-            literal,
-            delete,
-        },
-        description,
-        input_schema,
+        out.push(c.to_ascii_lowercase());
     }
-}
-
-/// The tools: each method, its schema without the group, and each record
-/// an assistant may write as the group.
-pub fn tools() -> Vec<Tool> {
-    let docs = Docs::load();
-    let tool = |nsid: &str| {
-        let main = &docs.0[nsid]["defs"]["main"];
-        let procedure = main["type"] == "procedure";
-        let taken = match procedure {
-            true => &main["input"]["schema"],
-            false => &main["parameters"],
-        };
-        let mut input = docs.object(nsid, taken, DEPTH);
-        let properties = input["properties"].as_object_mut();
-        properties
-            .expect("an object's schema has properties")
-            .remove("group");
-        let required = input["required"].as_array_mut();
-        let required = required.expect("an object's schema says what it requires");
-        required.retain(|r| r != "group");
-        Tool {
-            name: nsid.rsplit('.').next().unwrap_or(nsid).to_string(),
-            nsid: nsid.to_string(),
-            kind: if procedure {
-                Kind::Procedure
-            } else {
-                Kind::Query
-            },
-            description: main["description"].as_str().unwrap_or_default().into(),
-            input_schema: input,
-        }
-    };
-    let mut out: Vec<Tool> = METHODS.iter().map(|(nsid, _)| tool(nsid)).collect();
-    out.extend(invite_tools(&docs));
-    out.extend(RECORDS.iter().map(|r| record_tool(&docs, *r)));
     out
 }
 
-/// The tools that write invites as the group, as the member's own session
-/// for it would, through `com.atproto.space.*`: one sent, written in the
-/// invitee's inbox, and the one waiting taken back.
-fn invite_tools(docs: &Docs) -> Vec<Tool> {
-    let invite = "fyi.opensocial.invite";
-    let invitee =
-        json!({"type": "string", "format": "did", "description": "Who is invited, by their DID."});
-    let record = &docs.0[invite]["defs"]["main"]["record"];
-    let mut send = docs.object(invite, record, DEPTH);
-    send["properties"]["invitee"] = invitee.clone();
-    let properties = send["properties"].as_object_mut();
-    let properties = properties.expect("a record has properties");
-    properties.remove("createdAt");
-    send["required"] = json!(["invitee"]);
-    let take_back =
-        json!({"type": "object", "properties": {"invitee": invitee}, "required": ["invitee"]});
-    let made = |name: &str, nsid: &str, description: &str, input_schema: Value| Tool {
-        name: name.into(),
-        nsid: nsid.into(),
-        kind: Kind::Procedure,
-        description: description.into(),
-        input_schema,
+/// `display_name` as `displayName`.
+pub fn camel(name: &str) -> String {
+    let mut out = String::new();
+    let mut upper = false;
+    for c in name.chars() {
+        if c == '_' {
+            upper = true;
+            continue;
+        }
+        out.push(if upper { c.to_ascii_uppercase() } else { c });
+        upper = false;
+    }
+    out
+}
+
+/// The key a record tool is told of.
+fn rkey(described: String) -> Value {
+    json!({"type": "string", "format": "record-key", "description": described})
+}
+
+/// `schema`'s properties, without `name`; whether it required it.
+fn drop(schema: &mut Value, name: &str) -> bool {
+    let properties = schema["properties"].as_object_mut();
+    properties.expect("an object has properties").remove(name);
+    let required = schema["required"].as_array_mut();
+    let required = required.expect("an object says what it requires");
+    let had = required.iter().any(|r| r == name);
+    required.retain(|r| r != name);
+    had
+}
+
+/// `schema` with `name`, as `property`, required or not.
+fn add(schema: &mut Value, name: &str, property: Value, required: bool) {
+    schema["properties"][name] = property;
+    if required {
+        let list = schema["required"].as_array_mut();
+        list.expect("an object says what it requires")
+            .push(json!(name));
+    }
+}
+
+/// `schema`, an object's, its properties named in snake case.
+fn snaked(schema: &Value) -> Value {
+    let properties: Map<String, Value> = schema["properties"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(k, v)| (snake(k), v.clone()))
+        .collect();
+    let required = schema["required"].as_array().into_iter().flatten();
+    let required: Vec<Value> = required
+        .filter_map(Value::as_str)
+        .map(|r| json!(snake(r)))
+        .collect();
+    json!({"type": "object", "properties": properties, "required": required})
+}
+
+impl Docs {
+    fn main(&self, nsid: &str) -> &Value {
+        &self.0[nsid]["defs"]["main"]
+    }
+
+    /// The tool `TOOLS` makes so.
+    fn tool(&self, (name, args, what, made): &(&str, &[&str], &str, Made)) -> Tool {
+        let (action, mut input, about) = match made {
+            Made::Method(method, opposite) => {
+                let nsid = format!("{NS}.{method}");
+                let main = self.main(&nsid);
+                let procedure = main["type"] == "procedure";
+                let taken = match procedure {
+                    true => &main["input"]["schema"],
+                    false => &main["parameters"],
+                };
+                let mut input = self.object(&nsid, taken, DEPTH);
+                drop(&mut input, "group");
+                // A union of an account and a record, as text.
+                let union = &taken["properties"]["subject"];
+                let subject = (union["type"] == "union").then(|| {
+                    let refs = union["refs"].as_array().expect("a union has refs");
+                    let text = |i: usize| refs[i].as_str().expect("a ref").to_string();
+                    [text(0), text(1)]
+                });
+                if subject.is_some() {
+                    let said = "An account's DID, or a record's at:// URI.";
+                    let text = json!({"type": "string", "description": said});
+                    add(&mut input, "subject", text, true);
+                    let said = "The record's version, its CID: one a label is about needs it.";
+                    let cid = json!({"type": "string", "format": "cid", "description": said});
+                    add(&mut input, "cid", cid, false);
+                }
+                let action = Action::Method {
+                    nsid,
+                    procedure,
+                    undo: opposite.map(|o| format!("{NS}.{o}")),
+                    subject,
+                };
+                (action, input, main["description"].as_str())
+            }
+            Made::Put(kind, space, at) | Made::Delete(kind, space, at) => {
+                let collection = format!("{NS}.{kind}");
+                let main = self.main(&collection);
+                let whole = self.object(&collection, &main["record"], DEPTH);
+                let delete = matches!(made, Made::Delete(..));
+                let mut input = match delete {
+                    true => json!({"type": "object", "properties": {}, "required": []}),
+                    false => whole.clone(),
+                };
+                let stamp = drop(&mut input, "createdAt");
+                let key = match at {
+                    At::Literal(k) => Key::Literal(k.to_string()),
+                    At::Named(n) => {
+                        let said = format!("Which {kind}: its record's key.");
+                        add(&mut input, n, rkey(said), true);
+                        Key::Named(n.to_string())
+                    }
+                    At::Field(n) => {
+                        drop(&mut input, n);
+                        add(&mut input, n, whole["properties"][*n].clone(), true);
+                        Key::Field(n.to_string())
+                    }
+                    At::New(n) => {
+                        let said = format!(
+                            "Which {kind} to change: its record's key. Left out, a new one."
+                        );
+                        add(&mut input, n, rkey(said), false);
+                        Key::New(n.to_string())
+                    }
+                };
+                let (collection, space) = (collection.clone(), space.to_string());
+                let action = match delete {
+                    true => Action::Delete {
+                        collection,
+                        space,
+                        key,
+                    },
+                    false => Action::Put {
+                        collection,
+                        space,
+                        key,
+                        stamp,
+                    },
+                };
+                (action, input, main["description"].as_str())
+            }
+            Made::Invite => {
+                let nsid = format!("{NS}.invite");
+                let main = self.main(&nsid);
+                let mut input = self.object(&nsid, &main["record"], DEPTH);
+                drop(&mut input, "createdAt");
+                let said = "Who is invited, by their DID.";
+                let person = json!({"type": "string", "format": "did", "description": said});
+                add(&mut input, "person", person, true);
+                (Action::Invite, input, main["description"].as_str())
+            }
+            Made::Grant => {
+                let defs = format!("{NS}.defs");
+                let grant = &self.0[&defs]["defs"]["groupGrant"];
+                let mut input = self.object(&defs, grant, DEPTH);
+                input["required"] = json!(["role"]);
+                let main = self.main(&format!("{NS}.permissions"));
+                (Action::Grant, input, main["description"].as_str())
+            }
+        };
+        let undoes = matches!(
+            action,
+            Action::Invite | Action::Grant | Action::Method { undo: Some(_), .. }
+        );
+        if undoes {
+            let said = "Do the opposite, as the tool's description says.";
+            add(
+                &mut input,
+                "undo",
+                json!({"type": "boolean", "description": said}),
+                false,
+            );
+        }
+        let input = snaked(&input);
+        Tool {
+            name: name.to_string(),
+            args: args.iter().map(|a| a.to_string()).collect(),
+            action,
+            description: format!("{what} {}", about.unwrap_or_default()),
+            input_schema: input,
+        }
+    }
+}
+
+/// The tools, by group.
+pub fn tools() -> Vec<Tool> {
+    let docs = Docs::load();
+    TOOLS.iter().map(|t| docs.tool(t)).collect()
+}
+
+/// What calling a tool comes to, carried out by the host for an MCP client and
+/// by the command for a person.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Plan {
+    /// Ask the method `nsid` with `input`, and the group, which the one
+    /// asking adds.
+    Call {
+        nsid: String,
+        procedure: bool,
+        input: Value,
+    },
+    /// Write a record of the group's in its space of the type `space`: put
+    /// `record` at `rkey`, or at a new key if none; with no record, delete
+    /// the one at `rkey`.
+    Write {
+        space: String,
+        collection: String,
+        rkey: Option<String>,
+        record: Option<Value>,
+    },
+    /// Write `record` as an invite in `person`'s inbox; with none, take
+    /// back the one waiting for them.
+    Invite {
+        person: String,
+        record: Option<Value>,
+    },
+    /// Set `role`'s grant in the permissions record to `grant`; with none,
+    /// drop it. `regrant` makes the write, from the record as it is.
+    Grant { role: String, grant: Option<Value> },
+}
+
+/// What calling `tool` with `args` comes to, `now` the time a record it
+/// makes says it was made.
+pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
+    let mut input: Map<String, Value> = args
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(k, v)| (camel(k), v.clone()))
+        .collect();
+    let undo = input.remove("undo") == Some(Value::Bool(true));
+    let given = |input: &mut Map<String, Value>, name: &str| match input.remove(&camel(name)) {
+        Some(Value::String(s)) => Ok(s),
+        _ => Err(format!("{name} is required, as text")),
     };
-    vec![
-        made(
-            "sendInvite",
-            "com.atproto.space.createRecord",
-            "Invite someone not yet a member: an invite written as the group into their own inbox \
-             (fyi.opensocial.invites), told to their PDS. One already waiting for them is the one \
-             answered. Requires invite.",
-            send,
-        ),
-        made(
-            "takeBackInvite",
-            "com.atproto.space.deleteRecord",
-            "Take back the group's invite waiting for someone, deleting it from their inbox. \
-             Requires invite.",
-            take_back,
-        ),
-    ]
+    let stamped = |mut record: Map<String, Value>, collection: &str| {
+        record.insert("$type".into(), json!(collection));
+        record.insert("createdAt".into(), json!(now));
+        Value::Object(record)
+    };
+    Ok(match &tool.action {
+        Action::Method {
+            nsid,
+            procedure,
+            undo: opposite,
+            subject,
+        } => {
+            if let (Some([account, record]), Some(Value::String(s))) =
+                (subject, input.get("subject"))
+            {
+                let made = match s.starts_with("did:") {
+                    true => json!({"$type": account, "did": s}),
+                    false => {
+                        let mut made = json!({"$type": record, "uri": s});
+                        if let Some(cid) = input.remove("cid") {
+                            made["cid"] = cid;
+                        }
+                        made
+                    }
+                };
+                input.insert("subject".into(), made);
+            }
+            let nsid = match (undo, opposite) {
+                (true, Some(opposite)) => opposite,
+                _ => nsid,
+            };
+            Plan::Call {
+                nsid: nsid.clone(),
+                procedure: *procedure,
+                input: Value::Object(input),
+            }
+        }
+        Action::Put {
+            collection,
+            space,
+            key,
+            ..
+        }
+        | Action::Delete {
+            collection,
+            space,
+            key,
+        } => {
+            let rkey = match key {
+                Key::Literal(k) => Some(k.clone()),
+                Key::Named(n) => Some(given(&mut input, n)?),
+                Key::Field(n) => {
+                    let named = given(&mut input, n)?;
+                    input.insert(n.clone(), json!(named));
+                    Some(named)
+                }
+                Key::New(n) => given(&mut input, n).ok(),
+            };
+            let record = match &tool.action {
+                Action::Put { stamp: true, .. } => Some(stamped(input, collection)),
+                Action::Put { .. } => {
+                    input.insert("$type".into(), json!(collection));
+                    Some(Value::Object(input))
+                }
+                _ => None,
+            };
+            Plan::Write {
+                space: space.clone(),
+                collection: collection.clone(),
+                rkey,
+                record,
+            }
+        }
+        Action::Invite => {
+            let person = given(&mut input, "person")?;
+            let record = (!undo).then(|| stamped(input, &format!("{NS}.invite")));
+            Plan::Invite { person, record }
+        }
+        Action::Grant => {
+            let role = given(&mut input, "role")?;
+            let list = |input: &Map<String, Value>, name: &str| {
+                input.get(name).cloned().unwrap_or(json!([]))
+            };
+            let grant = json!({
+                "role": role,
+                "scopes": list(&input, "scopes"),
+                "assignable": list(&input, "assignable"),
+            });
+            Plan::Grant {
+                role,
+                grant: (!undo).then_some(grant),
+            }
+        }
+    })
+}
+
+/// The write that sets `role`'s grant to `grant`, or with none drops it,
+/// in `permissions`, the group's permissions record as it is (none if it
+/// has none): each other role's grant as it was.
+pub fn regrant(permissions: &Value, role: &str, grant: Option<Value>) -> Plan {
+    let mut record = match permissions {
+        Value::Object(_) => permissions.clone(),
+        _ => json!({}),
+    };
+    let mut grants = Vec::new();
+    let mut replaced = false;
+    for old in record["grants"].as_array().into_iter().flatten() {
+        match old["role"] == role {
+            true if !replaced => {
+                replaced = true;
+                grants.extend(grant.clone());
+            }
+            true => {}
+            false => grants.push(old.clone()),
+        }
+    }
+    if !replaced {
+        grants.extend(grant);
+    }
+    record["$type"] = json!(format!("{NS}.permissions"));
+    record["grants"] = json!(grants);
+    Plan::Write {
+        space: MEMBERS.into(),
+        collection: format!("{NS}.permissions"),
+        rkey: Some("self".into()),
+        record: Some(record),
+    }
 }
 
 fn error(id: &Value, code: i64, message: &str) -> Value {
@@ -416,7 +815,7 @@ pub fn not_json() -> Value {
     error(&Value::Null, -32700, "a JSON-RPC message is JSON")
 }
 
-/// The answer to `message`, an assistant's JSON-RPC message, or none for
+/// The answer to `message`, an MCP client's JSON-RPC message, or none for
 /// a notification: each tool called through `call`, with its arguments,
 /// which answers what the method did, or why it did not.
 pub async fn answer<F, Fut>(message: &Value, tools: &[Tool], call: F) -> Option<Value>

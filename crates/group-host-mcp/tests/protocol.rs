@@ -1,7 +1,9 @@
-//! The tools, as an assistant lists them, and what the server answers
-//! each message it sends.
+//! The tools, as an MCP client lists them, what each call comes to, and what
+//! the server answers each message an MCP client sends.
 
-use group_host_mcp::{Kind, PROTOCOL_VERSIONS, Tool, answer, tools};
+use group_host_mcp::{
+    Action, Key, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, plan, regrant, snake, tools,
+};
 use serde_json::{Value, json};
 
 /// What the server answers `message`, each tool answering as `said` says.
@@ -14,158 +16,377 @@ fn tool(name: &str) -> Tool {
     tools().into_iter().find(|t| t.name == name).unwrap()
 }
 
+const NOW: &str = "2026-11-04T00:00:00.000Z";
+
+/// What calling `name` with `args` comes to.
+fn planned(name: &str, args: Value) -> Result<Plan, String> {
+    plan(&tool(name), &args, NOW)
+}
+
 #[test]
-fn makes_a_tool_of_each_method_without_its_group() {
-    let all = tools();
-    assert!(all.len() > 15);
-    for t in &all {
-        let record = matches!(t.kind, Kind::Record { .. });
-        let method = t.nsid.ends_with(&t.name);
-        assert!(
-            method || record || t.nsid.starts_with("com.atproto.space."),
-            "{t:?}"
-        );
-        assert!(
-            t.input_schema["properties"].get("group").is_none(),
-            "{}",
-            t.name
-        );
-        let required = t.input_schema["required"].as_array();
-        assert!(
-            !required.into_iter().flatten().any(|r| r == "group"),
-            "{}",
-            t.name
-        );
-        assert!(!t.description.is_empty(), "{}", t.name);
-    }
-    let get = tool("getGroup");
-    assert_eq!(get.kind, Kind::Query);
+fn names_each_tool_for_its_command() {
+    let names: Vec<String> = tools().into_iter().map(|t| t.name).collect();
     assert_eq!(
-        get.input_schema,
+        names,
+        [
+            "group_show",
+            "profile_set",
+            "rule_set",
+            "rule_delete",
+            "role_set",
+            "role_delete",
+            "role_grant",
+            "member_list",
+            "member_assign",
+            "member_eject",
+            "join_list",
+            "join_deny",
+            "invite_send",
+            "invite_list",
+            "space_create",
+            "space_records",
+            "mod_list",
+            "mod_history",
+            "mod_resolve",
+            "mod_label",
+        ]
+    );
+    assert_eq!(tool("member_assign").command(), "member assign");
+    for t in tools() {
+        let properties = t.input_schema["properties"].as_object().unwrap();
+        // Never the group, which is the one the MCP client was connected to.
+        assert!(properties.get("group").is_none(), "{}", t.name);
+        // Named as its command's flags are, in snake case.
+        for name in properties.keys() {
+            assert_eq!(name, &snake(name), "{}", t.name);
+        }
+        // What its command takes in order, it requires.
+        let required = t.input_schema["required"].as_array().unwrap();
+        for arg in &t.args {
+            assert!(required.iter().any(|r| r == arg), "{}: {arg}", t.name);
+        }
+        assert!(t.description.len() > 20, "{}", t.name);
+    }
+    assert_eq!(snake("expiresAt"), "expires_at");
+    assert_eq!(camel("expires_at"), "expiresAt");
+}
+
+#[test]
+fn makes_each_schema_from_the_lexicons() {
+    let show = tool("group_show");
+    assert_eq!(
+        show.input_schema,
         json!({"type": "object", "properties": {}, "required": []})
     );
+    assert!(
+        show.description
+            .starts_with("The group as the member may see it. Get a detailed view")
+    );
 
-    // A membership, written as the group in its members space, at its
-    // member's DID; a reference followed: each role its id.
-    let admit = tool("putMembership");
-    let members = "fyi.opensocial.members".to_string();
-    let put = Kind::Record {
-        space: members.clone(),
-        literal: None,
-        delete: false,
-    };
-    assert_eq!(admit.kind, put);
-    let fields = &admit.input_schema["properties"];
+    // A membership, at its member's DID; each role its id.
+    let assign = tool("member_assign");
+    assert_eq!(assign.args, ["member", "roles"]);
+    let fields = &assign.input_schema["properties"];
     assert_eq!(fields["member"]["format"], "did");
     assert_eq!(fields["roles"]["items"]["type"], "string");
-    assert_eq!(fields["rkey"]["format"], "record-key");
-    let gone = Kind::Record {
-        space: members,
-        literal: None,
-        delete: true,
-    };
-    assert_eq!(tool("deleteMembership").kind, gone);
-    assert_eq!(tool("deleteRole").kind, gone);
-    // The permissions record, at self; its grants' scopes plain strings.
-    let grants = &tool("putPermissions").input_schema["properties"]["grants"];
+    assert!(fields.get("created_at").is_none());
     assert_eq!(
-        grants["items"]["properties"]["scopes"]["items"]["type"],
-        "string"
+        assign.action,
+        Action::Put {
+            collection: "fyi.opensocial.membership".into(),
+            space: "fyi.opensocial.members".into(),
+            key: Key::Field("member".into()),
+            stamp: true,
+        }
     );
-    assert!(tools().iter().all(|t| t.name != "deletePermissions"));
+    let eject = tool("member_eject");
+    assert_eq!(eject.input_schema["required"], json!(["member"]));
+    assert_eq!(eject.input_schema["properties"]["member"]["format"], "did");
 
-    // Known values said in words, beside what the lexicon says; a closed
-    // set, as JSON Schema's own.
-    let policy = &tool("putProfile").input_schema["properties"]["joinPolicy"];
-    let said = policy["description"].as_str().unwrap();
+    // The profile, at its one key: none to say, nor when it was made.
+    let profile = tool("profile_set");
+    let fields = &profile.input_schema["properties"];
+    assert_eq!(fields["display_name"]["maxLength"], 640);
+    assert!(fields.get("rkey").is_none() && fields.get("created_at").is_none());
+    assert_eq!(
+        profile.input_schema["required"],
+        json!(["display_name", "join_policy"])
+    );
+    let said = fields["join_policy"]["description"].as_str().unwrap();
     assert!(said.contains("One of: "), "{said}");
-    let status = &tool("listSubjects").input_schema["properties"]["status"];
-    assert_eq!(status["enum"], json!(["open", "escalated", "resolved"]));
-    let limit = &tool("listSubjects").input_schema["properties"]["limit"];
-    assert_eq!(limit["type"], "integer");
-    assert!(limit.get("maximum").is_some());
+    assert_eq!(fields["online"]["type"], "boolean");
+    assert!(profile.description.contains("The group's profile"));
 
-    // A union, each member saying which it is.
-    let subject = &tool("applyLabel").input_schema["properties"]["subject"];
-    let members = subject["anyOf"].as_array().unwrap();
-    assert!(members.len() >= 2, "{subject}");
-    assert!(
-        members
-            .iter()
-            .filter_map(|m| m["properties"]["$type"]["const"].as_str())
-            .count()
-            >= 1,
-        "{subject}"
-    );
-    let online = &tool("putProfile").input_schema["properties"]["online"];
-    assert_eq!(online["type"], "boolean");
-
-    // Invites, written as the group: the record's fields but when it was
-    // made, which the host says, and whom it is for.
-    let send = tool("sendInvite");
+    // A rule to change, or none for a new one; one to delete.
+    let rule = tool("rule_set");
     assert_eq!(
-        (send.nsid.as_str(), send.kind),
-        ("com.atproto.space.createRecord", Kind::Procedure)
+        rule.input_schema["properties"]["rule"]["format"],
+        "record-key"
     );
+    assert_eq!(rule.input_schema["required"], json!(["title", "text"]));
+    assert_eq!(
+        tool("rule_delete").input_schema["required"],
+        json!(["rule"])
+    );
+    assert_eq!(tool("role_delete").args, ["role"]);
+
+    // A role's grant: its scopes plain strings; with undo, dropped.
+    let grant = tool("role_grant");
+    let fields = &grant.input_schema["properties"];
+    assert_eq!(fields["scopes"]["items"]["type"], "string");
+    assert_eq!(fields["assignable"]["items"]["type"], "string");
+    assert_eq!(fields["undo"]["type"], "boolean");
+    assert_eq!(grant.input_schema["required"], json!(["role"]));
+
+    // An invite: the record's fields but when it was made, and whom for.
+    let send = tool("invite_send");
     let fields = send.input_schema["properties"].as_object().unwrap();
     let mut names: Vec<&str> = fields.keys().map(String::as_str).collect();
     names.sort();
-    assert_eq!(names, ["expiresAt", "invitee", "message"]);
-    assert_eq!(send.input_schema["required"], json!(["invitee"]));
+    assert_eq!(names, ["expires_at", "message", "person", "undo"]);
+    assert_eq!(send.input_schema["required"], json!(["person"]));
     assert_eq!(fields["message"]["maxLength"], 20000);
-    let take_back = tool("takeBackInvite");
-    assert_eq!(take_back.nsid, "com.atproto.space.deleteRecord");
-    assert_eq!(take_back.input_schema["required"], json!(["invitee"]));
+
+    // A closed set, as JSON Schema's own; limits as the lexicon's.
+    let fields = &tool("mod_list").input_schema["properties"];
+    assert_eq!(
+        fields["status"]["enum"],
+        json!(["open", "escalated", "resolved"])
+    );
+    assert_eq!(fields["limit"]["type"], "integer");
+    assert!(fields["limit"].get("maximum").is_some());
+
+    // A subject, an account or a record, as text; and its opposite.
+    let label = tool("mod_label");
+    let fields = &label.input_schema["properties"];
+    assert_eq!(fields["subject"]["type"], "string");
+    assert_eq!(fields["cid"]["format"], "cid");
+    assert_eq!(fields["undo"]["type"], "boolean");
+    assert_eq!(label.args, ["subject", "val"]);
+    let history = &tool("mod_history").input_schema["properties"]["subject"];
+    assert_eq!(history["format"], "uri");
+    assert!(
+        tool("mod_resolve").input_schema["properties"]
+            .get("undo")
+            .is_none()
+    );
+    assert_eq!(
+        tool("space_records").input_schema["required"],
+        json!(["space"])
+    );
 }
 
 #[test]
-fn makes_a_tool_of_each_record_written_as_the_group() {
-    // The profile, kept at one key, as its lexicon has it: no key to say.
-    let profile = tool("putProfile");
-    assert_eq!(profile.nsid, "fyi.opensocial.profile");
-    let meta = "fyi.opensocial.meta".to_string();
+fn plans_a_method_asked_with_its_arguments() {
     assert_eq!(
-        profile.kind,
-        Kind::Record {
-            space: meta.clone(),
-            literal: Some("self".into()),
-            delete: false
-        }
+        planned("group_show", json!({})),
+        Ok(Plan::Call {
+            nsid: "fyi.opensocial.getGroup".into(),
+            procedure: false,
+            input: json!({}),
+        })
     );
-    let fields = &profile.input_schema["properties"];
-    assert!(fields.get("rkey").is_none(), "{fields}");
-    assert_eq!(fields["displayName"]["maxLength"], 640);
+    let Ok(Plan::Call { input, .. }) = planned("join_list", json!({"limit": 5})) else {
+        panic!()
+    };
+    assert_eq!(input, json!({"limit": 5}));
+    // An account, or a record at a version; the opposite asked instead.
+    let call = |args: Value| match planned("mod_label", args).unwrap() {
+        Plan::Call { nsid, input, .. } => (nsid, input),
+        other => panic!("{other:?}"),
+    };
+    let (nsid, input) = call(json!({"subject": "did:plc:a", "val": "spam", "undo": false}));
+    assert_eq!(nsid, "fyi.opensocial.applyLabel");
     assert_eq!(
-        profile.input_schema["required"],
-        json!(["displayName", "joinPolicy"])
+        input,
+        json!({"subject": {"$type": "com.atproto.admin.defs#repoRef", "did": "did:plc:a"}, "val": "spam"})
     );
-    assert!(profile.description.contains("The group's profile"));
-
-    // A rule, at a key of its own: one to change, or none for a new one.
-    let rule = tool("putRule");
-    assert_eq!(rule.nsid, "fyi.opensocial.rule");
-    let fields = &rule.input_schema["properties"];
-    assert_eq!(fields["rkey"]["type"], "string");
-    assert_eq!(fields["title"]["type"], "string");
-    assert!(
-        !rule.input_schema["required"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|r| r == "rkey")
-    );
-    let delete = tool("deleteRule");
+    let post = "at://did:plc:g/space/x/self/did:plc:a/com.example.post/1";
+    let (nsid, input) = call(json!({"subject": post, "cid": "bafy", "val": "spam", "undo": true}));
+    assert_eq!(nsid, "fyi.opensocial.negateLabel");
     assert_eq!(
-        delete.kind,
-        Kind::Record {
-            space: meta,
-            literal: None,
-            delete: true
-        }
+        input["subject"],
+        json!({"$type": "com.atproto.repo.strongRef", "uri": post, "cid": "bafy"})
     );
-    assert_eq!(delete.input_schema["required"], json!(["rkey"]));
+    let Ok(Plan::Call { input, .. }) = planned(
+        "mod_resolve",
+        json!({"subject": post, "status": "resolved"}),
+    ) else {
+        panic!()
+    };
+    assert_eq!(
+        input["subject"],
+        json!({"$type": "fyi.opensocial.defs#recordSubject", "uri": post})
+    );
+    // Nothing to make a subject of, nothing made.
+    let (_, input) = call(json!({"val": "spam"}));
+    assert_eq!(input, json!({"val": "spam"}));
 }
 
+#[test]
+fn plans_a_record_written_as_the_group() {
+    let write = |space: &str, kind: &str, rkey: Option<&str>, record: Option<Value>| Plan::Write {
+        space: format!("fyi.opensocial.{space}"),
+        collection: format!("fyi.opensocial.{kind}"),
+        rkey: rkey.map(String::from),
+        record,
+    };
+    // In snake case, written in the lexicon's own case.
+    assert_eq!(
+        planned(
+            "profile_set",
+            json!({"display_name": "Riders", "join_policy": "open"})
+        ),
+        Ok(write(
+            "meta",
+            "profile",
+            Some("self"),
+            Some(
+                json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "joinPolicy": "open"})
+            )
+        ))
+    );
+    let rule = json!({"$type": "fyi.opensocial.rule", "title": "Be kind", "text": ""});
+    assert_eq!(
+        planned("rule_set", json!({"title": "Be kind", "text": ""})),
+        Ok(write("meta", "rule", None, Some(rule.clone())))
+    );
+    assert_eq!(
+        planned(
+            "rule_set",
+            json!({"rule": "3k", "title": "Be kind", "text": ""})
+        ),
+        Ok(write("meta", "rule", Some("3k"), Some(rule)))
+    );
+    assert_eq!(
+        planned("rule_delete", json!({"rule": "3k"})),
+        Ok(write("meta", "rule", Some("3k"), None))
+    );
+    assert_eq!(
+        planned("rule_delete", json!({"rule": 3})),
+        Err("rule is required, as text".into())
+    );
+    assert_eq!(
+        planned(
+            "role_set",
+            json!({"role": "leader", "display_name": "Ride leader"})
+        ),
+        Ok(write(
+            "members",
+            "role",
+            Some("leader"),
+            Some(json!({"$type": "fyi.opensocial.role", "displayName": "Ride leader"}))
+        ))
+    );
+    // A membership at its member's DID, saying when it was made.
+    assert_eq!(
+        planned(
+            "member_assign",
+            json!({"member": "did:plc:b", "roles": ["member"]})
+        ),
+        Ok(write(
+            "members",
+            "membership",
+            Some("did:plc:b"),
+            Some(
+                json!({"$type": "fyi.opensocial.membership", "member": "did:plc:b", "roles": ["member"], "createdAt": NOW})
+            )
+        ))
+    );
+    assert_eq!(
+        planned("member_eject", json!({"member": "did:plc:b"})),
+        Ok(write("members", "membership", Some("did:plc:b"), None))
+    );
+    assert_eq!(
+        planned("member_eject", json!({})),
+        Err("member is required, as text".into())
+    );
+}
+
+#[test]
+fn plans_an_invite_and_a_grant() {
+    assert_eq!(
+        planned(
+            "invite_send",
+            json!({"person": "did:plc:b", "message": "Ride with us", "expires_at": "2099-01-01T00:00:00Z"})
+        ),
+        Ok(Plan::Invite {
+            person: "did:plc:b".into(),
+            record: Some(
+                json!({"$type": "fyi.opensocial.invite", "message": "Ride with us", "expiresAt": "2099-01-01T00:00:00Z", "createdAt": NOW})
+            ),
+        })
+    );
+    assert_eq!(
+        planned("invite_send", json!({"person": "did:plc:b", "undo": true})),
+        Ok(Plan::Invite {
+            person: "did:plc:b".into(),
+            record: None
+        })
+    );
+    assert_eq!(
+        planned("invite_send", json!({})),
+        Err("person is required, as text".into())
+    );
+    assert_eq!(
+        planned("role_grant", json!({"role": "leader", "scopes": ["rpc:x"]})),
+        Ok(Plan::Grant {
+            role: "leader".into(),
+            grant: Some(json!({"role": "leader", "scopes": ["rpc:x"], "assignable": []})),
+        })
+    );
+    assert_eq!(
+        planned("role_grant", json!({"role": "leader", "undo": true})),
+        Ok(Plan::Grant {
+            role: "leader".into(),
+            grant: None
+        })
+    );
+    assert!(planned("role_grant", json!({})).is_err());
+}
+
+#[test]
+fn regrants_one_role_keeping_the_rest() {
+    let grant =
+        |role: &str, scope: &str| json!({"role": role, "scopes": [scope], "assignable": []});
+    let written = |plan: Plan| match plan {
+        Plan::Write {
+            space,
+            collection,
+            rkey,
+            record,
+        } => {
+            assert_eq!(
+                (space.as_str(), collection.as_str(), rkey.as_deref()),
+                (
+                    "fyi.opensocial.members",
+                    "fyi.opensocial.permissions",
+                    Some("self")
+                )
+            );
+            record.unwrap()
+        }
+        other => panic!("{other:?}"),
+    };
+    let kept = json!({"$type": "fyi.opensocial.permissions", "grants": [grant("admin", "a"), grant("leader", "b"), grant("leader", "c")], "createdAt": NOW});
+    // In its place, once; the rest as they were.
+    let record = written(regrant(&kept, "leader", Some(grant("leader", "d"))));
+    assert_eq!(
+        record["grants"],
+        json!([grant("admin", "a"), grant("leader", "d")])
+    );
+    assert_eq!(record["createdAt"], NOW);
+    let record = written(regrant(&kept, "leader", None));
+    assert_eq!(record["grants"], json!([grant("admin", "a")]));
+    let record = written(regrant(&kept, "mod", Some(grant("mod", "e"))));
+    assert_eq!(record["grants"].as_array().unwrap().len(), 4);
+    // A group with none yet has one.
+    let record = written(regrant(&Value::Null, "mod", Some(grant("mod", "e"))));
+    assert_eq!(
+        record,
+        json!({"$type": "fyi.opensocial.permissions", "grants": [grant("mod", "e")]})
+    );
+}
 #[tokio::test]
 async fn answers_initialize_ping_and_the_list() {
     let said = ask(
@@ -216,7 +437,7 @@ async fn answers_initialize_ping_and_the_list() {
 
 #[tokio::test]
 async fn calls_a_tool_and_says_what_it_did_or_why_not() {
-    let call = |args: Value| json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "getGroup", "arguments": args}});
+    let call = |args: Value| json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "group_show", "arguments": args}});
     let said = ask(
         call(Value::Null),
         Ok(json!({"group": {"did": "did:plc:x"}})),
@@ -251,13 +472,13 @@ async fn calls_a_tool_and_says_what_it_did_or_why_not() {
     let tools = tools();
     let message = call(json!({"x": 1}));
     let said = answer(&message, &tools, |t: Tool, args: Value| async move {
-        Ok(json!({"tool": t.nsid, "args": args}))
+        Ok(json!({"tool": t.name, "args": args}))
     })
     .await
     .unwrap();
     assert_eq!(
         said["result"]["structuredContent"],
-        json!({"tool": "fyi.opensocial.getGroup", "args": {"x": 1}})
+        json!({"tool": "group_show", "args": {"x": 1}})
     );
 }
 
@@ -298,7 +519,7 @@ async fn refuses_what_is_not_a_request_it_knows() {
     assert_eq!(
         error(
             ask(
-                json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "getGroup", "arguments": [1]}}),
+                json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "group_show", "arguments": [1]}}),
                 Ok(json!({}))
             )
             .await

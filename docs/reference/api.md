@@ -166,9 +166,9 @@ A group's profile and rules, in `meta`, change only this way: an app
 writes the records as the group, and the host keeps each only as its
 rules have it ([groups](../design/groups.md#changing-its-profile-rules-and-pictures)).
 
-## Assistants
+## MCP
 
-An AI app connects to a group over MCP ([assistants](../design/assistants.md));
+An MCP client, an AI app, connects to a group over MCP ([MCP](../design/mcp.md));
 its tools are in [MCP tools](mcp.md).
 
 | Route | What it does |
@@ -179,7 +179,7 @@ its tools are in [MCP tools](mcp.md).
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.listConnectedApps` | the assistants the caller connected to a group |
+| `GET fyi.opensocial.listConnectedApps` | the MCP clients the caller connected to a group |
 | `POST fyi.opensocial.revokeConnectedApp` | disconnects one |
 
 ## Moderation

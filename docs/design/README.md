@@ -21,8 +21,9 @@ accounts on their own PDSes, anywhere on the network.
 - Its OAuth server. A member signs an app in as the group, and the app
   gets what that member's roles allow, checked again at every write
   ([signing in](signing-in.md)).
-- An MCP server, where a member connects an AI assistant to act for them
-  in one group ([assistants](assistants.md)).
+- An MCP server, where a member connects an AI app to act for them in
+  one group, its tools the twins of the `opensocial` commands
+  ([MCP](mcp.md)).
 
 ## Where things live
 
@@ -42,7 +43,7 @@ accounts on their own PDSes, anywhere on the network.
 | --- | --- |
 | `crates/atproto` | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE, lexicon data validation, and the space alpha's set hash, commits and tokens, checked against atproto's interop test vectors and its reference implementation |
 | `crates/group-host` | the server, over SQLite: accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries |
-| `crates/group-host-mcp` | the host's methods as MCP tools, asked as the member who connected an assistant |
+| `crates/group-host-mcp` | the MCP tools, each the twin of an `opensocial` command, and what each call comes to, carried out by the host as the member who connected an MCP client and by the command as the person running it |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command ([commands](../reference/cli.md)) |
 | `web/` | the console, a SvelteKit app where people start and run groups and approve apps |
 | `lexicons/` | the schemas of the records and methods: every `fyi.opensocial.*` method's parameters and input are checked against its own before its handler runs, and a record of our own collections an app writes as a group before it is kept |
@@ -54,10 +55,10 @@ accounts on their own PDSes, anywhere on the network.
 - [Groups](groups.md): starting a group, what it shows, its profile,
   spaces and handle, and ending it.
 - [Membership](membership.md): roles, joining, invites, and leaving.
-- [Signing in](signing-in.md): people, apps and assistants, and what a
+- [Signing in](signing-in.md): people, apps and MCP clients, and what a
   token may do.
 - [Moderation](moderation.md): labels, the queue, and reports.
-- [Assistants](assistants.md): connecting an AI assistant to a group.
+- [MCP](mcp.md): connecting an AI app to a group, and its tools.
 - [Recovery](recovery.md): keys that let a group's stewards hold its
   identity.
 - [Moving](moving.md): a group to another host, an account here as a

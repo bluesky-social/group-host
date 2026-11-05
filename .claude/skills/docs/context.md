@@ -11,7 +11,7 @@ protocol instead of the page.
   spaces, and its OAuth server.
 - Members keep their own accounts on their own PDSes, anywhere. What a
   member may do in a group is what their roles there grant, and an app or
-  assistant a member signs in gets what those roles allow and nothing more.
+  MCP client a member signs in gets what those roles allow and nothing more.
 - The host is one Rust server over SQLite, with a console (a SvelteKit
   app) where people start and run groups and approve apps, and a command,
   `opensocial`, that does the same from a terminal.
@@ -48,12 +48,12 @@ for more.
   client holds.
 - **lexicon**: the schema for a record or method (`lexicons/fyi/opensocial/`).
 - **label**: a moderation tag on a record or account.
-- **MCP**: the protocol an AI assistant uses to call tools on a server.
+- **MCP**: the protocol an AI app uses to call tools on a server.
 
 ## Pages to link
 
 Design: `README.md` (overview), `spaces.md`, `groups.md`,
-`membership.md`, `signing-in.md`, `moderation.md`, `assistants.md`,
+`membership.md`, `signing-in.md`, `moderation.md`, `mcp.md`,
 `recovery.md`, `moving.md`. Reference: `../reference/api.md`, `mcp.md`,
 `cli.md`, `config.md`. `../development.md`. Link to them rather than
 restating them.

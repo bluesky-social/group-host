@@ -1,5 +1,8 @@
 //! A client for opensocial group hosts, and what the `opensocial` command
-//! does with it.
+//! does with it. Each command is `opensocial <group> <action>`; all but
+//! those that make or move a group or an account are the twins of the
+//! host's MCP tools, made from the same `group_host_mcp::Tool`s and
+//! carried out from the same `Plan`s.
 //!
 //! The command acts as a person: it signs in to their own PDS with their
 //! handle and password (an app password is enough), and asks that PDS for
@@ -11,37 +14,87 @@
 use anyhow::{Context, Result, anyhow, bail};
 use atproto::jose;
 use atproto::keys::{Curve, Keypair};
+use group_host_mcp::{Plan, Tool};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// What `opensocial` prints for `--help`, or with no command.
-pub const USAGE: &str = "usage: opensocial <command>
+pub const USAGE: &str = "usage: opensocial <group> <action> <arguments>
 
-  create-group <handle> [--name <name>] [--description <words>] [--join open|approval|invite]
+group
+  group create <handle> [--display-name <name>] [--description <words>] [--join-policy open|approval|invite]
                          start a group, run by you
-  inspect <group>        a group as you may see it: its roles, members and spaces
-  membership assign <group> <member> <role,role…>
-                         give a member these roles, in place of theirs
-  membership eject <group> <member>
-                         put a member out
-  membership invite <group> <person> [--message <words>]
-                         invite someone in
-  migrate <group> --to <address> [--to-did <did>]
+  group show <group>     a group as you may see it: its roles, members and spaces
+  group seed <handle>    a group to try things on: two rules, a moderator role, and an
+                         invite for each handle in OPENSOCIAL_SEED_INVITE
+  group move <group> --to <address> [--to-did <did>]
                          move a group, whole, from this host to the one at <address>
-  import <account> [--address <label>]
+profile
+  profile set <group> --display-name <name> --join-policy <policy> [--description <words>] …
+                         replace the group's profile
+rule
+  rule set <group> --title <title> --text <words> [--order <n>] [--rule <key>]
+                         write a rule: the one --rule names, or a new one
+  rule delete <group> <rule>
+                         delete a rule
+role
+  role set <group> <role> --display-name <name> [--description <words>] [--default] [--bot]
+                         write a role
+  role delete <group> <role>
+                         delete a role nobody holds or is granted
+  role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
+                         set what a role may do, or with --undo drop its grant
+member
+  member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
+                         who is in the group, and their roles, a page at a time
+  member assign <group> <member> <role,role…>
+                         give a member these roles, in place of theirs, or let them in
+  member eject <group> <member>
+                         put a member out
+join
+  join list <group> [--limit <n>] [--cursor <cursor>]
+                         the requests to join waiting
+  join deny <group> <member>
+                         turn down a request to join
+invite
+  invite send <group> <person> [--message <words>] [--expires-at <time>] [--undo]
+                         invite someone in, or with --undo take the invite back
+  invite list <group> [--limit <n>] [--cursor <cursor>]
+                         the invites waiting
+space
+  space create <group> <type> --access <json> [--name <name>] [--skey <key>] [--no-index]
+                         add a space to the group
+  space records <group> <space> [--collection <nsid>] [--field <path> --equals <value>] …
+                         the records in one of the group's spaces
+mod
+  mod list <group> [--status open|escalated|resolved] [--limit <n>] [--cursor <cursor>]
+                         the moderation queue
+  mod history <group> <subject> [--cid <cid>] [--limit <n>] [--cursor <cursor>]
+                         what was done about a subject
+  mod resolve <group> <subject> --status resolved|escalated [--note <words>] [--cid <cid>]
+                         resolve or escalate a subject
+  mod label <group> <subject> <val> [--cid <cid>] [--rule <uri>] [--undo]
+                         label a subject, or with --undo take the label back
+account
+  account import <account> [--address <label>]
                          move an account from its server here, its spaces with it, to
                          become a group run by you; its server emails a code
-  import <account> --code <code>
+  account import <account> --code <code>
                          with that code, finish moving it
-  seed <handle>          a group to try things on: two rules, a moderator role, and an
-                         invite for each handle in OPENSOCIAL_SEED_INVITE
 
-  A group or person is a handle or a DID. You sign in as OPENSOCIAL_AS (a
-  handle) with OPENSOCIAL_PASSWORD, at PDS_URL; the host is OPENSOCIAL_HOST,
-  its DID OPENSOCIAL_HOST_DID (by default the did:web of its address). An
-  account you import signs in at its own server with OPENSOCIAL_IMPORT_PASSWORD,
-  its own password: its server hands its identity over for no app password.
+  A group or person is a handle or a DID; a subject an account's DID or a
+  record's at:// URI. A flag is a field of what the command writes or asks,
+  in kebab case; a list is comma-separated, and anything more than text or
+  a number is JSON. Every command but group create, seed and move and
+  account import is also the MCP tool <group>_<action> (member_assign),
+  which an MCP client connected to a group calls there.
+
+  You sign in as OPENSOCIAL_AS (a handle) with OPENSOCIAL_PASSWORD, at
+  PDS_URL; the host is OPENSOCIAL_HOST, its DID OPENSOCIAL_HOST_DID (by
+  default the did:web of its address). An account you import signs in at
+  its own server with OPENSOCIAL_IMPORT_PASSWORD, its own password: its
+  server hands its identity over for no app password.
 ";
 
 /// Where the command acts, and as whom: from the environment.
@@ -238,21 +291,17 @@ impl Client {
     }
 
     /// Invites `invitee` to `group`, as the group: with a group token for
-    /// their inbox, from `getGroupAuth`, an invite written there through
+    /// their inbox, from `getGroupAuth`, `record` written there through
     /// `com.atproto.space.createRecord`.
     pub async fn invite(
         &self,
         host: &Host,
         group: &str,
         invitee: &str,
-        message: Option<&str>,
+        record: Value,
     ) -> Result<Value> {
-        let inbox = format!("at://{invitee}/space/fyi.opensocial.invites/self");
+        let inbox = inbox_of(invitee);
         let session = GroupSession::start(self, host, group, &inbox).await?;
-        let mut record = json!({"$type": "fyi.opensocial.invite", "createdAt": now_iso()});
-        if let Some(words) = message {
-            record["message"] = json!(words);
-        }
         let body = json!({"repo": group, "space": inbox, "collection": "fyi.opensocial.invite", "record": record});
         session.call("com.atproto.space.createRecord", &body).await
     }
@@ -266,6 +315,11 @@ impl Client {
         let said = self.query(host, lxm, &[("handle", who)]).await?;
         Ok(text(&said["did"]).to_string())
     }
+}
+
+/// `person`'s inbox, where a group writes an invite for them.
+fn inbox_of(person: &str) -> String {
+    format!("at://{person}/space/fyi.opensocial.invites/self")
 }
 
 /// Now, as atproto writes a datetime.
@@ -386,10 +440,10 @@ struct Args<'a> {
     flags: HashMap<&'a str, &'a str>,
 }
 
-fn parse<'a>(args: &'a [String], known: &[&str]) -> Result<Args<'a>> {
+fn parse<'a>(args: &[&'a str], known: &[&str]) -> Result<Args<'a>> {
     let mut words = Vec::new();
     let mut flags = HashMap::new();
-    let mut it = args.iter().map(String::as_str);
+    let mut it = args.iter().copied();
     while let Some(a) = it.next() {
         match a.strip_prefix("--") {
             Some(flag) if known.contains(&flag) => {
@@ -414,6 +468,72 @@ impl<'a> Args<'a> {
     }
 }
 
+/// `value`, given for `name`, as the tool's `schema` for it has it: a
+/// number, a list (`a,b`), JSON for anything more than text, or text.
+fn typed(name: &str, value: &str, schema: &Value) -> Result<Value> {
+    let listed = schema["type"] == "array" && schema["items"]["type"] == "string";
+    Ok(match schema["type"].as_str() {
+        Some("integer") => {
+            let n: i64 = value
+                .parse()
+                .map_err(|_| anyhow!("{name} wants a number"))?;
+            json!(n)
+        }
+        Some("string") => json!(value),
+        _ if listed => {
+            let items = value.split(',').map(str::trim).filter(|v| !v.is_empty());
+            json!(items.collect::<Vec<_>>())
+        }
+        _ => serde_json::from_str(value).map_err(|_| anyhow!("{name} wants JSON"))?,
+    })
+}
+
+/// A tool's command's words after `<group> <action>`, as the tool's
+/// arguments: the group first, then the arguments the tool names in
+/// order, then flags, each `--name value` for its `name` in kebab case,
+/// a yes or no `--name` or `--no-name`, typed as the tool's schema has
+/// it. The group, and the arguments.
+pub fn arguments(tool: &Tool, words: &[&str]) -> Result<(String, Value)> {
+    let properties = &tool.input_schema["properties"];
+    let mut given = json!({});
+    let mut positional = Vec::new();
+    let mut it = words.iter().copied();
+    while let Some(word) = it.next() {
+        let Some(flag) = word.strip_prefix("--") else {
+            positional.push(word);
+            continue;
+        };
+        let name = flag.replace('-', "_");
+        let no = name
+            .strip_prefix("no_")
+            .filter(|n| properties[*n]["type"] == "boolean");
+        let schema = &properties[no.unwrap_or(&name)];
+        if schema.is_null() || tool.args.contains(&name) {
+            bail!("no option --{flag}\n\n{USAGE}");
+        }
+        let value = match (no, schema["type"] == "boolean") {
+            (Some(n), _) => {
+                given[n] = json!(false);
+                continue;
+            }
+            (None, true) => json!(true),
+            (None, false) => {
+                let value = it.next().ok_or_else(|| anyhow!("--{flag} wants a value"))?;
+                typed(&format!("--{flag}"), value, schema)?
+            }
+        };
+        given[name] = value;
+    }
+    let (group, rest) = positional.split_first().ok_or_else(usage)?;
+    if rest.len() != tool.args.len() {
+        return Err(usage());
+    }
+    for (name, value) in tool.args.iter().zip(rest) {
+        given[name] = typed(name, value, &properties[name])?;
+    }
+    Ok((group.to_string(), given))
+}
+
 /// Signs in as the environment's person.
 async fn signed_in(env: &Env) -> Result<Client> {
     let (Some(handle), Some(password)) = (&env.handle, &env.password) else {
@@ -429,30 +549,19 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
         url: env.host.clone(),
         did: env.host_did.clone(),
     };
-    let Some((command, rest)) = args.split_first() else {
-        return Ok(USAGE.to_string());
-    };
-    match command.as_str() {
-        "help" | "--help" | "-h" => Ok(USAGE.to_string()),
-        "create-group" => {
-            let a = parse(rest, &["name", "description", "join"])?;
+    let words: Vec<&str> = args.iter().map(String::as_str).collect();
+    match words.as_slice() {
+        [] | ["help" | "--help" | "-h"] => Ok(USAGE.to_string()),
+        ["group", "create", rest @ ..] => {
+            let a = parse(rest, &["display-name", "description", "join-policy"])?;
             let [handle] = a.take()?;
             create_group(&signed_in(env).await?, &host, handle, &a.flags).await
         }
-        "inspect" => {
-            let [group] = parse(rest, &[])?.take()?;
-            inspect(&signed_in(env).await?, &host, group).await
+        ["group", "seed", rest @ ..] => {
+            let [handle] = parse(rest, &[])?.take()?;
+            seed(&signed_in(env).await?, &host, handle, &env.seed_invite).await
         }
-        "membership" => {
-            // Invite takes a message.
-            let known: &[&str] = match rest.first().map(String::as_str) {
-                Some("invite") => &["message"],
-                _ => &[],
-            };
-            let a = parse(rest, known)?;
-            membership(&signed_in(env).await?, &host, &a).await
-        }
-        "migrate" => {
+        ["group", "move", rest @ ..] => {
             let a = parse(rest, &["to", "to-did"])?;
             let [group] = a.take()?;
             let to = a.flags.get("to").ok_or_else(usage)?.trim_end_matches('/');
@@ -463,16 +572,160 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             };
             migrate(&signed_in(env).await?, &host, &dest, group).await
         }
-        "import" => {
+        ["account", "import", rest @ ..] => {
             let a = parse(rest, &["address", "code"])?;
             let [account] = a.take()?;
             import(&signed_in(env).await?, &host, env, account, &a).await
         }
-        "seed" => {
-            let [handle] = parse(rest, &[])?.take()?;
-            seed(&signed_in(env).await?, &host, handle, &env.seed_invite).await
+        [group, action, rest @ ..] => {
+            let name = format!("{group}_{action}").replace('-', "_");
+            let tools = group_host_mcp::tools();
+            let Some(tool) = tools.into_iter().find(|t| t.name == name) else {
+                bail!("no command {group} {action}\n\n{USAGE}");
+            };
+            let (group, given) = arguments(&tool, rest)?;
+            command(&signed_in(env).await?, &host, &tool, &group, given).await
         }
-        other => bail!("no command {other}\n\n{USAGE}"),
+        [other] => bail!("no command {other}\n\n{USAGE}"),
+    }
+}
+
+/// A tool's command, as `me`, in `group`: what it answers, as JSON; or
+/// for `group show`, as lines.
+async fn command(
+    me: &Client,
+    host: &Host,
+    tool: &Tool,
+    group: &str,
+    mut given: Value,
+) -> Result<String> {
+    let group = me.resolve(host, group).await?;
+    // A person is named by a handle or a DID, and the tool takes a DID.
+    let properties = tool.input_schema["properties"].as_object();
+    for (name, schema) in properties.into_iter().flatten() {
+        let named = given[name.as_str()].as_str().map(String::from);
+        if let Some(who) = named.filter(|_| schema["format"] == "did") {
+            given[name.as_str()] = json!(me.resolve(host, &who).await?);
+        }
+    }
+    let planned = group_host_mcp::plan(tool, &given, &now_iso()).map_err(anyhow::Error::msg)?;
+    let done = carry_out(me, host, &group, planned).await?;
+    Ok(match tool.name.as_str() {
+        "group_show" => {
+            // The first hundred, to one who may read them, as getGroup
+            // counts them.
+            let members = match done["group"].get("memberCount") {
+                Some(_) => {
+                    let asked = [("group", group.as_str()), ("limit", "100")];
+                    let page = me.query(host, &m("listMembers"), &asked).await?;
+                    page["members"].clone()
+                }
+                None => Value::Null,
+            };
+            shown(&done, &members)
+        }
+        _ => format!("{}\n", serde_json::to_string_pretty(&done)?),
+    })
+}
+
+/// A query's parameters from JSON, each value as text: none of the
+/// queries a command asks takes a list.
+fn query_of(input: &Value) -> Vec<(String, String)> {
+    let fields = input.as_object().into_iter().flatten();
+    let text = |v: &Value| v.as_str().map_or_else(|| v.to_string(), String::from);
+    fields.map(|(k, v)| (k.clone(), text(v))).collect()
+}
+
+/// The permissions record as getGroup shows it: each role's grant.
+fn permissions_of(view: &Value) -> Value {
+    let listed = |v: &Value, field: &str| -> Vec<Value> {
+        let items = v.as_array().into_iter().flatten();
+        items.map(|i| i[field].clone()).collect()
+    };
+    let bindings = view["bindings"].as_array().into_iter().flatten();
+    let grants: Vec<Value> = bindings
+        .map(|b| json!({"role": b["role"], "scopes": listed(&b["scopes"], "scope"), "assignable": listed(&b["assignable"], "role")}))
+        .collect();
+    json!({ "grants": grants })
+}
+
+/// Carries out `plan` as `me`, in `group`: a method asked with a service
+/// token, a record written with a group token for its space, as an app
+/// writes as the group.
+async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<Value> {
+    match plan {
+        Plan::Call {
+            nsid,
+            procedure,
+            mut input,
+        } => {
+            input["group"] = json!(group);
+            if procedure {
+                return me.call(host, &nsid, &input).await;
+            }
+            let params = query_of(&input);
+            let params: Vec<(&str, &str)> = params
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            me.query(host, &nsid, &params).await
+        }
+        Plan::Write {
+            space,
+            collection,
+            rkey,
+            record,
+        } => {
+            let uri = format!("at://{group}/space/{space}/self");
+            let session = GroupSession::start(me, host, group, &uri).await?;
+            let mut body = json!({"repo": group, "space": uri, "collection": collection});
+            if let Some(key) = &rkey {
+                body["rkey"] = json!(key);
+            }
+            let nsid = match (&rkey, record) {
+                (Some(_), Some(record)) => {
+                    body["record"] = record;
+                    "com.atproto.space.putRecord"
+                }
+                (None, Some(record)) => {
+                    body["record"] = record;
+                    "com.atproto.space.createRecord"
+                }
+                (_, None) => "com.atproto.space.deleteRecord",
+            };
+            session.call(nsid, &body).await
+        }
+        Plan::Invite {
+            person,
+            record: Some(record),
+        } => me.invite(host, group, &person, record).await,
+        Plan::Invite {
+            person,
+            record: None,
+        } => {
+            // The one waiting, which the group's list of them names.
+            let lxm = m("listInvites");
+            let listed = me
+                .query(host, &lxm, &[("group", group), ("limit", "100")])
+                .await?;
+            let invites = listed["invites"].as_array().into_iter().flatten();
+            let mut waiting = invites.filter(|i| i["invitee"] == person.as_str());
+            let uri = waiting.next().map(|i| text(&i["uri"]).to_string());
+            let rkey = uri
+                .as_deref()
+                .and_then(|u| u.rsplit('/').next())
+                .unwrap_or_default();
+            let inbox = inbox_of(&person);
+            let session = GroupSession::start(me, host, group, &inbox).await?;
+            let body =
+                json!({"repo": group, "space": inbox, "collection": m("invite"), "rkey": rkey});
+            session.call("com.atproto.space.deleteRecord", &body).await
+        }
+        Plan::Grant { role, grant } => {
+            let view = me.query(host, &m("getGroup"), &[("group", group)]).await?;
+            let write = group_host_mcp::regrant(&permissions_of(&view), &role, grant);
+            Box::pin(carry_out(me, host, group, write)).await
+        }
     }
 }
 
@@ -493,12 +746,12 @@ async fn create_group(
     flags: &HashMap<&str, &str>,
 ) -> Result<String> {
     let label = handle.split('.').next().unwrap_or_default();
-    let name = flags.get("name").copied().unwrap_or(label);
+    let name = flags.get("display-name").copied().unwrap_or(label);
     let mut body = json!({"handle": handle, "displayName": name});
     if let Some(d) = flags.get("description") {
         body["description"] = json!(d);
     }
-    if let Some(j) = flags.get("join") {
+    if let Some(j) = flags.get("join-policy") {
         body["joinPolicy"] = json!(j);
     }
     let made = me.call(host, &m("createGroup"), &body).await?;
@@ -533,9 +786,8 @@ fn member_line(member: &Value) -> String {
     format!("{name:<30} {}", roles.join(", "))
 }
 
-async fn inspect(me: &Client, host: &Host, group: &str) -> Result<String> {
-    let did = me.resolve(host, group).await?;
-    let said = me.query(host, &m("getGroup"), &[("group", &did)]).await?;
+/// What getGroup `said`, and its `members`, as `group show` prints them.
+fn shown(said: &Value, members: &Value) -> String {
     let g = &said["group"];
     let mut out = format!(
         "group    {} {}\nname     {}\njoining  {}\n",
@@ -548,72 +800,11 @@ async fn inspect(me: &Client, host: &Host, group: &str) -> Result<String> {
     out += &lines(&said["roles"], |r| {
         format!("{:<12} {}", text(&r["key"]), text(&r["name"]))
     });
-    // The first hundred, to one who may read them, as getGroup counts them.
-    let members = match g.get("memberCount") {
-        Some(_) => {
-            let asked = [("group", did.as_str()), ("limit", "100")];
-            let page = me.query(host, &m("listMembers"), &asked).await?;
-            page["members"].clone()
-        }
-        None => Value::Null,
-    };
     out += "members\n";
-    out += &lines(&members, member_line);
+    out += &lines(members, member_line);
     out += "spaces\n";
     out += &lines(&said["spaces"], |s| text(&s["uri"]).to_string());
-    Ok(out)
-}
-
-async fn membership(me: &Client, host: &Host, a: &Args<'_>) -> Result<String> {
-    let (&what, rest) = a.words.split_first().ok_or_else(usage)?;
-    let (&group, &who) = (
-        rest.first().ok_or_else(usage)?,
-        rest.get(1).ok_or_else(usage)?,
-    );
-    if !matches!(
-        (what, rest.len()),
-        ("assign", 3) | ("eject", 2) | ("invite", 2)
-    ) {
-        return Err(usage());
-    }
-    let group = me.resolve(host, group).await?;
-    let person = me.resolve(host, who).await?;
-    // An invite is a record the group writes in their inbox.
-    if what == "invite" {
-        let message = a.flags.get("message").copied();
-        me.invite(host, &group, &person, message).await?;
-        return Ok(format!("{who}: invited\n"));
-    }
-    // A membership is the group's record in its members space, kept at its
-    // member's DID.
-    let members = members_of(&group);
-    let mut body = json!({
-        "repo": group,
-        "space": members,
-        "collection": m("membership"),
-        "rkey": person.replace("%3A", ":"),
-    });
-    let session = GroupSession::start(me, host, &group, &members).await?;
-    let done = match what {
-        "assign" => {
-            let roles: Vec<&str> = rest[2].split(',').filter(|r| !r.is_empty()).collect();
-            body["record"] = json!({
-                "$type": m("membership"),
-                "member": person,
-                "roles": roles,
-                "createdAt": now_iso(),
-            });
-            session.call("com.atproto.space.putRecord", &body).await?;
-            roles.join(", ")
-        }
-        _ => {
-            session
-                .call("com.atproto.space.deleteRecord", &body)
-                .await?;
-            "put out".to_string()
-        }
-    };
-    Ok(format!("{who}: {done}\n"))
+    out
 }
 
 /// A group's members space.
@@ -791,7 +982,7 @@ async fn start_import(
     let ask = "com.atproto.identity.requestPlcOperationSignature";
     theirs.own(ask, &[], Some(&Value::Null)).await?;
     out += &format!(
-        "its server has emailed a code to move its identity; finish with\n  opensocial import {account} --code <code>\n"
+        "its server has emailed a code to move its identity; finish with\n  opensocial account import {account} --code <code>\n"
     );
     Ok(out)
 }
@@ -884,7 +1075,7 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
     let body = json!({
         "handle": handle,
         "displayName": "A group to try things on",
-        "description": "Seeded by opensocial seed.",
+        "description": "Seeded by opensocial group seed.",
         "joinPolicy": "approval",
     });
     let made = me.call(host, &m("createGroup"), &body).await?;
@@ -904,7 +1095,8 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
     out += "role       moderator\n";
     for who in invite {
         let person = me.resolve(host, who).await?;
-        me.invite(host, &group, &person, None).await?;
+        let record = json!({"$type": m("invite"), "createdAt": now_iso()});
+        me.invite(host, &group, &person, record).await?;
         out += &format!("invited    {who}\n");
     }
     Ok(out)

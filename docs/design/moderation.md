@@ -32,9 +32,9 @@ Each method checks the caller's roles as they are at the moment of the
 call. The caller is whoever signed in, either through service auth from
 their PDS or through the console's session (see [signing
 in](signing-in.md)). A caller without the action is refused `403
-Forbidden`. An assistant a member connects can read the queue, label and
-resolve as that member, within the same roles (see
-[assistants](assistants.md)).
+Forbidden`. An MCP client a member connects can read the queue, label and
+resolve as that member, within the same roles, with the `mod_*` tools,
+the twins of the `opensocial mod` commands (see [MCP](mcp.md)).
 
 Details:
 

@@ -55,7 +55,7 @@ right, and come before the code they test.
   console's pages' queries as XRPC, each with its lexicon under
   `lexicons/`.
 - `crates/group-host-mcp`: the MCP protocol and tools, the core's
-  methods asked as the member who connected an assistant; the host serves
+  methods asked as the member who connected an MCP client; the host serves
   them at `/mcp`.
 - `crates/opensocial`: a client for group hosts, and the `opensocial`
   command (creating, inspecting and running groups; seeding; moving a group
@@ -67,6 +67,29 @@ right, and come before the code they test.
   deployed with `just docs-deploy` (`docs/development.md`).
 - `harness/`: the checks beside the tests, and the console's flows end to
   end (`harness/e2e`).
+
+## Commands and tools
+
+A command is `opensocial <group> <action> <group> ...`: the group a
+singular noun for what it acts on (`group`, `role`, `member`, `invite`,
+`mod`), then the action, then the group it acts in, then the arguments
+it takes in order, then flags. An opposite is `--undo` on the action
+(`invite send --undo`), never an `un-` command. `opensocial --help`
+lists them by group.
+
+A command and its MCP tool land together, in one pull, from one entry in
+`TOOLS` in `crates/group-host-mcp/src/lib.rs`. The tool is
+`<group>_<action>`, and takes what the command takes but the group: its
+arguments named as the usage names them, its flags in snake case
+(`--display-name`, `display_name`; `--undo`, `undo`). The command reads
+its words by the tool's schema, and both carry out the same `Plan`, so a
+new one is an entry there, its line in the usage, and its row in
+`docs/reference/cli.md` and `docs/reference/mcp.md`, each laid out by
+group. One action is one tool: a tool that would fold several commands
+is split. Only the commands that make or move a group or an account
+(`group create`, `group seed`, `group move`, `account import`) have no
+tool, as an MCP client acts in the one group it was connected to. The
+host's own command, `group-host move-host`, stands alone.
 
 ## The console
 

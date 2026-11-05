@@ -1,6 +1,6 @@
 [package]
 name = "opensocial"
-description = "A client for opensocial group hosts, and the opensocial command: create, inspect and run groups, seed a dev host, move a group or a host"
+description = "A client for opensocial group hosts, and the opensocial command: make, show and run groups, seed a dev host, move a group or an account"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow.workspace = true
 atproto.workspace = true
+group-host-mcp.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

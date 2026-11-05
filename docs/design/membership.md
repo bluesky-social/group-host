@@ -135,8 +135,10 @@ holds `member` (`MemberRole`), and names only roles the group defines.
 
 A token from `getGroupAuth` for the members space writes what the
 member's grants let them write there, and the console's member and
-settings pages write with one. An [assistant](assistants.md) makes the
-same writes with its tools, as the member who connected it.
+settings pages write with one, and so do the `opensocial` commands. An
+[MCP client](mcp.md) makes the same writes with its tools, as the member
+who connected it: `role_set`, `role_delete`, `role_grant`,
+`member_assign` and `member_eject`.
 
 ## Joining
 
@@ -229,7 +231,7 @@ is one the ejecter's `eject` grants may assign. Either way the host:
 
 1. revokes the space credentials the group issued them;
 2. ends the OAuth grants they approved for the group, and their
-   [assistants'](assistants.md) grants, with every session those began;
+   [MCP clients'](mcp.md) grants, with every session those began;
 3. drops their app passwords for the group;
 4. deletes their membership;
 5. unindexes their repo in each of the group's spaces.

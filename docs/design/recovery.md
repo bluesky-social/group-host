@@ -52,8 +52,8 @@ Adding, listing and removing keys all need `group.configure`, the action
 that lets a member change the group's settings (see
 [membership](membership.md)). The console's settings page for the group
 lists the keys, to whoever configures it, with forms to add and take off
-one. These methods are not among an assistant's tools (see
-[assistants](assistants.md)).
+one. These methods are not among the MCP tools (see
+[MCP](mcp.md)).
 
 The PLC directory says which keys a group has, so each method reads the
 group's last operation there, every time, rather than a copy in the
