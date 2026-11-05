@@ -186,32 +186,13 @@ async fn offers_only_the_group_the_app_named_even_to_one_without_a_role() {
 async fn shows_the_groups_picture() {
     let h = start(&[], false).await;
     let (riders, _, [alice, ..]) = groups(&h).await;
-    let lxm = format!("{NS}.uploadImage");
-    let (k, v) = auth(&h, &alice, &lxm);
-    let res = h
-        .http
-        .post(format!("{}/xrpc/{lxm}?group={riders}", h.url))
-        .header(k, v)
-        .header("content-type", "image/png")
-        .body(b"face".to_vec())
-        .send()
-        .await
-        .unwrap();
-    let image: Json = res.json().await.unwrap();
-    let (status, put) = call(
-        &h,
-        &alice,
-        "updateProfile",
-        json!({"group": riders, "displayName": "Riders", "avatar": image["blob"]}),
-    )
-    .await;
-    assert_eq!(status, 200, "{put}");
+    let image = give_avatar(&h, &alice, &riders, "Riders", b"face").await;
     let request_uri = App::loopback(SCOPE)
         .push(&h, &[("login_hint", RIDERS)])
         .await;
     let (_, offered) = offer(&h, &alice, &request_uri).await;
     let avatar = offered["groups"][0]["avatar"].as_str().unwrap();
-    let cid = image["blob"]["ref"]["$link"].as_str().unwrap();
+    let cid = image["ref"]["$link"].as_str().unwrap();
     assert_eq!(param(avatar, "cid").unwrap(), cid);
     // Where any file in the space is served, to whoever may read it.
     let query = avatar

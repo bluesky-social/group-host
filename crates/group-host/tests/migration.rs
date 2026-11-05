@@ -13,6 +13,7 @@ use axum::Router;
 use axum::extract::{Query, State};
 use axum::routing::get as route;
 use common::groups::*;
+use common::oauth::{App, give_avatar};
 use common::spaces::*;
 use common::{Running, serve, start_reachable};
 use group_host::group::meta_space;
@@ -51,29 +52,19 @@ async fn two_hosts_with(
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let lxm = format!("{NS}.uploadImage");
-    let (k, v) = auth(&a, &alice, &lxm);
-    let res = a
-        .http
-        .post(format!("{}/xrpc/{lxm}?group={did}", a.url))
-        .header(k, v)
-        .header("content-type", "image/png")
-        .body(b"face".to_vec())
-        .send()
-        .await
-        .unwrap();
-    let image: Json = res.json().await.unwrap();
-    let calls = [
-        (
-            "updateProfile",
-            json!({"group": did, "displayName": "Riders", "avatar": image["blob"]}),
-        ),
-        ("putRule", json!({"group": did, "title": "Be kind"})),
-        (
-            "createSpace",
-            json!({"group": did, "type": "com.example.calendar", "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}}),
-        ),
-    ];
+    give_avatar(&a, &alice, &did, "Riders", b"face").await;
+    let console = App::new("console");
+    let meta = meta_space(&did);
+    let token = console.token_for(&a, &alice, &did, &meta).await;
+    let rule = json!({"repo": did, "space": meta, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "text": ""}});
+    let said = console
+        .call(&a, "com.atproto.space.createRecord", &token, Some(&rule))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let calls = [(
+        "createSpace",
+        json!({"group": did, "type": "com.example.calendar", "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}}),
+    )];
     let mut calendar = String::new();
     for (method, body) in calls {
         let lxm = format!("{NS}.{method}");

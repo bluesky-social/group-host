@@ -686,6 +686,12 @@ async fn configures_the_group_as_its_methods_would() {
         )
         .await
     };
+    let mut labeler = h
+        .host
+        .group_record(&did, &meta, &c("labeler"), "self")
+        .unwrap()
+        .unwrap();
+    labeler["subjectTypes"] = json!(["account"]);
     let profile = |extra: Json| {
         let mut p = json!({"$type": c("profile"), "displayName": "Riders United", "joinPolicy": "open", "createdAt": "2026-11-03T00:00:00Z"});
         p.as_object_mut()
@@ -735,7 +741,7 @@ async fn configures_the_group_as_its_methods_would() {
             put(
                 &meta,
                 &c("rule"),
-                "r",
+                "3m2abcdefghij",
                 json!({"$type": c("rule"), "title": "x"}),
             )
             .await,
@@ -743,6 +749,26 @@ async fn configures_the_group_as_its_methods_would() {
         ),
         (
             delete(&meta, &c("profile"), "self").await,
+            (400, "InvalidRequest"),
+        ),
+        // The labeler, likewise, is kept at self, and never taken away,
+        // though it may change there.
+        (
+            put(&meta, &c("labeler"), "self", labeler.clone()).await,
+            (200, ""),
+        ),
+        (
+            put(
+                &meta,
+                &c("labeler"),
+                "other",
+                json!({"$type": c("labeler")}),
+            )
+            .await,
+            (400, "InvalidRequest"),
+        ),
+        (
+            delete(&meta, &c("labeler"), "self").await,
             (400, "InvalidRequest"),
         ),
         (

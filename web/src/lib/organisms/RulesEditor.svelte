@@ -18,7 +18,7 @@
 		<Empty title="No rules yet" />
 	{/if}
 	<form class="stack" method="post" action="?/rule">
-		<label class="field">Rule <input name="title" required maxlength="100" /></label>
+		<label class="field">Rule <input name="title" required maxlength="64" /></label>
 		<label class="field">What it means <textarea name="text" maxlength="1000"></textarea></label>
 		<button type="submit">Add the rule</button>
 	</form>

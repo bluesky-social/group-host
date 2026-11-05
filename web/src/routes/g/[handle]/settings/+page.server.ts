@@ -6,6 +6,7 @@ import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecover
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { act, xrpc } from '#lib/data.ts';
+import { withGroup, type Done, type GroupSession } from '#lib/asGroup.ts';
 
 type Handle = `${string}.${string}`;
 type Event = { fetch: typeof fetch; params: { handle?: string } };
@@ -40,36 +41,69 @@ async function asked(event: Event & { request: Request }) {
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
+const PROFILE = 'fyi.opensocial.profile';
+const RULE = 'fyi.opensocial.rule';
+
 /**
- * The profile as it is now, to put back whole with one thing changed: what
- * the profile form does not show is kept as it is.
+ * A picture the profile names by its CID, as the record holds it: its
+ * type and size as the host serves it.
+ */
+async function picture(event: Event, did: string, cid?: string) {
+	if (!cid) return [];
+	const res = await event.fetch(`/img/${did}/${cid}`);
+	if (!res.ok) return [];
+	const size = (await res.arrayBuffer()).byteLength;
+	return [{ $type: 'blob', ref: { $link: cid }, mimeType: res.headers.get('content-type'), size }];
+}
+
+/**
+ * The group's meta space, and its profile there as it is now, to put back
+ * whole with what is changed: what the form does not show is kept.
  */
 async function profileNow(event: Event, group: string) {
 	const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as `did:${string}:${string}` });
 	const kept = Object.fromEntries(['description', 'url', 'location', 'online', 'topics', 'languages'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : [])));
-	return { ...kept, group, displayName: now.displayName ?? now.handle };
+	const [avatar] = await picture(event, now.did, now.avatar);
+	const [banner] = await picture(event, now.did, now.banner);
+	const pictures = { ...(avatar ? { avatar } : {}), ...(banner ? { banner } : {}) };
+	const profile: Record<string, unknown> = { ...kept, ...pictures, displayName: now.displayName ?? now.handle, joinPolicy: now.joinPolicy ?? 'approval' };
+	// Shown only to someone signed in, as everyone here is.
+	return { meta: now.meta ?? '', profile };
 }
+
+type Profile = Record<string, unknown>;
+
+/** What `write` comes to, given the group's session in its meta space and its profile now: or why not. */
+async function asMeta(event: Event, group: string, write: (session: GroupSession, profile: Profile) => Promise<Done>) {
+	const { meta, profile } = await profileNow(event, group);
+	return withGroup(event, group, meta, (session) => write(session, profile));
+}
+
+/** The profile put back whole, as the group. */
+const putProfile = (session: GroupSession, profile: Profile) => session.write('com.atproto.space.putRecord', { collection: PROFILE, rkey: 'self', record: { $type: PROFILE, ...profile } });
 
 /** What a group's settings change: each drawn again after, or the host's refusal said. */
 export const actions: Actions = {
 	picture: async (event) => {
 		const { group, form } = await asked(event);
-		const slot = text(form, 'slot');
+		const slot = text(form, 'slot') === 'banner' ? 'banner' : 'avatar';
 		const file = form.get('file');
 		if (!(file instanceof File) || file.size === 0) return fail(400, { failed: 'Choose a picture to upload.' });
-		const res = await event.fetch(`/xrpc/fyi.opensocial.uploadImage?group=${encodeURIComponent(group)}`, {
-			method: 'POST',
-			headers: { 'content-type': file.type || 'application/octet-stream' },
-			body: await file.arrayBuffer()
+		const bytes = await file.arrayBuffer();
+		return asMeta(event, group, async (session, profile) => {
+			const up = await session.upload(bytes, file.type || 'application/octet-stream');
+			if (!('blob' in up)) return up;
+			return putProfile(session, { ...profile, [slot]: up.blob });
 		});
-		const answer = await res.json().catch(() => null);
-		if (!res.ok) return fail(res.status, { failed: answer?.message ?? res.statusText });
-		return act(event, 'fyi.opensocial.updateProfile', { ...(await profileNow(event, group)), [slot]: answer.blob });
 	},
 	unpicture: async (event) => {
 		const { group, form } = await asked(event);
-		const remove = text(form, 'slot') === 'banner' ? 'removeBanner' : 'removeAvatar';
-		return act(event, 'fyi.opensocial.updateProfile', { ...(await profileNow(event, group)), [remove]: true });
+		const slot = text(form, 'slot') === 'banner' ? 'banner' : 'avatar';
+		return asMeta(event, group, async (session, profile) => {
+			const kept = { ...profile };
+			delete kept[slot];
+			return putProfile(session, kept);
+		});
 	},
 	visibility: async (event) => {
 		const { group, form } = await asked(event);
@@ -84,25 +118,25 @@ export const actions: Actions = {
 	},
 	profile: async (event) => {
 		const { group, form } = await asked(event);
-		// Replaced whole: what the form does not show is kept as it is.
-		const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
-		const kept = Object.fromEntries(['location', 'online', 'topics', 'languages'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : [])));
-		return act(event, 'fyi.opensocial.updateProfile', {
-			...kept,
-			group,
-			displayName: text(form, 'displayName'),
-			description: text(form, 'description') || undefined,
-			joinPolicy: text(form, 'joinPolicy') || undefined,
-			url: text(form, 'url') || undefined
+		return asMeta(event, group, async (session, now) => {
+			// The form's own fields replace what is there: one left empty goes.
+			const profile: Record<string, unknown> = { ...now, displayName: text(form, 'displayName'), joinPolicy: text(form, 'joinPolicy') || now.joinPolicy };
+			for (const k of ['description', 'url']) {
+				if (text(form, k)) profile[k] = text(form, k);
+				else delete profile[k];
+			}
+			return putProfile(session, profile);
 		});
 	},
 	rule: async (event) => {
 		const { group, form } = await asked(event);
-		return act(event, 'fyi.opensocial.putRule', { group, title: text(form, 'title'), text: text(form, 'text') || undefined });
+		const record = { $type: RULE, title: text(form, 'title'), text: text(form, 'text') };
+		return asMeta(event, group, (session) => session.write('com.atproto.space.createRecord', { collection: RULE, record }));
 	},
 	unrule: async (event) => {
 		const { group, form } = await asked(event);
-		return act(event, 'fyi.opensocial.deleteRule', { group, rkey: text(form, 'rkey') });
+		const rkey = text(form, 'rkey');
+		return asMeta(event, group, (session) => session.write('com.atproto.space.deleteRecord', { collection: RULE, rkey }));
 	},
 	role: async (event) => {
 		const { group, form } = await asked(event);

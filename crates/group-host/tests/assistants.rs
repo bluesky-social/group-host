@@ -333,6 +333,91 @@ async fn acts_as_the_member_in_the_group_they_chose() {
 }
 
 #[tokio::test]
+async fn writes_the_groups_profile_and_rules_as_the_group() {
+    let h = start(&[], false).await;
+    let [alice, ..] = people(&h).await;
+    let group = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let (client, tokens) = connect(&h, &alice, &group).await;
+    let access = tokens["access_token"].as_str().unwrap();
+    let meta = group_host::group::meta_space(&group);
+    let kept = |collection: &str, rkey: &str| {
+        let c = format!("{NS}.{collection}");
+        h.host.group_record(&group, &meta, &c, rkey).unwrap()
+    };
+
+    // The profile, at its one key, replaced whole.
+    let profile = json!({"displayName": "Riders United", "joinPolicy": "open"});
+    let got = tool(&h, access, "putProfile", profile).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    let uri = format!("{meta}/{group}/{NS}.profile/self");
+    assert_eq!(got["structuredContent"]["uri"], uri);
+    assert!(got["structuredContent"]["cid"].is_string());
+    let written = kept("profile", "self").unwrap();
+    assert_eq!(
+        written,
+        json!({"$type": format!("{NS}.profile"), "displayName": "Riders United", "joinPolicy": "open"})
+    );
+
+    // A new rule, keyed by the clock; changed at its key; taken away.
+    let got = tool(
+        &h,
+        access,
+        "putRule",
+        json!({"title": "Be kind", "text": ""}),
+    )
+    .await;
+    assert!(got.get("isError").is_none(), "{got}");
+    let made = got["structuredContent"]["uri"].as_str().unwrap();
+    let rkey = made.rsplit('/').next().unwrap().to_string();
+    assert_eq!(kept("rule", &rkey).unwrap()["title"], "Be kind");
+    let again = json!({"rkey": rkey, "title": "Be very kind", "text": "Always."});
+    let got = tool(&h, access, "putRule", again).await;
+    assert_eq!(got["structuredContent"]["uri"], made, "{got}");
+    assert_eq!(kept("rule", &rkey).unwrap()["title"], "Be very kind");
+    let got = tool(&h, access, "deleteRule", json!({"rkey": rkey})).await;
+    assert_eq!(got["structuredContent"], json!({"uri": made}), "{got}");
+    assert_eq!(kept("rule", &rkey), None);
+
+    // Held to what the host keeps, as any write as the group is.
+    let got = tool(
+        &h,
+        access,
+        "putProfile",
+        json!({"displayName": " ", "joinPolicy": "open"}),
+    )
+    .await;
+    assert_eq!(got["isError"], true, "{got}");
+    let text = got["content"][0]["text"].as_str().unwrap();
+    assert!(text.starts_with("InvalidRequest: "), "{text}");
+    let got = tool(
+        &h,
+        access,
+        "putRule",
+        json!({"rkey": "chosen", "title": "x", "text": ""}),
+    )
+    .await;
+    assert_eq!(got["isError"], true, "{got}");
+
+    // What it did is in the group's log, as the assistant's.
+    let lxm = format!("{NS}.listGroupTokens");
+    let (_, listed) = get(
+        &h,
+        &lxm,
+        &format!("group={group}"),
+        &[auth(&h, &alice, &lxm)],
+    )
+    .await;
+    let by = &listed["activity"][0];
+    assert_eq!(by["clientId"], client.as_str(), "{listed}");
+    assert_eq!(by["member"], alice.did.as_str());
+}
+
+#[tokio::test]
 async fn does_only_what_the_members_roles_allow() {
     let h = start(&[], false).await;
     let [alice, bob, _] = people(&h).await;

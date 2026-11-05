@@ -1,16 +1,16 @@
-//! A group's face changed by those who may configure it: its profile, its
-//! images and its rules.
+//! A group's face, written as the group by those who may configure it:
+//! its profile, its pictures and its rules, records in its meta space,
+//! and its declaration, which follows who may read that space.
 
 mod common;
 
 use common::groups::*;
+use common::oauth::*;
 use common::spaces::*;
 use common::start;
 use group_host::group::{members_space, meta_space};
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
-
-const NS: &str = "fyi.opensocial";
 
 /// A group Alice started, Bob a plain member of it, and Carol a stranger.
 async fn group() -> (common::Running, String, [Authority; 3]) {
@@ -49,397 +49,321 @@ fn profile(h: &common::Running, did: &str) -> Json {
         .unwrap()
 }
 
-async fn upload(
-    h: &common::Running,
-    who: &Authority,
-    did: &str,
-    bytes: Vec<u8>,
-    mime: &str,
-) -> (u16, Json) {
-    let lxm = format!("{NS}.uploadImage");
-    let (k, v) = auth(h, who, &lxm);
-    let res = h
-        .http
-        .post(format!("{}/xrpc/{lxm}?group={did}", h.url))
-        .header(k, v)
-        .header("content-type", mime)
-        .body(bytes)
-        .send()
-        .await
-        .unwrap();
-    (
-        res.status().as_u16(),
-        res.json().await.unwrap_or(Json::Null),
-    )
+/// The console, writing as the group in its meta space as Alice, with
+/// her token.
+async fn console(h: &common::Running, did: &str, alice: &Authority) -> (App, String) {
+    let app = App::new("console");
+    let token = app.token_for(h, alice, did, &meta_space(did)).await;
+    (app, token)
+}
+
+/// A profile named Riders, joined by asking, with `extra` beside.
+fn riders(extra: Json) -> Json {
+    let mut p = json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "approval"});
+    p.as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
+    p
+}
+
+/// What uploading `bytes` as `mime` answered: the blob.
+async fn uploaded(h: &common::Running, app: &App, token: &str, bytes: Vec<u8>, mime: &str) -> Json {
+    let said = app.upload(h, token, bytes, mime).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    said.body["blob"].clone()
 }
 
 #[tokio::test]
 async fn an_admin_changes_the_profile() {
     let (h, did, [alice, _, _]) = group().await;
-    let created = profile(&h, &did)["createdAt"].clone();
+    let (app, token) = console(&h, &did, &alice).await;
+    let meta = meta_space(&did);
     // As large as a profile's picture may be.
-    let face = vec![7; 2_000_000];
-    let (status, image) = upload(&h, &alice, &did, face, "image/webp").await;
-    assert_eq!(status, 200, "{image}");
-    let avatar = image["blob"].clone();
+    let avatar = uploaded(&h, &app, &token, vec![7; 2_000_000], "image/webp").await;
     assert_eq!(avatar["size"], 2_000_000);
     assert_eq!(avatar["mimeType"], "image/webp");
-    // Its type and size are the upload's, whatever the caller says of them.
-    let mut said = avatar.clone();
-    said["mimeType"] = json!("image/png");
-    said["size"] = json!(999);
-    let (status, put) = call(
-        &h,
-        &alice,
-        "updateProfile",
-        json!({
-            "group": did,
-            "displayName": "  Riders United ",
-            "description": "We ride.",
-            "url": "https://riders.example",
-            "location": {"$type": "community.lexicon.location.address", "locality": "Ljubljana", "country": "SI"},
-            "online": true,
-            "topics": [{"topic": "bikes"}, {"topic": " bikes "}, {"topic": ""}, {"topic": "x".repeat(64)}],
-            "languages": [{"language": "sl"}, {"language": "en-GB"}],
-            "avatar": said,
-        }),
-    )
-    .await;
-    assert_eq!(status, 200, "{put}");
-    assert_eq!(
-        put["uri"],
-        format!("{}/{did}/{NS}.profile/self", meta_space(&did))
-    );
-    let p = profile(&h, &did);
-    assert_eq!(p["displayName"], "Riders United");
-    assert_eq!(p["description"], "We ride.");
-    // Its join policy is kept when it is not named.
-    assert_eq!(p["joinPolicy"], "open");
-    assert_eq!(p["online"], true);
-    assert_eq!(
-        p["topics"],
-        json!([{"topic": "bikes"}, {"topic": "x".repeat(64)}])
-    );
-    assert_eq!(
-        p["languages"],
-        json!([{"language": "sl"}, {"language": "en-GB"}])
-    );
-    assert_eq!(p["avatar"], avatar);
-    assert_eq!(p["createdAt"], created);
-    assert_eq!(put["cid"].as_str().map(str::len), Some(59));
+    let banner = uploaded(&h, &app, &token, b"road".to_vec(), "image/jpeg").await;
+    let record = riders(json!({
+        "displayName": "Riders United",
+        "description": "We ride.",
+        "url": "https://riders.example",
+        "joinPolicy": "invite",
+        "location": {"$type": "community.lexicon.location.address", "locality": "Ljubljana", "country": "SI"},
+        "online": true,
+        "topics": [{"topic": "bikes"}, {"topic": "x".repeat(64)}],
+        "languages": [{"language": "sl"}, {"language": "en-GB"}],
+        "avatar": avatar,
+        "banner": banner,
+    }));
+    let said = app
+        .put(
+            &h,
+            &token,
+            &meta,
+            &format!("{NS}.profile"),
+            "self",
+            record.clone(),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(said.body["uri"], format!("{meta}/{did}/{NS}.profile/self"));
+    assert_eq!(said.body["cid"].as_str().map(str::len), Some(59));
+    assert_eq!(profile(&h, &did), record);
+    // getGroup shows it as it is kept.
+    let shown = view(&h, &did, Some(&alice)).await;
+    assert_eq!(shown["group"]["displayName"], "Riders United");
+    assert_eq!(shown["group"]["joinPolicy"], "invite");
 
-    // A replace: what finds it and its site, left out, are none; the
-    // images are kept; a policy named is taken.
-    let (status, _) = call(
-        &h,
-        &alice,
-        "updateProfile",
-        json!({"group": did, "displayName": "Riders", "joinPolicy": "invite"}),
-    )
-    .await;
-    assert_eq!(status, 200);
+    // Replaced whole: what is left out goes, pictures and all.
+    let said = app
+        .put(
+            &h,
+            &token,
+            &meta,
+            &format!("{NS}.profile"),
+            "self",
+            riders(json!({})),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
     let p = profile(&h, &did);
+    assert_eq!(p.get("avatar"), None);
     assert_eq!(p.get("topics"), None);
-    assert_eq!(p.get("location"), None);
-    assert_eq!(p.get("description"), None);
-    assert_eq!(p.get("url"), None);
-    assert_eq!(p["avatar"]["ref"], avatar["ref"]);
-    assert_eq!(p["joinPolicy"], "invite");
-    // And removeAvatar clears one.
-    call(
-        &h,
-        &alice,
-        "updateProfile",
-        json!({"group": did, "displayName": "Riders", "removeAvatar": true}),
-    )
-    .await;
-    assert_eq!(profile(&h, &did).get("avatar"), None);
+    assert_eq!(p["joinPolicy"], "approval");
 }
 
 #[tokio::test]
 async fn refuses_a_profile_it_should_not_keep() {
     let (h, did, [alice, bob, carol]) = group().await;
+    let (app, token) = console(&h, &did, &alice).await;
+    let meta = meta_space(&did);
     let words = h.host.upload_blob(&did, b"words", "text/plain").unwrap();
-    for (who, body, refused) in [
-        // A blob of the group's that is no image.
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "avatar": words}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &bob,
-            json!({"group": did, "displayName": "Mine"}),
-            (403, "Forbidden"),
-        ),
-        (
-            &carol,
-            json!({"group": did, "displayName": "Mine"}),
-            (403, "Forbidden"),
-        ),
-        (
-            &alice,
-            json!({"displayName": "Riders"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": "did:plc:nobody", "displayName": "Riders"}),
-            (400, "GroupNotFound"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "  "}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "joinPolicy": "sometimes"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "location": {"$type": "xyz.place"}}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "avatar": {"ref": "x"}}),
-            (400, "InvalidRequest"),
-        ),
+    let moving = uploaded(&h, &app, &token, b"GIF89a".to_vec(), "image/gif").await;
+    let large = uploaded(&h, &app, &token, vec![0; 2_000_001], "image/png").await;
+    let face = uploaded(&h, &app, &token, b"face".to_vec(), "image/webp").await;
+    // Its type and size are the upload's, whatever the record says.
+    let mut retyped = face.clone();
+    retyped["mimeType"] = json!("image/png");
+    let mut resized = face.clone();
+    resized["size"] = json!(999);
+    let never = json!({"$type": "blob", "ref": {"$link": "bafkrgqaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "mimeType": "image/png", "size": 1});
+    let anothers = json!({"$type": "blob", "ref": {"$link": "bafkreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm"}, "mimeType": "image/png", "size": 4});
+    for record in [
+        riders(json!({"displayName": "  "})),
+        riders(json!({"joinPolicy": "sometimes"})),
         // A join policy is one of the words the lexicon knows.
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "joinPolicy": "fyi.opensocial.profile#invite"}),
-            (400, "InvalidRequest"),
-        ),
-        // An image whose CID the host never keeps.
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "avatar": {"$type": "blob", "ref": {"$link": "bafkrgqaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "mimeType": "image/png", "size": 1}}),
-            (400, "InvalidRequest"),
-        ),
+        riders(json!({"joinPolicy": "fyi.opensocial.profile#invite"})),
+        riders(json!({"location": {"$type": "xyz.place"}})),
+        riders(json!({"url": "ftp://riders.example"})),
+        riders(json!({"topics": [{"topic": "bikes"}, {"topic": " bikes "}]})),
+        riders(json!({"topics": [{"topic": " "}]})),
+        riders(json!({"languages": [{"language": "sl"}, {"language": "sl"}]})),
+        // Pictures that are not the group's own images, as it kept them.
+        riders(json!({"avatar": words})),
+        riders(json!({"avatar": moving})),
+        riders(json!({"banner": large})),
+        riders(json!({"avatar": retyped})),
+        riders(json!({"avatar": resized})),
+        riders(json!({"avatar": never})),
+        riders(json!({"avatar": anothers})),
+        riders(json!({"avatar": {"ref": "x"}})),
         // Longer than the lexicon has them, or not of its format.
-        (
-            &alice,
-            json!({"group": did, "displayName": "x".repeat(65)}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "topics": [{"topic": "x".repeat(65)}]}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "languages": [{"language": "not a tag"}]}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "description": "x".repeat(2001)}),
-            (400, "InvalidRequest"),
-        ),
-        // An image that is not the group's.
-        (
-            &alice,
-            json!({"group": did, "displayName": "Riders", "avatar": {"$type": "blob", "ref": {"$link": "bafkreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm"}, "mimeType": "image/png", "size": 4}}),
-            (400, "InvalidRequest"),
-        ),
+        riders(json!({"displayName": "x".repeat(65)})),
+        riders(json!({"topics": [{"topic": "x".repeat(65)}]})),
+        riders(json!({"languages": [{"language": "not a tag"}]})),
+        riders(json!({"description": "x".repeat(2001)})),
+        json!({"$type": format!("{NS}.profile"), "displayName": "Riders"}),
     ] {
-        let said = call(&h, who, "updateProfile", body.clone()).await;
-        assert_eq!(
-            (said.0, said.1["error"].as_str().unwrap()),
-            refused,
-            "{body}"
-        );
+        let said = app
+            .put(
+                &h,
+                &token,
+                &meta,
+                &format!("{NS}.profile"),
+                "self",
+                record.clone(),
+            )
+            .await;
+        assert_eq!(said.error(), (400, "InvalidRequest"), "{record}");
     }
-    let lxm = format!("{NS}.updateProfile");
-    let said = post(&h, &lxm, &json!({"group": did, "displayName": "X"}), &[]).await;
-    assert_eq!(said.0, 401);
+    // Kept at self, and never taken away.
+    let said = app
+        .put(
+            &h,
+            &token,
+            &meta,
+            &format!("{NS}.profile"),
+            "other",
+            riders(json!({})),
+        )
+        .await;
+    assert_eq!(said.error(), (400, "InvalidRequest"));
+    let body =
+        json!({"repo": did, "space": meta, "collection": format!("{NS}.profile"), "rkey": "self"});
+    let said = app
+        .call(&h, "com.atproto.space.deleteRecord", &token, Some(&body))
+        .await;
+    assert_eq!(said.error(), (400, "InvalidRequest"));
+    // Nothing refused was kept.
+    assert_eq!(profile(&h, &did)["displayName"], "Riders");
 
-    for (who, bytes, mime, refused) in [
-        (&bob, b"face".to_vec(), "image/png", (403, "Forbidden")),
-        (&alice, vec![], "image/png", (400, "InvalidRequest")),
-        // A picture of a kind a profile does not take.
-        (
-            &alice,
-            b"GIF89a".to_vec(),
-            "image/gif",
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            vec![0; 2_000_001],
-            "image/png",
-            (400, "InvalidRequest"),
-        ),
-        // No image a page is given.
-        (
-            &alice,
-            b"page".to_vec(),
-            "application/pdf",
-            (400, "InvalidRequest"),
-        ),
-    ] {
-        let said = upload(&h, who, &did, bytes, mime).await;
-        assert_eq!((said.0, said.1["error"].as_str().unwrap()), refused);
+    // Who may not configure the group gets no token to write it with.
+    for who in [&bob, &carol] {
+        let said = group_token(&h, &App::new("console"), who, &did, &meta).await;
+        assert_eq!(said.error(), (403, "Forbidden"));
     }
-    let lxm = format!("{NS}.uploadImage");
-    let said = read(&h, &lxm, "", &[auth(&h, &alice, &lxm)]).await;
-    assert_eq!(said.status, 405);
+    // And no token at all, nothing.
+    let body = json!({"repo": did, "space": meta, "collection": format!("{NS}.profile"), "rkey": "self", "record": riders(json!({}))});
+    let said = post(&h, "com.atproto.space.putRecord", &body, &[]).await;
+    assert_eq!(said.0, 401);
 }
 
 #[tokio::test]
 async fn an_admin_keeps_the_rules() {
-    let (h, did, [alice, bob, _]) = group().await;
-    let rule = |key: &str| {
-        h.host
-            .group_record(&did, &meta_space(&did), &format!("{NS}.rule"), key)
-            .unwrap()
+    let (h, did, [alice, _, _]) = group().await;
+    let (app, token) = console(&h, &did, &alice).await;
+    let meta = meta_space(&did);
+    let collection = format!("{NS}.rule");
+    let rule = |key: &str| h.host.group_record(&did, &meta, &collection, key).unwrap();
+    let make = async |record: Json| {
+        let body = json!({"repo": did, "space": meta, "collection": collection, "record": record});
+        app.call(&h, "com.atproto.space.createRecord", &token, Some(&body))
+            .await
     };
-    let (status, first) = call(
-        &h,
-        &alice,
-        "putRule",
-        json!({"group": did, "title": "Be kind", "text": " Always. "}),
-    )
-    .await;
-    assert_eq!(status, 200, "{first}");
-    let first_key = first["uri"]
-        .as_str()
+    let key = |said: &Said| {
+        let uri = said.body["uri"].as_str().unwrap();
+        uri.rsplit('/').next().unwrap().to_string()
+    };
+    // A new rule is keyed by the host's clock, a TID.
+    let first =
+        make(json!({"$type": collection, "title": "Be kind", "text": "Always.", "order": 0})).await;
+    assert_eq!(first.status, 200, "{}", first.body);
+    let first_key = key(&first);
+    assert_eq!(first_key.len(), 13);
+    let second = make(json!({"$type": collection, "title": "No spam", "text": ""})).await;
+    let second_key = key(&second);
+    let third =
+        make(json!({"$type": collection, "title": "Ride safe", "text": "", "order": 1})).await;
+    let third_key = key(&third);
+    // Shown by their order, those with none last.
+    let shown = view(&h, &did, Some(&alice)).await;
+    let keys: Vec<&str> = shown["group"]["rules"]
+        .as_array()
         .unwrap()
-        .rsplit('/')
-        .next()
-        .unwrap()
-        .to_string();
-    let (_, second) = call(
-        &h,
-        &alice,
-        "putRule",
-        json!({"group": did, "title": "No spam"}),
-    )
-    .await;
-    let second_key = second["uri"]
-        .as_str()
-        .unwrap()
-        .rsplit('/')
-        .next()
-        .unwrap()
-        .to_string();
-    // A new rule goes last.
-    assert_eq!(rule(&first_key).unwrap()["order"], 0);
-    assert_eq!(rule(&first_key).unwrap()["text"], "Always.");
-    assert_eq!(rule(&second_key).unwrap()["order"], 1);
+        .iter()
+        .map(|r| r["rkey"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, [&first_key, &third_key, &second_key]);
 
-    // Changed in place, it keeps its key, its place and when it was made.
-    let made = rule(&first_key).unwrap()["createdAt"].clone();
-    let (_, again) = call(
-        &h,
-        &alice,
-        "putRule",
-        json!({"group": did, "rkey": first_key, "title": "Be very kind"}),
-    )
-    .await;
-    assert_eq!(again["uri"], first["uri"]);
-    let changed = rule(&first_key).unwrap();
-    assert_eq!(
-        (changed["title"].clone(), changed["order"].clone()),
-        (json!("Be very kind"), json!(0))
-    );
-    assert_eq!(changed["createdAt"], made);
-    // Or moved.
-    call(
-        &h,
-        &alice,
-        "putRule",
-        json!({"group": did, "rkey": first_key, "title": "Be very kind", "order": 5}),
-    )
-    .await;
-    assert_eq!(rule(&first_key).unwrap()["order"], 5);
-    // A new one goes after it.
-    let (_, third) = call(
-        &h,
-        &alice,
-        "putRule",
-        json!({"group": did, "title": "Chosen"}),
-    )
-    .await;
-    let third_key = third["uri"].as_str().unwrap().rsplit('/').next().unwrap();
-    assert_eq!(rule(third_key).unwrap()["order"], 6);
-    // A key no rule has makes none: a new rule's key is the host's.
-    let said = call(
-        &h,
-        &alice,
-        "putRule",
-        json!({"group": did, "rkey": "chosen", "title": "Chosen"}),
-    )
-    .await;
-    assert_eq!(said.0, 400, "{}", said.1);
-    assert_eq!(rule("chosen"), None);
+    // Changed in place, it keeps its key, so a label citing it still does.
+    let changed =
+        json!({"$type": collection, "title": "Be very kind", "text": "Always.", "order": 5});
+    let said = app
+        .put(&h, &token, &meta, &collection, &first_key, changed.clone())
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(said.body["uri"], first.body["uri"]);
+    assert_eq!(rule(&first_key).unwrap(), changed);
 
-    let (status, _) = call(
-        &h,
-        &alice,
-        "deleteRule",
-        json!({"group": did, "rkey": second_key}),
-    )
-    .await;
-    assert_eq!(status, 200);
+    // Taken away, it is gone; taking it away again is no matter.
+    let body = json!({"repo": did, "space": meta, "collection": collection, "rkey": second_key});
+    for _ in 0..2 {
+        let said = app
+            .call(&h, "com.atproto.space.deleteRecord", &token, Some(&body))
+            .await;
+        assert_eq!(said.status, 200, "{}", said.body);
+    }
     assert_eq!(rule(&second_key), None);
-    // Taking away one that is not there is no matter.
-    let (status, _) = call(
-        &h,
-        &alice,
-        "deleteRule",
-        json!({"group": did, "rkey": second_key}),
-    )
-    .await;
-    assert_eq!(status, 200);
 
-    for (method, body, refused) in [
+    let at = async |rkey: &str, record: Json| {
+        app.put(&h, &token, &meta, &collection, rkey, record).await
+    };
+    for (rkey, record) in [
+        // A key that is not the clock's: a rule is cited by its TID.
         (
-            "putRule",
-            json!({"group": did, "title": "Mine"}),
-            (403, "Forbidden"),
+            "chosen",
+            json!({"$type": collection, "title": "Chosen", "text": ""}),
         ),
         (
-            "deleteRule",
-            json!({"group": did, "rkey": "chosen"}),
-            (403, "Forbidden"),
+            first_key.as_str(),
+            json!({"$type": collection, "title": " ", "text": ""}),
         ),
-    ] {
-        let said = call(&h, &bob, method, body).await;
-        assert_eq!((said.0, said.1["error"].as_str().unwrap()), refused);
-    }
-    for (method, body) in [
-        ("putRule", json!({"group": did, "title": " "})),
         (
-            "putRule",
-            json!({"group": did, "title": "Odd", "order": -1}),
+            first_key.as_str(),
+            json!({"$type": collection, "title": "Odd", "text": "", "order": -1}),
         ),
-        // A key no record could have.
         (
-            "putRule",
-            json!({"group": did, "rkey": "a/b", "title": "Odd"}),
+            first_key.as_str(),
+            json!({"$type": collection, "title": "Odd"}),
         ),
-        ("putRule", json!({"title": "Odd"})),
         // Longer than the lexicon has them.
-        ("putRule", json!({"group": did, "title": "x".repeat(101)})),
         (
-            "putRule",
-            json!({"group": did, "title": "Odd", "text": "x".repeat(2001)}),
+            first_key.as_str(),
+            json!({"$type": collection, "title": "x".repeat(65), "text": ""}),
         ),
-        ("deleteRule", json!({"group": did})),
-        ("deleteRule", json!({"rkey": "x"})),
+        (
+            first_key.as_str(),
+            json!({"$type": collection, "title": "Odd", "text": "x".repeat(2001)}),
+        ),
     ] {
-        let said = call(&h, &alice, method, body.clone()).await;
-        assert_eq!(
-            (said.0, said.1["error"].as_str().unwrap()),
-            (400, "InvalidRequest"),
-            "{body}"
-        );
+        let said = at(rkey, record.clone()).await;
+        assert_eq!(said.error(), (400, "InvalidRequest"), "{record}");
     }
+    assert_eq!(rule("chosen"), None);
+    assert_eq!(rule(&first_key).unwrap(), changed);
+}
+
+#[tokio::test]
+async fn declares_the_group_while_anyone_may_read_its_meta() {
+    let (h, did, [alice, _, _]) = group().await;
+    // An app signed in as the group, Alice approving it.
+    let app = App::loopback(&format!("atproto repo:{NS}.declaration"));
+    let tokens = app.sign_in(&h, &alice, &did).await;
+    let token = tokens["access_token"].as_str().unwrap().to_string();
+    let collection = format!("{NS}.declaration");
+    let declared = || {
+        h.host
+            .store
+            .record(&did, &collection, "self")
+            .unwrap()
+            .is_some()
+    };
+    let put = async |rkey: &str, record: Json| {
+        let body = json!({"repo": did, "collection": collection, "rkey": rkey, "record": record});
+        app.call(&h, "com.atproto.repo.putRecord", &token, Some(&body))
+            .await
+    };
+    let declaration = json!({"$type": collection, "meta": meta_space(&did)});
+    assert!(declared());
+    // Taken away, the group is unlisted; put back, listed again.
+    let body = json!({"repo": did, "collection": collection, "rkey": "self"});
+    let said = app
+        .call(&h, "com.atproto.repo.deleteRecord", &token, Some(&body))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert!(!declared());
+    let said = put("self", declaration.clone()).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert!(declared());
+    // It names the group's own meta, at self.
+    let elsewhere = json!({"$type": collection, "meta": "at://did:plc:elsewhere/space/fyi.opensocial.meta/self"});
+    assert_eq!(
+        put("self", elsewhere).await.error(),
+        (400, "InvalidRequest")
+    );
+    let said = put("other", declaration.clone()).await;
+    assert_eq!(said.error(), (400, "InvalidRequest"));
+
+    // Once only members read its meta, it is unlisted, and stays so.
+    let meta = meta_space(&did);
+    let hide = json!({"group": did, "space": meta, "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
+    assert_eq!(call(&h, &alice, "updateSpace", hide).await.0, 200);
+    assert!(!declared());
+    assert_eq!(
+        put("self", declaration).await.error(),
+        (400, "InvalidRequest")
+    );
+    assert!(!declared());
 }
 
 /// An image of `did`'s, `cid`, as a page asks for it, as `who` if anyone:
@@ -485,10 +409,14 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     // The avatar of a group listed on the network: anyone's to see who is
     // signed in, as an image and nothing more, kept for good; no one's who
     // is not.
-    let (_, up) = upload(&h, &alice, &did, b"face".to_vec(), "image/png").await;
-    let avatar = up["blob"].clone();
-    let body = json!({"group": did, "displayName": "Riders", "avatar": avatar});
-    assert_eq!(call(&h, &alice, "updateProfile", body).await.0, 200);
+    let (app, token) = console(&h, &did, &alice).await;
+    let avatar = uploaded(&h, &app, &token, b"face".to_vec(), "image/png").await;
+    let record = riders(json!({"avatar": avatar}));
+    let collection = format!("{NS}.profile");
+    let said = app
+        .put(&h, &token, &meta_space(&did), &collection, "self", record)
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(image(&h, &did, &cid(&avatar), None).await.0, 404);
     let (status, headers, bytes) = image(&h, &did, &cid(&avatar), Some(&carol)).await;
     assert_eq!((status, bytes.as_slice()), (200, &b"face"[..]));
@@ -513,8 +441,7 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     assert_eq!(image(&h, &did, &cid(&avatar), Some(&bob)).await.0, 200);
 
     // In its public repo: anyone's.
-    let (_, up) = upload(&h, &alice, &did, b"ride".to_vec(), "image/jpeg").await;
-    let photo = up["blob"].clone();
+    let photo = uploaded(&h, &app, &token, b"ride".to_vec(), "image/jpeg").await;
     h.host.write(&did, &[holding("ride", &photo)]).unwrap();
     assert_eq!(image(&h, &did, &cid(&photo), None).await.0, 200);
 
@@ -530,8 +457,7 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
 
     // In a space of another's, which this host does not govern: no one's.
     let elsewhere = "at://did:plc:elsewhere/space/com.example.forum/main";
-    let (_, up) = upload(&h, &alice, &did, b"away".to_vec(), "image/png").await;
-    let away = up["blob"].clone();
+    let away = uploaded(&h, &app, &token, b"away".to_vec(), "image/png").await;
     h.host
         .space_write(&did, elsewhere, &[holding("away", &away)])
         .await

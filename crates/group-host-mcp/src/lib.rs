@@ -1,15 +1,16 @@
 //! An MCP server for a group on an opensocial host. Its tools are the
-//! core's methods, asked as the member who connected it, and the records
-//! the member's own session for the group would write as it, so an
-//! assistant may do only what that member's roles allow: read the group,
-//! and run its members, roles, invites and moderation.
+//! core's methods, and the records the member's own session for the
+//! group would write as it, each asked as the member who connected it, so
+//! an assistant may do only what that member's roles allow: read the
+//! group, change its profile and rules, and run its members, roles,
+//! invites and moderation.
 //!
 //! This crate is the protocol and the tools: what an assistant may call,
-//! made from the lexicons, and the answer to each message it
-//! sends (JSON-RPC, over MCP's Streamable HTTP, each answered on its own).
-//! The host serves it at `/mcp`, signs assistants in, and makes each call:
-//! as the member, in the one group they connected the assistant to, which
-//! is why no tool asks which group.
+//! made from the lexicons, and the answer to each message it sends
+//! (JSON-RPC, over MCP's Streamable HTTP, each answered on its own). The
+//! host serves it at `/mcp`, signs assistants in, and makes each call: as
+//! the member, in the one group they connected the assistant to, which is
+//! why no tool asks which group.
 
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -19,8 +20,8 @@ pub const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-0
 
 /// What the server tells an assistant of itself as it connects.
 const INSTRUCTIONS: &str = "The tools act as the person who connected you, in the one group \
-they chose, with what their roles there allow: read the group, and run its members, roles, \
-rules, invites, spaces and moderation. Anything their roles do not allow is refused.";
+they chose, with what their roles there allow: read the group, change its profile and rules, \
+and run its members, roles, invites, spaces and moderation. Anything their roles do not allow is refused.";
 
 macro_rules! lexicon {
     ($name:literal) => {
@@ -34,9 +35,6 @@ macro_rules! lexicon {
 /// The methods an assistant may call, by their lexicons.
 const METHODS: &[(&str, &str)] = &[
     lexicon!("getGroup"),
-    lexicon!("updateProfile"),
-    lexicon!("putRule"),
-    lexicon!("deleteRule"),
     lexicon!("putRole"),
     lexicon!("deleteRole"),
     lexicon!("assignRoles"),
@@ -54,9 +52,35 @@ const METHODS: &[(&str, &str)] = &[
     lexicon!("resolveSubject"),
 ];
 
-/// What the methods refer to, and the records the tools write: ours, and
+/// The group's records an assistant may write as the group: each tool's
+/// name, the record's kind, the type of the group's space it is kept in,
+/// and whether the tool deletes one rather than puts it.
+const RECORDS: &[(&str, &str, &str, bool)] = &[
+    (
+        "putProfile",
+        "fyi.opensocial.profile",
+        "fyi.opensocial.meta",
+        false,
+    ),
+    (
+        "putRule",
+        "fyi.opensocial.rule",
+        "fyi.opensocial.meta",
+        false,
+    ),
+    (
+        "deleteRule",
+        "fyi.opensocial.rule",
+        "fyi.opensocial.meta",
+        true,
+    ),
+];
+
+/// The records, and what the methods and records refer to: ours, and
 /// atproto's.
 const REFERRED: &[(&str, &str)] = &[
+    lexicon!("profile"),
+    lexicon!("rule"),
     lexicon!("defs"),
     lexicon!("access"),
     lexicon!("invite"),
@@ -70,20 +94,40 @@ const REFERRED: &[(&str, &str)] = &[
     ),
 ];
 
-/// A tool: a method of the host's, asked in the group the assistant was
-/// connected to, or a record written there as the group.
+/// What calling a tool does.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Kind {
+    /// Asks a query of the host's (a GET).
+    Query,
+    /// Asks a procedure of the host's (a POST of JSON).
+    Procedure,
+    /// Writes a record of the group's, of the kind the tool's NSID names,
+    /// as the group, in its space of the type `space` (keyed `self`): puts
+    /// the record its arguments are, but `rkey`, or deletes the one at
+    /// `rkey`. A kind kept at one key, `literal`, takes no `rkey`.
+    Record {
+        space: String,
+        literal: Option<String>,
+        delete: bool,
+    },
+}
+
+/// A tool: a method of the host's, or a record of the group's, asked in
+/// the group the assistant was connected to.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tool {
-    /// Its name, the method's: `getGroup`.
+    /// Its name: the method's, `getGroup`, or what it does to a record,
+    /// `putRule`.
     pub name: String,
-    /// The method, `fyi.opensocial.getGroup`; for a tool that writes a
-    /// record, the write it makes, `com.atproto.space.createRecord`.
+    /// The method, `fyi.opensocial.getGroup`; for a tool that writes an
+    /// invite, the write it makes, `com.atproto.space.createRecord`; for
+    /// one that writes the group's own record, the record's kind,
+    /// `fyi.opensocial.rule`.
     pub nsid: String,
-    /// Whether it is a procedure (a POST of JSON), not a query.
-    pub procedure: bool,
+    pub kind: Kind,
     pub description: String,
     /// What it takes, as JSON Schema: the method's parameters or input,
-    /// but the group.
+    /// but the group; or the record, and its key.
     pub input_schema: Value,
 }
 
@@ -215,7 +259,47 @@ impl Docs {
 /// How deep the tools' schemas follow references.
 const DEPTH: u8 = 6;
 
-/// The tools, each a method, its schema without the group.
+/// The key a record tool is told of: which one to change, or delete.
+fn rkey(described: &str) -> Value {
+    json!({"type": "string", "format": "record-key", "description": described})
+}
+
+/// The tool that puts or deletes `nsid`'s records, as `RECORDS` has it.
+fn record_tool(docs: &Docs, (name, nsid, space, delete): (&str, &str, &str, bool)) -> Tool {
+    let main = &docs.0[nsid]["defs"]["main"];
+    let key = main["key"].as_str().unwrap_or_default();
+    let literal = key.strip_prefix("literal:").map(String::from);
+    let about = main["description"].as_str().unwrap_or_default();
+    let (description, input_schema) = match delete {
+        true => (
+            format!("Deletes one, by its key, as the group. {about}"),
+            json!({"type": "object", "properties": {"rkey": rkey("The key of the one to delete.")}, "required": ["rkey"]}),
+        ),
+        false => {
+            let mut input = docs.object(nsid, &main["record"], DEPTH);
+            if literal.is_none() {
+                let which = "The key of the one to change; left out, a new one.";
+                input["properties"]["rkey"] = rkey(which);
+            }
+            let whole = "Puts one as the group, replacing it whole.";
+            (format!("{whole} {about}"), input)
+        }
+    };
+    Tool {
+        name: name.into(),
+        nsid: nsid.into(),
+        kind: Kind::Record {
+            space: space.into(),
+            literal,
+            delete,
+        },
+        description,
+        input_schema,
+    }
+}
+
+/// The tools: each method, its schema without the group, and each record
+/// an assistant may write as the group.
 pub fn tools() -> Vec<Tool> {
     let docs = Docs::load();
     let tool = |nsid: &str| {
@@ -236,13 +320,18 @@ pub fn tools() -> Vec<Tool> {
         Tool {
             name: nsid.rsplit('.').next().unwrap_or(nsid).to_string(),
             nsid: nsid.to_string(),
-            procedure,
+            kind: if procedure {
+                Kind::Procedure
+            } else {
+                Kind::Query
+            },
             description: main["description"].as_str().unwrap_or_default().into(),
             input_schema: input,
         }
     };
     let mut out: Vec<Tool> = METHODS.iter().map(|(nsid, _)| tool(nsid)).collect();
     out.extend(invite_tools(&docs));
+    out.extend(RECORDS.iter().map(|r| record_tool(&docs, *r)));
     out
 }
 
@@ -265,7 +354,7 @@ fn invite_tools(docs: &Docs) -> Vec<Tool> {
     let made = |name: &str, nsid: &str, description: &str, input_schema: Value| Tool {
         name: name.into(),
         nsid: nsid.into(),
-        procedure: true,
+        kind: Kind::Procedure,
         description: description.into(),
         input_schema,
     };

@@ -29,18 +29,33 @@ result is the method's JSON, as text and, for an object, as
 refuses, is `isError: true`, its text `<error>: <message>` in the method's
 words.
 
-Two tools write a record instead: `sendInvite` and `takeBackInvite`
-make the write in the invitee's inbox that the member's own session for
-the group would (`com.atproto.space.createRecord` and `deleteRecord`),
-with the scope a group token for that inbox carries and the member's
-roles as they are, logged under the assistant. Each answers the invite's
-`uri`.
+Five tools write a record instead of calling a method, each the write
+the member's own session for the group would make, with the scope a
+group token for that space carries and the member's roles as they are,
+logged under the assistant.
+
+`sendInvite` and `takeBackInvite` make the write in the invitee's inbox
+(`com.atproto.space.createRecord` and `deleteRecord`). Each answers the
+invite's `uri`.
+
+`putProfile` (`fyi.opensocial.profile`, at `self`), `putRule` and
+`deleteRule` (`fyi.opensocial.rule`) write the group's own records in
+`meta`, held to the same rules as any write of them
+([groups](../design/groups.md#changing-its-profile-rules-and-pictures)).
+A put's input schema is the record's lexicon, and replaces the record
+whole; `putRule` takes an `rkey` to change a rule, and without one
+makes a new rule, keyed by the host's clock; `deleteRule` takes the
+`rkey`. Their descriptions are the record's lexicon's, after what the
+tool does, and each answers the record's `uri`, and for a put its `cid`.
+`RECORDS` in `crates/group-host-mcp/src/lib.rs` lists them. A picture
+cannot be uploaded through MCP; a profile put keeps a picture only by
+naming a blob the group already holds.
 
 | Tool | What it does |
 | --- | --- |
 | `getGroup` | the group as the member may see it: its profile, rules, roster, roles and spaces |
-| `updateProfile` | replaces the group's profile |
-| `putRule`, `deleteRule` | makes, changes or removes a rule |
+| `putProfile` | replaces the group's profile, as the group |
+| `putRule`, `deleteRule` | makes, changes or removes a rule, as the group |
 | `putRole`, `deleteRole` | makes, changes or removes a role |
 | `assignRoles` | sets a member's roles |
 | `listJoinRequests`, `admitMember`, `denyJoinRequest` | the requests to join waiting, and letting one in or turning it down |

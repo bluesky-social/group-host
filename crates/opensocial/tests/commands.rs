@@ -152,6 +152,18 @@ async fn seeds_a_group_to_try_things_on() {
     assert!(said.contains("rule       Be kind\n"), "{said}");
     assert!(said.contains("role       moderator\n"), "{said}");
     assert!(said.ends_with(&format!("invited    {bob}\n")), "{said}");
+    // Its rules are its own records, written as the group, in its meta.
+    let trial = h.host.store.account("trial.groups.test").unwrap().unwrap();
+    let meta = group_host::group::meta_space(&trial.did);
+    let rules = h
+        .host
+        .group_records(&trial.did, &meta, "fyi.opensocial.rule")
+        .unwrap();
+    let titles: Vec<&str> = rules
+        .iter()
+        .map(|(_, r)| r["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(titles, ["Be kind", "Stay on topic"]);
     let h2 = host().await;
     let alice = env(&h2, 0);
     ok(&alice, &["create-group", "quiet.groups.test"]).await;

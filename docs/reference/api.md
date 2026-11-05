@@ -55,10 +55,6 @@ spaces through the atproto methods below.
 | `GET fyi.opensocial.getGroup` | a group as the caller may see it: its profile and rules, and to a member who may read them its roster, roles and spaces; to someone not signed in, its DID and handle alone |
 | `GET fyi.opensocial.listGroups` | the groups hosted here, to anyone; to someone signed in, the profile and rules of those anyone signed in may read, and to someone not, each by its DID and handle alone |
 | `GET fyi.opensocial.checkAddress` | whether an address, one label under `HANDLE_DOMAIN`, is free for a new group; anyone may ask |
-| `POST fyi.opensocial.updateProfile` | replaces a group's profile |
-| `POST fyi.opensocial.uploadImage` | uploads an avatar or banner for the profile |
-| `POST fyi.opensocial.putRule` | makes or changes a rule |
-| `POST fyi.opensocial.deleteRule` | removes a rule |
 | `GET fyi.opensocial.checkGroupHandle` | whether a domain names the group yet, to be its handle |
 | `POST fyi.opensocial.updateGroupHandle` | gives the group a handle on its own domain, or its address back |
 | `POST fyi.opensocial.deactivateGroup` | switches a group off, until `activateGroup` |
@@ -153,6 +149,10 @@ An app signed in so, or with an app password, uses these as the group:
 | `POST com.atproto.server.createSession`, `POST com.atproto.server.refreshSession`, `POST com.atproto.server.deleteSession` | an app password's sessions |
 | `POST com.atproto.repo.createRecord`, `POST com.atproto.repo.putRecord`, `POST com.atproto.repo.deleteRecord`, `POST com.atproto.repo.applyWrites`, `POST com.atproto.repo.uploadBlob` | writes to the group's public repo |
 | `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space: one of its own, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`) |
+
+A group's profile and rules, in `meta`, change only this way: an app
+writes the records as the group, and the host keeps each only as its
+rules have it ([groups](../design/groups.md#changing-its-profile-rules-and-pictures)).
 
 ## Assistants
 

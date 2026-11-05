@@ -3,6 +3,7 @@
 mod common;
 
 use common::groups::*;
+use common::oauth::give_avatar;
 use common::spaces::*;
 use common::{Running, start};
 use group_host::group::members_space;
@@ -150,26 +151,9 @@ async fn shows_a_groups_picture() {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let lxm = format!("{NS}.uploadImage");
-    let (k, v) = auth(&h, &alice, &lxm);
-    let res = h
-        .http
-        .post(format!("{}/xrpc/{lxm}?group={riders}", h.url))
-        .header(k, v)
-        .header("content-type", "image/png")
-        .body(b"face".to_vec())
-        .send()
-        .await
-        .unwrap();
-    let image: Json = res.json().await.unwrap();
-    let lxm = format!("{NS}.updateProfile");
-    let body = json!({"group": riders, "displayName": "Riders", "avatar": image["blob"]});
-    assert_eq!(
-        post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await.0,
-        200
-    );
+    let avatar = give_avatar(&h, &alice, &riders, "Riders", b"face").await;
     let (_, mine) = groups_of(&h, &alice, &format!("actor={}", alice.did)).await;
-    assert_eq!(mine["groups"][0]["avatar"], image["blob"]["ref"]["$link"]);
+    assert_eq!(mine["groups"][0]["avatar"], avatar["ref"]["$link"]);
 }
 
 #[tokio::test]

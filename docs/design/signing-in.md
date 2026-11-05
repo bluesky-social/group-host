@@ -230,6 +230,12 @@ Details:
 - The meta space takes only a profile, rules and the labeler, and the
   members space only roles. An inbox takes invites, one write at a time. A role still named by a grant cannot be
   deleted.
+- A write of the profile, a rule or the declaration is kept only as the
+  group would keep it: a profile with a name, a known join policy and
+  pictures that are the group's own images, at `self` and never deleted;
+  a rule with a title, at a TID; a declaration naming `meta`, only while
+  anyone may read it ([groups](groups.md#changing-its-profile-rules-and-pictures)).
+  This is the only way to change them; no method of the host's does.
 - Each use marks the grant used, at most once a minute.
 
 ## Lifetimes
@@ -273,7 +279,15 @@ nothing for anyone else. If they write nothing there, the request fails
 scope for writing invites there and nothing else, which is how the
 console invites someone and takes an invite back. The token lasts 15
 minutes and is an ordinary grant with source `getGroupAuth`, checked at
-each write as above.
+each write as above. The console's settings take one for `meta` to
+write the group's profile, pictures and rules. The console ends each
+token at `/oauth/revoke` once its writes are made, so none is left
+among the group's sessions.
+
+An assistant connected over MCP writes the profile and rules the same
+way, inside the host: each such tool call is made as a grant for its
+member, with the scope `getGroupAuth` would give them for `meta` at that
+moment, and checked as any write is ([MCP](../reference/mcp.md)).
 
 ## Listing and revoking
 

@@ -4,19 +4,20 @@
 //! reaches, and blobs for them.
 //!
 //! In the group's own meta and members spaces, a token writes only what
-//! the configure set is for, and only as the host's methods would: the
-//! profile (with a name and a join policy it knows) and the labeler, kept
-//! at `self` and never deleted; rules; and roles, one taken away only once
-//! nothing grants it. Who holds which role, what each may do, and who may
-//! read a space change only through the host's methods, which check that
-//! nobody gives themselves more than they hold.
+//! the configure set is for, and only as the host would keep it: the
+//! profile, its pictures and the rules, as `group_config` has them; the
+//! labeler, kept at `self` and never deleted; and roles, one taken away
+//! only once nothing grants it. The group's declaration, in its public
+//! repo, follows who may read its meta space. Who holds which role, what
+//! each may do, and who may read a space change only through the host's
+//! methods, which check that nobody gives themselves more than they hold.
 //!
 //! In someone's inbox, a token writes the group's invite to them, as
 //! `group_invites` has it.
 
 use crate::Host;
 use crate::api::invalid;
-use crate::group::{join_policy, members_space, meta_space};
+use crate::group::{members_space, meta_space};
 use crate::group_invites::is_inbox;
 use crate::lexicons::{check_record, validation};
 use crate::oauth_resource::{Acting, Refusal};
@@ -104,7 +105,7 @@ impl Host {
                     "{collection} changes through the host's methods, not as a record"
                 )));
             }
-            if [c("profile"), c("labeler")].iter().any(|x| x == collection) {
+            if collection == c("labeler") {
                 if rkey != "self" {
                     return Err(invalid(format!("{collection} is kept at self")));
                 }
@@ -112,16 +113,8 @@ impl Host {
                     return Err(invalid(format!("the group keeps its {collection}")));
                 }
             }
-            if let Write::Create { value, .. } | Write::Update { value, .. } = write
-                && collection == c("profile")
-            {
-                let named = value["displayName"]
-                    .as_str()
-                    .is_some_and(|n| !n.trim().is_empty());
-                if !named {
-                    return Err(invalid("displayName is required"));
-                }
-                join_policy(value["joinPolicy"].as_str())?;
+            if space == meta_space(group) {
+                self.face(group, write)?;
             }
             if matches!(write, Write::Delete { .. }) && collection == c("role") {
                 let permissions = self.group_record(group, space, &c("permissions"), "self");
@@ -285,6 +278,7 @@ impl Host {
             if !granted && !may_write(&publishable, collection, action(w)) {
                 return Err(no_longer(collection));
             }
+            self.declaration(&acting.grant.group, w)?;
         }
         checked(writes)
     }
@@ -506,8 +500,35 @@ fn space_uri(space: &str, group: &str, collection: &str, rkey: &str) -> String {
     format!("{space}/{group}/{collection}/{rkey}")
 }
 
-/// Makes `writes` in the space a body names, as `put` has them: its
-/// commit, if any.
+impl Host {
+    /// Makes `writes` in `space`, at `uri`, as `acting`, as `put` has
+    /// them, each as far as its scope and its member's roles reach and as
+    /// the host would keep it: whether a commit was made.
+    pub(crate) async fn write_as(
+        &self,
+        acting: &Acting,
+        uri: &str,
+        space: &SpaceRef,
+        writes: &[Write],
+        put: bool,
+    ) -> Result<bool, XrpcError> {
+        let allow = |w: &[Write]| self.may_space(acting, uri, space, w);
+        let asked = Asked {
+            put,
+            allow: Some(&allow),
+            ..Asked::default()
+        };
+        let group = &acting.grant.group;
+        let made = self.space_write_asked(group, uri, writes, &asked).await?;
+        if let Some((_, made)) = &made {
+            self.wrote(acting, Some(uri), made)?;
+        }
+        Ok(made.is_some())
+    }
+}
+
+/// Makes `writes` in the space a body names, as `put` has them: the
+/// space, the group, the writes, and whether a commit was made.
 async fn space_writes(
     host: &Host,
     nsid: &str,
@@ -518,26 +539,15 @@ async fn space_writes(
 ) -> Result<(String, String, Vec<Write>, bool), Refusal> {
     let acting = host.writer(headers, nsid, body)?;
     let (uri, space) = space_of(body)?;
-    let group = acting.grant.group.clone();
     let writes = writes(host)?;
+    let group = acting.grant.group.clone();
     // Someone's inbox, where the group writes invites, is theirs.
     if is_inbox(&space) {
         let made = host.write_invites(&acting, &space, writes).await?;
         return Ok((uri, group, made, true));
     }
-    let allow = |w: &[Write]| host.may_space(&acting, &uri, &space, w);
-    let asked = Asked {
-        put,
-        allow: Some(&allow),
-        ..Asked::default()
-    };
-    let made = host
-        .space_write_asked(&group, &uri, &writes, &asked)
-        .await?;
-    if let Some((_, made)) = &made {
-        host.wrote(&acting, Some(&uri), made)?;
-    }
-    Ok((uri, group, writes, made.is_some()))
+    let made = host.write_as(&acting, &uri, &space, &writes, put).await?;
+    Ok((uri, group, writes, made))
 }
 
 /// The one write a put or delete body asks for.

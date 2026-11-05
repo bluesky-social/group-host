@@ -1,7 +1,7 @@
 //! The tools, as an assistant lists them, and what the server answers
 //! each message it sends.
 
-use group_host_mcp::{PROTOCOL_VERSIONS, Tool, answer, tools};
+use group_host_mcp::{Kind, PROTOCOL_VERSIONS, Tool, answer, tools};
 use serde_json::{Value, json};
 
 /// What the server answers `message`, each tool answering as `said` says.
@@ -19,8 +19,12 @@ fn makes_a_tool_of_each_method_without_its_group() {
     let all = tools();
     assert!(all.len() > 15);
     for t in &all {
+        let record = matches!(t.kind, Kind::Record { .. });
         let method = t.nsid.ends_with(&t.name);
-        assert!(method || t.nsid.starts_with("com.atproto.space."), "{t:?}");
+        assert!(
+            method || record || t.nsid.starts_with("com.atproto.space."),
+            "{t:?}"
+        );
         assert!(
             t.input_schema["properties"].get("group").is_none(),
             "{}",
@@ -35,14 +39,14 @@ fn makes_a_tool_of_each_method_without_its_group() {
         assert!(!t.description.is_empty(), "{}", t.name);
     }
     let get = tool("getGroup");
-    assert!(!get.procedure);
+    assert_eq!(get.kind, Kind::Query);
     assert_eq!(
         get.input_schema,
         json!({"type": "object", "properties": {}, "required": []})
     );
 
     let admit = tool("admitMember");
-    assert!(admit.procedure);
+    assert_eq!(admit.kind, Kind::Procedure);
     assert_eq!(admit.input_schema["properties"]["did"]["format"], "did");
     // A reference followed: each role an object naming it.
     let role = &admit.input_schema["properties"]["roles"]["items"];
@@ -51,7 +55,7 @@ fn makes_a_tool_of_each_method_without_its_group() {
 
     // Known values said in words, beside what the lexicon says; a closed
     // set, as JSON Schema's own.
-    let policy = &tool("updateProfile").input_schema["properties"]["joinPolicy"];
+    let policy = &tool("putProfile").input_schema["properties"]["joinPolicy"];
     let said = policy["description"].as_str().unwrap();
     assert!(said.contains("One of: "), "{said}");
     let status = &tool("listSubjects").input_schema["properties"]["status"];
@@ -72,15 +76,15 @@ fn makes_a_tool_of_each_method_without_its_group() {
             >= 1,
         "{subject}"
     );
-    let online = &tool("updateProfile").input_schema["properties"]["online"];
+    let online = &tool("putProfile").input_schema["properties"]["online"];
     assert_eq!(online["type"], "boolean");
 
     // Invites, written as the group: the record's fields but when it was
     // made, which the host says, and whom it is for.
     let send = tool("sendInvite");
     assert_eq!(
-        (send.nsid.as_str(), send.procedure),
-        ("com.atproto.space.createRecord", true)
+        (send.nsid.as_str(), send.kind),
+        ("com.atproto.space.createRecord", Kind::Procedure)
     );
     let fields = send.input_schema["properties"].as_object().unwrap();
     let mut names: Vec<&str> = fields.keys().map(String::as_str).collect();
@@ -91,6 +95,54 @@ fn makes_a_tool_of_each_method_without_its_group() {
     let take_back = tool("takeBackInvite");
     assert_eq!(take_back.nsid, "com.atproto.space.deleteRecord");
     assert_eq!(take_back.input_schema["required"], json!(["invitee"]));
+}
+
+#[test]
+fn makes_a_tool_of_each_record_written_as_the_group() {
+    // The profile, kept at one key, as its lexicon has it: no key to say.
+    let profile = tool("putProfile");
+    assert_eq!(profile.nsid, "fyi.opensocial.profile");
+    let meta = "fyi.opensocial.meta".to_string();
+    assert_eq!(
+        profile.kind,
+        Kind::Record {
+            space: meta.clone(),
+            literal: Some("self".into()),
+            delete: false
+        }
+    );
+    let fields = &profile.input_schema["properties"];
+    assert!(fields.get("rkey").is_none(), "{fields}");
+    assert_eq!(fields["displayName"]["maxLength"], 640);
+    assert_eq!(
+        profile.input_schema["required"],
+        json!(["displayName", "joinPolicy"])
+    );
+    assert!(profile.description.contains("The group's profile"));
+
+    // A rule, at a key of its own: one to change, or none for a new one.
+    let rule = tool("putRule");
+    assert_eq!(rule.nsid, "fyi.opensocial.rule");
+    let fields = &rule.input_schema["properties"];
+    assert_eq!(fields["rkey"]["type"], "string");
+    assert_eq!(fields["title"]["type"], "string");
+    assert!(
+        !rule.input_schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r == "rkey")
+    );
+    let delete = tool("deleteRule");
+    assert_eq!(
+        delete.kind,
+        Kind::Record {
+            space: meta,
+            literal: None,
+            delete: true
+        }
+    );
+    assert_eq!(delete.input_schema["required"], json!(["rkey"]));
 }
 
 #[tokio::test]

@@ -1,13 +1,19 @@
 // Writing as a group from a form's action: a group token from
-// getGroupAuth for one space, bound to a DPoP key made for it, and the
-// write made with it through com.atproto.space.*, as any app writes as a
-// group.
+// getGroupAuth for one space, bound to a DPoP key made for it, the writes
+// made with it through com.atproto.space.* (and the files they hold, with
+// com.atproto.repo.uploadBlob), as any app writes as a group, and the
+// token ended once they are made.
 
 import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto';
-import { fail } from '@sveltejs/kit';
+import { fail, type ActionFailure } from '@sveltejs/kit';
 import type { LexErrorData } from '@atproto/lex';
 
 type Load = { fetch: typeof fetch };
+
+/** The host's refusal, as a form says it. */
+export type Failed = ActionFailure<{ failed: string }>;
+/** What a write as the group comes to: nothing, or the host's refusal. */
+export type Done = Failed | undefined;
 
 const b64 = (bytes: Buffer | Uint8Array | string) => Buffer.from(bytes).toString('base64url');
 
@@ -30,12 +36,15 @@ class Prover {
 		return `${body}.${b64(signature)}`;
 	}
 
-	/** POSTs `input` to `nsid` with a fresh proof, once more with the nonce if the host asks for one. */
-	async post({ fetch }: Load, nsid: string, input: object, token?: string): Promise<Response> {
+	/**
+	 * POSTs `body`, of the type `type`, to `nsid` with a fresh proof, once
+	 * more with the nonce if the host asks for one.
+	 */
+	async post({ fetch }: Load, nsid: string, body: BodyInit, type: string, token?: string): Promise<Response> {
 		for (let tries = 0; ; tries++) {
-			const headers: Record<string, string> = { 'content-type': 'application/json', dpop: this.proof(nsid, token) };
+			const headers: Record<string, string> = { 'content-type': type, dpop: this.proof(nsid, token) };
 			if (token) headers.authorization = `DPoP ${token}`;
-			const res = await fetch(`/xrpc/${nsid}`, { method: 'POST', headers, body: JSON.stringify(input) });
+			const res = await fetch(`/xrpc/${nsid}`, { method: 'POST', headers, body });
 			this.nonce = res.headers.get('dpop-nonce') ?? this.nonce;
 			const stale = res.headers.get('www-authenticate')?.includes('use_dpop_nonce');
 			if (!stale || tries > 0) return res;
@@ -44,24 +53,67 @@ class Prover {
 }
 
 /** Why the host refused, as a form says it. */
-async function refused(res: Response) {
+async function refused(res: Response): Promise<Failed> {
 	const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
 	return fail(res.status, { failed: failure?.message ?? res.statusText });
+}
+
+/** The group, acting in one of its spaces with a token for it. */
+export class GroupSession {
+	constructor(
+		private readonly load: Load,
+		private readonly prover: Prover,
+		private readonly token: string,
+		readonly group: string,
+		readonly space: string
+	) {}
+
+	/** The write `nsid` with `input`, in the session's space: nothing, or the host's refusal. */
+	async write(nsid: string, input: object): Promise<Done> {
+		const body = JSON.stringify({ repo: this.group, space: this.space, ...input });
+		const res = await this.prover.post(this.load, nsid, body, 'application/json', this.token);
+		return res.ok ? undefined : refused(res);
+	}
+
+	/** `bytes`, of the type `type`, uploaded as the group's: the blob, or the host's refusal. */
+	async upload(bytes: ArrayBuffer, type: string): Promise<{ blob: unknown } | Failed> {
+		const res = await this.prover.post(this.load, 'com.atproto.repo.uploadBlob', bytes, type, this.token);
+		return res.ok ? { blob: (await res.json()).blob } : refused(res);
+	}
+
+	/** Ends the token, done with: it stays among the group's sessions no longer. */
+	async end() {
+		const body = new URLSearchParams({ token: this.token });
+		await this.load.fetch('/oauth/revoke', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+	}
+}
+
+/**
+ * What `act` comes to, given the group's session in `space`, from a
+ * form's action, as the person signed in: as far as their roles let them
+ * write there. The session is ended after. If the host gives none, the
+ * form says why.
+ */
+export async function withGroup(load: Load, group: string, space: string, act: (session: GroupSession) => Promise<Done>): Promise<Done> {
+	// A proof names the host as it names itself.
+	const { resource } = await (await load.fetch('/.well-known/oauth-protected-resource')).json();
+	const prover = new Prover(resource);
+	const given = await prover.post(load, 'fyi.opensocial.getGroupAuth', JSON.stringify({ group, space }), 'application/json');
+	if (!given.ok) return refused(given);
+	const { accessJwt } = await given.json();
+	const session = new GroupSession(load, prover, accessJwt, group, space);
+	try {
+		return await act(session);
+	} finally {
+		await session.end();
+	}
 }
 
 /**
  * Makes the write `nsid` (com.atproto.space.createRecord, and the rest)
  * with `input` as `group`, in `space`, from a form's action, as the person
- * signed in: with a group token for that space, as far as their roles let
- * them write there. If the host refuses, the form says why.
+ * signed in. If the host refuses, the form says why.
  */
-export async function asGroup(load: Load, group: string, space: string, nsid: string, input: object) {
-	// A proof names the host as it names itself.
-	const { resource } = await (await load.fetch('/.well-known/oauth-protected-resource')).json();
-	const prover = new Prover(resource);
-	const given = await prover.post(load, 'fyi.opensocial.getGroupAuth', { group, space });
-	if (!given.ok) return refused(given);
-	const { accessJwt } = await given.json();
-	const res = await prover.post(load, nsid, { repo: group, space, ...input }, accessJwt);
-	if (!res.ok) return refused(res);
+export async function asGroup(load: Load, group: string, space: string, nsid: string, input: object): Promise<Done> {
+	return withGroup(load, group, space, (session) => session.write(nsid, input));
 }

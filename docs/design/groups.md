@@ -146,21 +146,27 @@ a group here, or someone asking to join one, to a signed-in caller.
 
 ## Changing its profile, rules and pictures
 
-The host writes a group's profile and rules in `meta`, as the group, for
-anyone whose roles hold `group.configure`. `updateProfile`, `uploadImage`,
-`putRule` and `deleteRule` all ask for it. Nothing is written as a
-switched-off group.
+A group's profile (`fyi.opensocial.profile`, at `self`) and its rules
+(`fyi.opensocial.rule`) are records in `meta`, and an app changes them
+by writing them as the group: `com.atproto.space.putRecord`,
+`createRecord`, `deleteRecord` and `applyWrites`, with a token for the
+group ([signing in](signing-in.md)). The token's scope must cover the
+write, and the member who approved it must hold `group.configure` when
+it is made. Nothing is written as a switched-off group.
 
-`updateProfile` replaces the profile. A display name is required. The
-description, site, location, online flag, topics and languages are as
-given, and removed when left out. The join policy, avatar and banner are
-kept when left out; `removeAvatar` and `removeBanner` clear them.
+A put replaces the record whole: what it leaves out goes. Beyond what
+the lexicon checks, the host keeps a profile only with a display name
+that is more than spaces, a join policy of `open`, `approval` or
+`invite`, a location of one of `community.lexicon.location`'s kinds, a
+site on `http` or `https`, and topics and languages each listed once and
+none blank. The profile stays at `self` and is never deleted.
 
 A picture must be a blob in the group's own repo, because a blob in
-another account's repo would not resolve for the group's profile. So
-`uploadImage` keeps the image's bytes as the group's blob, and the client
-names that blob in `updateProfile`. An upload no record takes within a
-day is swept away, and a blob goes when its last reference does.
+another account's repo would not resolve for the group's profile. So the
+app uploads it as the group (`com.atproto.repo.uploadBlob`, which a
+token for `meta` may do for images) and names the blob it gets back in
+the profile. An upload no record takes within a day is swept away, and a
+blob goes when its last reference does.
 
 The host serves images at `/img/{did}/{cid}` to whoever may see a record
 holding them: anyone, for the public repo; otherwise whoever may read the
@@ -168,25 +174,30 @@ space, signed in to the console, which for `meta` while the group is
 declared is anyone signed in.
 A switched-off group's images are not served.
 
-`putRule` adds or changes a rule and `deleteRule` removes one. Rules keep
-an order, and a new rule goes last. A label citing a deleted rule keeps
-its URI, which no longer resolves ([moderation](moderation.md)).
+A rule is kept at a TID, so that a label citing it keeps its URI however
+the rule changes; a new rule written with no key is given one by the
+host's clock. Rules are shown by their `order`, lowest first, then those
+with none, as they were written. A label citing a deleted rule keeps its
+URI, which no longer resolves ([moderation](moderation.md)).
+
+The declaration follows who may read `meta`: written as the group in its
+public repo, it is kept only at `self`, naming the group's own `meta`,
+and only while anyone may read it. Deleting it is always allowed.
 
 Details:
 
-- `uploadImage` takes at most 2,000,000 bytes, of a PNG, JPEG or WebP
-  image as its `Content-Type` says, and refuses any other type.
-- `updateProfile` takes a picture's type and size from the upload the
-  host kept, not from what the caller writes, and refuses a blob that is
-  not one of the group's images.
-- A topic is cut to 64 characters, and topics the cut makes the same are
-  kept once.
-- A new rule's record key is a TID from the host's clock. `putRule` with
-  an `rkey` changes the rule of that key, and refuses a key no rule has.
-- A rule's title is 100 characters at most, its text 2,000.
-- The console's settings set pictures through `uploadImage` then
-  `updateProfile`, and visibility by making `meta` public or not through
-  `updateSpace`, members granted `read` there either way.
+- A picture is a PNG, JPEG or WebP of at most 2,000,000 bytes, and its
+  record names it with the type and size the host kept at upload; one
+  that says otherwise, or a blob that is not the group's, is refused.
+- A rule's title is 64 characters at most and must be more than spaces;
+  its text, which it must have, is 2,000 at most.
+- The console's settings write the profile, pictures and rules this way,
+  with a token `getGroupAuth` gives for `meta`, and set visibility by
+  making `meta` public or not through `updateSpace`, members granted
+  `read` there either way.
+- An assistant connected over MCP changes them with the `putProfile`,
+  `putRule` and `deleteRule` tools, the same writes made as its member
+  ([MCP](../reference/mcp.md)).
 
 ## More spaces
 

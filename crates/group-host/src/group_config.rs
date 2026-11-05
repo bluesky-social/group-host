@@ -1,28 +1,27 @@
-//! Changing a group's face: its profile, its images and its rules. Each is
-//! a record in its meta space, written by the group, so the host writes it
-//! for a caller holding `group.configure`.
+//! A group's face: its profile, its pictures and its rules, each a record
+//! in its meta space that the group writes, and its declaration, in its
+//! public repo, which lists it while anyone may read that space. An app
+//! writes them as the group, with a token a member approved
+//! (`token_writes`); here is what each must be for the host to keep it,
+//! beyond what its lexicon says, and who may configure the group.
 
 use crate::Host;
-use crate::api::{Params, invalid, param};
+use crate::api::invalid;
 use crate::blobs::PROFILE_IMAGES;
 use crate::group::{join_policy, members_space, meta_space};
-use crate::group_api::{group_of, signed_in};
-use crate::rbac::{NS, actions_for, grants, roles_of};
+use crate::rbac::{Access, NS, actions_for, grants, roles_of};
 use crate::repo::Write;
-use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::Cid;
+use atproto::syntax::is_tid;
 use axum::Json;
-use axum::body::Bytes;
-use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::StatusCode;
 use serde_json::{Value, json};
-use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
-/// The most bytes an image may be, as the profile's lexicon has it.
-pub const IMAGE_AT_MOST: usize = 2_000_000;
+/// The most bytes a profile's picture may be, as its lexicon has it.
+pub const IMAGE_AT_MOST: i64 = 2_000_000;
 
 /// Where a group meets: the places `community.lexicon.location` has.
 const PLACES: [&str; 4] = [
@@ -38,22 +37,6 @@ pub(crate) fn forbidden() -> XrpcError {
         "Forbidden",
         "missing group.configure",
     )
-}
-
-/// The group a caller of `lxm` changes, once they hold `group.configure`
-/// in it.
-async fn configurer(
-    host: &Host,
-    headers: &HeaderMap,
-    group: &str,
-    lxm: &str,
-) -> Result<String, XrpcError> {
-    let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
-    group_of(host, group)?;
-    if !host.may_configure(group, &me)? {
-        return Err(forbidden());
-    }
-    Ok(group.to_string())
 }
 
 impl Host {
@@ -90,24 +73,18 @@ impl Host {
     }
 }
 
-/// Puts the group's record at `collection/rkey` in meta, made or replaced:
-/// its URI and CID.
-async fn put(host: &Host, group: &str, collection: &str, rkey: &str, value: Value) -> Answer {
-    put_in(host, group, &meta_space(group), collection, rkey, value).await
-}
-
 /// Puts the group's record at `collection/rkey` in `space`, made or
 /// replaced: its URI and CID.
 pub(crate) async fn put_in(
     host: &Host,
     group: &str,
-    meta: &str,
+    space: &str,
     collection: &str,
     rkey: &str,
     value: Value,
 ) -> Answer {
     let current = host
-        .group_record(group, meta, collection, rkey)
+        .group_record(group, space, collection, rkey)
         .map_err(XrpcError::internal)?;
     let (collection, rkey) = (collection.to_string(), rkey.to_string());
     let write = match current {
@@ -122,234 +99,158 @@ pub(crate) async fn put_in(
             value,
         },
     };
-    host.space_write(group, meta, &[write]).await?;
+    host.space_write(group, space, &[write]).await?;
     let kept = host
         .store
-        .space_record(group, meta, &collection, &rkey)
+        .space_record(group, space, &collection, &rkey)
         .map_err(XrpcError::internal)?
         .expect("the record just written");
-    let uri = format!("{meta}/{group}/{collection}/{rkey}");
+    let uri = format!("{space}/{group}/{collection}/{rkey}");
     Ok(Json(json!({"uri": uri, "cid": kept.cid.to_string()})))
 }
 
-/// Words a profile lists, as `[{topic}]`: trimmed, cut to `longest`
-/// characters, each once, at most `max`.
-fn words(asked: &Value, field: &str, longest: usize, max: usize) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for item in asked.as_array().into_iter().flatten() {
+/// Whether `text` says something: more than spaces.
+fn said(text: &Value) -> bool {
+    text.as_str().is_some_and(|t| !t.trim().is_empty())
+}
+
+/// Refuses the words a profile lists at `key`, as `[{field}]`, if one is
+/// blank or listed twice.
+fn words(profile: &Value, key: &str, field: &str) -> Result<(), XrpcError> {
+    let mut seen: Vec<&str> = Vec::new();
+    for item in profile[key].as_array().into_iter().flatten() {
         let word = item[field].as_str().unwrap_or_default().trim();
-        let word: String = word.chars().take(longest).collect();
-        if !word.is_empty() && !out.contains(&word) {
-            out.push(word);
+        if word.is_empty() || seen.contains(&word) {
+            let once = format!("{key} lists each {field} once, and none blank");
+            return Err(invalid(once));
         }
+        seen.push(word);
     }
-    out.truncate(max);
-    out
+    Ok(())
 }
 
-/// A blob as a record holds it, `{$type, ref, mimeType, size}`, from what
-/// `uploadImage` answered.
-fn blob(asked: &Value) -> Option<Value> {
-    let link = asked["ref"]["$link"].as_str()?;
-    let mime = asked["mimeType"].as_str()?;
-    let size = asked["size"].as_u64()?;
-    Some(json!({"$type": "blob", "ref": {"$link": link}, "mimeType": mime, "size": size}))
-}
-
-/// The image `asked` names, as the group's profile holds it: one of its
-/// own uploads, of a kind of image a page is given, its type and size as
-/// the host kept them rather than as the caller says.
-fn image(host: &Host, group: &str, key: &str, asked: &Value) -> Result<Value, XrpcError> {
-    let not_one = invalid(format!("{key} is an image uploadImage answered"));
-    let link = asked["ref"]["$link"].as_str().unwrap_or_default();
-    let Ok(cid) = Cid::parse(link) else {
-        return Err(not_one);
+/// Refuses a place the profile says it meets that is none of [`PLACES`].
+fn place(profile: &Value) -> Result<(), XrpcError> {
+    let Some(place) = profile.get("location") else {
+        return Ok(());
     };
-    let kept = host.store.blob(group, &cid).map_err(XrpcError::internal)?;
-    let kept = kept.filter(|b| PROFILE_IMAGES.contains(&b.mime_type.as_str()));
-    let kept = kept.ok_or(not_one)?;
-    let (mime, size) = (kept.mime_type, kept.size);
-    Ok(json!({"$type": "blob", "ref": {"$link": link}, "mimeType": mime, "size": size}))
+    let kind = place["$type"].as_str().unwrap_or_default();
+    if !PLACES.contains(&kind) {
+        return Err(invalid(format!("location is one of {}", PLACES.join(", "))));
+    }
+    Ok(())
 }
 
-/// Replaces the group's profile. What finds it (where it meets, online,
-/// topics, languages) is as given, none when left out; an image left out
-/// is kept, and `removeAvatar` or `removeBanner` clears it; its first
-/// `createdAt` is kept.
-pub async fn update_profile(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let group = body["group"].as_str().expect("its lexicon requires it");
-    let group = configurer(&host, &headers, group, "updateProfile").await?;
-    let name = body["displayName"].as_str().unwrap_or_default().trim();
-    if name.is_empty() {
-        return Err(invalid("displayName is required"));
-    }
-    let meta = meta_space(&group);
-    let collection = format!("{NS}.profile");
-    let current = host
-        .group_record(&group, &meta, &collection, "self")
-        .map_err(XrpcError::internal)?
-        .unwrap_or_default();
-    let join = match body["joinPolicy"].as_str() {
-        Some(asked) => join_policy(Some(asked))?.to_string(),
-        None => current["joinPolicy"]
-            .as_str()
-            .unwrap_or("approval")
-            .to_string(),
+/// Refuses a site that is not on the web.
+fn site(profile: &Value) -> Result<(), XrpcError> {
+    let Some(url) = profile.get("url") else {
+        return Ok(());
     };
-    let mut profile = json!({
-        "$type": collection,
-        "displayName": name,
-        "joinPolicy": join,
-        "createdAt": current.get("createdAt").cloned().unwrap_or(json!(iso(now_millis()))),
-    });
-    let text = |k: &str| body[k].as_str().map(str::trim).filter(|t| !t.is_empty());
-    if let Some(d) = text("description") {
-        profile["description"] = json!(d);
+    let url = url.as_str().unwrap_or_default();
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err(invalid("url is an http or https address"));
     }
-    // The site is replaced, as the description is: left out, it goes.
-    if let Some(url) = text("url") {
-        profile["url"] = json!(url);
-    }
-    if let Some(place) = body.get("location").filter(|l| !l.is_null()) {
-        let kind = place["$type"].as_str().unwrap_or_default();
-        if !PLACES.contains(&kind) {
-            return Err(invalid(format!("location is one of {}", PLACES.join(", "))));
-        }
-        profile["location"] = place.clone();
-    }
-    if body["online"].as_bool() == Some(true) {
-        profile["online"] = json!(true);
-    }
-    let topics: Vec<Value> = words(&body["topics"], "topic", 64, 10)
-        .into_iter()
-        .map(|t| json!({ "topic": t }))
-        .collect();
-    if !topics.is_empty() {
-        profile["topics"] = json!(topics);
-    }
-    let languages: Vec<Value> = words(&body["languages"], "language", usize::MAX, 5)
-        .into_iter()
-        .map(|l| json!({"language": l}))
-        .collect();
-    if !languages.is_empty() {
-        profile["languages"] = json!(languages);
-    }
-    for (key, remove) in [("avatar", "removeAvatar"), ("banner", "removeBanner")] {
-        let image = match body.get(key) {
-            _ if body[remove] == true => None,
-            Some(asked) => Some(image(&host, &group, key, asked)?),
-            None => current.get(key).and_then(blob),
+    Ok(())
+}
+
+impl Host {
+    /// Refuses a picture a profile names at `key`, unless it is one of the
+    /// group's own uploads, of a kind of image a page is given and no
+    /// larger than a profile takes, with the type and size the host kept.
+    fn picture(&self, group: &str, profile: &Value, key: &str) -> Result<(), XrpcError> {
+        let Some(asked) = profile.get(key) else {
+            return Ok(());
         };
-        if let Some(image) = image {
-            profile[key] = image;
-        }
-    }
-    put(&host, &group, &collection, "self", profile).await
-}
-
-/// Keeps an image as the group's, for its profile: the blob to put there.
-pub async fn upload_image(
-    State(host): State<Arc<Host>>,
-    Query(p): Query<Params>,
-    headers: HeaderMap,
-    bytes: Bytes,
-) -> Answer {
-    let group = configurer(&host, &headers, param(&p, "group")?, "uploadImage").await?;
-    if bytes.is_empty() {
-        return Err(invalid("an empty upload"));
-    }
-    if bytes.len() > IMAGE_AT_MOST {
-        return Err(invalid(format!(
-            "an image is {IMAGE_AT_MOST} bytes at most"
-        )));
-    }
-    let mime = headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    if !PROFILE_IMAGES.contains(&mime) {
-        return Err(invalid(format!(
-            "an image is one of {}",
-            PROFILE_IMAGES.join(", ")
-        )));
-    }
-    let blob = host.upload_blob(&group, &bytes, mime)?;
-    Ok(Json(json!({ "blob": blob })))
-}
-
-/// Makes or changes a rule. Its key stays as it is, so a label citing it
-/// still does; a new one gets a key of its own, and goes last unless it
-/// says where.
-pub async fn put_rule(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let group = body["group"].as_str().expect("its lexicon requires it");
-    let group = configurer(&host, &headers, group, "putRule").await?;
-    let title = body["title"].as_str().unwrap_or_default().trim();
-    if title.is_empty() {
-        return Err(invalid("title is required"));
-    }
-    let text = body["text"].as_str().unwrap_or_default().trim();
-    let collection = format!("{NS}.rule");
-    let rules = host
-        .group_records(&group, &meta_space(&group), &collection)
-        .map_err(XrpcError::internal)?;
-    // A key names a rule there is; a new one is keyed by the clock, as
-    // rules are.
-    let (rkey, current) = match body["rkey"].as_str() {
-        Some(k) => {
-            let found = rules.iter().find(|(key, _)| key == k);
-            let none = invalid(format!("no rule {k}: a new one is given no rkey"));
-            let found = found.ok_or(none)?;
-            (k.to_string(), Some(&found.1))
-        }
-        None => (host.clock.next(), None),
-    };
-    let last = rules.iter().filter_map(|(_, r)| r["order"].as_i64()).max();
-    let order = body["order"]
-        .as_i64()
-        .or_else(|| current.and_then(|r| r["order"].as_i64()))
-        .unwrap_or_else(|| last.map_or(0, |l| l + 1));
-    let created = current
-        .and_then(|r| r.get("createdAt").cloned())
-        .unwrap_or_else(|| json!(iso(now_millis())));
-    let rule = json!({
-        "$type": collection,
-        "title": title,
-        "text": text,
-        "order": order,
-        "createdAt": created,
-    });
-    put(&host, &group, &collection, &rkey, rule).await
-}
-
-/// Takes a rule away. A label citing it keeps its URI, which no longer
-/// resolves: better than a citation taken out of history.
-pub async fn delete_rule(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let group = body["group"].as_str().expect("its lexicon requires it");
-    let group = configurer(&host, &headers, group, "deleteRule").await?;
-    let rkey = body["rkey"].as_str().expect("its lexicon requires it");
-    let collection = format!("{NS}.rule");
-    let meta = meta_space(&group);
-    let current = host
-        .group_record(&group, &meta, &collection, rkey)
-        .map_err(XrpcError::internal)?;
-    if current.is_some() {
-        let delete = Write::Delete {
-            collection,
-            rkey: rkey.into(),
+        let not_one = || {
+            invalid(format!(
+                "{key} is a PNG, JPEG or WebP image of at most {IMAGE_AT_MOST} bytes, as the group's uploadBlob answered it"
+            ))
         };
-        host.space_write(&group, &meta, &[delete]).await?;
+        let link = asked["ref"]["$link"].as_str().unwrap_or_default();
+        let cid = Cid::parse(link).map_err(|_| not_one())?;
+        let kept = self.store.blob(group, &cid).map_err(XrpcError::internal)?;
+        let kept = kept.ok_or_else(not_one)?;
+        let image = PROFILE_IMAGES.contains(&kept.mime_type.as_str());
+        let as_kept = asked["mimeType"] == kept.mime_type && asked["size"] == kept.size;
+        if !image || kept.size > IMAGE_AT_MOST || !as_kept {
+            return Err(not_one());
+        }
+        Ok(())
     }
-    Ok(Json(json!({})))
+
+    /// Refuses a profile the group should not keep: one with no name, a
+    /// join policy the host does not know, a place that is none, a site
+    /// not on the web, words blank or listed twice, or a picture that is
+    /// not one of its own.
+    fn profile(&self, group: &str, profile: &Value) -> Result<(), XrpcError> {
+        if !said(&profile["displayName"]) {
+            return Err(invalid("displayName is required"));
+        }
+        if let Some(policy) = profile["joinPolicy"].as_str() {
+            join_policy(Some(policy))?;
+        }
+        place(profile)?;
+        site(profile)?;
+        words(profile, "topics", "topic")?;
+        words(profile, "languages", "language")?;
+        self.picture(group, profile, "avatar")?;
+        self.picture(group, profile, "banner")
+    }
+
+    /// Refuses a write of the group's profile or one of its rules, in its
+    /// meta space, that the host should not keep: a profile as `profile`
+    /// has it, kept at `self` and never deleted; a rule with a title, at a
+    /// TID, so that a label citing it keeps its URI however it changes.
+    pub(crate) fn face(&self, group: &str, write: &Write) -> Result<(), XrpcError> {
+        let (collection, rkey) = write.path();
+        let value = match write {
+            Write::Create { value, .. } | Write::Update { value, .. } => Some(value),
+            Write::Delete { .. } => None,
+        };
+        if collection == format!("{NS}.profile") {
+            if rkey != "self" {
+                return Err(invalid(format!("{collection} is kept at self")));
+            }
+            let kept = || invalid("the group keeps its profile");
+            return self.profile(group, value.ok_or_else(kept)?);
+        }
+        if let Some(rule) = value.filter(|_| collection == format!("{NS}.rule")) {
+            if !is_tid(rkey) {
+                return Err(invalid("a rule is kept at a TID"));
+            }
+            if !said(&rule["title"]) {
+                return Err(invalid("title is required"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Refuses a write of the group's declaration, in its public repo,
+    /// that does not follow who may read its meta space: it is kept at
+    /// `self`, names that space, and is made only while anyone may read
+    /// it. Taking it away is always the group's to do.
+    pub(crate) fn declaration(&self, group: &str, write: &Write) -> Result<(), XrpcError> {
+        let (collection, rkey) = write.path();
+        if collection != format!("{NS}.declaration") {
+            return Ok(());
+        }
+        if rkey != "self" {
+            return Err(invalid(format!("{collection} is kept at self")));
+        }
+        let (Write::Create { value, .. } | Write::Update { value, .. }) = write else {
+            return Ok(());
+        };
+        let meta = meta_space(group);
+        if value["meta"] != meta.as_str() {
+            let named = format!("a group's declaration names its meta space, {meta}");
+            return Err(invalid(named));
+        }
+        let access = self.group_record(group, &meta, &format!("{NS}.access"), "self");
+        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
+        if !Access::of(&access, &meta).public {
+            let hidden = "a group is declared only while anyone may read its meta space";
+            return Err(invalid(hidden));
+        }
+        Ok(())
+    }
 }

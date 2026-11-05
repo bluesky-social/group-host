@@ -51,7 +51,7 @@ const retracted = new Set([
   'fyi.opensocial.listSpaceRecords#main.output.actors',
   'fyi.opensocial.invite#main.record.by',
   'fyi.opensocial.getActorInvites#actorInvite.by',
-  ...['createGroup#main.input', 'updateProfile#main.input', 'profile#main.record'].map((at) => `fyi.opensocial.${at}.joinPolicy`),
+  ...['createGroup#main.input', 'profile#main.record'].map((at) => `fyi.opensocial.${at}.joinPolicy`),
   'fyi.opensocial.defs#viewerState.request',
   'fyi.opensocial.getGroup#main.output.joinRequests[]',
   'fyi.opensocial.getJoinRequest#main.output.request',
@@ -83,8 +83,12 @@ const retracted = new Set([
 // space's `type` so; and the access record and createSpace require what
 // the proposal's do. A membership's roles are bare role ids, at most 100;
 // a moderation subject's status is a closed set; and a report's and an
-// event's `id` is the proposal's name for it.
+// event's `id` is the proposal's name for it. A rule's title is as long
+// as the proposal's.
 const proposal = new Set([
+  ...['maxLength went from 1000 to 640', 'maxGraphemes went from 100 to 64'].map(
+    (m) => `fyi.opensocial.rule#main.record.title: ${m}: what was valid must stay so`,
+  ),
   'fyi.opensocial.defs#spaceGrant.scopes: an array holds objects, which can grow, not bare values',
   'fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type',
   'fyi.opensocial.access#main.record: grants is required now: only new optional fields',

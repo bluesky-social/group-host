@@ -21,18 +21,23 @@
 use crate::Host;
 use crate::api::{Params, param};
 use crate::group_api::{group_of, signed_in};
+use crate::oauth_resource::Acting;
+use crate::oauth_store::Grant;
 use crate::rbac::NS;
+use crate::repo::{Write, record_cid};
+use crate::scopes::Permissions;
 use crate::store::Store;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
 use atproto::jose;
+use atproto::space::SpaceRef;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, Request, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::{Form, Json};
-use group_host_mcp::Tool;
+use group_host_mcp::{Kind, Tool};
 use rusqlite::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -690,7 +695,82 @@ fn query_of(args: &Value) -> Vec<(String, String)> {
     out
 }
 
+/// A record tool's write: the record's kind, the type of the group's
+/// space it is kept in, the one key it is kept at if one, and whether it
+/// goes.
+struct RecordAsked<'a> {
+    collection: &'a str,
+    space: &'a str,
+    literal: Option<&'a str>,
+    delete: bool,
+}
+
 impl Host {
+    /// Writes the record `asked` names, its key and value `args`, as the
+    /// group, in `who`'s group: what a group session `who`'s member
+    /// approved for that space would write, its scope what their roles
+    /// there grant now, kept to the same rules.
+    async fn record_as(
+        &self,
+        who: &Connected,
+        asked: &RecordAsked<'_>,
+        mut args: Value,
+    ) -> Result<Value, XrpcError> {
+        let group = &who.group;
+        let uri = format!("at://{group}/space/{}/self", asked.space);
+        let space = SpaceRef::parse(&uri).expect("a group's own space is a space");
+        let (_, scope) = self.group_scope(group, &who.member, &uri, &space)?;
+        let now = now_millis();
+        let grant = Grant {
+            id: who.id.clone(),
+            group: group.clone(),
+            member: who.member.clone(),
+            client_id: who.client_id.clone(),
+            client_auth: json!({"method": "none"}),
+            scope: scope.clone(),
+            dpop_jkt: String::new(),
+            access_expires: now,
+            expires_at: now,
+            created_at: now,
+            source: "mcp".into(),
+            used_at: None,
+        };
+        let acting = Acting {
+            permissions: Permissions::new(&scope, group),
+            grant,
+        };
+        let fields = args
+            .as_object_mut()
+            .expect("a tool's arguments are an object");
+        let named = fields.remove("rkey");
+        let rkey = match (asked.literal, named.as_ref().and_then(Value::as_str)) {
+            (Some(key), _) => key.to_string(),
+            (None, Some(key)) => key.to_string(),
+            (None, None) => self.clock.next(),
+        };
+        let collection = asked.collection.to_string();
+        let write = match asked.delete {
+            true => Write::Delete { collection, rkey },
+            false => {
+                fields.insert("$type".into(), json!(collection));
+                Write::Update {
+                    collection,
+                    rkey,
+                    value: args.clone(),
+                }
+            }
+        };
+        let writes = std::slice::from_ref(&write);
+        let written = self.write_as(&acting, &uri, &space, writes, true);
+        written.await?;
+        let (collection, rkey) = write.path();
+        let mut out = json!({"uri": format!("{uri}/{group}/{collection}/{rkey}")});
+        if !asked.delete {
+            out["cid"] = json!(record_cid(collection, &args)?.to_string());
+        }
+        Ok(out)
+    }
+
     /// Calls `tool` with `args` as `who`, in their group: as the console
     /// does, the host asking itself as them. A tool that writes an invite
     /// makes the write their own session for the group would.
@@ -700,6 +780,21 @@ impl Host {
         tool: Tool,
         mut args: Value,
     ) -> Result<Value, String> {
+        if let Kind::Record {
+            space,
+            literal,
+            delete,
+        } = &tool.kind
+        {
+            let asked = RecordAsked {
+                collection: &tool.nsid,
+                space,
+                literal: literal.as_deref(),
+                delete: *delete,
+            };
+            let written = self.record_as(who, &asked, args).await;
+            return written.map_err(|e| format!("{}: {}", e.error, e.message));
+        }
         if tool.nsid.starts_with("com.atproto.space.") {
             let made = self.invite_as(who, &tool.name, &args).await;
             return made.map_err(|e| format!("{}: {}", e.error, e.message));
@@ -708,7 +803,7 @@ impl Host {
         let cookie = self.session_cookie(&who.member, now_millis());
         let cookie = format!("{}={cookie}", crate::console_login::COOKIE);
         let path = format!("/xrpc/{}", tool.nsid);
-        let request = match tool.procedure {
+        let request = match tool.kind == Kind::Procedure {
             true => Request::post(path)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(args.to_string())),

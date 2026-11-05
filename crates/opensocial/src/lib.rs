@@ -811,9 +811,14 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
     let made = me.call(host, &m("createGroup"), &body).await?;
     let group = text(&made["did"]).to_string();
     let mut out = format!("group      {handle} {group}\n");
+    // Its rules are its own records, in its meta space, written as it.
+    let meta = text(&made["meta"]).to_string();
+    let session = GroupSession::start(me, host, &group, &meta).await?;
     for (title, words) in RULES {
-        let body = json!({"group": group, "title": title, "text": words});
-        me.call(host, &m("putRule"), &body).await?;
+        let rule = json!({"$type": m("rule"), "title": title, "text": words});
+        let body = json!({"repo": group, "space": meta, "collection": m("rule"), "record": rule});
+        let written = session.call("com.atproto.space.createRecord", &body);
+        written.await?;
         out += &format!("rule       {title}\n");
     }
     let role = json!({

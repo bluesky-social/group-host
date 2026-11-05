@@ -296,6 +296,85 @@ pub async fn group_token(
     app.said(send()).await
 }
 
+impl App {
+    /// A group token for `group`'s `space`, as `who`: the console's way
+    /// to write as the group.
+    pub async fn token_for(
+        &self,
+        h: &Running,
+        who: &Authority,
+        group: &str,
+        space: &str,
+    ) -> String {
+        let said = group_token(h, self, who, group, space).await;
+        assert_eq!(said.status, 200, "{}", said.body);
+        said.body["accessJwt"].as_str().unwrap().to_string()
+    }
+
+    /// Uploads `bytes`, of the type `mime`, with `token`.
+    pub async fn upload(&self, h: &Running, token: &str, bytes: Vec<u8>, mime: &str) -> Said {
+        let nsid = "com.atproto.repo.uploadBlob";
+        let send = || {
+            h.http
+                .post(format!("{}/xrpc/{nsid}", h.url))
+                .header("authorization", format!("DPoP {token}"))
+                .header("dpop", self.resource_proof(h, "POST", nsid, token))
+                .header("content-type", mime)
+                .body(bytes.clone())
+        };
+        let said = self.said(send()).await;
+        let stale = said
+            .headers
+            .get("www-authenticate")
+            .is_some_and(|v| v.to_str().unwrap().contains("use_dpop_nonce"));
+        if !stale {
+            return said;
+        }
+        self.said(send()).await
+    }
+
+    /// Puts `record` as the group in `space`, at `collection/rkey`, with
+    /// `token`.
+    pub async fn put(
+        &self,
+        h: &Running,
+        token: &str,
+        space: &str,
+        collection: &str,
+        rkey: &str,
+        record: Json,
+    ) -> Said {
+        let group = space.split('/').nth(2).unwrap();
+        let body = json!({"repo": group, "space": space, "collection": collection, "rkey": rkey, "record": record});
+        self.call(h, "com.atproto.space.putRecord", token, Some(&body))
+            .await
+    }
+}
+
+/// Gives `group` a PNG of `bytes` for its avatar, as `who` does from the
+/// console, its profile named `name`: the blob.
+pub async fn give_avatar(
+    h: &Running,
+    who: &Authority,
+    group: &str,
+    name: &str,
+    bytes: &[u8],
+) -> Json {
+    let app = App::new("console");
+    let meta = format!("at://{group}/space/{NS}.meta/self");
+    let token = app.token_for(h, who, group, &meta).await;
+    let said = app.upload(h, &token, bytes.to_vec(), "image/png").await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let blob = said.body["blob"].clone();
+    let profile = json!({"$type": format!("{NS}.profile"), "displayName": name, "joinPolicy": "approval", "avatar": blob});
+    let collection = format!("{NS}.profile");
+    let said = app
+        .put(h, &token, &meta, &collection, "self", profile)
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    blob
+}
+
 /// `nsid`, a write as `group` in the inbox `inbox`, made for `who` with a
 /// group token for it, `body` given its repo and, unless it names one,
 /// its space: what it answered, or why there was no token.

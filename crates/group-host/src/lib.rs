@@ -213,19 +213,6 @@ pub fn router(host: Arc<Host>) -> Router {
             get(group_api::list_groups),
         )
         .route(
-            "/xrpc/fyi.opensocial.updateProfile",
-            post(group_config::update_profile),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.uploadImage",
-            post(group_config::upload_image),
-        )
-        .route("/xrpc/fyi.opensocial.putRule", post(group_config::put_rule))
-        .route(
-            "/xrpc/fyi.opensocial.deleteRule",
-            post(group_config::delete_rule),
-        )
-        .route(
             "/xrpc/fyi.opensocial.deactivateGroup",
             post(group_lifecycle::deactivate_group),
         )

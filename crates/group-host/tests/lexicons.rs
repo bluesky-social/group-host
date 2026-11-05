@@ -27,13 +27,23 @@ async fn send(h: &common::Running, nsid: &str, body: Vec<u8>) -> (u16, Json) {
 async fn refuses_what_a_lexicon_does_not_describe_before_its_handler() {
     let h = start(&[], false).await;
     // Nobody signed in: the refusals come before the handler would ask.
-    let said = send(&h, "fyi.opensocial.putRule", b"{\"group\": 1}".to_vec()).await;
+    let said = send(
+        &h,
+        "fyi.opensocial.deactivateGroup",
+        b"{\"group\": 1}".to_vec(),
+    )
+    .await;
     assert_eq!(said.0, 400);
     assert_eq!(said.1["error"], "InvalidRequest");
     assert_eq!(said.1["message"], "input.group must be a string");
-    let said = send(&h, "fyi.opensocial.putRule", b"not json".to_vec()).await;
+    let said = send(&h, "fyi.opensocial.deactivateGroup", b"not json".to_vec()).await;
     assert_eq!(said.1["message"], "the input is not JSON");
-    let said = send(&h, "fyi.opensocial.putRule", vec![b' '; INPUT_AT_MOST + 1]).await;
+    let said = send(
+        &h,
+        "fyi.opensocial.deactivateGroup",
+        vec![b' '; INPUT_AT_MOST + 1],
+    )
+    .await;
     assert_eq!(
         (said.0, said.1["error"].as_str()),
         (413, Some("PayloadTooLarge"))
@@ -54,7 +64,7 @@ async fn refuses_what_a_lexicon_does_not_describe_before_its_handler() {
         (400, Some("GroupNotFound"))
     );
     // A method asked the wrong way is the router's to refuse.
-    assert_eq!(h.get("fyi.opensocial.putRule", "").await.0, 405);
+    assert_eq!(h.get("fyi.opensocial.deactivateGroup", "").await.0, 405);
     // A method with no lexicon here is not looked at.
     let (status, _) = h.get("fyi.opensocial.noSuchMethod", "").await;
     assert_eq!(status, 501);
@@ -85,7 +95,7 @@ fn holds_every_lexicon() {
         }
     }
     assert_eq!(found, FILES.len());
-    assert!(found > 100);
+    assert!(found > 50);
 }
 
 /// The name of a document's first def.

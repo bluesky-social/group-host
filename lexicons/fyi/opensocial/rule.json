@@ -12,8 +12,8 @@
         "properties": {
           "title": {
             "type": "string",
-            "maxGraphemes": 100,
-            "maxLength": 1000
+            "maxGraphemes": 64,
+            "maxLength": 640
           },
           "text": {
             "type": "string",
