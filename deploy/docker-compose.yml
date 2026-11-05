@@ -1,0 +1,104 @@
+# The host and its console, from one image (../Dockerfile), beside the
+# .env it reads: docs/deploying.md says what goes in it.
+#
+# TLS is left to a reverse proxy in front: it joins the network named by
+# GROUP_HOST_PROXY_NETWORK and sends the host's paths to group-host:2600
+# and the rest to group-host-console:2601.
+#
+# Neither sets a container_name, so a rollout can start a new console
+# beside the old. The host never runs twice over one DATA_DIR: its
+# database is the groups' own, so it is stopped, then started.
+
+name: group-host
+
+# Each container's output, the host's lines JSON, kept in the machine's
+# journal, which outlives the container.
+x-logging: &logging
+  driver: journald
+  options:
+    labels: com.docker.compose.project,com.docker.compose.service
+    tag: "{{.Name}}"
+
+services:
+  host:
+    image: group-host:current
+    restart: always
+    logging: *logging
+    command: ["group-host"]
+    environment:
+      PORT: "2600"
+      PUBLIC_URL: https://${GROUP_HOST_DOMAIN:?set GROUP_HOST_DOMAIN in .env}
+      # Groups' handles are made under it, with its leading dot: the
+      # default, .test, is not for a deployed host.
+      HANDLE_DOMAIN: ${GROUP_HOST_HANDLE_DOMAIN:?set GROUP_HOST_HANDLE_DOMAIN in .env}
+      DATA_DIR: /data
+      # Empty, each takes the host's default (docs/reference/config.md).
+      PLC_URL: ${GROUP_HOST_PLC_URL:-https://plc.directory}
+      GROUP_FOUNDERS: ${GROUP_HOST_FOUNDERS:-}
+      PROVISIONING_CLIENTS: ${GROUP_HOST_PROVISIONING_CLIENTS:-}
+      PDS_CRAWLERS: ${GROUP_HOST_CRAWLERS:-}
+      BLOB_UPLOAD_LIMIT: ${GROUP_HOST_BLOB_UPLOAD_LIMIT:-52428800}
+      RUST_LOG: ${GROUP_HOST_LOG:-info}
+    volumes:
+      # The database, blobs and keys: back it up (docs/deploying.md).
+      # Owned by uid 1000, the node user the image runs as.
+      - ${GROUP_HOST_DATA:-/var/lib/group-host}:/data
+    networks:
+      default: {}
+      proxy:
+        aliases: [group-host]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:2600/xrpc/_health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
+    # Stopped, it answers the requests under way first.
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+
+  console:
+    image: group-host:current
+    restart: always
+    logging: *logging
+    command: ["node", "/app/build"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "2601"
+      GROUP_HOST: http://host:2600
+      ORIGIN: https://${GROUP_HOST_DOMAIN:?set GROUP_HOST_DOMAIN in .env}
+      # At least the host's BLOB_UPLOAD_LIMIT, or a larger upload is
+      # refused before the host sees it.
+      BODY_SIZE_LIMIT: ${GROUP_HOST_BLOB_UPLOAD_LIMIT:-52428800}
+    networks:
+      default: {}
+      proxy:
+        aliases: [group-host-console]
+    depends_on:
+      - host
+    # A file the build writes, answered without asking the host.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:2601/_app/version.json').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
+    # Stopped, it finishes the requests it has, for up to adapter-node's
+    # SHUTDOWN_TIMEOUT (30s).
+    stop_grace_period: 35s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+
+networks:
+  proxy:
+    name: ${GROUP_HOST_PROXY_NETWORK:-group-host}
+    external: true

@@ -50,3 +50,10 @@ debug = false
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# The image's (Dockerfile): release's, built for the build's time, in 16
+# codegen units without LTO, so a deploy rebuilds our crates on every core.
+[profile.deploy]
+inherits = "release"
+lto = false
+codegen-units = 16

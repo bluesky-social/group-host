@@ -7,7 +7,7 @@ import { remarkReference } from './reference.mjs'
 /** Where the site is served: a private repository's site is at its own host's root. */
 const base = '/'
 
-// The sidebar follows docs/README.md: design, then reference, then development.
+// The sidebar follows docs/README.md: design, then reference, then deploying and development.
 const page = (label, slug) => ({ label, slug })
 
 export default defineConfig({
@@ -62,6 +62,7 @@ export default defineConfig({
             page('Configuration', 'reference/config'),
           ],
         },
+        { label: 'Running it', items: [page('Deploying', 'deploying')] },
         { label: 'Contributing', items: [page('Development', 'development')] },
       ],
     }),

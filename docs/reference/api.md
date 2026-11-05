@@ -252,7 +252,7 @@ repos as any PDS does:
 | `GET com.atproto.identity.resolveHandle` | a handle here, to its DID; for a caller signed in, any handle, through `HANDLE_RESOLVERS` |
 | `GET /.well-known/did.json` | the host's own DID document, when `SERVICE_DID` is a `did:web`: its `#atproto_pds` and `#opensocial` services at `PUBLIC_URL` |
 | `GET /.well-known/atproto-did` | the DID of the group whose address the request's host names |
-| `GET /xrpc/_health` | that the host is up, and its version |
+| `GET /xrpc/_health` | that the host is up: its `version`, and the `commit` its image was built from (`null` in a build of a checkout) |
 
 A switched-off group's public repo answers `RepoDeactivated`, and
 `listRepos` shows it `active: false`.

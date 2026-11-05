@@ -1,0 +1,13 @@
+.git
+target
+harness
+data
+*.profraw
+lcov.info
+web/node_modules
+web/build
+web/.svelte-kit
+web/src/lib/lexicons
+docs-site/node_modules
+docs-site/dist
+docs-site/.astro

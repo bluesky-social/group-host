@@ -559,9 +559,13 @@ fn token_routes() -> Router<Arc<Host>> {
         .layer(axum::middleware::from_fn(oauth::cors))
 }
 
+/// The commit the host was built from: `GROUP_HOST_COMMIT` as it was
+/// built, which the Dockerfile sets; none in a build of a checkout.
+const COMMIT: Option<&str> = option_env!("GROUP_HOST_COMMIT");
+
 /// That the host is up, and which build it is.
 async fn health() -> Json<Value> {
-    Json(json!({ "version": env!("CARGO_PKG_VERSION") }))
+    Json(json!({ "version": env!("CARGO_PKG_VERSION"), "commit": COMMIT }))
 }
 
 async fn not_implemented(Path(nsid): Path<String>) -> XrpcError {
@@ -605,7 +609,13 @@ pub async fn run(args: &[String], config: Config) -> anyhow::Result<()> {
 pub async fn serve(config: Config) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;
     println!("listening on {}", listener.local_addr()?);
-    tracing::info!(public_url = %config.public_url, did = %config.service_did, "serving");
+    tracing::info!(
+        public_url = %config.public_url,
+        did = %config.service_did,
+        version = env!("CARGO_PKG_VERSION"),
+        commit = COMMIT,
+        "serving"
+    );
     let host = Arc::new(Host::open(config)?);
     // Uploads no record took, moves kept a day, and invites lapsed, swept
     // now and each hour after.

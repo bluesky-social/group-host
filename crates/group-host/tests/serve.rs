@@ -48,6 +48,11 @@ async fn answers_health_and_refuses_unknown_methods() {
         .await
         .unwrap();
     assert_eq!(health["version"], env!("CARGO_PKG_VERSION"));
+    // The commit the image was built from (Dockerfile); none otherwise.
+    assert_eq!(
+        health["commit"],
+        serde_json::json!(option_env!("GROUP_HOST_COMMIT"))
+    );
 
     for req in [
         http.get(format!("{}/xrpc/fyi.opensocial.noSuchQuery", host.1)),

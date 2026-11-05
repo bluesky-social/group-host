@@ -1,0 +1,175 @@
+# Deploying the host
+
+A group host is a server that other servers on the network must reach. Members' PDSes, relays and apps fetch from it at its own domain, and at every group's handle, over https. It holds keys that sign each group's identity, and those keys cannot be replaced once lost. So running it takes more than starting a container: a domain and a wildcard name, a proxy that routes by path, an upgrade that never runs two hosts at once, and backups that keep the keys safe.
+
+This page walks through each of these on one machine with Docker and a reverse proxy. Every variable named here is described in [the configuration reference](reference/config.md). What the host is, and what is still to come, is in [the design overview](design/README.md).
+
+## What runs
+
+A group is an atproto account of its own, with no password and no one person behind it. This host is each group's PDS, the authority for its private spaces, and its OAuth server. Members keep their own accounts on their own PDSes.
+
+One image, `group-host:current`, carries three programs: the host, `group-host`, a Rust server over SQLite; the console, a SvelteKit app where people start and run groups, built into `/app/build`; and the command, `opensocial`. The host and the console run as two containers from that image, behind one domain.
+
+## Building the image
+
+Build from the repository root, naming the commit being built:
+
+```sh
+docker build --build-arg GROUP_HOST_COMMIT=$(git rev-parse HEAD) -t group-host:current .
+```
+
+The commit is compiled into the host, so a running host can say which build it is. Without the argument, the host reports its commit as `null`. The console is built from `web/` with `lexicons/` beside it, since its types are made from the lexicons.
+
+Details:
+
+- The Rust stage uses `rust:1.98-bookworm`, the toolchain CI tests with, and builds with `--locked` in the `deploy` profile: `release` without LTO and with 16 codegen units, so a rebuild is quick and uses every core. The cargo registry and `target/` are cache mounts, so a second build on the same machine rebuilds only the crates that changed.
+- The console stage and the final image use `node:24.22.1-bookworm-slim`, the version `.node-version` names. The console stage runs `npm ci` and `npm run build`. adapter-node bundles the console's dependencies, so no `node_modules` is copied.
+- The final image adds `ca-certificates` and `tini`, which runs as PID 1. It runs as uid 1000, with `DATA_DIR=/data`, `PORT=2600`, and `group-host` as its default command.
+
+## Running it with compose
+
+`deploy/docker-compose.yml` runs the host and the console. Copy it onto the machine, and put a `.env` beside it. The compose project is named `group-host`.
+
+The two services are `host`, running `group-host` on port 2600, and `console`, running `node /app/build` on port 2601. Neither publishes a port. A reverse proxy in front terminates TLS and reaches them over a docker network it shares with them. That network is external to the compose file, so create it first, and attach the proxy to it:
+
+```sh
+docker network create group-host
+```
+
+On that network the host answers as `group-host` and the console as `group-host-console`. The console reaches the host at `http://host:2600`, over the project's own network.
+
+A `.env` for a host at `group.example.com`, whose groups take handles under `groups.example.com`:
+
+```sh
+GROUP_HOST_DOMAIN=group.example.com
+GROUP_HOST_HANDLE_DOMAIN=.groups.example.com
+GROUP_HOST_CRAWLERS=https://bsky.network
+GROUP_HOST_DATA=/var/lib/group-host
+```
+
+Compose reads these and passes each to the host under the name the host knows:
+
+| `.env` | Sets | Unset |
+| --- | --- | --- |
+| `GROUP_HOST_DOMAIN` | host `PUBLIC_URL` as `https://<domain>`, console `ORIGIN` the same | required |
+| `GROUP_HOST_HANDLE_DOMAIN` | `HANDLE_DOMAIN`, with its leading dot | required |
+| `GROUP_HOST_PLC_URL` | `PLC_URL` | `https://plc.directory` |
+| `GROUP_HOST_FOUNDERS` | `GROUP_FOUNDERS` | anyone may start a group |
+| `GROUP_HOST_PROVISIONING_CLIENTS` | `PROVISIONING_CLIENTS` | none |
+| `GROUP_HOST_CRAWLERS` | `PDS_CRAWLERS` | none |
+| `GROUP_HOST_BLOB_UPLOAD_LIMIT` | host `BLOB_UPLOAD_LIMIT` and console `BODY_SIZE_LIMIT` | `52428800` |
+| `GROUP_HOST_LOG` | `RUST_LOG` | `info` |
+| `GROUP_HOST_DATA` | the directory mounted at `/data` | `/var/lib/group-host` |
+| `GROUP_HOST_PROXY_NETWORK` | the proxy's docker network | `group-host` |
+
+The host's own default handle domain, `.test`, is not for a deployed host, so compose refuses to start without `GROUP_HOST_HANDLE_DOMAIN`. One variable sets both upload limits, so an upload the host would take is never refused by the console first. An empty list is the same as an unset one.
+
+The data directory must exist and be owned by uid 1000 before the first start. Then:
+
+```sh
+sudo install -d -o 1000 -g 1000 /var/lib/group-host
+docker compose up -d
+```
+
+## Routing through the proxy
+
+The console passes the host's paths on to it: `/console/`, `/xrpc/`, `/oauth/`, `/.well-known/` and `/img/`. It does so with `fetch`, which carries no websocket. Relays read a PDS's repos through `com.atproto.sync.subscribeRepos`, a websocket, so it must reach the host directly. The proxy therefore splits by path. It sends `/xrpc/*`, `/oauth/*`, `/.well-known/*` and `/img/*` to `group-host:2600`, and everything else to `group-host-console:2601`. The console's pages and `/console/*` work through the console.
+
+Both containers sit behind the one domain. The host takes the console's address to be its own (`CONSOLE_URL` defaults to `PUBLIC_URL`), and this layout makes that true. PDSes and relays fetch the host's DID document at `/.well-known/did.json` and its OAuth metadata from that origin. The host's own DID is `did:web:<domain>` unless `SERVICE_DID` says otherwise.
+
+## Giving groups their handles
+
+A group's handle is its name followed by the handle domain, such as `hikers.groups.example.com`. Anyone resolving the handle asks `https://hikers.groups.example.com/.well-known/atproto-did`. The host answers with the DID of the group that the request's `Host` header names. So every handle must reach the host over https, including those of groups made after the host was set up.
+
+That takes a wildcard DNS record for the handle domain, a wildcard certificate (which needs a DNS challenge) or on-demand TLS, and a proxy rule sending those names to the host. A Caddyfile for both domains:
+
+```
+group.example.com {
+	request_body {
+		max_size 60MB
+	}
+	@host path /xrpc/* /oauth/* /.well-known/* /img/*
+	reverse_proxy @host group-host:2600 {
+		lb_try_duration 20s
+		lb_try_interval 250ms
+	}
+	reverse_proxy group-host-console:2601 {
+		lb_try_duration 20s
+		lb_try_interval 250ms
+	}
+}
+
+*.groups.example.com {
+	tls {
+		dns <provider> ...
+	}
+	reverse_proxy group-host:2600
+}
+```
+
+`lb_try_duration` holds each request through the second or two the host is down while it restarts. The body limit sits above the upload limit. How groups are named and made is in [Groups](design/groups.md).
+
+## Checking it is up
+
+`GET /xrpc/_health` answers with the host's version and the commit it was built from:
+
+```sh
+curl https://group.example.com/xrpc/_health
+{"version":"0.1.0","commit":"dc64028..."}
+```
+
+As it starts, the host logs a `serving` line with its `public_url`, `did`, `version` and `commit`. The host's lines are JSON. Both containers log through docker's `journald` driver, so their lines stay in the machine's journal after a container is removed:
+
+```sh
+docker compose logs -f host
+journalctl CONTAINER_NAME=group-host-host-1 --since today
+```
+
+Compose checks the host at `/xrpc/_health` and the console at `/_app/version.json`, a file the build writes, which the console answers without the host. Each is checked every second for up to 60 seconds while starting, then every 30 seconds.
+
+## Upgrading
+
+The host's SQLite database is the groups' own: their repos, their spaces, their members. The host makes its writes take turns within its own process, so two hosts over one data directory would interleave commits to the same repos. So the host is never run twice over one data directory. To upgrade, stop the old host, then start the new one:
+
+```sh
+docker build --build-arg GROUP_HOST_COMMIT=$(git rev-parse HEAD) -t group-host:current .
+docker compose stop host
+docker compose up -d host
+docker compose up -d console
+```
+
+On SIGTERM the host answers the requests already under way, within its 30-second grace period, then exits. The proxy holds new requests until the new host answers. Compose replaces the console the same way. It keeps no state, so a rollout could start a new console beside the old one instead; neither service sets `container_name`, which leaves that possible. Stopped, the console finishes its requests within a 35-second grace period. Scripts to build on the machine and roll out, and a workflow that deploys, are not in the repository yet.
+
+## Backing up
+
+The data directory holds everything the host knows: `host.sqlite`, the database of accounts, repos, spaces, members, tokens and the index; the blobs; and `host-secrets.json`, the host's keys.
+
+The host writes `host-secrets.json` the first time it starts; it is not set in config. Among its keys is the rotation key the host signs every group's PLC operations with. If it is lost, a group whose stewards hold no recovery key of their own can never change its identity again. [Recovery](design/recovery.md) explains what stewards can hold.
+
+The database runs in WAL mode, so copying the file while the host runs can give a broken copy. Take a snapshot with SQLite instead:
+
+```sh
+sqlite3 /var/lib/group-host/host.sqlite "VACUUM INTO '/backup/host-$(date +%F).sqlite'"
+```
+
+Copy the snapshot and the blobs off the machine on a schedule. Keep `host-secrets.json` apart from them, somewhere fewer people and systems can read, since anyone holding it can change every group's identity. Then restore a backup onto a spare machine to know it works. Scheduled backups are not in the repository yet.
+
+## Running the command
+
+The image carries `opensocial`, so the command runs in the host's container, or in one of its own:
+
+```sh
+docker compose exec host opensocial --help
+docker run --rm group-host:current opensocial --help
+```
+
+When the host's address changes, `group-host move-host` points every group's DID document at the new one. It runs once, over the data directory, with the host stopped and `.env` already naming the new domain. Run it first with `--dry-run` to see what it would change:
+
+```sh
+docker compose stop host
+docker compose run --rm host group-host move-host --from https://old.example.com --dry-run
+docker compose run --rm host group-host move-host --from https://old.example.com
+docker compose up -d host
+```
+
+[Moving](design/moving.md) explains what a move changes. Every command is listed in [the command reference](reference/cli.md), and every method in [the API reference](reference/api.md). Building and testing the host are in [Development](development.md).
