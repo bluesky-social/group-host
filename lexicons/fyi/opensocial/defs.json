@@ -37,6 +37,40 @@
       "maxLength": 512,
       "description": "The rkey of a role record in the group's members space."
     },
+    "groupGrant": {
+      "type": "object",
+      "description": "Scopes a role is granted across the group, and the roles its holders may assign.",
+      "required": [
+        "role",
+        "scopes",
+        "assignable"
+      ],
+      "properties": {
+        "role": {
+          "type": "ref",
+          "ref": "fyi.opensocial.defs#roleId"
+        },
+        "scopes": {
+          "type": "array",
+          "maxLength": 100,
+          "description": "OAuth scopes, one per item. May include permission sets. `repo:` scopes are the public-repo collections holders may write as the group.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "assignable": {
+          "type": "array",
+          "maxLength": 100,
+          "description": "Roles holders may grant or revoke, and whose holders they may eject.",
+          "items": {
+            "type": "ref",
+            "ref": "fyi.opensocial.defs#roleId"
+          }
+        }
+      }
+    },
     "joinPolicy": {
       "type": "string",
       "knownValues": [
@@ -403,6 +437,10 @@
         "bot": {
           "type": "boolean",
           "description": "People with this role are bots."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "Granted to members who join through requestJoin."
         }
       }
     },

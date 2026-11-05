@@ -58,7 +58,7 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
         .group_record(&did, &members_space(&did), &collection, "self")
         .unwrap()
         .unwrap();
-    let publisher = json!({"role": "publisher", "scopes": [{"scope": "repo:*"}], "assignable": []});
+    let publisher = json!({"role": "publisher", "scopes": ["repo:*"], "assignable": []});
     permissions["grants"]
         .as_array_mut()
         .unwrap()

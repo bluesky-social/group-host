@@ -108,9 +108,8 @@ it as `createdBy`, and one of four kinds as `event`:
 - `labelEvent`: a label was written, by the label record's `uri` and its
   `val`. A negation is a label taken back, so it is answered with
   `deleted: true` and the negating record's `uri`.
-- `ejectEvent`: the member was put out of the group. It says nothing
-  more; the host keeps the reason `ejectMember` was given, but does not
-  answer it.
+- `ejectEvent`: the member was put out of the group, their membership
+  deleted. It says nothing more.
 
 A subject enters the queue with its first report, label or ejection,
 opened.

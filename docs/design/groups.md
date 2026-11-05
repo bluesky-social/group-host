@@ -93,8 +93,9 @@ grants, with no deny, precedence or hierarchy. The same scopes bound an
 app or assistant a member signs in ([signing in](signing-in.md)).
 
 As made, `admin` holds every action, may write any public-repo collection
-as the group, and may assign `member` but not `admin`. `member` holds
-nothing. A group changes this by changing its permissions record.
+as the group, and may assign `admin` and `member`. `member` holds
+nothing. A group changes this by writing its permissions record as the
+group ([membership](membership.md#writing-roles-grants-and-memberships)).
 
 The host, as authority, decides every read and write in a group's spaces.
 The group itself always may. Anyone else may if their roles fit the

@@ -29,7 +29,7 @@ result is the method's JSON, as text and, for an object, as
 refuses, is `isError: true`, its text `<error>: <message>` in the method's
 words.
 
-Five tools write a record instead of calling a method, each the write
+Ten tools write a record instead of calling a method, each the write
 the member's own session for the group would make, with the scope a
 group token for that space carries and the member's roles as they are,
 logged under the assistant.
@@ -42,26 +42,33 @@ invite's `uri`.
 `deleteRule` (`fyi.opensocial.rule`) write the group's own records in
 `meta`, held to the same rules as any write of them
 ([groups](../design/groups.md#changing-its-profile-rules-and-pictures)).
+`putRole` and `deleteRole` (`fyi.opensocial.role`, at the role's id),
+`putPermissions` (`fyi.opensocial.permissions`, at `self`), and
+`putMembership` and `deleteMembership` (`fyi.opensocial.membership`, at
+the member's DID) write those in `members`, held to the same rules
+([membership](../design/membership.md#writing-roles-grants-and-memberships)).
 A put's input schema is the record's lexicon, and replaces the record
-whole; `putRule` takes an `rkey` to change a rule, and without one
-makes a new rule, keyed by the host's clock; `deleteRule` takes the
-`rkey`. Their descriptions are the record's lexicon's, after what the
-tool does, and each answers the record's `uri`, and for a put its `cid`.
-`RECORDS` in `crates/group-host-mcp/src/lib.rs` lists them. A picture
-cannot be uploaded through MCP; a profile put keeps a picture only by
-naming a blob the group already holds.
+whole; a tool for records not kept at one key takes an `rkey`: to change
+one, and for a rule without one makes a new rule, keyed by the host's
+clock; a delete takes the `rkey`. Their descriptions are the record's
+lexicon's, after what the tool does, and each answers the record's
+`uri`, and for a put its `cid`. `RECORDS` in
+`crates/group-host-mcp/src/lib.rs` lists them. A picture cannot be
+uploaded through MCP; a profile put keeps a picture only by naming a
+blob the group already holds.
 
 | Tool | What it does |
 | --- | --- |
 | `getGroup` | the group as the member may see it: its profile, rules, roster, roles and spaces |
 | `putProfile` | replaces the group's profile, as the group |
 | `putRule`, `deleteRule` | makes, changes or removes a rule, as the group |
-| `putRole`, `deleteRole` | makes, changes or removes a role |
-| `assignRoles` | sets a member's roles |
-| `listJoinRequests`, `admitMember`, `denyJoinRequest` | the requests to join waiting, and letting one in or turning it down |
+| `putRole`, `deleteRole` | writes a role, or deletes one nobody holds or is granted, as the group |
+| `putPermissions` | writes the permissions record, each role's scopes and the roles it may assign, as the group |
+| `putMembership` | writes a membership as the group: lets in someone waiting to join, or changes a member's roles |
+| `listJoinRequests`, `denyJoinRequest` | the requests to join waiting, and turning one down |
 | `listInvites` | the invites waiting |
 | `sendInvite`, `takeBackInvite` | invites someone (`invitee`, with an optional `message` and `expiresAt`), or takes back the invite waiting for them |
-| `ejectMember` | puts a member out |
+| `deleteMembership` | puts a member out |
 | `createSpace` | adds a space to the group |
 | `listSpaceRecords` | the records in one of the group's spaces |
 | `listSubjects`, `getSubjectHistory`, `resolveSubject` | the moderation queue, a subject's events, and resolving or escalating one |

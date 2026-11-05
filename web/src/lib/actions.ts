@@ -28,3 +28,25 @@ const whole: [Missing] extends [never] ? true : Missing = true;
 void whole;
 
 export const ACTIONS: string[] = [...KNOWN];
+
+const rpc = (method: string) => `rpc:fyi.opensocial.${method}?aud=*`;
+const members = (write: string) => `space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=${write}`;
+
+/**
+ * The scope that grants each action, as a role's grant in the group's
+ * permissions record holds it: what the host reads it as.
+ */
+export const SCOPES: Record<(typeof KNOWN)[number], string> = {
+	'mod.read': rpc('listSubjects'),
+	'mod.resolve': rpc('resolveSubject'),
+	label: rpc('applyLabel'),
+	takedown: 'space:*?collection=fyi.opensocial.label',
+	invite: 'space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite',
+	admit: members('create'),
+	eject: members('delete'),
+	'role.assign': members('update'),
+	'space.create': 'space:*?manage=create',
+	'space.configure': 'space:*?collection=fyi.opensocial.access',
+	'space.delete': 'space:*?manage=delete',
+	'group.configure': 'include:fyi.opensocial.configure'
+};

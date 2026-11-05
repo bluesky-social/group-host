@@ -33,9 +33,6 @@
           "lxm": [
             "fyi.opensocial.listJoinRequests",
             "fyi.opensocial.denyJoinRequest",
-            "fyi.opensocial.admitMember",
-            "fyi.opensocial.assignRoles",
-            "fyi.opensocial.ejectMember",
             "fyi.opensocial.listInvites"
           ]
         }

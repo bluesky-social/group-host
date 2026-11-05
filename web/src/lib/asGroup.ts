@@ -117,3 +117,16 @@ export async function withGroup(load: Load, group: string, space: string, act: (
 export async function asGroup(load: Load, group: string, space: string, nsid: string, input: object): Promise<Done> {
 	return withGroup(load, group, space, (session) => session.write(nsid, input));
 }
+
+/** One write, as com.atproto.space.applyWrites takes it. */
+export type Write = { action: 'create' | 'update' | 'delete'; collection: string; rkey: string; value?: object };
+
+/** A group's members space. */
+export const membersOf = (group: string) => `at://${group}/space/fyi.opensocial.members/self`;
+
+/** Makes `writes` at once as `group`, in `space`, as {@link asGroup} makes one. */
+export function applyAsGroup(load: Load, group: string, space: string, writes: Write[]) {
+	const nsid = 'com.atproto.space.applyWrites';
+	const listed = writes.map(({ action, collection, rkey, value }) => ({ $type: `${nsid}#${action}`, collection, rkey, value }));
+	return asGroup(load, group, space, nsid, { writes: listed });
+}

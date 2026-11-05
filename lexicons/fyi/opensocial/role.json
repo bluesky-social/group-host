@@ -5,7 +5,7 @@
     "main": {
       "type": "record",
       "key": "any",
-      "description": "Declares that a role exists. The record key is the role id.",
+      "description": "Declares that a role exists, in the members space. The record key is the role id, of 64 characters at most. A role is deleted only once no member holds it and the permissions record grants it nothing.",
       "record": {
         "type": "object",
         "required": ["displayName"],
@@ -17,12 +17,12 @@
           },
           "description": {
             "type": "string",
-            "maxGraphemes": 300,
-            "maxLength": 3000
+            "maxGraphemes": 2000,
+            "maxLength": 20000
           },
           "default": {
             "type": "boolean",
-            "description": "Granted to whoever joins without being given roles: by requestJoin, or by admitMember when it names none. With no role marked so, a newcomer gets member."
+            "description": "Granted to members who join through requestJoin. With no role marked so, a newcomer gets member."
           },
           "bot": {
             "type": "boolean",

@@ -793,7 +793,7 @@ async fn configures_the_group_as_its_methods_would() {
                 json!({"$type": c("permissions")}),
             )
             .await,
-            (403, "Forbidden"),
+            (400, "InvalidRequest"),
         ),
         (
             put(&meta, &c("access"), "self", json!({"$type": c("access")})).await,

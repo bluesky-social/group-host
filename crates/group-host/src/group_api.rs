@@ -279,6 +279,7 @@ pub async fn get_group(
                 ("displayName", "name"),
                 ("description", "description"),
                 ("bot", "bot"),
+                ("default", "default"),
             ] {
                 if let Some(v) = r.get(from) {
                     role[to] = v.clone();

@@ -181,3 +181,90 @@ impl Permissions {
         })
     }
 }
+
+/// Whether the scopes `held` grant all that `scope` does, for `group`:
+/// the same scope, or one as wide or wider. Permission sets are to be
+/// made into their scopes first, on both sides. A scope of a kind not
+/// read here is held only as written.
+pub fn covers(held: &[String], scope: &str, group: &str) -> bool {
+    let scope = decoded(scope);
+    let held: Vec<String> = held.iter().map(|h| decoded(h)).collect();
+    if held.contains(&scope) {
+        return true;
+    }
+    // A scope that manages spaces reads none here.
+    let plain: Vec<&str> = held
+        .iter()
+        .filter(|h| query(h, "manage").is_empty())
+        .map(String::as_str)
+        .collect();
+    let p = Permissions::new(&plain.join(" "), group);
+    if let Some(resource) = named(&scope, "repo") {
+        let collections = match resource {
+            "" => query(&scope, "collection"),
+            r => vec![r],
+        };
+        let writes = actions(&scope, &REPO_ACTIONS, &REPO_ACTIONS);
+        let each = |c: &&str| writes.iter().all(|a| p.repo(c, a));
+        return !collections.is_empty() && collections.iter().all(each);
+    }
+    if let Some(kind) = named(&scope, "space") {
+        let kind = match kind {
+            "" => query(&scope, "type").first().copied().unwrap_or("*"),
+            k => k,
+        };
+        return space_covered(&held, &p, &scope, kind, group);
+    }
+    if let Some(method) = named(&scope, "rpc") {
+        let aud = query(&scope, "aud");
+        return held.iter().any(|h| {
+            let theirs = named(h, "rpc").is_some_and(|m| m == method || m == "*");
+            let to = query(h, "aud");
+            theirs && (to.contains(&"*") || to == aud)
+        });
+    }
+    if let Some(accept) = named(&scope, "blob") {
+        let accept = match accept {
+            "" => query(&scope, "accept"),
+            a => a.split(',').collect(),
+        };
+        return !accept.is_empty() && accept.iter().all(|m| p.blob(m));
+    }
+    false
+}
+
+/// Whether `held`, or `p` (what of it does not manage spaces), grant the
+/// space scope `scope`, of spaces of `kind`.
+fn space_covered(held: &[String], p: &Permissions, scope: &str, kind: &str, group: &str) -> bool {
+    let manage = query(scope, "manage");
+    if !manage.is_empty() {
+        return manage.iter().all(|m| {
+            held.iter().any(|h| {
+                let at = named(h, "space").is_some_and(|k| k == "*" || k == kind);
+                at && query(h, "manage").contains(m)
+            })
+        });
+    }
+    let one = |name: &str, default: &'static str| {
+        let v = query(scope, name);
+        v.first().copied().unwrap_or(default).to_string()
+    };
+    let authority = match one("authority", "self").as_str() {
+        "self" => group.to_string(),
+        a => a.to_string(),
+    };
+    let at = SpaceRef {
+        authority,
+        kind: kind.into(),
+        skey: one("skey", "*"),
+    };
+    let collections = query(scope, "collection");
+    let collections = if collections.is_empty() {
+        vec!["*"]
+    } else {
+        collections
+    };
+    let granted = actions(scope, &SPACE_ACTIONS, &SPACE_DEFAULT);
+    let each = |a: &&str| collections.iter().all(|c| p.space(&at, Some(c), a));
+    granted.iter().all(each)
+}

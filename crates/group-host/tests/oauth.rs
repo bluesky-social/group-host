@@ -481,10 +481,9 @@ async fn ends_a_members_grants_when_they_are_put_out() {
     let app = App::loopback(SCOPE);
     let bobs = app.sign_in(&h, &bob, &did).await;
     let alices = app.sign_in(&h, &alice, &did).await;
-    let lxm = format!("{NS}.ejectMember");
-    let body = json!({"group": did, "member": bob.did});
-    let ejected = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
-    assert_eq!(ejected.0, 200, "{}", ejected.1);
+    let runs = common::members::Session::runs(&h, &alice, &did).await;
+    let ejected = runs.delete(&h, "membership", &bob.did).await;
+    assert_eq!(ejected.status, 200, "{}", ejected.body);
     let refresh = |t: &Json| t["refresh_token"].as_str().unwrap().to_string();
     assert_eq!(
         app.refresh(&h, &refresh(&bobs)).await.error(),

@@ -16,6 +16,7 @@ use crate::api::{Params, invalid, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
 use crate::group_invites::{inviting_scope, is_inbox};
+use crate::member_writes::own_scopes;
 use crate::oauth_resource::Refusal;
 use crate::oauth_scope::writes_in;
 use crate::oauth_store::{Grant, Tokens};
@@ -84,9 +85,10 @@ impl Host {
     /// `member`: its scope, and the kinds of record it writes there and in
     /// the group's repo.
     fn space_auth(&self, group: &str, member: &str, space: &SpaceRef) -> Authed {
-        let (writes, scope) = self.group_scope(group, member, &space.to_string(), space)?;
-        let collections: Vec<String> = writes.keys().cloned().collect();
-        Ok((scope, collections.clone(), collections))
+        let (writes, own, scope) = self.group_scope(group, member, &space.to_string(), space)?;
+        let published: Vec<String> = writes.keys().cloned().collect();
+        let collections = published.iter().chain(own.keys()).cloned().collect();
+        Ok((scope, collections, published))
     }
 
     /// What a group token for `inbox`, someone's, carries for `member`:
@@ -131,28 +133,37 @@ fn scopes_for(space: &SpaceRef, writes: &BTreeMap<String, BTreeSet<String>>) -> 
     out
 }
 
+/// Kinds of record, each with the writes that may be made of it.
+type Writable = BTreeMap<String, BTreeSet<String>>;
+
 impl Host {
     /// What `member`'s roles in `group` may write as it in `space`, at
-    /// `uri`: each kind of record with its writes, and the scope of a
-    /// token for them.
+    /// `uri`: each kind of record with its writes, as the space's access
+    /// record grants them and, in the members space, as the group grants
+    /// them its own records there; and the scope of a token for them.
     pub(crate) fn group_scope(
         &self,
         group: &str,
         member: &str,
         uri: &str,
         space: &SpaceRef,
-    ) -> Result<(BTreeMap<String, BTreeSet<String>>, String), XrpcError> {
+    ) -> Result<(Writable, Writable, String), XrpcError> {
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
         let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
         let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
         let everything = self.may_issue(group, member)?;
         let writes = writes_in(&Access::of(&access, uri), &roles, member, everything);
-        if writes.is_empty() {
+        let own = match uri == members_space(group) {
+            true => self.members_writes_of(group, &roles)?,
+            false => BTreeMap::new(),
+        };
+        if writes.is_empty() && own.is_empty() {
             let none = "no role of yours may act as the group in this space";
             return Err(forbidden(none));
         }
-        let scope = scopes_for(space, &writes).join(" ");
-        Ok((writes, scope))
+        let mut scope = scopes_for(space, &writes);
+        scope.extend(own_scopes(space, &own));
+        Ok((writes, own, scope.join(" ")))
     }
 }
 

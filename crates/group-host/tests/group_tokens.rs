@@ -137,6 +137,42 @@ async fn gives_a_member_a_token_for_what_their_roles_write_in_a_space() {
 }
 
 #[tokio::test]
+async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them() {
+    let h = start(&[], false).await;
+    let (did, _, [alice, bob, _]) = group(&h).await;
+    let members = members_space(&did);
+    let app = App::new("console");
+    let said = group_auth(&h, &app, &alice, &json!({"group": did, "space": members})).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    // Roles, the permissions record and memberships, kept there alone.
+    let c = |n: &str| format!("{NS}.{n}");
+    let names: Vec<Json> = ["membership", "permissions", "role"]
+        .iter()
+        .map(|n| json!({"collection": c(n)}))
+        .collect();
+    assert_eq!(said.body["collections"], json!(names));
+    assert_eq!(said.body["repoCollections"], json!([]));
+    let scope = said.body["scope"].as_str().unwrap();
+    let at = format!("space:{NS}.members?authority={did}&skey=self");
+    let all = "action=read&action=create&action=delete&action=update";
+    assert!(
+        scope.contains(&format!("{at}&collection={}&{all}", c("role"))),
+        "{scope}"
+    );
+    assert!(!scope.contains("repo:"), "{scope}");
+    let token = said.body["accessJwt"].as_str().unwrap();
+    let role = json!({"$type": c("role"), "displayName": "Ride leader"});
+    let body = json!({"repo": did, "space": members, "collection": c("role"), "rkey": "leader", "record": role});
+    let said = app
+        .call(&h, "com.atproto.space.putRecord", token, Some(&body))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    // A member the group grants nothing writes nothing there.
+    let said = group_auth(&h, &app, &bob, &json!({"group": did, "space": members})).await;
+    assert_eq!(said.error(), (403, "Forbidden"));
+}
+
+#[tokio::test]
 async fn refuses_a_group_token_it_should_not_give() {
     let h = start(&[], false).await;
     let (did, calendar, [alice, _, carol]) = group(&h).await;

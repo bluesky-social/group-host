@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod groups;
+pub mod members;
 pub mod net;
 pub mod oauth;
 pub mod spaces;

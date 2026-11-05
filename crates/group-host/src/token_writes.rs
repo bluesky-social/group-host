@@ -4,13 +4,13 @@
 //! reaches, and blobs for them.
 //!
 //! In the group's own meta and members spaces, a token writes only what
-//! the configure set is for, and only as the host would keep it: the
-//! profile, its pictures and the rules, as `group_config` has them; the
-//! labeler, kept at `self` and never deleted; and roles, one taken away
-//! only once nothing grants it. The group's declaration, in its public
-//! repo, follows who may read its meta space. Who holds which role, what
-//! each may do, and who may read a space change only through the host's
-//! methods, which check that nobody gives themselves more than they hold.
+//! the host would keep it: in the meta space, the profile, its pictures
+//! and the rules, as `group_config` has them, and the labeler, kept at
+//! `self` and never deleted; in the members space, roles, the
+//! permissions record and memberships, as `member_writes.rs` keeps them,
+//! so that nobody gives themselves more than they hold. The group's
+//! declaration, in its public repo, follows who may read its meta space.
+//! Who may read a space changes only through the host's methods.
 //!
 //! In someone's inbox, a token writes the group's invite to them, as
 //! `group_invites` has it.
@@ -20,6 +20,7 @@ use crate::api::invalid;
 use crate::group::{members_space, meta_space};
 use crate::group_invites::is_inbox;
 use crate::lexicons::{check_record, validation};
+use crate::member_writes::members_writes;
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{may_write, writes_in};
 use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
@@ -91,7 +92,7 @@ impl Host {
         let allowed = if space == meta_space(group) {
             Some([c("profile"), c("rule"), c("labeler")].to_vec())
         } else if space == members_space(group) {
-            Some([c("role")].to_vec())
+            Some([c("role"), c("permissions"), c("membership")].to_vec())
         } else {
             None
         };
@@ -115,19 +116,6 @@ impl Host {
             }
             if space == meta_space(group) {
                 self.face(group, write)?;
-            }
-            if matches!(write, Write::Delete { .. }) && collection == c("role") {
-                let permissions = self.group_record(group, space, &c("permissions"), "self");
-                let permissions = permissions
-                    .map_err(XrpcError::internal)?
-                    .unwrap_or_default();
-                if grants(&permissions).iter().any(|g| g.role == rkey) {
-                    return Err(XrpcError::new(
-                        StatusCode::BAD_REQUEST,
-                        "RoleInUse",
-                        format!("role {rkey} still has a grant; deleteRole takes both away"),
-                    ));
-                }
             }
         }
         Ok(())
@@ -458,7 +446,7 @@ fn space_of(body: &Value) -> Result<(String, SpaceRef), XrpcError> {
 impl Host {
     /// Whether the token may make each of `writes` in `space`, its
     /// member's roles still let them, and the host would make them.
-    fn may_space(
+    pub(crate) fn may_space(
         &self,
         acting: &Acting,
         uri: &str,
@@ -484,6 +472,9 @@ impl Host {
                 )));
             }
             let still = match own {
+                _ if uri == members_space(group) => {
+                    may_write(&members_writes(&grants, &roles), collection, action(w))
+                }
                 true => configures,
                 false => may_write(&writable, collection, action(w)),
             };
@@ -492,7 +483,11 @@ impl Host {
             }
         }
         self.guard(group, uri, writes)?;
-        checked(writes)
+        checked(writes)?;
+        if uri == members_space(group) {
+            self.members_rules(group, &roles, &grants, writes)?;
+        }
+        Ok(())
     }
 }
 
@@ -512,18 +507,28 @@ impl Host {
         writes: &[Write],
         put: bool,
     ) -> Result<bool, XrpcError> {
+        let group = &acting.grant.group;
+        let members = uri == members_space(group);
+        let leaving = match members {
+            true => self.leaving(acting, uri, space, writes).await?,
+            false => Default::default(),
+        };
         let allow = |w: &[Write]| self.may_space(acting, uri, space, w);
         let asked = Asked {
             put,
             allow: Some(&allow),
             ..Asked::default()
         };
-        let group = &acting.grant.group;
         let made = self.space_write_asked(group, uri, writes, &asked).await?;
-        if let Some((_, made)) = &made {
-            self.wrote(acting, Some(uri), made)?;
+        let Some((_, made)) = made else {
+            return Ok(false);
+        };
+        self.wrote(acting, Some(uri), &made)?;
+        // In the members space, what a write means is done too.
+        if members {
+            self.members_written(acting, &made, &leaving).await?;
         }
-        Ok(made.is_some())
+        Ok(true)
     }
 }
 

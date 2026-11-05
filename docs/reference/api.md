@@ -65,26 +65,37 @@ spaces through the atproto methods below.
 
 | Method | What it does |
 | --- | --- |
-| `POST fyi.opensocial.putRole` | makes or changes a role and what it grants |
-| `POST fyi.opensocial.deleteRole` | removes a role no member holds |
-| `POST fyi.opensocial.assignRoles` | sets a member's roles, `member` always among them |
-| `POST fyi.opensocial.ejectMember` | puts a member out |
 | `POST fyi.opensocial.leaveGroup` | leaves a group, unless no one else could configure it (`LastConfigurer`) |
 | `POST fyi.opensocial.requestJoin` | asks to join, or redeems an invite |
 | `GET fyi.opensocial.getJoinRequest` | the caller's own request to join, while it waits |
 | `POST fyi.opensocial.cancelJoinRequest` | withdraws it |
 | `GET fyi.opensocial.listJoinRequests` | the requests waiting, for those who admit |
-| `POST fyi.opensocial.admitMember` | lets a request in |
 | `POST fyi.opensocial.denyJoinRequest` | turns a request down |
 | `GET fyi.opensocial.listInvites` | the group's invites still waiting |
 | `GET fyi.opensocial.getActorInvites` | the caller's own invites from groups here |
 | `POST fyi.opensocial.declineInvite` | turns an invite down |
 | `GET com.atproto.managedspace.checkUserAccess` | whether someone may read or write an inbox the host keeps, asked by its authority |
 
+A group's roles, what each may do, and who holds them are records in its
+members space, written as the group with the `com.atproto.space.*`
+writes [below](#signing-apps-in-as-a-group): `fyi.opensocial.role`, the
+`fyi.opensocial.permissions` record, and `fyi.opensocial.membership`.
+Writing a membership for someone waiting to join lets them in; writing
+one for a member changes their roles; deleting one puts the member out
+([membership](../design/membership.md#writing-roles-grants-and-memberships)).
+
+| Refusal | Why |
+| --- | --- |
+| `LastConfigurer` | nobody would be left holding a role that configures the group |
+| `RoleInUse` | a role deleted is still held, or still has a grant |
+| `NotAssignable` | a role given, taken, or whose grant is changed, is not one the writer may assign |
+| `ScopeNotHeld` | a scope given is not one the writer's roles hold |
+| `MemberRole` | a membership leaves out `member` |
+| `JoinRequestNotFound` | a membership made for someone not waiting to join |
+
 A group invites someone by writing an `fyi.opensocial.invite` record in
 their inbox as the group, and takes it back by deleting it, with the
-`com.atproto.space.*` writes [below](#signing-apps-in-as-a-group)
-([membership](../design/membership.md#invites)).
+same writes ([membership](../design/membership.md#invites)).
 
 ## People
 

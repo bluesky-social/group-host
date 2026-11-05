@@ -172,7 +172,10 @@ At every write, both that scope and the roles as they are now are asked.
 - `rpc:M` is kept only if the roles hold `repo:*`, and `M` is neither
   `*` nor a `fyi.opensocial.*` method.
 - `space:T?…` is kept if some space of type `T` lets the roles write
-  what is asked there, or read it, for a scope that only reads.
+  what is asked there, or read it, for a scope that only reads. In the
+  members space, the roles write its roles and permissions record if
+  they hold `group.configure`, and memberships as they hold `admit`
+  (create), `role.assign` (update) and `eject` (delete).
 - `space:fyi.opensocial.invites?…`, people's inboxes, is kept if the
   roles hold `invite` and it asks for invites alone, in anyone's inbox or
   one person's.
@@ -188,11 +191,10 @@ scope for each space permission, and an `rpc:` scope for each method.
 `authority=self` becomes the group's DID.
 
 A token calls none of the host's own methods, which take a member's
-service auth, and writes in the meta and members spaces only what the
-configure set is for (below). So of the four sets only configure's
-writes, and manageMembers' invites in people's inboxes, can be made with
-a token now; the others' scopes say what an app was given, as the
-opensocial proposal lists them. A grant keeps this scope
+service auth. Of the four sets, configure's writes and manageMembers'
+(memberships, and invites in people's inboxes) can be made with a token
+now; the others' scopes say what an app was given, as the opensocial
+proposal lists them. A grant keeps this scope
 through every refresh; refreshing does not ask the roles again, because
 each write does.
 
@@ -208,7 +210,11 @@ fails `ScopeMissing`. The member's roles must allow it now, or it fails
 403 "may no longer write … as the group". For a repo write the roles
 need a repo grant for the collection, or the right to write it as the
 group in one of its open spaces. For a space write they need
-`group.configure` in the meta and members spaces; in someone's inbox,
+`group.configure` in the meta space, and for roles and the permissions
+record in the members space; for memberships there, `admit`,
+`role.assign` or `eject`, as the write creates, changes or deletes one,
+and then what the records' rules ask ([membership](membership.md)); in
+someone's inbox,
 `invite` ([membership](membership.md)); in a space for chosen people, to
 be one of them and hold `repo:*`; and otherwise what the space's access
 record grants. Both are asked under the lock the commit is made under,
@@ -228,8 +234,8 @@ Details:
 - `applyWrites` takes at most 200 writes. Repo writes honour
   `swapCommit` and `swapRecord`.
 - The meta space takes only a profile, rules and the labeler, and the
-  members space only roles. An inbox takes invites, one write at a time. A role still named by a grant cannot be
-  deleted.
+  members space only roles, the permissions record and memberships. An
+  inbox takes invites, one write at a time.
 - A write of the profile, a rule or the declaration is kept only as the
   group would keep it: a profile with a name, a known join policy and
   pictures that are the group's own images, at `self` and never deleted;
@@ -275,7 +281,11 @@ for each collection the member's roles may write in that space, a space
 scope and a repo scope, plus blob uploads. In a space for chosen people,
 that is every collection for those of them who hold `repo:*`, and
 nothing for anyone else. If they write nothing there, the request fails
-403. For someone's inbox instead, a member who holds `invite` gets a
+403. For the members space, the token also writes the records there
+the member's grants let them (roles and the permissions record, and
+memberships as above), each with a space scope and no repo scope, which
+is how the console defines roles, admits, gives roles and puts people
+out. For someone's inbox instead, a member who holds `invite` gets a
 scope for writing invites there and nothing else, which is how the
 console invites someone and takes an invite back. The token lasts 15
 minutes and is an ordinary grant with source `getGroupAuth`, checked at

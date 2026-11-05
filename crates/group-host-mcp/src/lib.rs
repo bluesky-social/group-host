@@ -35,14 +35,9 @@ macro_rules! lexicon {
 /// The methods an assistant may call, by their lexicons.
 const METHODS: &[(&str, &str)] = &[
     lexicon!("getGroup"),
-    lexicon!("putRole"),
-    lexicon!("deleteRole"),
-    lexicon!("assignRoles"),
     lexicon!("listJoinRequests"),
-    lexicon!("admitMember"),
     lexicon!("denyJoinRequest"),
     lexicon!("listInvites"),
-    lexicon!("ejectMember"),
     lexicon!("createSpace"),
     lexicon!("listSpaceRecords"),
     lexicon!("listSubjects"),
@@ -74,6 +69,36 @@ const RECORDS: &[(&str, &str, &str, bool)] = &[
         "fyi.opensocial.meta",
         true,
     ),
+    (
+        "putRole",
+        "fyi.opensocial.role",
+        "fyi.opensocial.members",
+        false,
+    ),
+    (
+        "deleteRole",
+        "fyi.opensocial.role",
+        "fyi.opensocial.members",
+        true,
+    ),
+    (
+        "putPermissions",
+        "fyi.opensocial.permissions",
+        "fyi.opensocial.members",
+        false,
+    ),
+    (
+        "putMembership",
+        "fyi.opensocial.membership",
+        "fyi.opensocial.members",
+        false,
+    ),
+    (
+        "deleteMembership",
+        "fyi.opensocial.membership",
+        "fyi.opensocial.members",
+        true,
+    ),
 ];
 
 /// The records, and what the methods and records refer to: ours, and
@@ -81,6 +106,9 @@ const RECORDS: &[(&str, &str, &str, bool)] = &[
 const REFERRED: &[(&str, &str)] = &[
     lexicon!("profile"),
     lexicon!("rule"),
+    lexicon!("role"),
+    lexicon!("permissions"),
+    lexicon!("membership"),
     lexicon!("defs"),
     lexicon!("access"),
     lexicon!("invite"),

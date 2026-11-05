@@ -4,9 +4,9 @@
 //! each action the host's methods ask about is answered by one scope.
 //! Roles compose by union: no deny, no precedence, no hierarchy.
 //!
-//! The records' lists are of objects (`{role}`, `{scope}`), but for an
-//! access record's grants, whose scopes are strings, and a membership's
-//! roles, which are role ids alone, as the proposal has them.
+//! The records' lists are of objects (`{role}`, `{did}`), but for the
+//! scopes and assignable roles of a grant, and a membership's roles,
+//! which are strings alone, as the proposal has them.
 
 use crate::scopes::{Permissions, decoded};
 use atproto::space::SpaceRef;
@@ -177,10 +177,7 @@ fn query_of(scope: &str, name: &str) -> Vec<String> {
 }
 
 /// The actions a host method's `rpc:` scope grants, by method.
-const BY_METHOD: [(&str, &str); 6] = [
-    ("assignRoles", "role.assign"),
-    ("ejectMember", "eject"),
-    ("admitMember", "admit"),
+const BY_METHOD: [(&str, &str); 3] = [
     ("listSubjects", "mod.read"),
     ("resolveSubject", "mod.resolve"),
     ("applyLabel", "label"),
@@ -189,15 +186,18 @@ const BY_METHOD: [(&str, &str); 6] = [
 /// The scope that grants each action.
 pub fn scope_of(action: &str) -> Option<String> {
     let rpc = |method: &str| format!("rpc:{NS}.{method}?aud=*");
+    let membership = |write: &str| {
+        format!("space:{NS}.members?skey=self&collection={NS}.membership&action={write}")
+    };
     Some(match action {
         "group.configure" => format!("include:{NS}.configure"),
         "space.create" => "space:*?manage=create".into(),
         "space.delete" => "space:*?manage=delete".into(),
         "space.configure" => format!("space:*?collection={NS}.access"),
-        "role.assign" => rpc("assignRoles"),
-        "eject" => rpc("ejectMember"),
+        "admit" => membership("create"),
+        "role.assign" => membership("update"),
+        "eject" => membership("delete"),
         "invite" => format!("space:{NS}.invites?authority=*&collection={NS}.invite"),
-        "admit" => rpc("admitMember"),
         "mod.read" => rpc("listSubjects"),
         "mod.resolve" => rpc("resolveSubject"),
         "label" => rpc("applyLabel"),
@@ -216,13 +216,47 @@ fn query<'a>(scope: &'a str, name: &str) -> Vec<&'a str> {
         .collect()
 }
 
+/// What a space scope lets its holder do of writing memberships: `admit`
+/// for making one, `role.assign` for changing one, `eject` for deleting
+/// one, in the members space or in every space.
+fn membership_actions(scope: &str, out: &mut BTreeSet<&'static str>) {
+    let Some(rest) = scope.strip_prefix("space:") else {
+        return;
+    };
+    let kind = rest.split('?').next().unwrap_or_default();
+    let members = kind == "*" || kind == format!("{NS}.members");
+    if !members || !query(scope, "manage").is_empty() {
+        return;
+    }
+    let collections = query(scope, "collection");
+    let membership = format!("{NS}.membership");
+    let any = collections.is_empty() || collections.contains(&"*");
+    if !any && !collections.contains(&membership.as_str()) {
+        return;
+    }
+    let named = query(scope, "action");
+    let writes = [
+        ("create", "admit"),
+        ("update", "role.assign"),
+        ("delete", "eject"),
+    ];
+    for (write, action) in writes {
+        if named.is_empty() || named.contains(&write) {
+            out.insert(action);
+        }
+    }
+}
+
 /// What these scopes let their holder do. A scope that is none of the
 /// host's grants nothing.
 pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
     let mut out = BTreeSet::new();
     for scope in scopes {
+        membership_actions(scope, &mut out);
         if *scope == format!("include:{NS}.configure") {
             out.insert("group.configure");
+        } else if *scope == format!("include:{NS}.manageMembers") {
+            out.extend(["admit", "eject", "role.assign", "invite"]);
         } else if let Some(rpc) = scope.strip_prefix("rpc:") {
             let method = rpc.split('?').next().unwrap_or_default();
             let action = BY_METHOD
@@ -282,18 +316,12 @@ impl Grant {
         }
     }
 
-    /// As the permissions record keeps it.
+    /// As the permissions record keeps it (`defs#groupGrant`).
     pub fn to_json(&self) -> Value {
-        let objects = |field: &str, items: &[String]| -> Value {
-            items
-                .iter()
-                .map(|i| serde_json::json!({ field: i }))
-                .collect()
-        };
         serde_json::json!({
             "role": self.role,
-            "scopes": objects("scope", &self.scopes),
-            "assignable": objects("role", &self.assignable),
+            "scopes": self.scopes,
+            "assignable": self.assignable,
         })
     }
 }
@@ -307,8 +335,8 @@ pub fn grants(permissions: &Value) -> Vec<Grant> {
                 .iter()
                 .map(|g| Grant {
                     role: g["role"].as_str().unwrap_or_default().into(),
-                    scopes: listed(g, "scopes", "scope"),
-                    assignable: listed(g, "assignable", "role"),
+                    scopes: strings(&g["scopes"]),
+                    assignable: strings(&g["assignable"]),
                 })
                 .collect()
         })

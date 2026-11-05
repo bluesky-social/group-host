@@ -5,7 +5,7 @@ import type * as listInvites from '#lib/lexicons/fyi/opensocial/listInvites.ts';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
-import { asGroup } from '#lib/asGroup.ts';
+import { asGroup, membersOf } from '#lib/asGroup.ts';
 
 type Handle = `${string}.${string}`;
 
@@ -40,6 +40,18 @@ async function asked(event: { fetch: typeof fetch; params: { handle?: string }; 
 	return { group: await groupOf(event), who: String(form.get('did') ?? ''), form };
 }
 
+const MEMBERSHIP = 'fyi.opensocial.membership';
+
+/**
+ * Writes `who`'s membership of `group`, holding `roles`, as the group:
+ * admitting one who asked, or changing a member's roles.
+ */
+async function membership(event: { fetch: typeof fetch }, group: string, who: string, roles: string[], action: 'create' | 'update') {
+	const record = { $type: MEMBERSHIP, member: who, roles, createdAt: new Date().toISOString() };
+	const nsid = action === 'create' ? 'com.atproto.space.createRecord' : 'com.atproto.space.putRecord';
+	return asGroup(event, group, membersOf(group), nsid, { collection: MEMBERSHIP, rkey: who, record });
+}
+
 /** What a person does on a group's page: each drawn again after. */
 export const actions: Actions = {
 	join: async (event) => {
@@ -56,7 +68,10 @@ export const actions: Actions = {
 	},
 	admit: async (event) => {
 		const { group, who } = await asked(event);
-		return act(event, 'fyi.opensocial.admitMember', { group, did: who });
+		// With the roles every new member gets, and member, which everyone holds.
+		const { roles } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as `did:${string}:${string}` });
+		const given = (roles ?? []).filter((r) => r.default).map((r) => r.key);
+		return membership(event, group, who, [...new Set(['member', ...given])], 'create');
 	},
 	deny: async (event) => {
 		const { group, who } = await asked(event);
@@ -64,12 +79,11 @@ export const actions: Actions = {
 	},
 	roles: async (event) => {
 		const { group, who, form } = await asked(event);
-		const roles = form.getAll('role').map((r) => ({ role: String(r) }));
-		return act(event, 'fyi.opensocial.assignRoles', { group, member: who, roles });
+		return membership(event, group, who, form.getAll('role').map(String), 'update');
 	},
 	eject: async (event) => {
 		const { group, who } = await asked(event);
-		return act(event, 'fyi.opensocial.ejectMember', { group, member: who });
+		return asGroup(event, group, membersOf(group), 'com.atproto.space.deleteRecord', { collection: MEMBERSHIP, rkey: who });
 	},
 	invite: async (event) => {
 		const { group, form } = await asked(event);

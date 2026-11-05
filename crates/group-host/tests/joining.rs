@@ -1,15 +1,15 @@
 //! Joining: at once, by request, or not without an invite; requests
-//! listed, admitted, turned down and withdrawn.
+//! listed, admitted by writing a membership as the group, turned down and
+//! withdrawn.
 
 mod common;
 
 use common::groups::*;
+use common::members::*;
 use common::spaces::*;
 use common::{Running, start};
 use group_host::group::members_space;
 use serde_json::{Value as Json, json};
-
-const NS: &str = "fyi.opensocial";
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
     let lxm = format!("{NS}.{method}");
@@ -58,25 +58,23 @@ async fn an_open_group_admits_at_once() {
     call(&h, &eve, "requestJoin", json!({"group": did})).await;
     assert_eq!(h.host.store.asked(&did, &eve.did).unwrap(), None);
     // Those marked default are what the next gets.
-    call(
-        &h,
-        &alice,
-        "putRole",
-        json!({"group": did, "role": "rider", "name": "Rider", "actions": [], "default": true}),
-    )
-    .await;
+    let marked = |name: &str, default: bool| {
+        let mut r = role(name);
+        r["default"] = json!(default);
+        r
+    };
+    keep(&h, &did, "role", "rider", marked("Rider", true)).await;
     let carol = authority(&h, false, true).await;
     call(&h, &carol, "requestJoin", json!({"group": did})).await;
     assert_eq!(h.host.roles(&did, &carol.did).unwrap(), ["member", "rider"]);
+    // With member not marked, member all the same.
+    keep(&h, &did, "role", "member", marked("Member", false)).await;
+    let frank = authority(&h, false, true).await;
+    call(&h, &frank, "requestJoin", json!({"group": did})).await;
+    assert_eq!(h.host.roles(&did, &frank.did).unwrap(), ["member", "rider"]);
     // With none marked, member.
-    for role in ["member", "rider"] {
-        call(
-            &h,
-            &alice,
-            "putRole",
-            json!({"group": did, "role": role, "name": role, "actions": [], "default": false}),
-        )
-        .await;
+    for name in ["member", "rider"] {
+        keep(&h, &did, "role", name, marked(name, false)).await;
     }
     let dave = authority(&h, false, true).await;
     call(&h, &dave, "requestJoin", json!({"group": did})).await;
@@ -202,25 +200,28 @@ async fn a_group_that_approves_its_members_keeps_requests() {
         (400, "InvalidRequest")
     );
 
-    // Admitted with the defaults, or the roles named that the admitter may give.
-    let said = call(
-        &h,
-        &alice,
-        "admitMember",
-        json!({"group": did, "did": bob.did, "roles": [{"role": "admin"}]}),
-    )
-    .await;
-    assert_eq!(error(&said), (400, "NotAssignable"));
-    assert_eq!(
-        call(
+    // Writing their membership as the group admits them, with roles the
+    // admitter's grant may give, and their request goes.
+    let runs = Session::runs(&h, &alice, &did).await;
+    keep(&h, &did, "role", "rider", role("Rider")).await;
+    let said = runs
+        .put(
             &h,
-            &alice,
-            "admitMember",
-            json!({"group": did, "did": bob.did})
+            "membership",
+            &bob.did,
+            membership(&bob.did, &["member", "rider"]),
         )
-        .await,
-        (200, json!({}))
-    );
+        .await;
+    assert_eq!(said.error(), (400, "NotAssignable"), "{}", said.body);
+    let said = runs
+        .put(
+            &h,
+            "membership",
+            &bob.did,
+            membership(&bob.did, &["member"]),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(h.host.roles(&did, &bob.did).unwrap(), ["member"]);
     assert_eq!(
         ask(&h, &bob, "getJoinRequest", &format!("group={did}"))
@@ -228,81 +229,58 @@ async fn a_group_that_approves_its_members_keeps_requests() {
             .1,
         json!({})
     );
-    assert_eq!(
-        error(
-            &call(
-                &h,
-                &alice,
-                "admitMember",
-                json!({"group": did, "did": bob.did})
-            )
-            .await
-        ),
-        (400, "JoinRequestNotFound")
-    );
-    // A request gone stale, its asker a member another way: refused,
-    // and gone.
+    // One who never asked is not let in so.
+    let said = runs
+        .put(
+            &h,
+            "membership",
+            &dave.did,
+            membership(&dave.did, &["member"]),
+        )
+        .await;
+    assert_eq!(said.error(), (400, "JoinRequestNotFound"), "{}", said.body);
+    // A request gone stale, its asker a member another way: written
+    // again, their roles change, and the request goes.
     let eve = authority(&h, false, true).await;
     call(&h, &eve, "requestJoin", json!({"group": did})).await;
-    h.host
-        .space_write(
-            &did,
-            &members_space(&did),
-            &[group_host::repo::Write::Create {
-                collection: format!("{NS}.membership"),
-                rkey: eve.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": eve.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
-            }],
-        )
-        .await
-        .unwrap();
-    let said = call(
+    keep(
         &h,
-        &alice,
-        "admitMember",
-        json!({"group": did, "did": eve.did}),
+        &did,
+        "membership",
+        &eve.did,
+        membership(&eve.did, &["member"]),
     )
     .await;
-    assert_eq!(error(&said), (400, "AlreadyMember"));
+    let said = runs
+        .put(
+            &h,
+            "membership",
+            &eve.did,
+            membership(&eve.did, &["member", "admin"]),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(
         ask(&h, &eve, "getJoinRequest", &format!("group={did}"))
             .await
             .1,
         json!({})
     );
-    // Nobody is admitted with no roles.
-    let said = call(
-        &h,
-        &alice,
-        "admitMember",
-        json!({"group": did, "did": carol.did, "roles": []}),
-    )
-    .await;
-    assert_eq!(error(&said), (400, "InvalidRequest"));
-    // Nor with a role the group no longer defines, though the admitter's
-    // grant still names it.
-    let every: Vec<&str> = group_host::rbac::ACTIONS.to_vec();
-    for (method, body) in [
-        (
-            "putRole",
-            json!({"group": did, "role": "ghost", "name": "Ghost", "actions": []}),
-        ),
-        (
-            "putRole",
-            json!({"group": did, "role": "admin", "name": "Admin", "actions": every, "assignable": [{"role": "member"}, {"role": "ghost"}]}),
-        ),
-        ("deleteRole", json!({"group": did, "role": "ghost"})),
-    ] {
-        assert_eq!(call(&h, &alice, method, body).await.0, 200);
-    }
-    let said = call(
-        &h,
-        &alice,
-        "admitMember",
-        json!({"group": did, "did": carol.did, "roles": [{"role": "ghost"}]}),
-    )
-    .await;
-    assert_eq!(error(&said), (400, "InvalidRequest"));
+    // Nobody is admitted without member, nor with a role the group does
+    // not define.
+    let said = runs
+        .put(&h, "membership", &carol.did, membership(&carol.did, &[]))
+        .await;
+    assert_eq!(said.error(), (400, "MemberRole"), "{}", said.body);
+    let said = runs
+        .put(
+            &h,
+            "membership",
+            &carol.did,
+            membership(&carol.did, &["member", "ghost"]),
+        )
+        .await;
+    assert_eq!(said.error(), (400, "InvalidRequest"), "{}", said.body);
     // A message is as long as the lexicon says.
     let frank = authority(&h, false, true).await;
     let ask_with = |words: String| json!({"group": did, "message": words});
@@ -312,22 +290,25 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     assert_eq!(said.1["status"], "pending");
 
     // A member who may not admit, may not.
-    let said = call(
-        &h,
-        &bob,
-        "admitMember",
-        json!({"group": did, "did": carol.did}),
-    )
-    .await;
-    assert_eq!(error(&said), (403, "Forbidden"));
-    let said = call(
-        &h,
-        &alice,
-        "admitMember",
-        json!({"group": did, "did": carol.did, "roles": [{"role": "member"}]}),
-    )
-    .await;
-    assert_eq!(said.0, 200);
+    let bobs = Session::runs(&h, &bob, &did).await;
+    let said = bobs
+        .put(
+            &h,
+            "membership",
+            &carol.did,
+            membership(&carol.did, &["member"]),
+        )
+        .await;
+    assert_eq!(said.error(), (403, "ScopeMissing"), "{}", said.body);
+    let said = runs
+        .create(
+            &h,
+            "membership",
+            &carol.did,
+            membership(&carol.did, &["member"]),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
 
     // Turned down, as if never asked: they may ask again.
     call(&h, &dave, "requestJoin", json!({"group": did})).await;
@@ -371,7 +352,6 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     );
 
     for (who, method, body) in [
-        (&alice, "admitMember", json!({"group": did})),
         (&alice, "denyJoinRequest", json!({"group": did})),
         (&dave, "cancelJoinRequest", json!({})),
     ] {
@@ -387,61 +367,53 @@ async fn a_group_that_approves_its_members_keeps_requests() {
 }
 
 #[tokio::test]
-async fn admitting_takes_admit_and_gives_member() {
+async fn admitting_takes_admit_and_gives_what_it_may() {
     let h = start(&[], false).await;
     let [alice, bob, carol] = people(&h).await;
     let did = group(&h, &alice, "approval").await;
     // A gatekeeper may admit, and give member and rider, and nothing else.
-    call(
+    keep(&h, &did, "role", "rider", role("Rider")).await;
+    keep(&h, &did, "role", "gatekeeper", role("Gatekeeper")).await;
+    let admit = group_host::rbac::scope_of("admit").unwrap();
+    let p = granting(&h, &did, "gatekeeper", &[&admit], &["member", "rider"]);
+    keep(&h, &did, "permissions", "self", p).await;
+    keep(
         &h,
-        &alice,
-        "putRole",
-        json!({"group": did, "role": "rider", "name": "Rider", "actions": []}),
+        &did,
+        "membership",
+        &bob.did,
+        membership(&bob.did, &["member", "gatekeeper"]),
     )
     .await;
-    call(&h, &alice, "putRole", json!({"group": did, "role": "gatekeeper", "name": "Gatekeeper", "actions": ["admit"], "assignable": [{"role": "member"}, {"role": "rider"}]})).await;
-    h.host
-        .space_write(
-            &did,
-            &members_space(&did),
-            &[group_host::repo::Write::Create {
-                collection: format!("{NS}.membership"),
-                rkey: bob.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": ["member", "gatekeeper"], "createdAt": "2026-11-03T00:00:00Z"}),
-            }],
-        )
-        .await
-        .unwrap();
     call(&h, &carol, "requestJoin", json!({"group": did})).await;
-    // Named roles that leave out member still give it.
-    let said = call(
-        &h,
-        &bob,
-        "admitMember",
-        json!({"group": did, "did": carol.did, "roles": [{"role": "rider"}]}),
-    )
-    .await;
-    assert_eq!(said, (200, json!({})));
-    assert_eq!(h.host.roles(&did, &carol.did).unwrap(), ["member", "rider"]);
-    // A newcomer gets member even when no role marked default is member.
-    for (role, default) in [("member", false), ("rider", true)] {
-        call(
+    let bobs = Session::of(&h, &bob, &did, &format!("atproto {admit}")).await;
+    let said = bobs
+        .put(
             &h,
-            &alice,
-            "putRole",
-            json!({"group": did, "role": role, "name": role, "actions": [], "default": default}),
+            "membership",
+            &carol.did,
+            membership(&carol.did, &["member", "gatekeeper"]),
         )
         .await;
-    }
-    let dave = authority(&h, false, true).await;
-    call(&h, &dave, "requestJoin", json!({"group": did})).await;
-    let said = call(
-        &h,
-        &bob,
-        "admitMember",
-        json!({"group": did, "did": dave.did}),
-    )
-    .await;
-    assert_eq!(said.0, 200);
-    assert_eq!(h.host.roles(&did, &dave.did).unwrap(), ["member", "rider"]);
+    assert_eq!(said.error(), (400, "NotAssignable"), "{}", said.body);
+    let said = bobs
+        .put(
+            &h,
+            "membership",
+            &carol.did,
+            membership(&carol.did, &["member", "rider"]),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(h.host.roles(&did, &carol.did).unwrap(), ["member", "rider"]);
+    // Admitting is not giving roles to one who is in.
+    let said = bobs
+        .put(
+            &h,
+            "membership",
+            &carol.did,
+            membership(&carol.did, &["member"]),
+        )
+        .await;
+    assert_eq!(said.error(), (403, "ScopeMissing"), "{}", said.body);
 }

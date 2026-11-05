@@ -169,13 +169,16 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         mine["roles"],
         json!([
             {"key": "admin", "name": "Admin", "description": "Runs the group."},
-            {"key": "member", "name": "Member"},
+            {"key": "member", "name": "Member", "default": true},
         ])
     );
     let admin = &mine["bindings"][0];
     assert_eq!(admin["role"], "admin");
     assert_eq!(admin["actions"], json!(every));
-    assert_eq!(admin["assignable"], json!([{"role": "member"}]));
+    assert_eq!(
+        admin["assignable"],
+        json!([{"role": "admin"}, {"role": "member"}])
+    );
     assert_eq!(admin["repoCollections"], json!([{"collection": "*"}]));
     assert_eq!(mine["bindings"][1]["actions"], json!([]));
     assert_eq!(mine["spaces"][0]["uri"], meta);

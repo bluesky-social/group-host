@@ -5,7 +5,7 @@
     "main": {
       "type": "record",
       "key": "any",
-      "description": "Grants a member their roles. Written by the group authority; the record key is the member's DID.",
+      "description": "Grants a member their roles, in the members space. Written by the group authority; the record key is the member's DID. Writes are bounded by the writer's assignable roles. Creating one admits one waiting to join and decides their request; deleting one ejects the member.",
       "record": {
         "type": "object",
         "required": [

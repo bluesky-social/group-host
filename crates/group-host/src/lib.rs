@@ -32,6 +32,7 @@ pub mod index;
 pub mod index_api;
 pub mod lexicons;
 pub mod lifecycle;
+pub mod member_writes;
 pub mod migration;
 pub mod moderation;
 pub mod move_host;
@@ -253,22 +254,6 @@ pub fn router(host: Arc<Host>) -> Router {
             get(index_api::get_space_blob),
         )
         .route(
-            "/xrpc/fyi.opensocial.putRole",
-            post(group_members::put_role),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.deleteRole",
-            post(group_members::delete_role),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.assignRoles",
-            post(group_members::assign_roles),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.ejectMember",
-            post(group_members::eject_member),
-        )
-        .route(
             "/xrpc/fyi.opensocial.leaveGroup",
             post(group_members::leave_group),
         )
@@ -283,10 +268,6 @@ pub fn router(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.listJoinRequests",
             get(group_join::list_join_requests),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.admitMember",
-            post(group_join::admit_member),
         )
         .route(
             "/xrpc/fyi.opensocial.denyJoinRequest",

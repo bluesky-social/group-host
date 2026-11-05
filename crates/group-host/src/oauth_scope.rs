@@ -172,11 +172,16 @@ impl Host {
                 .map_err(XrpcError::internal)?
                 .unwrap_or_default();
             let access = Access::of(&access, uri);
+            let mut writable = writes_in(&access, roles, member, everything);
+            // The members space's own records, as the group grants them.
+            if uri == members_space(group) {
+                writable.extend(self.members_writes_of(group, roles)?);
+            }
             rooms.push(Room {
                 kind: space.kind,
                 skey: space.skey,
                 readable: access.can_read(roles, member),
-                writable: writes_in(&access, roles, member, everything),
+                writable,
             });
         }
         Ok(rooms)
@@ -395,7 +400,7 @@ pub fn concrete(granted: &[String], group: &str) -> String {
 
 /// The scopes a permission set lists: a space permission as a space
 /// scope, and an rpc one as a scope for each of its methods.
-fn scopes_of(set: &Value) -> Vec<String> {
+pub(crate) fn scopes_of(set: &Value) -> Vec<String> {
     let mut out = Vec::new();
     for p in set["permissions"].as_array().into_iter().flatten() {
         let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();

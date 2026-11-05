@@ -1,7 +1,8 @@
 //! Joining a group: at once for one whose profile says `open`, or for one
 //! holding its invite; by a request someone holding `admit` decides on
 //! for one that says `approval`; not without an invite for one that says
-//! `invite`.
+//! `invite`. A request is granted by writing the asker's membership as
+//! the group (`member_writes.rs`), and turned down by `denyJoinRequest`.
 //!
 //! A request waits in the host, not in the group's records: who asks is
 //! no member, and the members space is for members. Decided, it goes: a
@@ -14,7 +15,7 @@ use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
 use crate::group_invites::invite_uri;
 use crate::group_members::{Members, acting};
-use crate::rbac::{NS, listed};
+use crate::rbac::NS;
 use crate::store::JoinRequest;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -150,55 +151,6 @@ pub async fn list_join_requests(
         .map(|r| r.seq.to_string());
     let requests: Vec<Value> = waiting.iter().map(request_view).collect();
     Ok(Json(json!({"requests": requests, "cursor": cursor})))
-}
-
-/// Admits one who asked, with the roles named or the group's defaults,
-/// each one the caller may give: admitting gives roles, so it is bound as
-/// giving them is.
-pub async fn admit_member(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let (members, _, mine) = acting(&host, &headers, &body, "admitMember", Some("admit")).await?;
-    let did = body["did"].as_str().expect("its lexicon requires it");
-    let asked = host
-        .store
-        .asked(&members.group, did)
-        .map_err(XrpcError::internal)?;
-    if asked.is_none() {
-        return Err(no_request());
-    }
-    // A member by now, by another way in: their request is stale, and
-    // their roles are not this method's to replace.
-    if members.membership(did)?.is_some() {
-        host.store
-            .decide(&members.group, did)
-            .map_err(XrpcError::internal)?;
-        return Err(bad("AlreadyMember", "they are a member already"));
-    }
-    let roles = match body.get("roles") {
-        Some(_) => listed(&body, "roles", "role"),
-        None => members.default_roles()?,
-    };
-    if roles.is_empty() {
-        return Err(invalid("roles names the roles to give"));
-    }
-    members.defined(&roles)?;
-    // The roles an admitter may give are those their `admit` grants may.
-    let assignable = members.assignable(&mine, "admit");
-    let blocked: Vec<&String> = roles.iter().filter(|r| !assignable.contains(*r)).collect();
-    if !blocked.is_empty() {
-        return Err(bad(
-            "NotAssignable",
-            format!("not yours to give: {blocked:?}"),
-        ));
-    }
-    members.put_membership(did, &roles).await?;
-    host.store
-        .decide(&members.group, did)
-        .map_err(XrpcError::internal)?;
-    Ok(Json(json!({})))
 }
 
 /// Turns down one who asked, for one holding `admit`. They may ask again.

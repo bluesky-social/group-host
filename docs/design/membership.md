@@ -19,13 +19,19 @@ record:
   100.
 - `fyi.opensocial.role`, one per role, keyed by its id: its name,
   description, and whether it is a `default` or `bot` role.
-- `fyi.opensocial.permissions`, one record: a grant per role, with the
-  scopes it carries and the roles it may assign.
+- `fyi.opensocial.permissions`, one record at `self`: a grant per role,
+  with the scopes it carries and the roles it may assign
+  (`defs#groupGrant`, each a list of strings).
 
 A member is anyone with a membership record. Every member holds `member`,
-the role the members space lets read, and `assignRoles` refuses to take it
-away. Who may write the members space is fixed; `updateSpace` will not
-change it.
+the role the members space lets read, and no membership leaves it out.
+Who may read the members space is fixed; `updateSpace` will not change
+it.
+
+Apps change these records the way they change any of the group's: by
+writing them as the group, with `com.atproto.space.*`, as the next
+sections tell. The host has no method of its own for roles, grants or
+memberships.
 
 A member may also write an `fyi.opensocial.acceptance` record in their own
 repo there. It is their side of membership, for apps that show only those
@@ -51,27 +57,78 @@ may assign comes from their roles granting `role.assign`, whom they may
 eject from those granting `eject`, and what they may admit someone with
 from those granting `admit`.
 
+The actions over members are writes of memberships in the members space,
+so their scopes say so: `admit` is
+`space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=create`,
+`role.assign` the same with `action=update`, and `eject` with
+`action=delete`. A scope naming every write of memberships, or of every
+collection in every space, carries all three, and so does the
+`fyi.opensocial.manageMembers` permission set, with `invite`.
+
 A new group has two roles. `admin` grants every action and `repo:*`, and
-may assign only `member`. `member` is the default role and grants nothing.
-The founder and each steward named at creation hold both
-([groups](groups.md)). So an admin cannot make or eject another admin
-until a role's `assignable` says so.
+may assign `admin` and `member`. `member` is the default role and grants
+nothing. The founder and each steward named at creation hold both
+([groups](groups.md)).
 
 Some member must always hold a role that grants `group.configure`, or no
-one could run the group. Every method that could break this refuses with
-`LastConfigurer`: `putRole` and `deleteRole`, and `assignRoles`,
-`ejectMember` and `leaveGroup`.
+one could run the group. Any write that would leave nobody holding one is
+refused with `LastConfigurer`, as is `leaveGroup` for its last holder.
 
-Details:
+## Writing roles, grants and memberships
 
-- `putRole` and `deleteRole` need `group.configure`; `deleteRole`
-  refuses a role someone holds.
-- `putRole` keeps a role's `default`, `bot`, `assignable` and
-  `repoCollections` as they were when left out. Each role in `assignable`
-  must be one the group defines, or the role itself.
-- A role's name is 64 characters at most, its description 300.
-- `assignRoles` (needs `role.assign`) sets a member's whole set of roles,
-  each defined and each one the caller may assign.
+An app writes these records as the group through `createRecord`,
+`putRecord`, `deleteRecord` or `applyWrites` of `com.atproto.space.*`,
+with a session for the group ([signing in](signing-in.md)). The session's
+scope must name each write, and the member who signed the app in must,
+at the time of each write, hold:
+
+- `group.configure` for roles and the permissions record;
+- `admit` to create a membership, `role.assign` to change one, and
+  `eject` to delete one.
+
+The host then makes each write only as it keeps the group whole, and
+does what the write means. The writes of one `applyWrites` are each
+asked of the records as the writes before them left them, against the
+member's roles as they were before any, and are made together or not at
+all.
+
+A role (`fyi.opensocial.role`) is keyed by its id, 64 characters at
+most. It goes only once no member holds it and the permissions record
+grants it nothing (`RoleInUse`): an app deletes the role and writes the
+permissions record without its grant at once. Its name is 64 characters
+at most, its description 2,000.
+
+The permissions record is kept at `self` and never deleted. It holds at
+most one grant per role, of a role the group defines. In it a member
+changes only:
+
+- the grants of roles their own grants may assign, or of a new role,
+  one nobody holds and no grant names (`NotAssignable`);
+- scopes their own roles hold, as written or within one they hold, a
+  permission set of ours read as the scopes it lists (`ScopeNotHeld`);
+- `assignable` lists, adding only roles they may assign themselves, or a
+  new role (`NotAssignable`), each defined.
+
+So nobody gives a role more than they hold, and the founder can grant a
+role they have just made and add it to what their own role may assign.
+
+A membership (`fyi.opensocial.membership`) is kept at its member's DID,
+holds `member` (`MemberRole`), and names only roles the group defines.
+
+- Creating one admits someone waiting to join, and their request goes
+  ([joining](#joining)). Each role it gives must be one the writer's
+  `admit` grants may assign. Nobody who has not asked is made a member
+  so (`JoinRequestNotFound`).
+- Writing one for a member changes their roles: each role added or taken
+  away must be one the writer's `role.assign` grants may assign. A
+  request of theirs still waiting goes.
+- Deleting one puts the member out, if each role they hold is one the
+  writer's `eject` grants may assign ([below](#leaving-and-being-put-out)).
+
+A token from `getGroupAuth` for the members space writes what the
+member's grants let them write there, and the console's member and
+settings pages write with one. An [assistant](assistants.md) makes the
+same writes with its tools, as the member who connected it.
 
 ## Joining
 
@@ -79,8 +136,8 @@ The profile's `joinPolicy` decides how people get in: `open`, `approval`
 (the default) or `invite`. Someone asks with `requestJoin`. With `open`
 they are in at once. With `invite` they are refused (`JoinClosed`)
 unless invited. With `approval` their request waits, with an optional
-message, until someone holding `admit` calls `admitMember` or
-`denyJoinRequest`. A live invite admits whatever the policy, since the
+message, until someone holding `admit` writes their membership as the
+group, or turns them down with `denyJoinRequest`. A live invite admits whatever the policy, since the
 group has already said yes. The asker may name it (`invite`, its at-uri);
 one named that is not their live invite from this group is refused
 (`InvalidInvite`). Unnamed, a live invite admits them all the same.
@@ -88,9 +145,10 @@ one named that is not their live invite from this group is refused
 `requestJoin` answers `status`: `admitted`, with the `membership` it
 wrote (its `uri` and `cid`), or `pending`, with the `request` waiting.
 
-A newcomer gets the default roles: those marked `default`, or `member` if
-none is. An admitter may name other roles, but only ones the group
-defines and they may assign.
+One let in by `requestJoin`, or by an invite, gets the default roles:
+those marked `default`, or `member` if none is, and `member` always. An
+admitter writing a membership gives the roles it names, each one the
+group defines and they may assign.
 
 The asker is no member, and the members space is for members, so requests
 are not records: the host keeps them in its database, one per group and
@@ -101,8 +159,8 @@ Details:
 
 - Asking again while a request waits keeps the first message and time.
 - A request's message is 2,000 characters at most.
-- Getting in by any route ends a waiting request; `admitMember` then
-  answers `AlreadyMember`.
+- Getting in by any route ends a waiting request, and so does any write
+  of the asker's membership.
 - The asker sees their request with `getJoinRequest` and withdraws it
   with `cancelJoinRequest`; admitters list them with `listJoinRequests`.
 
@@ -157,9 +215,9 @@ Details:
 
 ## Leaving and being put out
 
-A member leaves with `leaveGroup`. A holder of `eject` puts one out with
-`ejectMember`, if every role the member holds is one the ejecter's `eject`
-grants may assign. Either way the host, in order:
+A member leaves with `leaveGroup`. A holder of `eject` puts one out by
+deleting their membership as the group, if every role the member holds
+is one the ejecter's `eject` grants may assign. Either way the host:
 
 1. revokes the space credentials the group issued them;
 2. ends the OAuth grants they approved for the group, and their
@@ -168,8 +226,10 @@ grants may assign. Either way the host, in order:
 4. deletes their membership;
 5. unindexes their repo in each of the group's spaces.
 
-Credentials go first, so that if revoking fails they are still in and the
-call can be made again. A credential lasts ten minutes; the group keeps
+Credentials go first, so that if revoking fails they are still in and
+the call, or the write deleting their membership, can be made again.
+Put out, the rest follows the write; deleting a membership that is gone
+already changes nothing and does nothing more. A credential lasts ten minutes; the group keeps
 each it issues until it lapses, to revoke it at once. For writers on other
 PDSes it sends `com.atproto.space.notifyCredentialRevoked`, best effort.
 With no membership they hold no roles, so the access records grant them
@@ -177,8 +237,7 @@ nothing.
 
 An ejection is then kept in the group's [moderation](moderation.md)
 queue, as an `ejectEvent` on the member's DID, with who put them out.
-The host keeps the `reason` `ejectMember` was given beside it, but does
-not answer it. Leaving keeps nothing there.
+Leaving keeps nothing there.
 
 What they wrote stays in their own repos at their own PDSes. The group's
 index forgets it at once, and drops on each sync any writer a space no

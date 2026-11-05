@@ -45,13 +45,34 @@ fn makes_a_tool_of_each_method_without_its_group() {
         json!({"type": "object", "properties": {}, "required": []})
     );
 
-    let admit = tool("admitMember");
-    assert_eq!(admit.kind, Kind::Procedure);
-    assert_eq!(admit.input_schema["properties"]["did"]["format"], "did");
-    // A reference followed: each role an object naming it.
-    let role = &admit.input_schema["properties"]["roles"]["items"];
-    assert_eq!(role["type"], "object");
-    assert_eq!(role["properties"]["role"]["type"], "string");
+    // A membership, written as the group in its members space, at its
+    // member's DID; a reference followed: each role its id.
+    let admit = tool("putMembership");
+    let members = "fyi.opensocial.members".to_string();
+    let put = Kind::Record {
+        space: members.clone(),
+        literal: None,
+        delete: false,
+    };
+    assert_eq!(admit.kind, put);
+    let fields = &admit.input_schema["properties"];
+    assert_eq!(fields["member"]["format"], "did");
+    assert_eq!(fields["roles"]["items"]["type"], "string");
+    assert_eq!(fields["rkey"]["format"], "record-key");
+    let gone = Kind::Record {
+        space: members,
+        literal: None,
+        delete: true,
+    };
+    assert_eq!(tool("deleteMembership").kind, gone);
+    assert_eq!(tool("deleteRole").kind, gone);
+    // The permissions record, at self; its grants' scopes plain strings.
+    let grants = &tool("putPermissions").input_schema["properties"]["grants"];
+    assert_eq!(
+        grants["items"]["properties"]["scopes"]["items"]["type"],
+        "string"
+    );
+    assert!(tools().iter().all(|t| t.name != "deletePermissions"));
 
     // Known values said in words, beside what the lexicon says; a closed
     // set, as JSON Schema's own.

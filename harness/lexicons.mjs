@@ -79,7 +79,8 @@ const retracted = new Set([
 
 // Where the opensocial proposal's shape, which the host takes, differs
 // from the style above: each finding, exactly as said. A space grant's
-// scopes are bare strings, as OAuth scopes are; createSpace names a
+// scopes, and a group grant's, are bare strings, as OAuth scopes are, the
+// group grant the proposal's shared `defs#groupGrant`; createSpace names a
 // space's `type` so; and the access record and createSpace require what
 // the proposal's do. A membership's roles are bare role ids, at most 100;
 // a moderation subject's status is a closed set; and a report's and an
@@ -90,6 +91,8 @@ const proposal = new Set([
     (m) => `fyi.opensocial.rule#main.record.title: ${m}: what was valid must stay so`,
   ),
   'fyi.opensocial.defs#spaceGrant.scopes: an array holds objects, which can grow, not bare values',
+  'fyi.opensocial.defs#groupGrant.scopes: an array holds objects, which can grow, not bare values',
+  'fyi.opensocial.permissions#main.record.grants[]: was {"type":"ref","ref":"#grant"}, now {"type":"ref","ref":"fyi.opensocial.defs#groupGrant"}: a field is never retyped',
   'fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type',
   'fyi.opensocial.access#main.record: grants is required now: only new optional fields',
   ...['type', 'access'].map((f) => `fyi.opensocial.createSpace#main.input: ${f} is required now: only new optional fields`),

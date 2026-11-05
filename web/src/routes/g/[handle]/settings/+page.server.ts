@@ -5,8 +5,9 @@ import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/listGroupTok
 import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecoveryKeys.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { act, xrpc } from '#lib/data.ts';
-import { withGroup, type Done, type GroupSession } from '#lib/asGroup.ts';
+import { act, xrpc, type Answer } from '#lib/data.ts';
+import { applyAsGroup, membersOf, withGroup, type Done, type GroupSession, type Write } from '#lib/asGroup.ts';
+import { SCOPES } from '#lib/actions.ts';
 
 type Handle = `${string}.${string}`;
 type Event = { fetch: typeof fetch; params: { handle?: string } };
@@ -43,6 +44,21 @@ const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim()
 
 const PROFILE = 'fyi.opensocial.profile';
 const RULE = 'fyi.opensocial.rule';
+
+type Did = `did:${string}:${string}`;
+type Bindings = Answer<typeof getGroup.main>['bindings'];
+
+/** The grants of the group's permissions record, as getGroup shows them. */
+const grantsOf = (bindings: Bindings) =>
+	(bindings ?? []).map((b) => ({ role: b.role, scopes: b.scopes?.map((s) => s.scope) ?? [], assignable: b.assignable.map((a) => a.role) }));
+
+/** The permissions record holding `grants`, written in place of the one there. */
+const permissions = (grants: ReturnType<typeof grantsOf>): Write => ({
+	action: 'update',
+	collection: 'fyi.opensocial.permissions',
+	rkey: 'self',
+	value: { $type: 'fyi.opensocial.permissions', grants, createdAt: new Date().toISOString() }
+});
 
 /**
  * A picture the profile names by its CID, as the record holds it: its
@@ -140,18 +156,36 @@ export const actions: Actions = {
 	},
 	role: async (event) => {
 		const { group, form } = await asked(event);
-		return act(event, 'fyi.opensocial.putRole', {
-			group,
-			role: text(form, 'role'),
-			name: text(form, 'name'),
-			actions: form.getAll('action').map(String),
-			assignable: form.getAll('assignable').map((r) => ({ role: String(r) })),
-			default: form.get('default') === 'on'
-		});
+		const key = text(form, 'role');
+		const { group: now, roles, bindings } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as Did });
+		const was = roles?.find((r) => r.key === key);
+		// What the role's record does not show here stays as it was.
+		const record = { ...(was?.description ? { description: was.description } : {}), ...(was?.bot ? { bot: true } : {}) };
+		const role = { $type: 'fyi.opensocial.role', ...record, displayName: text(form, 'name'), default: form.get('default') === 'on', createdAt: new Date().toISOString() };
+		// Its grant: the actions as their scopes, beside any other scope it held.
+		const named = new Set(Object.values(SCOPES));
+		const kept = grantsOf(bindings).find((g) => g.role === key)?.scopes.filter((s) => !named.has(s)) ?? [];
+		const actions = form.getAll('action').map((a) => SCOPES[String(a) as keyof typeof SCOPES]);
+		const grant = { role: key, scopes: [...kept, ...actions], assignable: form.getAll('assignable').map(String) };
+		// A new role is given by those who run the group, as they run it.
+		const mine = now.viewer?.roles.map((r) => r.role) ?? [];
+		const grants = grantsOf(bindings)
+			.filter((g) => g.role !== key)
+			.map((g) => (!was && mine.includes(g.role) && g.scopes.includes(SCOPES['group.configure']) ? { ...g, assignable: [...g.assignable, key] } : g));
+		return applyAsGroup(event, group, membersOf(group), [
+			{ action: was ? 'update' : 'create', collection: 'fyi.opensocial.role', rkey: key, value: role },
+			permissions([...grants, grant])
+		]);
 	},
 	unrole: async (event) => {
 		const { group, form } = await asked(event);
-		return act(event, 'fyi.opensocial.deleteRole', { group, role: text(form, 'role') });
+		const key = text(form, 'role');
+		const { bindings } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as Did });
+		// The role and its grant go together.
+		return applyAsGroup(event, group, membersOf(group), [
+			{ action: 'delete', collection: 'fyi.opensocial.role', rkey: key },
+			permissions(grantsOf(bindings).filter((g) => g.role !== key))
+		]);
 	},
 	revoke: async (event) => {
 		const { group, form } = await asked(event);

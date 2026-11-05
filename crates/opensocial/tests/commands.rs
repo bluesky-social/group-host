@@ -132,14 +132,31 @@ async fn starts_inspects_and_runs_a_group() {
     )
     .await;
     assert_eq!(said, format!("{me}: admin, member\n"));
-    // Bob is no member yet: the host says why.
-    let said = fails(
-        &alice,
-        &["membership", "eject", &did, bob, "--reason", "spam"],
-    )
-    .await;
+    // Bob has not asked to join, so is given no roles; and the last who
+    // runs the group is not put out: the host says why.
+    let said = fails(&alice, &["membership", "assign", &did, bob, "member"]).await;
     assert!(
-        said.starts_with("fyi.opensocial.ejectMember: 400"),
+        said.starts_with("com.atproto.space.putRecord: 400 Bad Request JoinRequestNotFound"),
+        "{said}"
+    );
+    let said = fails(&alice, &["membership", "eject", &did, &me]).await;
+    assert!(
+        said.starts_with("com.atproto.space.deleteRecord: 400 Bad Request LastConfigurer"),
+        "{said}"
+    );
+    // Once he asks, he may be let in, and put out.
+    h.host
+        .store
+        .ask(&did, &net().accounts[1].did, None, 0)
+        .unwrap();
+    let said = ok(&alice, &["membership", "assign", &did, bob, "member"]).await;
+    assert_eq!(said, format!("{bob}: member\n"));
+    let said = ok(&alice, &["membership", "eject", &did, bob]).await;
+    assert_eq!(said, format!("{bob}: put out\n"));
+    // Out, he does not act as the group.
+    let said = fails(&env(&h, 1), &["membership", "eject", &did, &me]).await;
+    assert!(
+        said.starts_with("fyi.opensocial.getGroupAuth: 403"),
         "{said}"
     );
 }

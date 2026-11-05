@@ -719,7 +719,7 @@ impl Host {
         let group = &who.group;
         let uri = format!("at://{group}/space/{}/self", asked.space);
         let space = SpaceRef::parse(&uri).expect("a group's own space is a space");
-        let (_, scope) = self.group_scope(group, &who.member, &uri, &space)?;
+        let (_, _, scope) = self.group_scope(group, &who.member, &uri, &space)?;
         let now = now_millis();
         let grant = Grant {
             id: who.id.clone(),

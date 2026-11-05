@@ -151,15 +151,42 @@ fn answers_each_action_by_its_scope() {
             "{nothing}"
         );
     }
-    // A space scope over every collection labels, takes down and
-    // configures; one managing makes and deletes spaces.
+    // A space scope over every collection labels, takes down, configures
+    // and writes memberships; one managing makes and deletes spaces.
     let every = actions_of(&["space:*".into()]);
     assert_eq!(
         every.into_iter().collect::<Vec<_>>(),
-        ["label", "space.configure", "takedown"]
+        [
+            "admit",
+            "eject",
+            "label",
+            "role.assign",
+            "space.configure",
+            "takedown"
+        ]
     );
     let star = actions_of(&["space:*?collection=*".into()]);
-    assert_eq!(star.len(), 3);
+    assert_eq!(star.len(), 6);
+    // Memberships written in the members space admit, give roles and
+    // put out, as far as the scope's writes go; the set for running
+    // members does all of that, and invites.
+    let of = |scope: &str| actions_of(&[scope.into()]).into_iter().collect::<Vec<_>>();
+    let members = "space:fyi.opensocial.members?collection=fyi.opensocial.membership";
+    assert_eq!(of(members), ["admit", "eject", "role.assign"]);
+    assert_eq!(of(&format!("{members}&action=update")), ["role.assign"]);
+    assert_eq!(
+        of("space:fyi.opensocial.members?collection=fyi.opensocial.role"),
+        none
+    );
+    assert_eq!(
+        of("space:fyi.opensocial.meta?collection=fyi.opensocial.membership"),
+        none
+    );
+    assert_eq!(of("space:fyi.opensocial.members?manage=create"), none);
+    assert_eq!(
+        of("include:fyi.opensocial.manageMembers"),
+        ["admit", "eject", "invite", "role.assign"]
+    );
     let manage = actions_of(&["space:*?manage=create&manage=delete".into()]);
     assert_eq!(
         manage.into_iter().collect::<Vec<_>>(),

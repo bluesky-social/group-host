@@ -312,15 +312,81 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     let said = got["content"][0]["text"].as_str().unwrap();
     assert!(said.contains("InviteNotFound"), "{got}");
     // What the host refuses, it says why.
-    let got = tool(&h, access, "ejectMember", json!({"member": carol.did})).await;
-    assert_eq!(got["isError"], true);
-    assert!(
-        got["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("NotAMember"),
-        "{got}"
+    let refused = |got: &Json, why: &str| {
+        assert_eq!(got["isError"], true, "{got}");
+        let said = got["content"][0]["text"].as_str().unwrap();
+        assert!(said.starts_with(why), "{got}");
+    };
+    let got = tool(
+        &h,
+        access,
+        "putMembership",
+        json!({"rkey": carol.did, "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+    )
+    .await;
+    refused(&got, "JoinRequestNotFound");
+    let got = tool(&h, access, "deleteMembership", json!({"rkey": alice.did})).await;
+    refused(&got, "LastConfigurer");
+    let got = tool(&h, access, "deleteRole", json!({"rkey": "member"})).await;
+    refused(&got, "RoleInUse");
+    // A method of the host's refused says why in its words.
+    let got = tool(&h, access, "denyJoinRequest", json!({"member": carol.did})).await;
+    refused(&got, "JoinRequestNotFound");
+    // The group's records, written as the group, as she may: a role, what
+    // it may do, and who holds it.
+    let got = tool(
+        &h,
+        access,
+        "putRole",
+        json!({"rkey": "leader", "displayName": "Ride leader"}),
+    )
+    .await;
+    let uri = format!(
+        "{}/{group}/{NS}.role/leader",
+        group_host::group::members_space(&group)
     );
+    assert_eq!(got["structuredContent"]["uri"], uri, "{got}");
+    let members = group_host::group::members_space(&group);
+    let kept = |c: &str, k: &str| {
+        h.host
+            .group_record(&group, &members, &format!("{NS}.{c}"), k)
+            .unwrap()
+    };
+    let leader = kept("role", "leader").unwrap();
+    assert_eq!(leader.get("rkey"), None);
+    let mut permissions = kept("permissions", "self").unwrap();
+    permissions["grants"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"role": "leader", "scopes": [], "assignable": []}));
+    let got = tool(
+        &h,
+        access,
+        "putPermissions",
+        json!({"grants": permissions["grants"]}),
+    )
+    .await;
+    assert!(got.get("isError").is_none(), "{got}");
+    let lxm = format!("{NS}.requestJoin");
+    post(
+        &h,
+        &lxm,
+        &json!({"group": group}),
+        &[auth(&h, &carol, &lxm)],
+    )
+    .await;
+    let got = tool(
+        &h,
+        access,
+        "putMembership",
+        json!({"rkey": carol.did, "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+    )
+    .await;
+    assert!(got.get("isError").is_none(), "{got}");
+    assert!(kept("membership", &carol.did).is_some());
+    let got = tool(&h, access, "deleteMembership", json!({"rkey": carol.did})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    assert!(kept("membership", &carol.did).is_none());
     // Another group's, never: the group is the one she chose.
     let other = start_group(
         &h,
@@ -445,15 +511,19 @@ async fn does_only_what_the_members_roles_allow() {
     let access = tokens["access_token"].as_str().unwrap();
     let got = tool(&h, access, "putRule", json!({"title": "No spam"})).await;
     assert_eq!(got["isError"], true, "{got}");
-    // Put out, his assistant acts as him there no more.
-    let said = call(
+    // Nor may it write what his roles do not: he may give nobody roles.
+    let got = tool(
         &h,
-        &alice,
-        "ejectMember",
-        json!({"group": group, "member": bob.did}),
+        access,
+        "putMembership",
+        json!({"rkey": bob.did, "member": bob.did, "roles": ["member", "admin"], "createdAt": "2026-11-03T00:00:00Z"}),
     )
     .await;
-    assert_eq!(said.0, 200, "{}", said.1);
+    assert_eq!(got["isError"], true, "{got}");
+    // Put out, his assistant acts as him there no more.
+    let runs = common::members::Session::runs(&h, &alice, &group).await;
+    let said = runs.delete(&h, "membership", &bob.did).await;
+    assert_eq!(said.status, 200, "{}", said.body);
     let res = mcp(
         &h,
         Some(access),

@@ -216,7 +216,7 @@ impl Host {
             put(&c("access"), "self", meta_access(readers)),
         ];
         self.space_write(&did, &meta, &meta_writes).await?;
-        let admin = Grant::with("admin", &ACTIONS, &["member"], &["*"]);
+        let admin = Grant::with("admin", &ACTIONS, &["admin", "member"], &["*"]);
         let member = Grant::with("member", &[], &[], &[]);
         let mut members_writes = vec![
             put(

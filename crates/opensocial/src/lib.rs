@@ -5,8 +5,8 @@
 //! handle and password (an app password is enough), and asks that PDS for
 //! a service token for each method it calls on a host, as an app does. So
 //! an account on any PDS may run the command against any host. To write as
-//! a group, as an invite is written, it asks the host for a group token
-//! (`getGroupAuth`), bound to a DPoP key of its own.
+//! a group, as an invite, a role or a membership is written, it asks the
+//! host for a group token (`getGroupAuth`), bound to a DPoP key of its own.
 
 use anyhow::{Context, Result, anyhow, bail};
 use atproto::jose;
@@ -23,7 +23,7 @@ pub const USAGE: &str = "usage: opensocial <command>
   inspect <group>        a group as you may see it: its roles, members and spaces
   membership assign <group> <member> <role,role…>
                          give a member these roles, in place of theirs
-  membership eject <group> <member> [--reason <words>]
+  membership eject <group> <member>
                          put a member out
   membership invite <group> <person> [--message <words>]
                          invite someone in
@@ -444,9 +444,8 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             inspect(&signed_in(env).await?, &host, group).await
         }
         "membership" => {
-            // Each takes its own option: eject a reason, invite a message.
+            // Invite takes a message.
             let known: &[&str] = match rest.first().map(String::as_str) {
-                Some("eject") => &["reason"],
                 Some("invite") => &["message"],
                 _ => &[],
             };
@@ -562,39 +561,55 @@ async fn membership(me: &Client, host: &Host, a: &Args<'_>) -> Result<String> {
         rest.first().ok_or_else(usage)?,
         rest.get(1).ok_or_else(usage)?,
     );
-    let call = match (what, rest.len()) {
-        ("assign", 3) => "assignRoles",
-        ("eject", 2) => "ejectMember",
-        ("invite", 2) => "",
-        _ => return Err(usage()),
-    };
+    if !matches!(
+        (what, rest.len()),
+        ("assign", 3) | ("eject", 2) | ("invite", 2)
+    ) {
+        return Err(usage());
+    }
     let group = me.resolve(host, group).await?;
     let person = me.resolve(host, who).await?;
     // An invite is a record the group writes in their inbox.
-    if call.is_empty() {
+    if what == "invite" {
         let message = a.flags.get("message").copied();
         me.invite(host, &group, &person, message).await?;
         return Ok(format!("{who}: invited\n"));
     }
-    let mut body = json!({"group": group});
+    // A membership is the group's record in its members space, kept at its
+    // member's DID.
+    let members = members_of(&group);
+    let mut body = json!({
+        "repo": group,
+        "space": members,
+        "collection": m("membership"),
+        "rkey": person.replace("%3A", ":"),
+    });
+    let session = GroupSession::start(me, host, &group, &members).await?;
     let done = match what {
         "assign" => {
             let roles: Vec<&str> = rest[2].split(',').filter(|r| !r.is_empty()).collect();
-            body["member"] = json!(person);
-            let refs: Vec<Value> = roles.iter().map(|r| json!({ "role": r })).collect();
-            body["roles"] = json!(refs);
+            body["record"] = json!({
+                "$type": m("membership"),
+                "member": person,
+                "roles": roles,
+                "createdAt": now_iso(),
+            });
+            session.call("com.atproto.space.putRecord", &body).await?;
             roles.join(", ")
         }
         _ => {
-            body["member"] = json!(person);
-            if let Some(r) = a.flags.get("reason") {
-                body["reason"] = json!(r);
-            }
+            session
+                .call("com.atproto.space.deleteRecord", &body)
+                .await?;
             "put out".to_string()
         }
     };
-    me.call(host, &m(call), &body).await?;
     Ok(format!("{who}: {done}\n"))
+}
+
+/// A group's members space.
+fn members_of(group: &str) -> String {
+    format!("at://{group}/space/{NS}.members/self")
 }
 
 async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<String> {
@@ -801,6 +816,61 @@ const RULES: [(&str, &str); 2] = [
     ("Stay on topic", "Post what the group is for."),
 ];
 
+/// What a seeded group's moderator may do: read the moderation queue,
+/// resolve what is in it, and label.
+const MODERATES: [&str; 3] = ["listSubjects", "resolveSubject", "applyLabel"];
+
+/// Makes `group` a moderator role, as the group: the role, its grant, and
+/// the roles that run the group able to give it.
+async fn moderator(me: &Client, host: &Host, group: &str) -> Result<()> {
+    let view = me.query(host, &m("getGroup"), &[("group", group)]).await?;
+    let listed = |v: &Value, field: &str| -> Vec<String> {
+        let items = v.as_array().into_iter().flatten();
+        items.map(|i| text(&i[field]).to_string()).collect()
+    };
+    let runs = json!("group.configure");
+    let bindings = view["bindings"].as_array().into_iter().flatten();
+    let mut grants: Vec<Value> = bindings
+        .map(|b| {
+            let mut assignable = listed(&b["assignable"], "role");
+            if b["actions"].as_array().is_some_and(|a| a.contains(&runs)) {
+                assignable.push("moderator".into());
+            }
+            json!({"role": b["role"], "scopes": listed(&b["scopes"], "scope"), "assignable": assignable})
+        })
+        .collect();
+    let scopes: Vec<String> = MODERATES
+        .iter()
+        .map(|lxm| format!("rpc:{}?aud=*", m(lxm)))
+        .collect();
+    grants.push(json!({"role": "moderator", "scopes": scopes, "assignable": []}));
+    let now = now_iso();
+    let role = json!({
+        "$type": m("role"),
+        "displayName": "Moderator",
+        "description": "Keeps the group to its rules.",
+        "createdAt": now,
+    });
+    let permissions = json!({"$type": m("permissions"), "grants": grants, "createdAt": now});
+    let write = |action: &str, collection: &str, rkey: &str, value: Value| {
+        json!({
+            "$type": format!("com.atproto.space.applyWrites#{action}"),
+            "collection": m(collection),
+            "rkey": rkey,
+            "value": value,
+        })
+    };
+    let writes = [
+        write("create", "role", "moderator", role),
+        write("update", "permissions", "self", permissions),
+    ];
+    let members = members_of(group);
+    let session = GroupSession::start(me, host, group, &members).await?;
+    let body = json!({"repo": group, "space": members, "writes": writes});
+    session.call("com.atproto.space.applyWrites", &body).await?;
+    Ok(())
+}
+
 async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Result<String> {
     let body = json!({
         "handle": handle,
@@ -821,14 +891,7 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
         written.await?;
         out += &format!("rule       {title}\n");
     }
-    let role = json!({
-        "group": group,
-        "role": "moderator",
-        "name": "Moderator",
-        "description": "Keeps the group to its rules.",
-        "actions": ["mod.read", "mod.resolve", "label"],
-    });
-    me.call(host, &m("putRole"), &role).await?;
+    moderator(me, host, &group).await?;
     out += "role       moderator\n";
     for who in invite {
         let person = me.resolve(host, who).await?;

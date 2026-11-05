@@ -5,7 +5,7 @@
     "main": {
       "type": "record",
       "key": "literal:self",
-      "description": "Group-wide grants for each role, in the members space: the OAuth scopes the role holds and the roles its holders may assign. Roles compose by union; there are no deny rules.",
+      "description": "Group-wide grants for each role, in the members space: the OAuth scopes the role holds and the roles its holders may assign. Roles compose by union; there are no deny rules. A writer changes the grants only of roles they may assign, adds no scope their own roles do not hold, and lets no role assign one they may not.",
       "record": {
         "type": "object",
         "required": [
@@ -18,46 +18,12 @@
             "description": "At most one entry per role.",
             "items": {
               "type": "ref",
-              "ref": "#grant"
+              "ref": "fyi.opensocial.defs#groupGrant"
             }
           },
           "createdAt": {
             "type": "string",
             "format": "datetime"
-          }
-        }
-      }
-    },
-    "grant": {
-      "type": "object",
-      "description": "Scopes a role is granted across the group, and the roles its holders may assign.",
-      "required": [
-        "role",
-        "scopes",
-        "assignable"
-      ],
-      "properties": {
-        "role": {
-          "type": "string",
-          "maxLength": 64,
-          "description": "A role id: the record key of a fyi.opensocial.role record."
-        },
-        "scopes": {
-          "type": "array",
-          "maxLength": 100,
-          "description": "OAuth scopes, one per item. May include permission sets. `repo:` scopes are the public-repo collections holders may write as the group.",
-          "items": {
-            "type": "ref",
-            "ref": "fyi.opensocial.defs#scopeRef"
-          }
-        },
-        "assignable": {
-          "type": "array",
-          "maxLength": 100,
-          "description": "Roles holders may grant or revoke, and whose holders they may eject.",
-          "items": {
-            "type": "ref",
-            "ref": "fyi.opensocial.defs#roleRef"
           }
         }
       }

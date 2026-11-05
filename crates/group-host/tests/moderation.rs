@@ -445,14 +445,11 @@ async fn holds_each_label_to_the_action_it_needs() {
         error(&call(&h, &bob, "applyLabel", label("spam")).await),
         (403, "Forbidden")
     );
-    let (status, said) = call(
-        &h,
-        &alice,
-        "putRole",
-        json!({"group": did, "role": "labeler", "name": "Labeler", "actions": ["label"]}),
-    )
-    .await;
-    assert_eq!(status, 200, "{said}");
+    use common::members::{granting, keep, role};
+    let labels = group_host::rbac::scope_of("label").unwrap();
+    keep(&h, &did, "role", "labeler", role("Labeler")).await;
+    let permissions = granting(&h, &did, "labeler", &[&labels], &[]);
+    keep(&h, &did, "permissions", "self", permissions).await;
     membership(&h, &did, &bob.did, &["member", "labeler"]).await;
     assert_eq!(call(&h, &bob, "applyLabel", label("spam")).await.0, 200);
     // `!hide` and `!takedown` remove content: those take `takedown`.

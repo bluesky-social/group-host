@@ -76,7 +76,7 @@ async fn group(h: &Running) -> (String, String, Authority) {
     permissions["grants"]
         .as_array_mut()
         .unwrap()
-        .push(json!({"role": "poster", "scopes": [{"scope": "repo:app.bsky.feed.post"}], "assignable": []}));
+        .push(json!({"role": "poster", "scopes": ["repo:app.bsky.feed.post"], "assignable": []}));
     write(
         h,
         &did,
@@ -100,7 +100,7 @@ async fn keeps_for_each_role_what_its_grants_hold() {
         "repo:app.bsky.feed.post?action=create",
         "repo:app.bsky.feed.like",
         "rpc:app.bsky.feed.getTimeline?aud=*",
-        "rpc:fyi.opensocial.ejectMember?aud=*",
+        "rpc:fyi.opensocial.listSubjects?aud=*",
         "rpc:*?aud=*",
         "blob:*/*",
         "transition:generic",
@@ -513,9 +513,6 @@ fn makes_a_permission_set_concrete() {
             "space:fyi.opensocial.invites?authority=*&skey=self&collection=fyi.opensocial.invite&action=read_self&action=create&action=update&action=delete".into(),
             "rpc:fyi.opensocial.listJoinRequests?aud=*".into(),
             "rpc:fyi.opensocial.denyJoinRequest?aud=*".into(),
-            "rpc:fyi.opensocial.admitMember?aud=*".into(),
-            "rpc:fyi.opensocial.assignRoles?aud=*".into(),
-            "rpc:fyi.opensocial.ejectMember?aud=*".into(),
             "rpc:fyi.opensocial.listInvites?aud=*".into(),
             format!("space:fyi.opensocial.meta?authority={did}&skey=self&collection=fyi.opensocial.access&{all}"),
             format!("space:fyi.opensocial.members?authority={did}&skey=self&collection=fyi.opensocial.space&collection=fyi.opensocial.access&{all}"),
