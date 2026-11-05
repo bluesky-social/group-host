@@ -10,6 +10,7 @@
 import { defineConfig } from '@playwright/test'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolving } from '../world.mjs'
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '../..')
 
@@ -29,7 +30,7 @@ export default defineConfig({
     // The console is reached as the PDS reaches it: over https, at the
     // harness's console hostname, with the harness's own certificate.
     ignoreHTTPSErrors: true,
-    launchOptions: { args: ['--host-resolver-rules=MAP console.group-host.internal 127.0.0.1'] },
+    launchOptions: { args: [resolving] },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

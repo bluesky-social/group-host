@@ -93,6 +93,11 @@ host's own command, `group-host move-host`, stands alone.
 
 ## The console
 
+- Before changing anything under `web/`, load the `ui` skill
+  (`.claude/skills/ui`): its house rules, and `just look`, which draws
+  any page in any state as pictures to open (signed in as anyone, a
+  group with nothing in it or everything, a dialog open, on a phone, in
+  the dark). Look at every state you touch before pushing.
 - The look is the console's own, all of it in `web/src/app.css` over the
   tokens: warm paper, sections as cards (`Section.svelte`), one colour
   that acts (`--primary`), and rounded headings. A page takes the look

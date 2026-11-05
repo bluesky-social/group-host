@@ -62,6 +62,33 @@ resolves it. Chromium comes with `cd harness && npx playwright install
 chromium`. A failed flow leaves its trace and a picture under
 `target/e2e/results`.
 
+## Looking at the console
+
+`just look` draws the console's pages as pictures, in any state, for an
+agent (or you) to open: it is how a page is seen to look right, where
+the flows only see it work. The `ui` skill (`.claude/skills/ui`) says
+which states to look at and what the pages are held to.
+
+```sh
+just look /g/riders.groups.test --as alice           # signed in as alice
+just look / --seed full --as bob --phone --dark     # a seeded state, on a phone, dark
+just look /g/lanterns.groups.test --as alice --click 'button[popovertarget=invite]'
+```
+
+It draws over a world as the flows' is (`harness/world.mjs`), behind the
+same https front, but with the console served by its dev server, so the
+pictures show the source as it is now, with no build. Signing in as an
+account goes through its PDS's own page, as a person does, and is kept
+for the next look. A seed (`--seed`, from `harness/look/seeds` or a
+file of your own) writes the state a page should show: a group in full,
+everything long, people waiting. Starting a world takes half a minute;
+`just look-up`, left running, keeps one for every look until ctrl-c,
+each seed written to it once. The pictures go to `target/look`
+(`--out` for another place), desktop light and phone dark unless asked
+otherwise, and it says when a page is wider than the screen, naming the
+element that runs past its edge. Its options are at the top of
+`harness/look/look.mjs`.
+
 ## The docs site
 
 `docs/` reads on its own, in the repository's pages; `docs-site/` makes

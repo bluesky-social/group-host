@@ -82,6 +82,26 @@ e2e *args: web
     {{cargo}} build -p group-host
     cd harness && npx playwright test -c e2e/playwright.config.mjs {{args}}
 
+# The console's pages as pictures in target/look, to open: any path, in
+# any state, signed in as anyone, on a phone or a desktop, light or dark,
+# a dialog open (harness/look/look.mjs, whose top says every option):
+# `just look /g/riders.groups.test --as alice`, `just look / --seed full
+# --as bob --click 'button[popovertarget=invite]'`. Drawn over a world of
+# its own, the console from its source as it is now, or over the one
+# `look-up` keeps.
+[positional-arguments]
+look *args:
+    {{cargo}} build -p group-host -p opensocial
+    cd web && npm run lex
+    node harness/look/look.mjs "$@"
+
+# A world for `just look` to draw over, kept up until ctrl-c: each look
+# then takes seconds, not the half minute starting one does.
+look-up:
+    {{cargo}} build -p group-host -p opensocial
+    cd web && npm run lex
+    node harness/look/look.mjs --up
+
 # The opensocial command.
 opensocial *args:
     {{cargo}} run -q -p opensocial -- {{args}}

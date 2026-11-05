@@ -142,6 +142,8 @@ An unknown command or flag fails with its usage; any failure exits 1.
 | `dev` | the console to use, over a world of its own: the reference PDS with alice, bob and harbor, the host, and the console at https://group-host.localtest.me ([development](../development.md#using-it)) |
 | `serve` | the host |
 | `web`, `web-dev` | the console built, or served as its source changes |
+| `look <path>… [options]` | draws the console's pages as pictures in `target/look`, in any state: `--as <account>`, `--seed <name\|file>`, `--click`, `--type`, `--element`, `--phone`, `--desktop`, `--light`, `--dark`, `--all` ([development](../development.md#looking-at-the-console)) |
+| `look-up` | a world for `look` to draw over, kept until ctrl-c |
 | `e2e <args>` | builds the console and the host, then runs the console's flows in Chromium over the reference PDS, as the `e2e` check does |
 | `opensocial <args>` | the command |
 | `docs` | the docs' links and anchors, as the `docs` check runs it |

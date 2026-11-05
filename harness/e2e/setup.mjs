@@ -3,19 +3,7 @@
 // the name harness/pds.mjs resolves for itself. Where everything is goes
 // to the flows in E2E_WORLD. Returns the teardown.
 
-import { spawn } from 'node:child_process'
-import { join } from 'node:path'
-import { line, root, start } from '../world.mjs'
-
-/// The console's front: harness/tls-proxy.mjs, with the certificate the
-/// PDS trusts, for the name only it resolves.
-const front = async (consolePort, net, children) => {
-  const proxy = spawn('node', [join(root, 'harness/tls-proxy.mjs'), net.console.cert, net.console.key, String(consolePort)], {
-    stdio: ['pipe', 'pipe', 'inherit'],
-  })
-  children.push(proxy)
-  return `https://${net.console.host}:${(await line(proxy, (l) => /^\d+$/.test(l.trim()))).trim()}`
-}
+import { start, tlsFront as front } from '../world.mjs'
 
 export default async function setup() {
   // harbor is an account of its own, which alice moves here to become a group;

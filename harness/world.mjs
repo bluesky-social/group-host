@@ -2,7 +2,8 @@
 // (harness/pds.mjs), the host over them, the console's build in front of
 // the host, and a group of alice's, made with service auth from her PDS, as
 // a member's own client would. The e2e flows run over one
-// (e2e/setup.mjs), behind a front of their own; `just dev` runs one for a
+// (e2e/setup.mjs), and `just look` over another (look/look.mjs), each
+// behind the https front here (`tlsFront`); `just dev` runs one for a
 // person to look at (dev.mjs), behind portless.
 
 import { spawn } from 'node:child_process'
@@ -38,6 +39,21 @@ const up = async (url) => {
   }
   throw new Error(`${url} never answered`)
 }
+
+/// The console's front for a browser the harness drives:
+/// harness/tls-proxy.mjs, with the certificate the PDS trusts, for the
+/// name only it resolves (harness/pds.mjs), which the browser is told
+/// (`resolving`).
+export const tlsFront = async (consolePort, net, children) => {
+  const proxy = spawn('node', [join(root, 'harness/tls-proxy.mjs'), net.console.cert, net.console.key, String(consolePort)], {
+    stdio: ['pipe', 'pipe', 'inherit'],
+  })
+  children.push(proxy)
+  return `https://${net.console.host}:${(await line(proxy, (l) => /^\d+$/.test(l.trim()))).trim()}`
+}
+
+/// Chromium's argument that sends the console's name to this machine.
+export const resolving = '--host-resolver-rules=MAP console.group-host.internal 127.0.0.1'
 
 /// `account`'s service auth for `aud` and `lxm`, from their own PDS.
 export const serviceAuth = async (pds, account, aud, lxm) => {
