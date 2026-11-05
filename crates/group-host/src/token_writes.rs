@@ -17,7 +17,7 @@ use crate::group::{join_policy, members_space, meta_space};
 use crate::lexicons::{check_record, validation};
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{may_write, writes_in};
-use crate::rbac::{self, NS, actions_for, grants, repo_collections_for};
+use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
 use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -474,6 +474,7 @@ impl Host {
         let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
         let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
         let everything = repo_collections_for(&grants, &roles).contains("*");
+        let access = Access::of(&access, uri);
         let writable = writes_in(&access, &roles, &acting.grant.member, everything);
         for w in writes {
             let (collection, _) = w.path();

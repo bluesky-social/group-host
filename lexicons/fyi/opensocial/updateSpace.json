@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Change a space's config: its name, who can read it, and which roles may act as the group in it. Requires space.configure.",
+      "description": "Change a space: its name in the group's index, and its access record, replaced whole. Requires space.configure.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -26,30 +26,13 @@
             "name": {
               "type": "string",
               "maxLength": 640,
-              "maxGraphemes": 64
+              "maxGraphemes": 64,
+              "description": "What the group calls it, kept in its index entry."
             },
-            "readableBy": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.defs#audience"
-              }
-            },
-            "credentialScopes": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.access#roleScopes"
-              },
-              "description": "Replace which roles may act as the group in this space, and for which collections. Omitted means unchanged."
-            },
-            "writableBy": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.defs#audience"
-              },
-              "description": "Who may write into the space in their own name: role ids, or 'public' for anyone signed in. Absent is any member. Empty puts it back to any member."
+            "access": {
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#accessConfig",
+              "description": "The access record the space has now. Omitted means unchanged."
             }
           }
         }
@@ -60,7 +43,21 @@
           "type": "object",
           "properties": {}
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "SpaceNotFound",
+          "description": "The group has no such space, or, to name it, none in its index."
+        },
+        {
+          "name": "UnknownRole",
+          "description": "A grant names a role that doesn't exist."
+        },
+        {
+          "name": "InvalidScope",
+          "description": "A grant isn't a space scope."
+        }
+      ]
     }
   }
 }

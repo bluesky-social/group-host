@@ -495,7 +495,7 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     // Unlisted, its profile is its readers' alone: a member's, not a
     // stranger's, nor anyone's not signed in.
     let meta = meta_space(&did);
-    let hide = json!({"group": did, "space": meta, "readableBy": [{"role": "member"}]});
+    let hide = json!({"group": did, "space": meta, "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
     assert_eq!(call(&h, &alice, "updateSpace", hide).await.0, 200);
     assert_eq!(image(&h, &did, &cid(&avatar), None).await.0, 404);
     assert_eq!(image(&h, &did, &cid(&avatar), Some(&carol)).await.0, 404);

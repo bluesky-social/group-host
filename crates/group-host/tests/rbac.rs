@@ -10,36 +10,114 @@ fn roles(names: &[&str]) -> Vec<String> {
     names.iter().map(|r| r.to_string()).collect()
 }
 
+const CALENDAR: &str = "at://did:plc:g/space/xyz.app.calendar/rides";
+
 #[test]
 fn reads_and_writes_by_the_access_record() {
-    let members = Access::of(&json!({"readableBy": [{"role": "member"}]}));
+    let read = "space:xyz.app.calendar?action=read";
+    let members = Access::of(
+        &json!({"grants": [{"role": "member", "scopes": [read]}, {"role": "guest", "scopes": []}]}),
+        CALENDAR,
+    );
     assert!(members.can_read(&roles(&["member"]), "did:plc:a"));
     assert!(!members.can_read(&[], "did:plc:a"));
-    // Any member writes, unless it says who.
+    assert!(!members.can_read(&roles(&["guest"]), "did:plc:a"));
+    // A member whose roles grant read writes, unless it says who.
     assert!(members.can_write_own(&roles(&["member"]), "did:plc:a"));
+    assert!(!members.can_write_own(&roles(&["guest"]), "did:plc:a"));
     assert!(!members.can_write_own(&[], "did:plc:a"));
-    let public = Access::of(
-        &json!({"readableBy": [{"role": "public"}], "writableBy": [{"role": "public"}]}),
-    );
+    // Public: anyone signed in reads; members granted nothing write nothing.
+    let public = Access::of(&json!({"public": true, "grants": []}), CALENDAR);
     assert!(public.can_read(&[], "did:plc:a"));
-    assert!(public.can_write_own(&[], "did:plc:a"));
-    let mods = Access::of(&json!({"readableBy": [], "writableBy": [{"role": "mod"}]}));
+    assert!(!public.can_write_own(&roles(&["member"]), "did:plc:a"));
+    let open = Access::of(
+        &json!({"public": true, "grants": [], "writableBy": [{"role": "public"}]}),
+        CALENDAR,
+    );
+    assert!(open.can_write_own(&[], "did:plc:a"));
+    let mods = Access::of(
+        &json!({"grants": [{"role": "member", "scopes": [read]}], "writableBy": [{"role": "mod"}]}),
+        CALENDAR,
+    );
     assert!(mods.can_write_own(&roles(&["mod"]), "did:plc:a"));
     assert!(!mods.can_write_own(&roles(&["member"]), "did:plc:a"));
 
-    // For chosen people: them while they are members, and its reviewers.
-    let chosen = Access::of(&json!({
-        "readableBy": [{"role": "public"}],
-        "people": [{"did": "did:plc:a"}],
-        "reviewers": [{"role": "admin"}],
-    }));
+    // A grant counts in its own space: read of another type, or of
+    // another skey, is no read here, and nothing counts where no space is.
+    for elsewhere in [
+        "space:xyz.app.forum?action=read",
+        "space:xyz.app.calendar?skey=laps&action=read",
+        "space:xyz.app.calendar?authority=did:plc:other&action=read",
+        "repo:xyz.event",
+    ] {
+        let access = Access::of(
+            &json!({"grants": [{"role": "member", "scopes": [elsewhere]}]}),
+            CALENDAR,
+        );
+        assert!(
+            !access.can_read(&roles(&["member"]), "did:plc:a"),
+            "{elsewhere}"
+        );
+    }
+    for here in [
+        "space:*?action=read",
+        "space:xyz.app.calendar?skey=rides",
+        "space:xyz.app.calendar?authority=did:plc:g&action=read",
+    ] {
+        let access = Access::of(
+            &json!({"grants": [{"role": "member", "scopes": [here]}]}),
+            CALENDAR,
+        );
+        assert!(access.can_read(&roles(&["member"]), "did:plc:a"), "{here}");
+    }
+    let nowhere = Access::of(
+        &json!({"grants": [{"role": "member", "scopes": [read]}]}),
+        "nowhere",
+    );
+    assert!(!nowhere.can_read(&roles(&["member"]), "did:plc:a"));
+
+    // What a role writes as the group: each collection a scope names, as
+    // its actions say, every write when it names none.
+    let writers = Access::of(
+        &json!({"grants": [
+            {"role": "admin", "scopes": ["space:xyz.app.calendar?collection=xyz.event&collection=xyz.rsvp", "space:xyz.app.forum?collection=xyz.post"]},
+            {"role": "member", "scopes": ["space:xyz.app.calendar?collection=xyz.rsvp&action=create", read]},
+        ]}),
+        CALENDAR,
+    );
+    let writes = writers.writes(&roles(&["admin", "member"]));
+    let as_lists: Vec<(&str, Vec<&str>)> = writes
+        .iter()
+        .map(|(c, a)| (c.as_str(), a.iter().map(String::as_str).collect()))
+        .collect();
+    assert_eq!(
+        as_lists,
+        [
+            ("xyz.event", vec!["create", "delete", "update"]),
+            ("xyz.rsvp", vec!["create", "delete", "update"]),
+        ]
+    );
+    let member = writers.writes(&roles(&["member"]));
+    assert_eq!(member["xyz.rsvp"].len(), 1);
+    assert!(writers.can_read(&roles(&["admin"]), "did:plc:b"));
+
+    // For chosen people: them while they are members, and the roles
+    // granted read.
+    let chosen = Access::of(
+        &json!({
+            "public": true,
+            "grants": [{"role": "admin", "scopes": [read]}],
+            "people": [{"did": "did:plc:a"}],
+        }),
+        CALENDAR,
+    );
     assert!(chosen.can_read(&roles(&["member"]), "did:plc:a"));
     assert!(!chosen.can_read(&[], "did:plc:a"));
     assert!(!chosen.can_read(&roles(&["member"]), "did:plc:b"));
     assert!(chosen.can_read(&roles(&["admin"]), "did:plc:b"));
     assert!(chosen.can_write_own(&roles(&["member"]), "did:plc:a"));
     assert!(!chosen.can_write_own(&roles(&["admin"]), "did:plc:b"));
-    assert_eq!(Access::of(&json!({})), Access::default());
+    assert_eq!(Access::of(&json!({}), "nowhere"), Access::default());
     assert_eq!(
         listed(&json!({"x": [{"role": 1}, {"role": "a"}]}), "x", "role"),
         ["a"]

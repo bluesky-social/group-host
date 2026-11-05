@@ -42,20 +42,19 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
     let lxm = format!("{NS}.createSpace");
     let body = json!({
         "group": did,
-        "spaceType": CALENDAR,
+        "type": CALENDAR,
         "skey": "rides",
-        "readableBy": [{"role": "member"}],
-        "credentialScopes": [
-            {"role": "member", "scopes": [{"collection": format!("{EVENT}?action=create")}]},
-            {"role": "admin", "scopes": [{"collection": "*"}]},
-        ],
+        "access": {"grants": [
+            {"role": "member", "scopes": [format!("space:{CALENDAR}?action=read&collection={EVENT}&action=create")]},
+            {"role": "admin", "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        ]},
     });
     let (status, made) = post(h, &lxm, &body, &[auth(h, &alice, &lxm)]).await;
     assert_eq!(status, 200, "{made}");
     membership(h, &did, &bob.did, &["member"]).await;
     (
         did,
-        made["uri"].as_str().unwrap().to_string(),
+        made["space"].as_str().unwrap().to_string(),
         [alice, bob, carol],
     )
 }
@@ -290,12 +289,10 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
 async fn publishes_only_as_the_role_may_write_in_the_space() {
     let h = start(&[], false).await;
     let (did, calendar, [alice, bob, _]) = group(&h).await;
-    let access_of = |scopes: Json| {
+    let access_of = |scope: String| {
         json!({
             "$type": format!("{NS}.access"),
-            "readableBy": [{"role": "member"}],
-            "credentialScopes": [{"role": "member", "scopes": scopes}],
-            "createdAt": "2026-11-03T00:00:00Z",
+            "grants": [{"role": "member", "scopes": [format!("space:{CALENDAR}?action=read"), scope]}],
         })
     };
     let set = async |access: Json| {
@@ -307,7 +304,7 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
         h.host.space_write(&did, &calendar, &[write]).await.unwrap();
     };
     // Bob may write events every way, and takes a token while he may.
-    set(access_of(json!([{"collection": EVENT}]))).await;
+    set(access_of(format!("space:{CALENDAR}?collection={EVENT}"))).await;
     let app = App::new("console");
     let said = group_auth(&h, &app, &bob, &json!({"group": did, "space": calendar})).await;
     let token = said.body["accessJwt"].as_str().unwrap().to_string();
@@ -317,9 +314,9 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
     // Now only add them: in the repo too.
-    set(access_of(
-        json!([{"collection": format!("{EVENT}?action=create")}]),
-    ))
+    set(access_of(format!(
+        "space:{CALENDAR}?collection={EVENT}&action=create"
+    )))
     .await;
     let said = app
         .call(&h, "com.atproto.repo.putRecord", &token, Some(&put("two")))
@@ -350,10 +347,8 @@ async fn in_a_space_for_chosen_people_gives_those_of_them_who_may_do_anything() 
     // decide; Carol an admin but not one of them.
     let access = json!({
         "$type": format!("{NS}.access"),
-        "readableBy": [],
+        "grants": [{"role": "member", "scopes": [format!("space:{CALENDAR}?collection={EVENT}")]}],
         "people": [{"did": alice.did}, {"did": bob.did}],
-        "credentialScopes": [{"role": "member", "scopes": [{"collection": EVENT}]}],
-        "createdAt": "2026-11-03T00:00:00Z",
     });
     let write = Write::Update {
         collection: format!("{NS}.access"),

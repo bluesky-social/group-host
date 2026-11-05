@@ -5,35 +5,26 @@
     "main": {
       "type": "record",
       "key": "literal:self",
-      "description": "Who may read this space. Present in every space under the group. The group authority issues space credentials according to this record and nothing else.",
+      "description": "Who can access this space, in every space under the group. Grants apply only to this space. Members whose roles grant read may obtain space credentials and write their own records here. The group authority issues space credentials according to this record and nothing else.",
       "record": {
         "type": "object",
         "required": [
-          "readableBy",
-          "createdAt"
+          "grants"
         ],
         "properties": {
-          "readableBy": {
+          "public": {
+            "type": "boolean",
+            "default": false,
+            "description": "Anyone signed in can read, member or not."
+          },
+          "grants": {
             "type": "array",
+            "maxLength": 100,
+            "description": "At most one entry per role.",
             "items": {
               "type": "ref",
-              "ref": "fyi.opensocial.defs#audience"
-            },
-            "description": "Role ids that may read the space, or the literal string 'public' meaning any authenticated requester.",
-            "maxLength": 50
-          },
-          "credentialScopes": {
-            "type": "array",
-            "items": {
-              "type": "ref",
-              "ref": "#roleScopes"
-            },
-            "description": "Which OAuth scopes for the group DID each role may request in this space. A role that may write a kind of record as the group here may also publish that kind, as the group, in its public repo; '*' is any kind, in both.",
-            "maxLength": 50
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "datetime"
+              "ref": "fyi.opensocial.defs#spaceGrant"
+            }
           },
           "writableBy": {
             "type": "array",
@@ -41,32 +32,18 @@
               "type": "ref",
               "ref": "fyi.opensocial.defs#audience"
             },
-            "description": "Who may write into the space in their own name: role ids, or 'public' for anyone signed in. Absent is any member.",
+            "description": "Who may write into the space in their own name, when not every member whose roles grant read: role ids, or 'public' for anyone signed in.",
             "maxLength": 50
-          }
-        }
-      }
-    },
-    "roleScopes": {
-      "type": "object",
-      "required": [
-        "role",
-        "scopes"
-      ],
-      "properties": {
-        "role": {
-          "type": "string",
-          "maxLength": 64,
-          "description": "A role id: the record key of a fyi.opensocial.role record."
-        },
-        "scopes": {
-          "type": "array",
-          "items": {
-            "type": "ref",
-            "ref": "fyi.opensocial.defs#collectionRef"
           },
-          "description": "Collections this role may write in the space as the group: an NSID, or * for any. Every write, unless the grant names some: xyz.task?action=create lets the role add tasks but not change or delete them.",
-          "maxLength": 100
+          "people": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#accountRef"
+            },
+            "description": "A space for chosen people: those who read it and write in it in their own name while they are members, beside the roles granted read, who read it.",
+            "maxLength": 100
+          }
         }
       }
     }

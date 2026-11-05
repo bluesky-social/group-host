@@ -156,7 +156,7 @@ impl Host {
         // A group's space with an access record: the record decides,
         // against the user's roles in the group.
         let access = self.group_record(&space.authority, uri, &format!("{NS}.access"), "self")?;
-        if let Some(access) = access.as_ref().map(rbac::Access::of) {
+        if let Some(access) = access.map(|a| rbac::Access::of(&a, uri)) {
             let roles = self.roles(&space.authority, user)?;
             let by_record = match access_kind {
                 Access::Read => access.can_read(&roles, user),

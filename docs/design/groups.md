@@ -77,11 +77,13 @@ With no owner to ask, "may this person do that?" is answered from the
 group's records.
 
 A member's roles are the `roles` list of their membership in `members`. A
-space's access record says who reads it (`readableBy`) and who writes in
-it in their own name (`writableBy`, any member when absent), as lists of
-roles; `public` among them means anyone signed in. An access record can
-instead name `people`, the chosen people a space is for, with `reviewers`,
-the roles that may also read it.
+space's access record grants each role OAuth scopes in that space
+(`grants`, one entry a role), and may make it `public`, which means
+anyone signed in. A role granted `read` there reads it, and its members
+write there in their own name, unless `writableBy` names who may. A role
+granted a space scope naming collections writes those as the group
+there. An access record can also name `people`, the chosen people a
+space is for, by DID; the roles granted `read` there read it too.
 
 The permissions record in `members` grants each role OAuth scopes and the
 roles it may assign. Each of the host's twelve actions, such as `invite`,
@@ -101,9 +103,14 @@ writes in the spaces of a group that is switched off.
 
 Details:
 
-- An access record's `credentialScopes` say which collections each role
-  writes in that space as the group; in `meta`, `admin` writes the profile
-  and rules.
+- As made, `meta` is public unless `createGroup` names its readers, and
+  its access record grants `admin`
+  `space:fyi.opensocial.meta?collection=fyi.opensocial.profile&collection=fyi.opensocial.rule`,
+  so admins write the profile and rules as the group. `members` grants
+  `member` `space:fyi.opensocial.members?action=read`.
+- A grant's scopes are read as a token's are: one naming another type,
+  key or authority grants nothing in the space; one naming no collection
+  writes nothing as the group.
 - A missing action is refused with `403 Forbidden`, "missing <action>".
 
 ## What each person sees, and finding a group
@@ -170,26 +177,33 @@ Details:
   an `rkey` changes the rule of that key, and refuses a key no rule has.
 - A rule's title is 100 characters at most, its text 2,000.
 - The console's settings set pictures through `uploadImage` then
-  `updateProfile`, and visibility by setting `meta`'s readers to `public`
-  or `member` through `updateSpace`.
+  `updateProfile`, and visibility by making `meta` public or not through
+  `updateSpace`, members granted `read` there either way.
 
 ## More spaces
 
 A group may want more places, such as one only its admins read. Each
-further space has an access record and an index entry in `members` that
-apps read to find it. `createSpace` (for `space.create`) makes one from a
-type, its readers, and optionally its writers, key, name and credential
-scopes. A space is made whole or not at all: if its access record or
-its index entry cannot be written, the host ends it again, and its key
-is free to use. `updateSpace` (for `space.configure`) changes those,
-and changes nothing when it cannot change them all. Both refuse a
-`readableBy` that names nobody, and a name over 64 characters.
-`deleteSpace` (for `space.delete`) removes the index entry, tells the
-space's syncers, and deletes the space and the group's repo in it. What
-members wrote there stays theirs at their PDSes.
+further space has an access record and, unless it is left out, an index
+entry in `members` that apps read to find it. `createSpace` (for
+`space.create`) makes one from a `type`, its `access` (its grants,
+whether it is public, and who writes there in their own name), and
+optionally its key, a name for its entry, and `index: false` to leave it
+out of the index. It answers the space and strong references to the
+access record and the index entry it wrote. A space is made whole or not
+at all: if its access record or its index entry cannot be written, the
+host ends it again, and its key is free to use. `updateSpace` (for
+`space.configure`) replaces the access record whole and renames the
+entry, and changes nothing when it cannot change them all. Both refuse a
+grant of a role the group has not (`UnknownRole`), one that is no space
+scope (`InvalidScope`), two grants of one role, an access record that
+lets nobody but the group read, and a name over 64 characters.
+`deleteSpace` (for `space.delete`) removes the index entry if there is
+one, tells the space's syncers, and deletes the space and the group's
+repo in it. What members wrote there stays theirs at their PDSes.
 
 Two spaces carry the group itself, so their rules are fixed: `meta` and
-`members` cannot be deleted, `members` must stay readable by `member`, and
+`members` cannot be made again or deleted (`ReservedSpace`), `members`
+must stay granting `member` `read`, and
 who joins it by writing there cannot change. A space for chosen people is
 theirs, and the group can neither change nor delete it.
 

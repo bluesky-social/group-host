@@ -53,10 +53,28 @@ const retracted = new Set([
   'fyi.opensocial.requestJoin#main.input.invite',
   'fyi.opensocial.invite#main.record.by',
   'fyi.opensocial.getActorInvites#actorInvite.by',
+  ...['readableBy', 'credentialScopes', 'createdAt'].map((f) => `fyi.opensocial.access#main.record.${f}`),
+  ...['readableBy', 'credentialScopes', 'writableBy', 'spaceType'].map((f) => `fyi.opensocial.createSpace#main.input.${f}`),
+  'fyi.opensocial.createSpace#main.output.uri',
+  ...['readableBy', 'credentialScopes', 'writableBy'].map((f) => `fyi.opensocial.updateSpace#main.input.${f}`),
+  ...['readableBy', 'credentialScopes'].map((f) => `fyi.opensocial.defs#spaceView.${f}`),
+])
+
+// Where the opensocial proposal's shape, which the host takes, differs
+// from the style above: each finding, exactly as said. A space grant's
+// scopes are bare strings, as OAuth scopes are; createSpace names a
+// space's `type` so; and the access record and createSpace require what
+// the proposal's do.
+const proposal = new Set([
+  'fyi.opensocial.defs#spaceGrant.scopes: an array holds objects, which can grow, not bare values',
+  'fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type',
+  'fyi.opensocial.access#main.record: grants is required now: only new optional fields',
+  ...['type', 'access'].map((f) => `fyi.opensocial.createSpace#main.input: ${f} is required now: only new optional fields`),
+  ...['space', 'access'].map((f) => `fyi.opensocial.createSpace#main.output: ${f} is required now: only new optional fields`),
 ])
 
 const problems = []
-const say = (at, what) => retracted.has(at) || problems.push(`${at}: ${what}`)
+const say = (at, what) => retracted.has(at) || proposal.has(`${at}: ${what}`) || problems.push(`${at}: ${what}`)
 
 // goat (github.com/bluesky-social/goat), one finding a line.
 // The schemas held to the guide are this host's own. Those under

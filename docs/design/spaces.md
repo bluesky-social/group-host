@@ -28,9 +28,11 @@ listed on the network points at its meta space from a
 `fyi.opensocial.declaration` record in its public repo.
 
 A member holding `space.create` makes more with
-`fyi.opensocial.createSpace`; one holding `space.delete` ends one with
-`fyi.opensocial.deleteSpace`. Meta and members cannot be deleted. A space
-for chosen people is changed only by them ([groups](groups.md)).
+`fyi.opensocial.createSpace`, each with its access record and, unless
+asked not to, an index entry; one holding `space.delete` ends one with
+`fyi.opensocial.deleteSpace`, listed or not. Meta and members are neither
+made nor deleted so. A space for chosen people is changed only by them
+([groups](groups.md)).
 
 ## Who writes where
 
@@ -71,10 +73,13 @@ Details:
 Members and roles change, so a space's rule cannot be a fixed list. Each
 space holds an access record, `fyi.opensocial.access/self`, in the
 group's own repo there, and the host asks it against the user's roles on
-every request. A user may read if `readableBy` names `"public"` or a role
-they hold. Any member may write in their own name, unless `writableBy`
-names who may. In a space of chosen people (`people`), those people read
-and write while they are members, and reviewers read.
+every request. Its `grants` give each role OAuth scopes in that space and
+no other, such as `space:<type>?action=read`. A user may read if the
+record is `public`, which means anyone signed in, never anyone at all, or
+if a role they hold is granted `read` there. A member whose roles grant
+`read` may write in their own name, unless `writableBy` names who may.
+In a space of chosen people (`people`, by DID), those people read and
+write while they are members, and the roles granted `read` read too.
 
 The group itself may do anything in its spaces. Where the access record
 does not allow a user, a grant may; grants come only from moving a group

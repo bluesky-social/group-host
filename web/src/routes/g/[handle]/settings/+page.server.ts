@@ -28,9 +28,9 @@ export const load: PageServerLoad = async (event) => {
 	const tokens = configures ? await xrpc<typeof listGroupTokens.main>(event, 'fyi.opensocial.listGroupTokens', { group }) : null;
 	const recovery = configures ? await xrpc<typeof listRecoveryKeys.main>(event, 'fyi.opensocial.listRecoveryKeys', { group }).catch(() => null) : null;
 	const passwords = await xrpc<typeof listAppPasswords.main>(event, 'fyi.opensocial.listAppPasswords', { group }).catch(() => null);
-	// Listed while anyone may read its profile: its meta space's readers.
+	// Listed while anyone may read its profile: its meta space is public.
 	const meta = view.spaces?.find((s) => s.uri === view.group.meta);
-	const listed = meta?.readableBy?.some((a) => a.role === 'public') ?? false;
+	const listed = meta?.public ?? false;
 	return { ...view, configures, tokens, recovery, passwords: passwords?.passwords ?? null, listed };
 };
 
@@ -73,9 +73,14 @@ export const actions: Actions = {
 	},
 	visibility: async (event) => {
 		const { group, form } = await asked(event);
-		const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
-		const readableBy = [{ role: text(form, 'seen') === 'public' ? 'public' : 'member' }];
-		return act(event, 'fyi.opensocial.updateSpace', { group, space: now.meta, readableBy });
+		const { group: now, spaces } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
+		const meta = spaces?.find((s) => s.uri === now.meta);
+		// Members read it either way: as anyone signed in, or by their grant.
+		const read = 'space:fyi.opensocial.meta?action=read';
+		const member = meta?.grants?.find((g) => g.role === 'member');
+		const grants = [...(meta?.grants ?? []).filter((g) => g !== member), { role: 'member', scopes: [...new Set([...(member?.scopes ?? []), read])] }];
+		const access = { public: text(form, 'seen') === 'public', grants, writableBy: meta?.writableBy };
+		return act(event, 'fyi.opensocial.updateSpace', { group, space: now.meta, access });
 	},
 	profile: async (event) => {
 		const { group, form } = await asked(event);

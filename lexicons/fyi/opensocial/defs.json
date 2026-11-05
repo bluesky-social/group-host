@@ -487,12 +487,16 @@
         "name": {
           "type": "string"
         },
-        "readableBy": {
+        "public": {
+          "type": "boolean",
+          "description": "Whether anyone signed in may read it, when the viewer may read the space."
+        },
+        "grants": {
           "type": "array",
-          "description": "The space's read gate, when the viewer may read the space.",
+          "description": "The scopes each role is granted there, when the viewer may read the space.",
           "items": {
             "type": "ref",
-            "ref": "#audience"
+            "ref": "#spaceGrant"
           }
         },
         "people": {
@@ -505,18 +509,10 @@
         },
         "writableBy": {
           "type": "array",
-          "description": "Who may write there in their own name, when the viewer may read the space. Absent is any member.",
+          "description": "Who may write there in their own name, when the viewer may read the space. Absent is every member whose roles grant read.",
           "items": {
             "type": "ref",
             "ref": "#audience"
-          }
-        },
-        "credentialScopes": {
-          "type": "array",
-          "description": "What each role may write there as the group, when the viewer may read the space.",
-          "items": {
-            "type": "ref",
-            "ref": "fyi.opensocial.access#roleScopes"
           }
         },
         "spaceType": {
@@ -729,6 +725,62 @@
           "type": "string",
           "maxLength": 640,
           "maxGraphemes": 64
+        }
+      }
+    },
+    "spaceGrant": {
+      "type": "object",
+      "description": "Scopes a role is granted in one space.",
+      "required": [
+        "role",
+        "scopes"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "format": "record-key",
+          "maxLength": 512,
+          "description": "A role id: the record key of a fyi.opensocial.role record."
+        },
+        "scopes": {
+          "type": "array",
+          "maxLength": 100,
+          "description": "OAuth scopes, one per item: space scopes, read against this space. One granting read lets the role read the space; one naming collections lets it write those as the group here.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      }
+    },
+    "accessConfig": {
+      "type": "object",
+      "description": "Contents of an access record.",
+      "required": [
+        "grants"
+      ],
+      "properties": {
+        "public": {
+          "type": "boolean",
+          "default": false
+        },
+        "grants": {
+          "type": "array",
+          "maxLength": 100,
+          "items": {
+            "type": "ref",
+            "ref": "#spaceGrant"
+          }
+        },
+        "writableBy": {
+          "type": "array",
+          "maxLength": 50,
+          "description": "Who may write into the space in their own name, when not every member whose roles grant read: role ids, or 'public' for anyone signed in. Absent or empty is every such member.",
+          "items": {
+            "type": "ref",
+            "ref": "#audience"
+          }
         }
       }
     }

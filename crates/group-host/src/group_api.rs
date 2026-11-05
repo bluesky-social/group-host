@@ -7,7 +7,7 @@
 use crate::Host;
 use crate::api::{Params, param};
 use crate::group::{Made, NewGroup, members_space, meta_space};
-use crate::rbac::{self, Access, NS, actions_for, grants, listed, repo_collections_for};
+use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for};
 use crate::space_api::{service_caller, unauthorized};
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -216,7 +216,7 @@ pub async fn get_group(
     let me_or = me.as_deref().unwrap_or_default();
     let reads = |space: &str| -> Result<bool, XrpcError> {
         let access = record(space, "access", "self")?;
-        Ok(access.is_some_and(|a| Access::of(&a).can_read(&roles, me_or)))
+        Ok(access.is_some_and(|a| Access::of(&a, space).can_read(&roles, me_or)))
     };
     let reads_meta = reads(&meta)?;
     let reads_members = me.is_some() && reads(&members)?;
@@ -308,8 +308,8 @@ pub async fn get_group(
         let access = host
             .group_record(group, uri, &format!("{NS}.access"), "self")
             .map_err(XrpcError::internal)?;
-        if let Some(access) = access.filter(|a| Access::of(a).can_read(&roles, me_or)) {
-            for key in ["readableBy", "people", "writableBy", "credentialScopes"] {
+        if let Some(access) = access.filter(|a| Access::of(a, uri).can_read(&roles, me_or)) {
+            for key in ["public", "grants", "people", "writableBy"] {
                 if let Some(v) = access.get(key) {
                     space[key] = v.clone();
                 }
@@ -371,8 +371,7 @@ pub async fn list_groups(State(host): State<Arc<Host>>) -> Answer {
             let access = host
                 .group_record(did, &meta, &format!("{NS}.access"), "self")
                 .map_err(XrpcError::internal)?;
-            if access.is_some_and(|a| Access::of(&a).readable_by.iter().any(|r| r == rbac::PUBLIC))
-            {
+            if access.is_some_and(|a| Access::of(&a, &meta).public) {
                 let profile = host
                     .group_record(did, &meta, &format!("{NS}.profile"), "self")
                     .map_err(XrpcError::internal)?;

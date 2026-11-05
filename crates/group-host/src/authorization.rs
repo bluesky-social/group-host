@@ -101,7 +101,7 @@ impl Host {
         let (meta, access) = (meta_space(group), format!("{NS}.access"));
         let access = self.group_record(group, &meta, &access, "self");
         let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        if Access::of(&access).can_read(&roles, member) {
+        if Access::of(&access, &meta).can_read(&roles, member) {
             let profile = self.group_record(group, &meta, &format!("{NS}.profile"), "self");
             let profile = profile.map_err(XrpcError::internal)?.unwrap_or_default();
             if let Some(name) = profile.get("displayName") {

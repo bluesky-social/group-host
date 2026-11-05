@@ -6,7 +6,7 @@
 //! access record, against the reader's roles.
 
 use crate::Host;
-use crate::rbac::{ACTIONS, Grant, NS, listed};
+use crate::rbac::{ACTIONS, Grant, NS, PUBLIC, listed};
 use crate::repo::{Write, invalid};
 use crate::store::Record;
 use crate::time::{iso, now_millis};
@@ -93,8 +93,24 @@ fn put(collection: &str, rkey: &str, value: Value) -> Write {
     }
 }
 
-fn audience(roles: &[String]) -> Value {
-    roles.iter().map(|r| json!({ "role": r })).collect()
+/// The meta space's access record for `readers`, roles or `public` for
+/// anyone signed in: each role reading it, and admins writing its profile
+/// and rules as the group.
+fn meta_access(readers: &[String]) -> Value {
+    let meta = format!("{NS}.meta");
+    let read = format!("space:{meta}?action=read");
+    let write = format!("space:{meta}?collection={NS}.profile&collection={NS}.rule");
+    let mut grants: Vec<Value> = readers
+        .iter()
+        .filter(|r| *r != PUBLIC && *r != "admin")
+        .map(|r| json!({"role": r, "scopes": [read]}))
+        .collect();
+    grants.push(json!({"role": "admin", "scopes": [write]}));
+    let mut access = json!({"$type": format!("{NS}.access"), "grants": grants});
+    if readers.iter().any(|r| r == PUBLIC) {
+        access["public"] = json!(true);
+    }
+    access
 }
 
 /// How a new group lets people in, who reads its meta, and who runs it.
@@ -200,17 +216,7 @@ impl Host {
         let meta_writes = [
             put(&c("profile"), "self", profile),
             put(&c("labeler"), "self", labeler(&at)),
-            // Admins write the profile and rules as the group.
-            put(
-                &c("access"),
-                "self",
-                json!({
-                    "$type": c("access"),
-                    "readableBy": audience(readers),
-                    "credentialScopes": [{"role": "admin", "scopes": [{"collection": c("profile")}, {"collection": c("rule")}]}],
-                    "createdAt": at,
-                }),
-            ),
+            put(&c("access"), "self", meta_access(readers)),
         ];
         self.space_write(&did, &meta, &meta_writes).await?;
         let admin = Grant::with("admin", &ACTIONS, &["member"], &["*"]);
@@ -219,7 +225,7 @@ impl Host {
             put(
                 &c("access"),
                 "self",
-                json!({"$type": c("access"), "readableBy": [{"role": "member"}], "createdAt": at}),
+                json!({"$type": c("access"), "grants": [{"role": "member", "scopes": [format!("space:{}?action=read", c("members"))]}]}),
             ),
             put(
                 &c("role"),

@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Remove a space. Requires space.delete. Refuses on the meta and members spaces.",
+      "description": "Delete a group space and its index entry. Requires space.delete.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -28,7 +28,12 @@
       },
       "errors": [
         {
-          "name": "WellKnownSpace"
+          "name": "SpaceNotFound",
+          "description": "The group has no such space."
+        },
+        {
+          "name": "ReservedSpace",
+          "description": "The meta and members spaces can't be created or deleted."
         }
       ],
       "output": {

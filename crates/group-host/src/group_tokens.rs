@@ -3,8 +3,8 @@
 //! `getGroupAuth` gives a member, signed in as themselves, a short-lived
 //! token for the group, bound to their DPoP key, to write in one of its
 //! spaces what their roles there may write as the group, and the same
-//! kinds of record in its public repo, as the access record's
-//! `credentialScopes` say a role may publish what it writes. No group
+//! kinds of record in its public repo, as a role that may write a kind of
+//! record as the group in a space, by its grant there, may publish it. No group
 //! password is involved, and there is nothing to refresh.
 //!
 //! `listGroupTokens` shows a group's configurers every grant that acts as
@@ -16,7 +16,7 @@ use crate::api::{Params, invalid, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
 use crate::oauth_resource::Refusal;
-use crate::oauth_scope::{writes_for, writes_in};
+use crate::oauth_scope::writes_in;
 use crate::oauth_store::{Grant, Tokens};
 use crate::rbac::{Access, NS};
 use crate::time::{iso, now_millis};
@@ -66,8 +66,9 @@ impl Host {
             let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
             let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
             // A space for chosen people is theirs, not the group's to publish.
-            let open = Access::of(&access).people.is_none();
-            for (collection, actions) in writes_for(&access, roles).into_iter().filter(|_| open) {
+            let access = Access::of(&access, uri);
+            let open = access.people.is_none();
+            for (collection, actions) in access.writes(roles).into_iter().filter(|_| open) {
                 out.entry(collection).or_default().extend(actions);
             }
         }
@@ -129,7 +130,7 @@ pub async fn get_group_auth(
     let access = host.group_record(group, uri, &format!("{NS}.access"), "self");
     let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
     let everything = host.may_issue(group, &me)?;
-    let writes = writes_in(&access, &roles, &me, everything);
+    let writes = writes_in(&Access::of(&access, uri), &roles, &me, everything);
     if writes.is_empty() {
         return Err(forbidden("no role of yours may act as the group in this space").into());
     }

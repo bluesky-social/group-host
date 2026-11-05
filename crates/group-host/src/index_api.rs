@@ -55,7 +55,7 @@ async fn readable(
         Some(me) => host.roles(group, me).map_err(XrpcError::internal)?,
         None => Vec::new(),
     };
-    if !Access::of(&access).can_read(&roles, me.as_deref().unwrap_or_default()) {
+    if !Access::of(&access, space).can_read(&roles, me.as_deref().unwrap_or_default()) {
         return Err(XrpcError::new(
             StatusCode::UNAUTHORIZED,
             "NotAuthorized",

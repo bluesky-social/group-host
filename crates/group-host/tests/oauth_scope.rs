@@ -7,7 +7,8 @@ use common::groups::*;
 use common::spaces::*;
 use common::{Running, start};
 use group_host::group::members_space;
-use group_host::oauth_scope::{SpaceScope, concrete, writes_for};
+use group_host::oauth_scope::{SpaceScope, concrete};
+use group_host::rbac::Access;
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
 
@@ -53,13 +54,12 @@ async fn group(h: &Running) -> (String, String, Authority) {
     let lxm = format!("{NS}.createSpace");
     let body = json!({
         "group": did,
-        "spaceType": CALENDAR,
+        "type": CALENDAR,
         "skey": "rides",
-        "readableBy": [{"role": "member"}],
-        "credentialScopes": [
-            {"role": "member", "scopes": [{"collection": format!("{EVENT}?action=create")}]},
-            {"role": "admin", "scopes": [{"collection": "*"}]},
-        ],
+        "access": {"grants": [
+            {"role": "member", "scopes": [format!("space:{CALENDAR}?action=read&collection={EVENT}&action=create")]},
+            {"role": "admin", "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        ]},
     });
     let (status, made) = post(h, &lxm, &body, &[auth(h, &alice, &lxm)]).await;
     assert_eq!(status, 200, "{made}");
@@ -86,7 +86,7 @@ async fn group(h: &Running) -> (String, String, Authority) {
         permissions,
     )
     .await;
-    (did, made["uri"].as_str().unwrap().to_string(), alice)
+    (did, made["space"].as_str().unwrap().to_string(), alice)
 }
 
 #[tokio::test]
@@ -335,9 +335,8 @@ async fn in_a_space_for_chosen_people_reads_for_them_and_writes_for_those_who_ma
     let (did, uri, alice) = group(&h).await;
     let access = json!({
         "$type": format!("{NS}.access"),
-        "readableBy": [],
+        "grants": [],
         "people": [{"did": alice.did}],
-        "createdAt": "2026-11-03T00:00:00Z",
     });
     write(&h, &did, &uri, &format!("{NS}.access"), "self", access).await;
     let narrow = |r: &[&str], who: &str, scope: &str| {
@@ -436,15 +435,21 @@ fn reads_a_space_scope() {
 
 #[test]
 fn unions_a_roles_writes() {
-    let access = json!({"credentialScopes": [
-        {"role": "a", "scopes": [{"collection": "x?action=create"}, {"collection": "y"}]},
-        {"role": "b", "scopes": [{"collection": "x?action=delete&action=other"}]},
-        {"role": "c", "scopes": [{"collection": "z"}]},
+    let space = "at://did:plc:g/space/com.example.calendar/rides";
+    let at = "space:com.example.calendar";
+    let access = json!({"grants": [
+        {"role": "a", "scopes": [format!("{at}?collection=x&action=create"), format!("{at}?collection=y")]},
+        {"role": "b", "scopes": [format!("{at}?collection=x&action=delete&action=other")]},
+        {"role": "c", "scopes": [format!("{at}?collection=z")]},
     ]});
-    let writes = writes_for(&access, &roles(&["a", "b"]));
+    let writes = Access::of(&access, space).writes(&roles(&["a", "b"]));
     let x: Vec<&str> = writes["x"].iter().map(String::as_str).collect();
     assert_eq!(x, ["create", "delete"]);
     assert_eq!(writes["y"].len(), 3);
     assert!(!writes.contains_key("z"));
-    assert!(writes_for(&json!({}), &roles(&["a"])).is_empty());
+    assert!(
+        Access::of(&json!({}), space)
+            .writes(&roles(&["a"]))
+            .is_empty()
+    );
 }

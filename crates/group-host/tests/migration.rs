@@ -71,7 +71,7 @@ async fn two_hosts_with(
         ("putRule", json!({"group": did, "title": "Be kind"})),
         (
             "createSpace",
-            json!({"group": did, "spaceType": "com.example.calendar", "skey": "rides", "readableBy": [{"role": "member"}]}),
+            json!({"group": did, "type": "com.example.calendar", "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}}),
         ),
     ];
     let mut calendar = String::new();
@@ -80,7 +80,7 @@ async fn two_hosts_with(
         let (status, said) = post(&a, &lxm, &body, &[auth(&a, &alice, &lxm)]).await;
         assert_eq!(status, 200, "{method}: {said}");
         if method == "createSpace" {
-            calendar = said["uri"].as_str().unwrap().to_string();
+            calendar = said["space"].as_str().unwrap().to_string();
         }
     }
     let post = group_host::repo::Write::Create {

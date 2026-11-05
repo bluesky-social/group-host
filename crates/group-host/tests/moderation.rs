@@ -75,12 +75,12 @@ async fn group(h: &Running) -> (String, String, Json, [Authority; 3]) {
         h,
         &alice,
         "createSpace",
-        json!({"group": did, "spaceType": CALENDAR, "skey": "rides", "readableBy": [{"role": "member"}]}),
+        json!({"group": did, "type": CALENDAR, "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}}),
     )
     .await;
     assert_eq!(status, 200, "{made}");
     membership(h, &did, &bob.did, &["member"]).await;
-    let space = made["uri"].as_str().unwrap().to_string();
+    let space = made["space"].as_str().unwrap().to_string();
     let post = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("{space}/{}/com.example.event/ride", bob.did), "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm"});
     (did, space, post, [alice, bob, carol])
 }

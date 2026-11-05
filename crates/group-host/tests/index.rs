@@ -48,7 +48,7 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
     )
     .await;
     let lxm = format!("{NS}.createSpace");
-    let body = json!({"group": did, "spaceType": "fyi.opensocial.board", "skey": "notes", "readableBy": [{"role": "member"}]});
+    let body = json!({"group": did, "type": "fyi.opensocial.board", "skey": "notes", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
     let (status, made) = post(h, &lxm, &body, &[auth(h, founder, &lxm)]).await;
     assert_eq!(status, 200, "{made}");
     h.host
@@ -63,7 +63,7 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
         )
         .await
         .unwrap();
-    (did, made["uri"].as_str().unwrap().to_string())
+    (did, made["space"].as_str().unwrap().to_string())
 }
 
 async fn list(h: &Running, who: Option<&Authority>, query: &str) -> (u16, Json) {

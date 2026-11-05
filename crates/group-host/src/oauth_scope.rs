@@ -10,15 +10,14 @@
 
 use crate::Host;
 use crate::group::members_space;
-use crate::rbac::{self, Access, NS, actions_for, grants, listed, repo_collections_for};
+use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// The writes a space scope may name.
-pub const WRITES: [&str; 3] = ["create", "update", "delete"];
+pub use crate::rbac::WRITES;
 
 /// The permission set that lets an app configure the group.
 pub fn configure() -> String {
@@ -79,50 +78,23 @@ impl SpaceScope {
     }
 }
 
-/// What a holder of `roles` may write as the group in a space, by
-/// collection (`*` for every one), by the union of their grants in its
-/// access record's `credentialScopes`.
-pub fn writes_for(access: &Value, roles: &[String]) -> BTreeMap<String, BTreeSet<String>> {
-    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let scopes = access["credentialScopes"].as_array().into_iter().flatten();
-    for grant in scopes.filter(|g| roles.iter().any(|r| g["role"] == r.as_str())) {
-        for scope in listed(grant, "scopes", "collection") {
-            let (collection, query) = scope.split_once('?').unwrap_or((&scope, ""));
-            let named: Vec<&str> = query
-                .split('&')
-                .filter_map(|kv| kv.strip_prefix("action="))
-                .filter(|a| WRITES.contains(a))
-                .collect();
-            let actions = if named.is_empty() {
-                WRITES.to_vec()
-            } else {
-                named
-            };
-            let has = out.entry(collection.into()).or_default();
-            has.extend(actions.iter().map(|a| a.to_string()));
-        }
-    }
-    out
-}
-
 /// What a holder of `roles`, `member`, may write as the group in a space
 /// whose access record is `access`, by collection, `everything` being
 /// whether they may do anything as the group. A space for chosen people
 /// is written as the group by those of them who may do anything as it;
-/// any other, as its `credentialScopes` say.
+/// any other, as its grants say.
 pub fn writes_in(
-    access: &Value,
+    access: &Access,
     roles: &[String],
     member: &str,
     everything: bool,
 ) -> BTreeMap<String, BTreeSet<String>> {
-    let rules = Access::of(access);
-    match rules.people {
-        Some(_) if everything && rules.can_read(roles, member) => {
+    match access.people {
+        Some(_) if everything && access.can_read(roles, member) => {
             BTreeMap::from([("*".into(), WRITES.map(String::from).into())])
         }
         Some(_) => BTreeMap::new(),
-        None => writes_for(access, roles),
+        None => access.writes(roles),
     }
 }
 
@@ -175,10 +147,11 @@ impl Host {
                 .group_record(group, uri, &format!("{NS}.access"), "self")
                 .map_err(XrpcError::internal)?
                 .unwrap_or_default();
+            let access = Access::of(&access, uri);
             rooms.push(Room {
                 kind: space.kind,
                 skey: space.skey,
-                readable: Access::of(&access).can_read(roles, member),
+                readable: access.can_read(roles, member),
                 writable: writes_in(&access, roles, member, everything),
             });
         }

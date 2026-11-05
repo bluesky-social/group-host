@@ -42,17 +42,23 @@ async fn starts_a_group_with_its_spaces() {
     let profile = record(&meta, "profile", "self");
     assert_eq!(profile["displayName"], "Riders");
     assert_eq!(profile["joinPolicy"], "approval");
+    // Meta is public, its profile and rules written by admins; members
+    // read the members space.
     assert_eq!(
-        record(&meta, "access", "self")["readableBy"],
-        json!([{"role": "public"}])
+        record(&meta, "access", "self"),
+        json!({
+            "$type": format!("{NS}.access"),
+            "public": true,
+            "grants": [{"role": "admin", "scopes": [format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule")]}],
+        })
     );
     assert_eq!(
         record(&meta, "labeler", "self")["subjectTypes"],
         json!(["record"])
     );
     assert_eq!(
-        record(&members, "access", "self")["readableBy"],
-        json!([{"role": "member"}])
+        record(&members, "access", "self")["grants"],
+        json!([{"role": "member", "scopes": [format!("space:{NS}.members?action=read")]}])
     );
     assert_eq!(record(&members, "role", "member")["default"], true);
     // The founder and stewards run it from the start.
@@ -174,9 +180,10 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     assert_eq!(mine["bindings"][1]["actions"], json!([]));
     assert_eq!(mine["spaces"][0]["uri"], meta);
     assert_eq!(mine["spaces"][0]["spaceType"], format!("{NS}.meta"));
-    assert_eq!(mine["spaces"][0]["readableBy"], json!([{"role": "public"}]));
-    assert!(mine["spaces"][0]["credentialScopes"].is_array());
-    assert_eq!(mine["spaces"][1]["readableBy"], json!([{"role": "member"}]));
+    assert_eq!(mine["spaces"][0]["public"], true);
+    assert!(mine["spaces"][0]["grants"].is_array());
+    assert_eq!(mine["spaces"][1].get("public"), None);
+    assert_eq!(mine["spaces"][1]["grants"][0]["role"], "member");
 
     // A member who is no admin is shown a space only admins read, by its
     // name, but not who reads it.
@@ -191,7 +198,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
             &[Write::Create {
                 collection: format!("{NS}.access"),
                 rkey: "self".into(),
-                value: json!({"$type": format!("{NS}.access"), "readableBy": [{"role": "admin"}], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.access"), "grants": [{"role": "admin", "scopes": ["space:*?action=read"]}]}),
             }],
         )
         .await
@@ -219,13 +226,13 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     let spaces = hers["spaces"].as_array().unwrap();
     let board = spaces.iter().find(|s| s["uri"] == admins).unwrap();
     assert_eq!(board["name"], "Board");
-    assert_eq!(board.get("readableBy"), None);
+    assert_eq!(board.get("grants"), None);
     assert_eq!(hers["group"]["viewer"]["actions"], json!([]));
     let theirs = spaces
         .iter()
         .find(|s| s["uri"] == members_space(&did))
         .unwrap();
-    assert_eq!(theirs["readableBy"], json!([{"role": "member"}]));
+    assert_eq!(theirs["grants"][0]["role"], "member");
 
     // Once they write their acceptance, they have accepted.
     h.host

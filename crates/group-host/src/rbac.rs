@@ -4,10 +4,13 @@
 //! each action the host's methods ask about is answered by one scope.
 //! Roles compose by union: no deny, no precedence, no hierarchy.
 //!
-//! The records' lists are of objects (`{role}`, `{scope}`).
+//! The records' lists are of objects (`{role}`, `{scope}`), but for an
+//! access record's grants, whose scopes are strings.
 
+use crate::scopes::{Permissions, decoded};
+use atproto::space::SpaceRef;
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const NS: &str = "fyi.opensocial";
 /// Anyone signed in, as an audience.
@@ -43,52 +46,126 @@ pub fn listed(record: &Value, key: &str, field: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// A space's access record, as read.
+/// A role's grant in a space's access record: the OAuth scopes it holds
+/// there, which count only in that space.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceGrant {
+    pub role: String,
+    pub scopes: Vec<String>,
+}
+
+/// A space's access record, as read, for the space it is in.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Access {
-    pub readable_by: Vec<String>,
+    /// The space it is the record of; a grant counts in no other.
+    pub space: Option<SpaceRef>,
+    /// Whether anyone signed in reads it, member or not.
+    pub public: bool,
+    pub grants: Vec<SpaceGrant>,
     /// The people it is for, by DID, when it is for chosen people.
     pub people: Option<Vec<String>>,
-    /// The roles that may read a space for chosen people, to decide on it.
-    pub reviewers: Vec<String>,
-    /// Who may write in it in their own name; absent is any member.
+    /// Who may write in it in their own name, when not every member whose
+    /// roles grant `read`.
     pub writable_by: Option<Vec<String>>,
 }
 
 impl Access {
-    pub fn of(record: &Value) -> Access {
+    /// The access record `record` of the space at `space`.
+    pub fn of(record: &Value, space: &str) -> Access {
         let maybe = |key: &str, field: &str| record.get(key).map(|_| listed(record, key, field));
+        let grants = record["grants"].as_array().into_iter().flatten();
         Access {
-            readable_by: listed(record, "readableBy", "role"),
+            space: SpaceRef::parse(space).ok(),
+            public: record["public"] == true,
+            grants: grants
+                .map(|g| SpaceGrant {
+                    role: g["role"].as_str().unwrap_or_default().into(),
+                    scopes: strings(&g["scopes"]),
+                })
+                .collect(),
             people: maybe("people", "did"),
-            reviewers: listed(record, "reviewers", "role"),
             writable_by: maybe("writableBy", "role"),
         }
     }
 
-    /// May `did`, holding `roles`, read the space? One for chosen people is
-    /// for them while they are members, and its reviewers.
+    /// The scopes a holder of `roles` is granted here, by union.
+    pub fn scopes(&self, roles: &[String]) -> Vec<String> {
+        let mine = self.grants.iter().filter(|g| roles.contains(&g.role));
+        mine.flat_map(|g| g.scopes.clone()).collect()
+    }
+
+    /// Whether `scopes` let their holder `action` here, on `collection`
+    /// for a write.
+    fn lets(&self, scopes: &[String], collection: Option<&str>, action: &str) -> bool {
+        let Some(space) = &self.space else {
+            return false;
+        };
+        let held = Permissions::new(&scopes.join(" "), &space.authority);
+        held.space(space, collection, action)
+    }
+
+    /// Whether `roles` are granted `read` here.
+    pub fn reads(&self, roles: &[String]) -> bool {
+        self.lets(&self.scopes(roles), None, "read")
+    }
+
+    /// What a holder of `roles` may write here as the group, by collection
+    /// (`*` for every one): the writes of each collection their scopes
+    /// name.
+    pub fn writes(&self, roles: &[String]) -> BTreeMap<String, BTreeSet<String>> {
+        let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for scope in self.scopes(roles) {
+            let one = [scope.clone()];
+            for collection in query_of(&decoded(&scope), "collection") {
+                for action in WRITES {
+                    if self.lets(&one, Some(&collection), action) {
+                        out.entry(collection.clone())
+                            .or_default()
+                            .insert(action.into());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// May `did`, holding `roles`, read the space? Anyone signed in, if it
+    /// is public; else those whose roles grant `read`. One for chosen
+    /// people is for them while they are members, and those whose roles
+    /// grant `read`.
     pub fn can_read(&self, roles: &[String], did: &str) -> bool {
         if let Some(people) = &self.people {
             let theirs = !roles.is_empty() && people.iter().any(|p| p == did);
-            return theirs || roles.iter().any(|r| self.reviewers.contains(r));
+            return theirs || self.reads(roles);
         }
-        self.readable_by
-            .iter()
-            .any(|r| r == PUBLIC || roles.contains(r))
+        self.public || self.reads(roles)
     }
 
     /// May `did`, holding `roles`, write in the space in their own name?
-    /// Any member, unless the record names who.
+    /// A member whose roles grant `read`, unless the record names who.
     pub fn can_write_own(&self, roles: &[String], did: &str) -> bool {
         if let Some(people) = &self.people {
             return !roles.is_empty() && people.iter().any(|p| p == did);
         }
         match &self.writable_by {
-            None => !roles.is_empty(),
+            None => !roles.is_empty() && self.reads(roles),
             Some(by) => by.iter().any(|r| r == PUBLIC || roles.contains(r)),
         }
     }
+}
+
+/// The writes a space scope may name.
+pub const WRITES: [&str; 3] = ["create", "update", "delete"];
+
+/// The strings in a list of them.
+fn strings(value: &Value) -> Vec<String> {
+    let items = value.as_array().into_iter().flatten();
+    items.filter_map(|s| s.as_str().map(String::from)).collect()
+}
+
+/// The values of `name` in a scope's query, owned.
+fn query_of(scope: &str, name: &str) -> Vec<String> {
+    query(scope, name).into_iter().map(String::from).collect()
 }
 
 /// The actions a host method's `rpc:` scope grants, by method.

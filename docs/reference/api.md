@@ -103,7 +103,7 @@ A group's spaces, and the records in them ([spaces](../design/spaces.md)).
 | Method | What it does |
 | --- | --- |
 | `POST fyi.opensocial.createSpace` | adds a space to a group |
-| `POST fyi.opensocial.updateSpace` | changes a space's name, readers and who may act as the group in it |
+| `POST fyi.opensocial.updateSpace` | changes a space's name and its access record |
 | `POST fyi.opensocial.deleteSpace` | removes a space, never the meta or members space |
 | `GET fyi.opensocial.listSpaceRecords` | the records in a space, from the host's index of it, for those who may read it |
 | `GET fyi.opensocial.getSpaceBlob` | a file in a space, read from whoever wrote it |

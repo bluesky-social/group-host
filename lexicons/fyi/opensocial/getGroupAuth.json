@@ -21,7 +21,7 @@
             "space": {
               "type": "string",
               "format": "space-ref",
-              "description": "The space the caller intends to write into; its access record's credentialScopes bound the grant."
+              "description": "The space the caller intends to write into; the scopes its access record grants the caller's roles bound the grant."
             }
           }
         }

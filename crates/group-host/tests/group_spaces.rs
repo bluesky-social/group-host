@@ -65,33 +65,53 @@ fn entry(h: &Running, did: &str, space: &str) -> Option<Json> {
         .find(|e| e["space"] == space)
 }
 
+/// Grants to members to read a calendar.
+fn readers() -> Json {
+    json!([{"role": "member", "scopes": [format!("space:{CALENDAR}?action=read")]}])
+}
+
 #[tokio::test]
 async fn an_admin_makes_a_space() {
     let h = start(&[], false).await;
     let (did, [alice, bob, carol]) = group(&h).await;
-    let scopes = json!([{"role": "admin", "scopes": [{"collection": "fyi.opensocial.event"}]}]);
+    let grants = json!([
+        {"role": "member", "scopes": [format!("space:{CALENDAR}?action=read")]},
+        {"role": "admin", "scopes": [format!("space:{CALENDAR}?collection=fyi.opensocial.event")]},
+    ]);
     let (status, made) = call(
         &h,
         &alice,
         "createSpace",
         json!({
             "group": did,
-            "spaceType": CALENDAR,
+            "type": CALENDAR,
             "skey": "rides",
             "name": "Rides",
-            "readableBy": [{"role": "member"}],
-            "writableBy": [{"role": "admin"}],
-            "credentialScopes": scopes,
+            "access": {"grants": grants, "writableBy": [{"role": "admin"}]},
         }),
     )
     .await;
     assert_eq!(status, 200, "{made}");
     let uri = format!("at://{did}/space/{CALENDAR}/rides");
-    assert_eq!(made["uri"], uri);
+    assert_eq!(made["space"], uri);
+    // It answers what it wrote: the access record and the index entry.
     let a = access(&h, &did, &uri);
-    assert_eq!(a["readableBy"], json!([{"role": "member"}]));
+    assert_eq!(
+        made["access"]["uri"],
+        format!("{uri}/{did}/{NS}.access/self")
+    );
+    let kept = h
+        .host
+        .store
+        .space_record(&did, &uri, &format!("{NS}.access"), "self")
+        .unwrap()
+        .unwrap();
+    assert_eq!(made["access"]["cid"], kept.cid.to_string());
+    let index = made["index"]["uri"].as_str().unwrap();
+    assert!(index.starts_with(&format!("{}/{did}/{NS}.space/", members_space(&did))));
+    assert_eq!(a["grants"], grants);
+    assert_eq!(a.get("public"), None);
     assert_eq!(a["writableBy"], json!([{"role": "admin"}]));
-    assert_eq!(a["credentialScopes"], scopes);
     assert_eq!(entry(&h, &did, &uri).unwrap()["name"], "Rides");
     // The group is its authority, and its access record decides.
     let hosted = h.host.store.space(&uri).unwrap().unwrap();
@@ -111,60 +131,122 @@ async fn an_admin_makes_a_space() {
             .unwrap()
     );
 
-    // With no key, one of its own; with no writers named, any member.
+    // With no key, one of its own; with no writers named, any member
+    // granted read; public, read by anyone signed in.
     let (_, other) = call(
         &h,
         &alice,
         "createSpace",
-        json!({"group": did, "spaceType": CALENDAR, "readableBy": [{"role": "member"}], "writableBy": []}),
+        json!({"group": did, "type": CALENDAR, "access": {"public": true, "grants": readers(), "writableBy": []}}),
     )
     .await;
-    let other = other["uri"].as_str().unwrap();
+    let other = other["space"].as_str().unwrap();
     assert_ne!(other, uri);
     assert_eq!(access(&h, &did, other).get("writableBy"), None);
+    assert_eq!(access(&h, &did, other)["public"], true);
     assert_eq!(entry(&h, &did, other).unwrap().get("name"), None);
+    let hosted = h.host.store.space(other).unwrap().unwrap();
+    assert!(
+        h.host
+            .may(other, &hosted, Some(&bob.did), Access::Write)
+            .unwrap()
+    );
+    assert!(
+        h.host
+            .may(other, &hosted, Some(&carol.did), Access::Read)
+            .unwrap()
+    );
+    assert!(!h.host.may(other, &hosted, None, Access::Read).unwrap());
 
+    // Left out of the index, it has no entry, and says so.
+    let (status, hidden) = call(
+        &h,
+        &alice,
+        "createSpace",
+        json!({"group": did, "type": CALENDAR, "skey": "hidden", "index": false, "access": {"grants": readers()}}),
+    )
+    .await;
+    assert_eq!(status, 200, "{hidden}");
+    assert_eq!(hidden.get("index"), None);
+    assert_eq!(entry(&h, &did, hidden["space"].as_str().unwrap()), None);
+
+    let read =
+        |role: &str| json!([{"role": role, "scopes": [format!("space:{CALENDAR}?action=read")]}]);
     for (who, body, refused) in [
         (
             &bob,
-            json!({"group": did, "spaceType": CALENDAR, "readableBy": []}),
+            json!({"group": did, "type": CALENDAR, "access": {"grants": readers()}}),
             (403, "Forbidden"),
         ),
         (
             &alice,
-            json!({"group": did, "spaceType": CALENDAR, "skey": "rides", "readableBy": [{"role": "member"}]}),
+            json!({"group": did, "type": CALENDAR, "skey": "rides", "access": {"grants": readers()}}),
             (400, "SpaceAlreadyExists"),
         ),
         (
             &alice,
-            json!({"group": did, "spaceType": "calendar", "readableBy": []}),
+            json!({"group": did, "type": "calendar", "access": {"grants": readers()}}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "spaceType": CALENDAR}),
+            json!({"group": did, "type": CALENDAR}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "spaceType": CALENDAR, "readableBy": ["member"]}),
+            json!({"group": did, "type": CALENDAR, "access": {"grants": ["member"]}}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"spaceType": CALENDAR, "readableBy": []}),
+            json!({"type": CALENDAR, "access": {"grants": readers()}}),
             (400, "InvalidRequest"),
         ),
-        // Nobody to read it, as no change takes either.
+        // The meta and members spaces come with the group.
         (
             &alice,
-            json!({"group": did, "spaceType": CALENDAR, "readableBy": []}),
+            json!({"group": did, "type": format!("{NS}.meta"), "skey": "other", "access": {"grants": readers()}}),
+            (400, "ReservedSpace"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "type": format!("{NS}.members"), "access": {"grants": readers()}}),
+            (400, "ReservedSpace"),
+        ),
+        // A role the group has not, or a grant that is no space scope.
+        (
+            &alice,
+            json!({"group": did, "type": CALENDAR, "access": {"grants": read("guest")}}),
+            (400, "UnknownRole"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "type": CALENDAR, "access": {"grants": [{"role": "member", "scopes": ["repo:fyi.opensocial.event"]}]}}),
+            (400, "InvalidScope"),
+        ),
+        // One grant a role.
+        (
+            &alice,
+            json!({"group": did, "type": CALENDAR, "access": {"grants": [read("member")[0], read("member")[0]]}}),
+            (400, "InvalidRequest"),
+        ),
+        // Nobody to read it, as no change takes either: no grants, or
+        // read granted in another space.
+        (
+            &alice,
+            json!({"group": did, "type": CALENDAR, "access": {"grants": []}}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "type": CALENDAR, "access": {"grants": [{"role": "member", "scopes": ["space:fyi.opensocial.forum?action=read"]}]}}),
             (400, "InvalidRequest"),
         ),
         // A name longer than the lexicon has it.
         (
             &alice,
-            json!({"group": did, "spaceType": CALENDAR, "readableBy": [{"role": "member"}], "name": "x".repeat(65)}),
+            json!({"group": did, "type": CALENDAR, "access": {"grants": readers()}, "name": "x".repeat(65)}),
             (400, "InvalidRequest"),
         ),
     ] {
@@ -175,15 +257,17 @@ async fn an_admin_makes_a_space() {
     // An access record that is no record (a float, which its lexicon lets
     // through and DRISL does not) leaves no space behind, and its
     // key free to be made again.
-    let wrong = json!({"group": did, "spaceType": CALENDAR, "skey": "laps", "readableBy": [{"role": "member"}], "credentialScopes": [{"role": "admin", "scopes": [], "weight": 1.5}]});
+    let wrong = json!({"group": did, "type": CALENDAR, "skey": "laps", "access": {"grants": [{"role": "member", "scopes": [format!("space:{CALENDAR}?action=read")], "weight": 1.5}]}});
     let said = call(&h, &alice, "createSpace", wrong).await;
     assert_eq!(error(&said), (400, "InvalidRequest"));
     let laps = format!("at://{did}/space/{CALENDAR}/laps");
     assert!(h.host.store.space(&laps).unwrap().is_none());
     assert!(h.host.store.space_head(&did, &laps).unwrap().is_none());
-    let right = json!({"group": did, "spaceType": CALENDAR, "skey": "laps", "readableBy": [{"role": "member"}]});
+    let right =
+        json!({"group": did, "type": CALENDAR, "skey": "laps", "access": {"grants": readers()}});
     let said = call(&h, &alice, "createSpace", right).await;
-    assert_eq!(said, (200, json!({"uri": laps})));
+    assert_eq!(said.0, 200);
+    assert_eq!(said.1["space"], laps);
     assert!(entry(&h, &did, &laps).is_some());
 }
 
@@ -195,46 +279,35 @@ async fn an_admin_changes_a_space() {
         &h,
         &alice,
         "createSpace",
-        json!({"group": did, "spaceType": CALENDAR, "skey": "rides", "readableBy": [{"role": "member"}], "writableBy": [{"role": "admin"}]}),
+        json!({"group": did, "type": CALENDAR, "skey": "rides", "access": {"grants": readers(), "writableBy": [{"role": "admin"}]}}),
     )
     .await;
-    let uri = made["uri"].as_str().unwrap().to_string();
-    let made_at = access(&h, &did, &uri)["createdAt"].clone();
-    let scopes = json!([{"role": "member", "scopes": [{"collection": "*"}]}]);
+    let uri = made["space"].as_str().unwrap().to_string();
+    let grants = json!([{"role": "member", "scopes": [format!("space:{CALENDAR}?collection=*")]}]);
     let (status, _) = call(
         &h,
         &alice,
         "updateSpace",
-        json!({"group": did, "space": uri, "name": "Rides", "readableBy": [{"role": "public"}], "credentialScopes": scopes}),
+        json!({"group": did, "space": uri, "name": "Rides", "access": {"public": true, "grants": grants}}),
     )
     .await;
     assert_eq!(status, 200);
+    // Replaced whole: who writes is every member granted read again.
     let a = access(&h, &did, &uri);
-    assert_eq!(a["readableBy"], json!([{"role": "public"}]));
-    assert_eq!(a["writableBy"], json!([{"role": "admin"}]));
-    assert_eq!(a["credentialScopes"], scopes);
-    assert_eq!(a["createdAt"], made_at);
+    assert_eq!(a["public"], true);
+    assert_eq!(a["grants"], grants);
+    assert_eq!(a.get("writableBy"), None);
     assert_eq!(entry(&h, &did, &uri).unwrap()["name"], "Rides");
-    // Who writes, set and put back to any member.
     call(
         &h,
         &alice,
         "updateSpace",
-        json!({"group": did, "space": uri, "writableBy": [{"role": "member"}]}),
+        json!({"group": did, "space": uri, "access": {"grants": readers(), "writableBy": [{"role": "member"}]}}),
     )
     .await;
-    assert_eq!(
-        access(&h, &did, &uri)["writableBy"],
-        json!([{"role": "member"}])
-    );
-    call(
-        &h,
-        &alice,
-        "updateSpace",
-        json!({"group": did, "space": uri, "writableBy": []}),
-    )
-    .await;
-    assert_eq!(access(&h, &did, &uri).get("writableBy"), None);
+    let a = access(&h, &did, &uri);
+    assert_eq!(a["writableBy"], json!([{"role": "member"}]));
+    assert_eq!(a.get("public"), None);
     // Asked to change nothing, nothing changes.
     assert_eq!(
         call(
@@ -247,6 +320,7 @@ async fn an_admin_changes_a_space() {
         .0,
         200
     );
+    assert_eq!(access(&h, &did, &uri), a);
 
     // Meta's readers are the group's visibility: its declaration follows.
     let declared = |h: &Running| {
@@ -257,38 +331,20 @@ async fn an_admin_changes_a_space() {
             .is_some()
     };
     let meta = meta_space(&did);
+    let members_read =
+        json!([{"role": "member", "scopes": [format!("space:{NS}.meta?action=read")]}]);
     assert!(declared(&h));
-    call(
-        &h,
-        &alice,
-        "updateSpace",
-        json!({"group": did, "space": meta, "readableBy": [{"role": "member"}]}),
-    )
-    .await;
-    assert!(!declared(&h));
-    call(
-        &h,
-        &alice,
-        "updateSpace",
-        json!({"group": did, "space": meta, "readableBy": [{"role": "member"}]}),
-    )
-    .await;
-    call(
-        &h,
-        &alice,
-        "updateSpace",
-        json!({"group": did, "space": meta, "readableBy": [{"role": "public"}]}),
-    )
-    .await;
-    assert!(declared(&h));
-    call(
-        &h,
-        &alice,
-        "updateSpace",
-        json!({"group": did, "space": meta, "readableBy": [{"role": "public"}]}),
-    )
-    .await;
-    assert!(declared(&h));
+    for (public, listed) in [(false, false), (false, false), (true, true), (true, true)] {
+        let said = call(
+            &h,
+            &alice,
+            "updateSpace",
+            json!({"group": did, "space": meta, "access": {"public": public, "grants": members_read}}),
+        )
+        .await;
+        assert_eq!(said.0, 200, "{}", said.1);
+        assert_eq!(declared(&h), listed);
+    }
 
     // A space for chosen people, and one in no index.
     let chosen = h
@@ -303,7 +359,7 @@ async fn an_admin_changes_a_space() {
         (&chosen, Some(json!([{"did": bob.did}]))),
         (&unlisted, None),
     ] {
-        let mut value = json!({"$type": format!("{NS}.access"), "readableBy": [], "createdAt": "2026-11-03T00:00:00Z"});
+        let mut value = json!({"$type": format!("{NS}.access"), "grants": []});
         if let Some(people) = people {
             value["people"] = people;
         }
@@ -322,6 +378,10 @@ async fn an_admin_changes_a_space() {
     }
     let members = members_space(&did);
     let elsewhere = format!("at://did:plc:elsewhere/space/{CALENDAR}/rides");
+    let admins_read =
+        json!([{"role": "admin", "scopes": [format!("space:{NS}.members?action=read")]}]);
+    let members_space_read =
+        json!([{"role": "member", "scopes": [format!("space:{NS}.members?action=read")]}]);
     for (who, body, refused) in [
         (
             &bob,
@@ -335,7 +395,7 @@ async fn an_admin_changes_a_space() {
         ),
         (
             &alice,
-            json!({"group": did, "space": unlisted, "name": "Named", "readableBy": [{"role": "public"}]}),
+            json!({"group": did, "space": unlisted, "name": "Named", "access": {"public": true, "grants": []}}),
             (400, "SpaceNotFound"),
         ),
         (
@@ -356,23 +416,28 @@ async fn an_admin_changes_a_space() {
         (&alice, json!({"group": did}), (400, "InvalidRequest")),
         (
             &alice,
-            json!({"group": did, "space": members, "readableBy": [{"role": "admin"}]}),
+            json!({"group": did, "space": members, "access": {"grants": admins_read}}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "space": members, "writableBy": [{"role": "admin"}]}),
+            json!({"group": did, "space": members, "access": {"grants": members_space_read, "writableBy": [{"role": "admin"}]}}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "space": uri, "writableBy": "admin"}),
+            json!({"group": did, "space": uri, "access": {"grants": readers(), "writableBy": "admin"}}),
             (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "space": uri, "access": {"grants": [{"role": "guest", "scopes": []}]}}),
+            (400, "UnknownRole"),
         ),
         // Nobody to read it is no change it takes.
         (
             &alice,
-            json!({"group": did, "space": uri, "readableBy": []}),
+            json!({"group": did, "space": uri, "access": {"grants": []}}),
             (400, "InvalidRequest"),
         ),
         (
@@ -385,9 +450,19 @@ async fn an_admin_changes_a_space() {
         assert_eq!(error(&said), refused, "{body}");
     }
     // A change refused for want of the space's entry changes nothing.
-    assert_eq!(access(&h, &did, &unlisted)["readableBy"], json!([]));
+    assert_eq!(access(&h, &did, &unlisted).get("public"), None);
     // The members space may change, readable by members still.
-    let said = call(&h, &alice, "updateSpace", json!({"group": did, "space": members, "readableBy": [{"role": "member"}, {"role": "admin"}]})).await;
+    let both = json!([
+        {"role": "member", "scopes": [format!("space:{NS}.members?action=read")]},
+        {"role": "admin", "scopes": [format!("space:{NS}.members?action=read")]},
+    ]);
+    let said = call(
+        &h,
+        &alice,
+        "updateSpace",
+        json!({"group": did, "space": members, "access": {"grants": both}}),
+    )
+    .await;
     assert_eq!(said.0, 200);
 }
 
@@ -399,10 +474,10 @@ async fn an_admin_ends_a_space() {
         &h,
         &alice,
         "createSpace",
-        json!({"group": did, "spaceType": CALENDAR, "skey": "rides", "readableBy": [{"role": "member"}]}),
+        json!({"group": did, "type": CALENDAR, "skey": "rides", "access": {"grants": readers()}}),
     )
     .await;
-    let uri = made["uri"].as_str().unwrap().to_string();
+    let uri = made["space"].as_str().unwrap().to_string();
     let picture = h.host.upload_blob(&did, b"map", "image/png").unwrap();
     h.host
         .space_write(
@@ -460,8 +535,9 @@ async fn an_admin_ends_a_space() {
             json!({"group": did, "space": space}),
         )
         .await;
-        assert_eq!(error(&said), (400, "WellKnownSpace"));
+        assert_eq!(error(&said), (400, "ReservedSpace"));
     }
+    // One left out of the index ends as well; one never made is not found.
     let unlisted = h
         .host
         .create_space(&did, CALENDAR, "unlisted", false)
@@ -473,11 +549,20 @@ async fn an_admin_ends_a_space() {
             &[Write::Create {
                 collection: format!("{NS}.access"),
                 rkey: "self".into(),
-                value: json!({"$type": format!("{NS}.access"), "readableBy": [], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.access"), "grants": []}),
             }],
         )
         .await
         .unwrap();
+    let said = call(
+        &h,
+        &alice,
+        "deleteSpace",
+        json!({"group": did, "space": unlisted}),
+    )
+    .await;
+    assert_eq!(said, (200, json!({})));
+    assert!(h.host.store.space(&unlisted).unwrap().is_none());
     let said = call(
         &h,
         &alice,

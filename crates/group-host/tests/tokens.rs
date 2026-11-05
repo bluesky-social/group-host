@@ -58,20 +58,19 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
     let lxm = format!("{NS}.createSpace");
     let body = json!({
         "group": did,
-        "spaceType": CALENDAR,
+        "type": CALENDAR,
         "skey": "rides",
-        "readableBy": [{"role": "member"}],
-        "credentialScopes": [
-            {"role": "member", "scopes": [{"collection": format!("{EVENT}?action=create")}]},
-            {"role": "admin", "scopes": [{"collection": "*"}]},
-        ],
+        "access": {"grants": [
+            {"role": "member", "scopes": [format!("space:{CALENDAR}?action=read&collection={EVENT}&action=create")]},
+            {"role": "admin", "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        ]},
     });
     let (status, made) = post(h, &lxm, &body, &[auth(h, &alice, &lxm)]).await;
     assert_eq!(status, 200, "{made}");
     membership(h, &did, &bob.did, &["member"]).await;
     (
         did,
-        made["uri"].as_str().unwrap().to_string(),
+        made["space"].as_str().unwrap().to_string(),
         [alice, bob, carol],
     )
 }
@@ -536,7 +535,7 @@ async fn uploads_only_while_its_member_may_write_and_the_group_is_on() {
     // the app may upload; once he may write nothing as the group, not.
     membership(&h, &did, &bob.did, &["member"]).await;
     assert_eq!(upload().await.status, 200);
-    let access_record = json!({"$type": format!("{NS}.access"), "readableBy": [{"role": "member"}], "createdAt": "2026-11-03T00:00:00Z"});
+    let access_record = json!({"$type": format!("{NS}.access"), "grants": [{"role": "member", "scopes": ["space:*?action=read"]}]});
     let write = Write::Update {
         collection: format!("{NS}.access"),
         rkey: "self".into(),
@@ -634,7 +633,7 @@ async fn writes_the_groups_spaces_within_its_scope() {
     );
     assert_eq!(call("deleteRecord", gone).await.body, json!({}));
     // Never the record that says who reads it.
-    let access_record = json!({"repo": did, "space": calendar, "collection": format!("{NS}.access"), "rkey": "self", "record": {"$type": format!("{NS}.access"), "readableBy": [], "createdAt": "2026-11-03T00:00:00Z"}});
+    let access_record = json!({"repo": did, "space": calendar, "collection": format!("{NS}.access"), "rkey": "self", "record": {"$type": format!("{NS}.access"), "grants": []}});
     assert_eq!(
         call("putRecord", access_record).await.error(),
         (403, "Forbidden")
@@ -651,7 +650,8 @@ async fn in_a_space_for_chosen_people_writes_for_those_of_them_who_may_do_anythi
     // Both admins sign the app in while the calendar is the members'.
     let alices = token(&h, &app, &alice, &did).await;
     let bobs = token(&h, &app, &bob, &did).await;
-    let access = json!({"$type": format!("{NS}.access"), "readableBy": [], "people": [{"did": alice.did}], "createdAt": "2026-11-03T00:00:00Z"});
+    let access =
+        json!({"$type": format!("{NS}.access"), "grants": [], "people": [{"did": alice.did}]});
     let write = Write::Update {
         collection: format!("{NS}.access"),
         rkey: "self".into(),
