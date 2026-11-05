@@ -219,6 +219,49 @@ async fn indexes_a_member_writing_at_another_host() {
 }
 
 #[tokio::test]
+async fn a_public_space_is_for_anyone_signed_in() {
+    let h = start(&[], false).await;
+    let [alice, _, carol] = people(&h).await;
+    let did = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let lxm = format!("{NS}.createSpace");
+    let body = json!({"group": did, "type": "fyi.opensocial.board", "skey": "open", "access": {"public": true, "grants": []}});
+    let (status, made) = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{made}");
+    let space = made["space"].as_str().unwrap();
+    let picture = h.host.upload_blob(&did, b"a map", "image/png").unwrap();
+    h.host
+        .space_write(
+            &did,
+            space,
+            &[create(
+                "one",
+                json!({"$type": NOTE, "text": "Open", "map": picture}),
+            )],
+        )
+        .await
+        .unwrap();
+    let query = format!("group={did}&space={space}");
+    // A stranger signed in reads it.
+    let (status, page) = list(&h, Some(&carol), &query).await;
+    assert_eq!((status, texts(&page)), (200, vec!["Open".to_string()]));
+    // No one signed in reads it, nor its files.
+    let (status, said) = list(&h, None, &query).await;
+    assert_eq!(
+        (status, said["error"].as_str().unwrap()),
+        (401, "AuthMissing")
+    );
+    let cid = picture["ref"]["$link"].as_str().unwrap();
+    let blob = format!("{NS}.getSpaceBlob");
+    let got = read(&h, &blob, &format!("{query}&repo={did}&cid={cid}"), &[]).await;
+    assert_eq!(got.error(), (401, "AuthMissing".into()));
+}
+
+#[tokio::test]
 async fn pages_filters_and_finds_one() {
     let h = start(&[], false).await;
     let [alice, _, _] = people(&h).await;

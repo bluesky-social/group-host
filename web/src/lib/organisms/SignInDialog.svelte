@@ -7,19 +7,29 @@
 	 * server to approve it and back to `back`, the page it was opened on.
 	 */
 	let { back = '/' }: { back?: string } = $props();
+	// Apps on the Atmosphere, any of whose accounts signs in here: a row
+	// running past, twice over so it wraps without a seam.
+	const apps = ['bluesky', 'tangled', 'leaflet', 'semble', 'skylight', 'popfeed', 'anisota', 'flashes', 'spark', 'stream-place', 'blento', 'germ', 'gander', 'offprint', 'pckt', 'plyr', 'beacon-bits', 'eurosky', 'northsky', 'blacksky'];
+	const icon = (app: string) => `/atmo/${app}.${app === 'spark' ? 'png' : 'jpg'}`;
 </script>
 
 <Dialog id={SIGN_IN} title="Sign in with your Atmosphere account">
-	<p class="mute">The account you use on Bluesky, or any app of the Atmosphere. <a href="https://atmosphereaccount.com/" target="_blank" rel="noopener noreferrer">What is that?</a></p>
+	<div class="apps" aria-hidden="true">
+		<div class="apps-run">
+			{#each [...apps, ...apps] as app, i (i)}<img src={icon(app)} alt="" width="40" height="40" loading="lazy" />{/each}
+		</div>
+	</div>
+	<p class="what"><a href="https://atmosphereaccount.com/" target="_blank" rel="noopener noreferrer">What is an Atmosphere account?</a></p>
 	<form class="stack" method="get" action="/console/login">
 		<input type="hidden" name="back" value={back} />
 		<label class="field">
-			Your handle
+			Handle
 			<input name="handle" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="you.bsky.social" />
 		</label>
 		<div class="actions">
 			<button class="quiet" type="button" popovertarget={SIGN_IN} popovertargetaction="hide">Cancel</button>
-			<button type="submit">Continue</button>
+			<button type="submit">Sign in</button>
 		</div>
 	</form>
+	<p class="create">Don't have an account? <a href="https://bsky.app/" target="_blank" rel="noopener noreferrer">Create one</a></p>
 </Dialog>

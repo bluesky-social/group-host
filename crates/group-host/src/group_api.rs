@@ -186,9 +186,16 @@ fn objects(field: &str, items: impl IntoIterator<Item = impl Into<String>>) -> V
         .collect()
 }
 
+/// A group as someone not signed in sees it: what anyone can learn of it
+/// already, its DID and handle.
+fn signed_out(did: &str, handle: String) -> Value {
+    json!({"did": did, "handle": handle})
+}
+
 /// One group in full, as the caller may see it: what its meta space
 /// holds for whoever may read it, the caller's own standing, and for a
-/// member, its members, roles and spaces.
+/// member, its members, roles and spaces. To no one signed in, only its
+/// DID and handle, whatever its access record says.
 pub async fn get_group(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
@@ -197,6 +204,9 @@ pub async fn get_group(
     let group = param(&p, "group")?;
     let handle = group_of(&host, group)?;
     let me = caller(&host, &headers, &format!("{NS}.getGroup")).await?;
+    let Some(me) = me else {
+        return Ok(Json(json!({ "group": signed_out(group, handle) })));
+    };
     // Switched off: nothing in it is read, by members either. Still
     // answered, so a steward can find the switch.
     if host.deactivation(group)?.is_some() {
@@ -209,17 +219,13 @@ pub async fn get_group(
             .map_err(XrpcError::internal)
     };
     let (meta, members) = (meta_space(group), members_space(group));
-    let roles = match &me {
-        Some(me) => host.roles(group, me).map_err(XrpcError::internal)?,
-        None => Vec::new(),
-    };
-    let me_or = me.as_deref().unwrap_or_default();
+    let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
     let reads = |space: &str| -> Result<bool, XrpcError> {
         let access = record(space, "access", "self")?;
-        Ok(access.is_some_and(|a| Access::of(&a, space).can_read(&roles, me_or)))
+        Ok(access.is_some_and(|a| Access::of(&a, space).can_read(&roles, &me)))
     };
     let reads_meta = reads(&meta)?;
-    let reads_members = me.is_some() && reads(&members)?;
+    let reads_members = reads(&members)?;
     let permissions = record(&members, "permissions", "self")?.unwrap_or_default();
     let granted = grants(&permissions);
     let actions = actions_for(&granted, &roles);
@@ -231,23 +237,21 @@ pub async fn get_group(
         }
         view["rules"] = json!(rules(&host, group)?);
     }
-    if let Some(me) = &me {
-        let member = !roles.is_empty();
-        let mut viewer = json!({
-            "member": member,
-            "roles": objects("role", roles.clone()),
-            "actions": actions,
-        });
-        if member {
-            viewer["accepted"] = json!(accepted(&host, &members, me).map_err(XrpcError::internal)?);
-        }
-        // Their own request, while it waits.
-        let asked = host.store.asked(group, me).map_err(XrpcError::internal)?;
-        if let Some(request) = asked.filter(|_| !member) {
-            viewer["request"] = crate::group_join::request_view(&request);
-        }
-        view["viewer"] = viewer;
+    let member = !roles.is_empty();
+    let mut viewer = json!({
+        "member": member,
+        "roles": objects("role", roles.clone()),
+        "actions": actions,
+    });
+    if member {
+        viewer["accepted"] = json!(accepted(&host, &members, &me).map_err(XrpcError::internal)?);
     }
+    // Their own request, while it waits.
+    let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
+    if let Some(request) = asked.filter(|_| !member) {
+        viewer["request"] = crate::group_join::request_view(&request);
+    }
+    view["viewer"] = viewer;
     let mut out = json!({ "group": view });
     if !reads_members {
         return Ok(Json(out));
@@ -308,7 +312,7 @@ pub async fn get_group(
         let access = host
             .group_record(group, uri, &format!("{NS}.access"), "self")
             .map_err(XrpcError::internal)?;
-        if let Some(access) = access.filter(|a| Access::of(a, uri).can_read(&roles, me_or)) {
+        if let Some(access) = access.filter(|a| Access::of(a, uri).can_read(&roles, &me)) {
             for key in ["public", "grants", "people", "writableBy"] {
                 if let Some(v) = access.get(key) {
                     space[key] = v.clone();
@@ -347,9 +351,11 @@ fn accepted(host: &Host, members: &str, did: &str) -> anyhow::Result<bool> {
     Ok(writers.iter().any(|w| w.did == did && w.data != empty))
 }
 
-/// Every group here: its handle and spaces, and for one whose meta anyone
-/// may read, its profile and rules. Unauthenticated.
-pub async fn list_groups(State(host): State<Arc<Host>>) -> Answer {
+/// Every group here: to someone signed in, its handle and spaces, and for
+/// one whose meta anyone signed in may read, its profile and rules; to no
+/// one signed in, each one's DID and handle alone.
+pub async fn list_groups(State(host): State<Arc<Host>>, headers: HeaderMap) -> Answer {
+    let me = caller(&host, &headers, &format!("{NS}.listGroups")).await?;
     let mut groups = Vec::new();
     let mut cursor: Option<String> = None;
     loop {
@@ -361,6 +367,10 @@ pub async fn list_groups(State(host): State<Arc<Host>>) -> Answer {
             let Ok(handle) = group_of(&host, did) else {
                 continue;
             };
+            if me.is_none() {
+                groups.push(signed_out(did, handle));
+                continue;
+            }
             let mut view = base(&host, did, &handle)?;
             if host.deactivation(did)?.is_some() {
                 view["deactivated"] = json!(true);

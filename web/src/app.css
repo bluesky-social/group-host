@@ -96,6 +96,17 @@ ol > li::marker{color:var(--primary);font-weight:var(--weight-bold);font-family:
 .dialog .close:hover{background:var(--soft);color:var(--fg)}
 .dialog .field input{width:100%}
 .actions{display:flex;justify-content:flex-end;gap:var(--space-2)}
+/* Signing in: the Atmosphere's apps running past, faded at the edges and
+   still for whoever asks for less motion; then the handle; then the way
+   to an account for one with none. */
+.dialog .apps{overflow:hidden;mask-image:linear-gradient(90deg,transparent,var(--opaque) var(--space-6),var(--opaque) calc(100% - var(--space-6)),transparent)}
+.dialog .apps-run{display:flex;gap:var(--space-3);width:max-content;animation:apps-run var(--apps-run) linear infinite}
+.dialog .apps img{width:var(--app-icon);height:var(--app-icon);border-radius:var(--radius-md);object-fit:cover;flex-shrink:0}
+@keyframes apps-run{to{transform:translateX(calc(-50% - var(--space-3) / 2))}}
+@media (prefers-reduced-motion:reduce){.dialog .apps-run{animation:none}}
+.dialog .what,.dialog .create{text-align:center;font-size:var(--text-sm)}
+.dialog .what a,.dialog .create a{color:var(--fg)}
+.dialog .create{padding-top:var(--space-3);border-top:var(--border);color:var(--mute)}
 /* A label typed before the domain it is under, read as one name. */
 .address{display:flex;align-items:center;gap:var(--space-2)}
 .address input{flex:1;min-width:0}
@@ -114,6 +125,15 @@ ol > li::marker{color:var(--primary);font-weight:var(--weight-bold);font-family:
 .group-row a{color:var(--fg);font:var(--weight-bold) var(--text-lg) var(--font-round);text-decoration:none}
 .group-row a:hover{color:var(--primary)}
 .standing form{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+
+/* ── Templates ────────────────────────────────────────────────────── */
+
+/* For someone not signed in: one heading, a line, and the way in. */
+.welcome{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-5);padding-top:var(--space-16)}
+.welcome h1{font-size:var(--text-hero);text-wrap:balance}
+.welcome h1.handle{font-size:var(--text-3xl);overflow-wrap:anywhere}
+.welcome p{max-width:var(--measure);font-size:var(--text-lg);color:var(--mute)}
+.welcome button{margin-top:var(--space-2)}
 
 /* ── A group's own page ───────────────────────────────────────────── */
 

@@ -6,15 +6,13 @@
 //!
 //! An image of an account's is also served for a page to draw, at
 //! `/img/{did}/{cid}`, to whoever may see a record that holds it: anyone,
-//! for a record in its public repo or in the profile of a group listed on
-//! the network; for one in a space, whoever that space lets read, as the
-//! console's session says. Served as an image and nothing more, and kept
-//! for good, as a CID names its bytes.
+//! for a record in its public repo; for one in a space, whoever signed in
+//! to the console that space lets read, a group's listed profile being for
+//! anyone signed in. Served as an image and nothing more, and kept for
+//! good, as a CID names its bytes.
 
 use crate::Host;
 use crate::authority::Access;
-use crate::group::meta_space;
-use crate::rbac::NS;
 use crate::store::{Blob, Store};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
@@ -181,7 +179,9 @@ impl Store {
 
 impl Host {
     /// Whether `who` (none, for someone not signed in) may see `did`'s blob
-    /// `cid`: a record holding it is one they may read.
+    /// `cid`: a record holding it is one they may read. Someone not signed
+    /// in sees only what the public repo holds, as of a group they learn
+    /// no more than its DID and handle.
     pub fn may_see(&self, did: &str, cid: &Cid, who: Option<&str>) -> Result<bool> {
         if self.store.deactivation(did)?.is_some() {
             return Ok(false);
@@ -189,17 +189,12 @@ impl Host {
         if self.store.held_publicly(did, cid)? {
             return Ok(true);
         }
-        // A listed group's profile is anyone's to see, as listGroups shows it.
-        let listed = self
-            .store
-            .record(did, &format!("{NS}.declaration"), "self")?
-            .is_some();
+        let Some(who) = who else {
+            return Ok(false);
+        };
         for space in self.store.holding_spaces(did, cid)? {
-            if listed && space == meta_space(did) {
-                return Ok(true);
-            }
             let hosted = self.store.space(&space)?;
-            let may = hosted.map(|h| self.may(&space, &h, who, Access::Read));
+            let may = hosted.map(|h| self.may(&space, &h, Some(who), Access::Read));
             if may.transpose()?.unwrap_or(false) {
                 return Ok(true);
             }

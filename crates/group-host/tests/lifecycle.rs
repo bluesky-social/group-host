@@ -153,8 +153,14 @@ async fn a_group_switched_off_is_read_by_nobody() {
     let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(shown["group"]["deactivated"], true);
     assert_eq!(shown["group"].get("displayName"), None);
-    let (_, listed) = get(&h, &format!("{NS}.listGroups"), "", &[]).await;
+    let lxm = format!("{NS}.listGroups");
+    let (_, listed) = get(&h, &lxm, "", &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(listed["groups"][0]["deactivated"], true);
+    // To no one signed in, as any other: its DID and handle.
+    let (_, listed) = get(&h, &lxm, "", &[]).await;
+    assert_eq!(listed["groups"][0].get("deactivated"), None);
+    let (_, shown) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
+    assert_eq!(shown["group"].get("deactivated"), None);
 
     // Off twice, or on when on, changes nothing.
     assert!(!h.host.deactivate_account(&did, &alice.did, &[]).unwrap());

@@ -76,11 +76,10 @@
     },
     "groupView": {
       "type": "object",
+      "description": "A group as a list shows it. To a caller not signed in, only its did and handle.",
       "required": [
         "did",
-        "handle",
-        "meta",
-        "members"
+        "handle"
       ],
       "properties": {
         "did": {
@@ -178,11 +177,10 @@
     },
     "groupViewDetailed": {
       "type": "object",
+      "description": "A group in full, as its viewer may see it. To a caller not signed in, only its did and handle.",
       "required": [
         "did",
-        "handle",
-        "meta",
-        "members"
+        "handle"
       ],
       "properties": {
         "did": {

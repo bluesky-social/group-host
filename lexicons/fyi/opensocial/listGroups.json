@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Host-level: the groups hosted here, with their profiles.",
+      "description": "Host-level: the groups hosted here. With auth, the profiles anyone signed in may read; without it, each group's did and handle alone.",
       "parameters": {
         "type": "params",
         "properties": {}

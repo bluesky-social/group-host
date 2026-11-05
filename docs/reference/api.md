@@ -52,8 +52,8 @@ spaces through the atproto methods below.
 | Method | What it does |
 | --- | --- |
 | `POST fyi.opensocial.createGroup` | starts a group, the caller its founder and first admin |
-| `GET fyi.opensocial.getGroup` | a group as the caller may see it: its profile and rules, and to a member who may read them its roster, roles and spaces |
-| `GET fyi.opensocial.listGroups` | the groups hosted here, to anyone; the profile and rules only of those anyone may read |
+| `GET fyi.opensocial.getGroup` | a group as the caller may see it: its profile and rules, and to a member who may read them its roster, roles and spaces; to someone not signed in, its DID and handle alone |
+| `GET fyi.opensocial.listGroups` | the groups hosted here, to anyone; to someone signed in, the profile and rules of those anyone signed in may read, and to someone not, each by its DID and handle alone |
 | `GET fyi.opensocial.checkAddress` | whether an address, one label under `HANDLE_DOMAIN`, is free for a new group; anyone may ask |
 | `POST fyi.opensocial.updateProfile` | replaces a group's profile |
 | `POST fyi.opensocial.uploadImage` | uploads an avatar or banner for the profile |
@@ -94,7 +94,7 @@ spaces through the atproto methods below.
 | `GET fyi.opensocial.getViewer` | who is asking, by the console's cookie or service auth |
 | `GET fyi.opensocial.getActor` | a person's DID and handle, to someone signed in: themselves, or anyone the host shows (a member of a group here, or someone asking to join one); to themselves also whether they may start a group |
 | `GET fyi.opensocial.getActorGroups` | the groups here a person is in, as far as the caller shares them |
-| `GET /img/<did>/<cid>` | a group's or a person's image, for whoever may see it |
+| `GET /img/<did>/<cid>` | a group's or a person's image, for whoever may see it: anyone, for one in a public repo; otherwise only someone signed in to the console |
 
 ## Spaces
 
@@ -105,7 +105,7 @@ A group's spaces, and the records in them ([spaces](../design/spaces.md)).
 | `POST fyi.opensocial.createSpace` | adds a space to a group |
 | `POST fyi.opensocial.updateSpace` | changes a space's name and its access record |
 | `POST fyi.opensocial.deleteSpace` | removes a space, never the meta or members space |
-| `GET fyi.opensocial.listSpaceRecords` | the records in a space, from the host's index of it, for those who may read it |
+| `GET fyi.opensocial.listSpaceRecords` | the records in a space, from the host's index of it, for those signed in who may read it |
 | `GET fyi.opensocial.getSpaceBlob` | a file in a space, read from whoever wrote it |
 
 As the spaces' authority and the PDS of the group's own repo in each, the

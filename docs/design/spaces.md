@@ -162,9 +162,10 @@ most 5 seconds, then answers newest first: by when the index first saw
 each record, its `createdAt`, which reading a repo again does not move.
 It and `getSpaceBlob` ask the access record on every
 call, so the index never decides who sees what. The caller is known by
-service auth or the console's session; one with neither reads only what
-is readable by `"public"`. A space's images are also served at
-`/img/{did}/{cid}` to whoever the space lets read.
+service auth or the console's session; one with neither reads nothing,
+a space readable by `public` included, and is told `AuthMissing`. A
+space's images are also served at `/img/{did}/{cid}` to whoever signed
+in the space lets read.
 
 The `com.atproto.space.*` methods read one repo directly: `getRecord`,
 `listRecords`, `getRepo`, `getLatestCommit`, `listRepoOps`, `getBlob`,

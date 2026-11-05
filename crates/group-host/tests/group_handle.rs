@@ -174,7 +174,8 @@ async fn takes_a_domain_that_names_it_and_its_address_back() {
         ("#identity", json!("riders.test"))
     );
     // Its address stays.
-    let (_, shown) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
+    let lxm = format!("{NS}.getGroup");
+    let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(
         (
             shown["group"]["handle"].clone(),

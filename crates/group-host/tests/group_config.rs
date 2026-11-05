@@ -482,13 +482,15 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     let (h, did, [alice, bob, carol]) = group().await;
     let cid = |b: &Json| b["ref"]["$link"].as_str().unwrap().to_string();
 
-    // The avatar of a group listed on the network: anyone's to see, as an
-    // image and nothing more, kept for good.
+    // The avatar of a group listed on the network: anyone's to see who is
+    // signed in, as an image and nothing more, kept for good; no one's who
+    // is not.
     let (_, up) = upload(&h, &alice, &did, b"face".to_vec(), "image/png").await;
     let avatar = up["blob"].clone();
     let body = json!({"group": did, "displayName": "Riders", "avatar": avatar});
     assert_eq!(call(&h, &alice, "updateProfile", body).await.0, 200);
-    let (status, headers, bytes) = image(&h, &did, &cid(&avatar), None).await;
+    assert_eq!(image(&h, &did, &cid(&avatar), None).await.0, 404);
+    let (status, headers, bytes) = image(&h, &did, &cid(&avatar), Some(&carol)).await;
     assert_eq!((status, bytes.as_slice()), (200, &b"face"[..]));
     assert_eq!(headers["content-type"], "image/png");
     assert_eq!(headers["x-content-type-options"], "nosniff");
@@ -502,7 +504,7 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     );
 
     // Unlisted, its profile is its readers' alone: a member's, not a
-    // stranger's, nor anyone's not signed in.
+    // stranger's.
     let meta = meta_space(&did);
     let hide = json!({"group": did, "space": meta, "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
     assert_eq!(call(&h, &alice, "updateSpace", hide).await.0, 200);

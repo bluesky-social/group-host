@@ -115,10 +115,15 @@ Details:
 
 ## What each person sees, and finding a group
 
-`getGroup` answers anyone and gives more to those allowed more. Everyone
-gets the group's DID, handle, address, and the URIs of its two spaces.
-Whoever may read `meta` also gets the profile and the rules, in order. A
-signed-in caller gets `viewer`: whether they are a member, their roles and
+Someone not signed in learns of a group only what anyone can already
+learn of it from its DID document: its DID and handle. `getGroup` and
+`listGroups` tell them that and nothing more, whatever the group's access
+records say, since `public` means anyone signed in.
+
+`getGroup` gives more to those allowed more. Everyone signed in gets the
+group's DID, handle, address, and the URIs of its two spaces. Whoever may
+read `meta` also gets the profile and the rules, in order. A signed-in
+caller gets `viewer`: whether they are a member, their roles and
 actions, and for a member whether their own repo in `members` holds
 anything yet. Whoever may read `members` gets the members, the roles and
 what each may do, and the spaces, with a space's access shown only to
@@ -128,9 +133,11 @@ switched-off group shows only the first part and `deactivated: true`.
 A group that wants to be found says so with its declaration, a
 `fyi.opensocial.declaration` record in its public repo pointing at
 `meta`. The host writes it when `public` is among `meta`'s readers and
-removes it when not. `listGroups` lists every group on the host, adding
-the profile and rules of those whose `meta` is readable by `public`. A
-hidden group still appears with its DID, handle, address and space URIs.
+removes it when not. `listGroups` lists every group on the host to
+someone signed in, adding the profile and rules of those whose `meta` is
+readable by `public`. A hidden group still appears with its DID, handle,
+address and space URIs. To someone not signed in, it lists each group by
+its DID and handle alone.
 
 `getActorGroups` lists the switched-on groups a person is in that the
 caller is in too, with each group's member count, and its display name and
@@ -156,8 +163,9 @@ names that blob in `updateProfile`. An upload no record takes within a
 day is swept away, and a blob goes when its last reference does.
 
 The host serves images at `/img/{did}/{cid}` to whoever may see a record
-holding them: anyone, for the public repo or for `meta` while the group is
-declared; otherwise whoever may read the space, signed in to the console.
+holding them: anyone, for the public repo; otherwise whoever may read the
+space, signed in to the console, which for `meta` while the group is
+declared is anyone signed in.
 A switched-off group's images are not served.
 
 `putRule` adds or changes a rule and `deleteRule` removes one. Rules keep

@@ -3,7 +3,7 @@
 // and what the app then does as the group, read back from the host.
 
 import { expect, test } from '@playwright/test'
-import { App, Assistant, approve, didKey, signIn, signedInAs, url, who, world } from './pages.mjs'
+import { App, Assistant, approve, didKey, signIn, signInDialog, signedInAs, url, who, world } from './pages.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -21,11 +21,47 @@ test.afterAll(async () => {
   await bob.context().close()
 })
 
-test('signing in at her own PDS', async () => {
+test('coming to the host signed out', async () => {
   await page.goto(url('/'))
-  await expect(page.getByRole('heading', { name: 'Groups on this host' })).toBeVisible()
-  await signIn(page, 'alice')
+  // The host by its address, what signing in is for, and no groups.
+  const host = new URL(world.base).hostname
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`Groups on ${host}`)
+  await expect(page.getByText('Sign in with your Atmosphere account to see your groups, or to start one.')).toBeVisible()
+  await expect(page.locator('.group-row')).toHaveCount(0)
+  await expect(page.getByRole('contentinfo')).toHaveText(`${host} runs opensocial`)
+  // Its one button opens the dialog: the apps of the Atmosphere, what an
+  // account is, the handle, and where to make one.
+  await page.getByRole('main').getByRole('button', { name: 'Sign in' }).click()
+  const dialog = signInDialog(page)
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('.apps img')).toHaveCount(40)
+  await expect(dialog.getByRole('link', { name: 'What is an Atmosphere account?' })).toHaveAttribute('href', 'https://atmosphereaccount.com/')
+  await expect(dialog.getByRole('textbox', { name: 'Handle' })).toBeFocused()
+  await expect(dialog.getByRole('link', { name: 'Create one' })).toHaveAttribute('href', 'https://bsky.app/')
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toBeHidden()
+})
+
+test("a group's page signed out", async () => {
+  // Its handle alone, and the way in, wherever its access record lets
+  // anyone signed in read it.
+  await page.goto(url('/g/riders.groups.test'))
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('riders.groups.test')
+  await expect(page.getByText('Sign in to see this group.')).toBeVisible()
+  await expect(page.locator('.identity, .rules, .standing')).toHaveCount(0)
+  // Nor does the host tell anyone not signed in more of it.
+  const { group } = await fetch(`${world.host}/xrpc/fyi.opensocial.getGroup?group=${world.riders}`).then((r) => r.json())
+  expect(group).toEqual({ did: world.riders, handle: 'riders.groups.test' })
+})
+
+test("signing in at her own PDS, from a group's page", async () => {
+  // Signed in from the page, back on it, as she may see it.
+  await signIn(page, 'alice', page.getByRole('main').getByRole('button', { name: 'Sign in' }))
+  await expect(page).toHaveURL(url('/g/riders.groups.test'))
   await expect.poll(() => signedInAs(page)).toBe('@alice.test')
+  await expect(page.getByText('Sign in to see this group.')).toHaveCount(0)
+  await expect(page.getByText('You are a member.')).toBeVisible()
+  await page.goto(url('/'))
 })
 
 test('seeing her groups', async () => {
@@ -151,9 +187,10 @@ test("giving a group a picture, and taking it away", async () => {
 })
 
 test("hiding a group's profile, and showing it again", async () => {
-  // The host lists every group of its own; a hidden one by its handle alone.
+  // The host lists every group of its own to someone signed in, as bob
+  // is, a member of none; a hidden one by its handle alone.
   const listed = async () => {
-    const { groups } = await fetch(`${world.host}/xrpc/fyi.opensocial.listGroups`).then((r) => r.json())
+    const { groups } = await bob.evaluate(() => fetch('/xrpc/fyi.opensocial.listGroups').then((r) => r.json()))
     return groups.find((g) => g.handle === 'hikers.groups.test')?.displayName !== undefined
   }
   expect(await listed()).toBe(true)
@@ -346,6 +383,6 @@ test('moving an account here to become a group', async () => {
 test('signing out', async () => {
   await page.goto(url('/'))
   await page.getByRole('button', { name: 'Sign out' }).click()
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in' })).toBeVisible()
   await expect.poll(() => signedInAs(page)).toBe('')
 })

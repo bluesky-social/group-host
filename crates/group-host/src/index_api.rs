@@ -1,12 +1,12 @@
 //! The space index, served: what is in one of a group's spaces, and the
 //! pictures and files there, for whoever its access record lets read the
-//! space, asked on every call. The index holds copies; it never decides
-//! who sees them.
+//! space, signed in, asked on every call. The index holds copies; it
+//! never decides who sees them.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
 use crate::authority::Access::Write;
-use crate::group_api::{caller, group_of};
+use crate::group_api::{group_of, signed_in};
 use crate::rbac::{Access, NS};
 use crate::time::iso;
 use crate::xrpc::XrpcError;
@@ -42,7 +42,8 @@ async fn readable(
     let space = param(p, "space")?;
     group_of(host, group).map_err(|_| not_found("unknown group"))?;
     host.active(group).map_err(|_| not_found("unknown group"))?;
-    let me = caller(host, headers, &format!("{NS}.{lxm}")).await?;
+    // Someone not signed in reads no space, a public one included.
+    let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
     let named = SpaceRef::parse(space).ok().filter(|s| s.authority == group);
     let access = match named {
         Some(_) => host
@@ -51,11 +52,8 @@ async fn readable(
         None => None,
     };
     let access = access.ok_or_else(|| not_found("not one of this group's spaces"))?;
-    let roles = match &me {
-        Some(me) => host.roles(group, me).map_err(XrpcError::internal)?,
-        None => Vec::new(),
-    };
-    if !Access::of(&access, space).can_read(&roles, me.as_deref().unwrap_or_default()) {
+    let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
+    if !Access::of(&access, space).can_read(&roles, &me) {
         return Err(XrpcError::new(
             StatusCode::UNAUTHORIZED,
             "NotAuthorized",

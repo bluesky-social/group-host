@@ -9,6 +9,7 @@
 	import { image } from '#lib/images.ts';
 	import Page from '#lib/templates/Page.svelte';
 	import Section from '#lib/molecules/Section.svelte';
+	import Welcome from '#lib/templates/Welcome.svelte';
 	let { data, form } = $props();
 	const g = $derived(data.group);
 	const actions = $derived(g.viewer?.actions ?? []);
@@ -22,6 +23,9 @@
 
 <svelte:head><title>{g.displayName ?? g.handle} · opensocial</title></svelte:head>
 
+{#if !data.viewer}
+	<Welcome title={g.handle} handle>Sign in to see this group.</Welcome>
+{:else}
 <Page title={g.displayName ?? g.handle}>
 	{#if g.banner}<img class="banner" src={image(g.did, g.banner)} alt="" />{/if}
 	<p class="identity"><Avatar src={image(g.did, g.avatar)} size="md" /></p>
@@ -62,3 +66,4 @@
 		{/if}
 	{/if}
 </Page>
+{/if}

@@ -259,10 +259,9 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         json!({"member": false, "roles": [], "actions": []})
     );
     assert_eq!(theirs.get("members"), None);
-    // Nobody signed in: the public face alone.
+    // Nobody signed in: what anyone can learn of it already, and no more.
     let anyone = view(&h, &did, None).await;
-    assert_eq!(anyone["group"]["displayName"], "Riders");
-    assert_eq!(anyone["group"].get("viewer"), None);
+    assert_eq!(anyone, json!({"group": {"did": did, "handle": RIDERS}}));
 }
 
 fn rule_at(rkey: &str, title: &str, order: Option<i64>, at: &str) -> Write {
@@ -372,7 +371,7 @@ async fn its_access_records_say_who_reads_and_writes_its_spaces() {
 #[tokio::test]
 async fn lists_every_group_here() {
     let h = start(&[], false).await;
-    let [alice, _, _] = people(&h).await;
+    let [alice, _, dave] = people(&h).await;
     let open = start_group(
         &h,
         &alice,
@@ -395,7 +394,10 @@ async fn lists_every_group_here() {
     .await;
     // An account that is no group is not listed.
     h.host.create_account("plain.groups.test").await.unwrap();
-    let (status, listed) = get(&h, &format!("{NS}.listGroups"), "", &[]).await;
+    // To someone signed in, a member of neither: the profile and rules of
+    // the one whose meta anyone signed in may read.
+    let lxm = format!("{NS}.listGroups");
+    let (status, listed) = get(&h, &lxm, "", &[auth(&h, &dave, &lxm)]).await;
     assert_eq!(status, 200);
     let groups = listed["groups"].as_array().unwrap();
     assert_eq!(groups.len(), 2);
@@ -407,6 +409,18 @@ async fn lists_every_group_here() {
     );
     assert_eq!(of(&closed).get("displayName"), None);
     assert_eq!(of(&closed)["handle"], "hikers.groups.test");
+    // To no one signed in, each by its DID and handle alone.
+    let (status, listed) = get(&h, &lxm, "", &[]).await;
+    assert_eq!(status, 200);
+    let mut groups = listed["groups"].as_array().unwrap().clone();
+    groups.sort_by_key(|g| g["handle"].as_str().unwrap().to_string());
+    assert_eq!(
+        groups,
+        [
+            json!({"did": closed, "handle": "hikers.groups.test"}),
+            json!({"did": open, "handle": RIDERS}),
+        ]
+    );
 }
 
 #[tokio::test]

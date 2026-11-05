@@ -40,6 +40,12 @@ is derived from the host's rotation secret, so it needs no storage. The
 sign-in asks for `atproto` alone, which proves the account and grants
 nothing.
 
+Someone not signed in is shown no group, since the host tells them
+nothing of one but its DID and handle ([groups](groups.md#what-each-person-sees-and-finding-a-group)).
+The console's home page names the host and asks them to sign in; a
+group's page shows its handle and asks the same. Either opens the
+sign-in dialog, which comes back to the page it was opened on.
+
 A person types their handle or DID. The host finds their PDS and its
 authorization server, pushes the request with PKCE and a fresh DPoP key,
 and sends the browser there. On return it exchanges the code, checks the
