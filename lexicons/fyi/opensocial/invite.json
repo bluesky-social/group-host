@@ -5,7 +5,7 @@
     "main": {
       "type": "record",
       "key": "tid",
-      "description": "An invitation, written by the inviting group into the invitee's own inbox (fyi.opensocial.invites). The group is the record's author.",
+      "description": "An invitation, written by the group in its own repo in the invitee's inbox (fyi.opensocial.invites), through com.atproto.space.*. Deleting it revokes it.",
       "record": {
         "type": "object",
         "required": ["createdAt"],

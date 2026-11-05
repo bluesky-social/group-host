@@ -80,12 +80,15 @@ spaces through the atproto methods below.
 | `GET fyi.opensocial.listJoinRequests` | the requests waiting, for those who admit |
 | `POST fyi.opensocial.admitMember` | lets a request in |
 | `POST fyi.opensocial.denyJoinRequest` | turns a request down |
-| `POST fyi.opensocial.createInvite` | invites someone, into their own inbox |
 | `GET fyi.opensocial.listInvites` | the group's invites still waiting |
-| `POST fyi.opensocial.revokeInvite` | takes an invite back |
 | `GET fyi.opensocial.getActorInvites` | the caller's own invites from groups here |
 | `POST fyi.opensocial.declineInvite` | turns an invite down |
 | `GET com.atproto.managedspace.checkUserAccess` | whether someone may read or write an inbox the host keeps, asked by its authority |
+
+A group invites someone by writing an `fyi.opensocial.invite` record in
+their inbox as the group, and takes it back by deleting it, with the
+`com.atproto.space.*` writes [below](#signing-apps-in-as-a-group)
+([membership](../design/membership.md#invites)).
 
 ## People
 
@@ -132,7 +135,7 @@ The host is each group's OAuth server ([signing in](../design/signing-in.md)):
 | Method | What it does |
 | --- | --- |
 | `POST fyi.opensocial.provisionGroup` | an app `PROVISIONING_CLIENTS` names starts a group for a person, and is signed in to it |
-| `POST fyi.opensocial.getGroupAuth` | a 15-minute token to act as the group in one of its spaces, for a member with a DPoP proof, scoped to what their roles may write there as the group; `Forbidden` if nothing |
+| `POST fyi.opensocial.getGroupAuth` | a 15-minute token to act as the group in one of its spaces, for a member with a DPoP proof, scoped to what their roles may write there as the group, or in someone's inbox, to write invites there for a member who may invite; `Forbidden` if nothing |
 | `GET fyi.opensocial.getAuthorization` | an app's request to sign in as a group, as the caller would approve it |
 | `POST fyi.opensocial.approveAuthorization` | approves it, with what the caller's roles allow |
 | `POST fyi.opensocial.declineAuthorization` | declines it |
@@ -149,7 +152,7 @@ An app signed in so, or with an app password, uses these as the group:
 | `GET com.atproto.server.getSession` | the group a token acts as: its DID, handle, and whether it is switched on |
 | `POST com.atproto.server.createSession`, `POST com.atproto.server.refreshSession`, `POST com.atproto.server.deleteSession` | an app password's sessions |
 | `POST com.atproto.repo.createRecord`, `POST com.atproto.repo.putRecord`, `POST com.atproto.repo.deleteRecord`, `POST com.atproto.repo.applyWrites`, `POST com.atproto.repo.uploadBlob` | writes to the group's public repo |
-| `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space |
+| `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space: one of its own, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`) |
 
 ## Assistants
 

@@ -273,15 +273,22 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
-    // A procedure, as her.
+    // An invite written as the group, as her own session for it would.
     let got = tool(
         &h,
         access,
-        "createInvite",
-        json!({"invitee": bob.did, "message": "Ride with us"}),
+        "sendInvite",
+        json!({"invitee": bob.did, "message": "Ride with us", "expiresAt": "2099-01-01T00:00:00Z"}),
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
+    let uri = got["structuredContent"]["uri"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(uri.contains(&format!("/{group}/{NS}.invite/")), "{uri}");
+    let got = tool(&h, access, "sendInvite", json!({"invitee": "bob"})).await;
+    assert_eq!(got["isError"], true, "{got}");
     let lxm = format!("{NS}.listInvites");
     let (_, invites) = get(
         &h,
@@ -291,10 +298,19 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     )
     .await;
     assert_eq!(
-        invites["invites"][0]["invitee"],
-        bob.did.as_str(),
+        (
+            invites["invites"][0]["invitee"].clone(),
+            invites["invites"][0]["uri"].clone()
+        ),
+        (json!(bob.did), json!(uri)),
         "{invites}"
     );
+    // Taken back; then there is none.
+    let got = tool(&h, access, "takeBackInvite", json!({"invitee": bob.did})).await;
+    assert_eq!(got["structuredContent"]["uri"], uri.as_str(), "{got}");
+    let got = tool(&h, access, "takeBackInvite", json!({"invitee": bob.did})).await;
+    let said = got["content"][0]["text"].as_str().unwrap();
+    assert!(said.contains("InviteNotFound"), "{got}");
     // What the host refuses, it says why.
     let got = tool(&h, access, "ejectMember", json!({"member": carol.did})).await;
     assert_eq!(got["isError"], true);

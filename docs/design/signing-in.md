@@ -173,6 +173,9 @@ At every write, both that scope and the roles as they are now are asked.
   `*` nor a `fyi.opensocial.*` method.
 - `space:T?…` is kept if some space of type `T` lets the roles write
   what is asked there, or read it, for a scope that only reads.
+- `space:fyi.opensocial.invites?…`, people's inboxes, is kept if the
+  roles hold `invite` and it asks for invites alone, in anyone's inbox or
+  one person's.
 - `space:*?…` becomes one scope per space the roles may read, naming the
   asked collections they may write.
 - `blob:…` is kept only if something kept writes.
@@ -187,8 +190,9 @@ scope for each space permission, and an `rpc:` scope for each method.
 A token calls none of the host's own methods, which take a member's
 service auth, and writes in the meta and members spaces only what the
 configure set is for (below). So of the four sets only configure's
-writes can be made with a token now; the others' scopes say what an app
-was given, as the opensocial proposal lists them. A grant keeps this scope
+writes, and manageMembers' invites in people's inboxes, can be made with
+a token now; the others' scopes say what an app was given, as the
+opensocial proposal lists them. A grant keeps this scope
 through every refresh; refreshing does not ask the roles again, because
 each write does.
 
@@ -204,10 +208,12 @@ fails `ScopeMissing`. The member's roles must allow it now, or it fails
 403 "may no longer write … as the group". For a repo write the roles
 need a repo grant for the collection, or the right to write it as the
 group in one of its open spaces. For a space write they need
-`group.configure` in the meta and members spaces; in a space for chosen
-people, to be one of them and hold `repo:*`; and otherwise what the
-space's access record grants. Both are asked under the lock the commit
-is made under, so no change of roles slips in between. An upload is
+`group.configure` in the meta and members spaces; in someone's inbox,
+`invite` ([membership](membership.md)); in a space for chosen people, to
+be one of them and hold `repo:*`; and otherwise what the space's access
+record grants. Both are asked under the lock the commit is made under,
+so no change of roles slips in between, but for an invite, whose checks
+are made just before its write. An upload is
 asked the same way: the scope must take the file's type, and the roles
 must still let the member write something as the group.
 
@@ -222,7 +228,7 @@ Details:
 - `applyWrites` takes at most 200 writes. Repo writes honour
   `swapCommit` and `swapRecord`.
 - The meta space takes only a profile, rules and the labeler, and the
-  members space only roles. A role still named by a grant cannot be
+  members space only roles. An inbox takes invites, one write at a time. A role still named by a grant cannot be
   deleted.
 - Each use marks the grant used, at most once a minute.
 
@@ -263,8 +269,11 @@ for each collection the member's roles may write in that space, a space
 scope and a repo scope, plus blob uploads. In a space for chosen people,
 that is every collection for those of them who hold `repo:*`, and
 nothing for anyone else. If they write nothing there, the request fails
-403. The token lasts 15 minutes and is an ordinary
-grant with source `getGroupAuth`, checked at each write as above.
+403. For someone's inbox instead, a member who holds `invite` gets a
+scope for writing invites there and nothing else, which is how the
+console invites someone and takes an invite back. The token lasts 15
+minutes and is an ordinary grant with source `getGroupAuth`, checked at
+each write as above.
 
 ## Listing and revoking
 

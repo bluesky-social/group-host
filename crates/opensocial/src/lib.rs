@@ -4,11 +4,16 @@
 //! The command acts as a person: it signs in to their own PDS with their
 //! handle and password (an app password is enough), and asks that PDS for
 //! a service token for each method it calls on a host, as an app does. So
-//! an account on any PDS may run the command against any host.
+//! an account on any PDS may run the command against any host. To write as
+//! a group, as an invite is written, it asks the host for a group token
+//! (`getGroupAuth`), bound to a DPoP key of its own.
 
 use anyhow::{Context, Result, anyhow, bail};
+use atproto::jose;
+use atproto::keys::{Curve, Keypair};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 /// What `opensocial` prints for `--help`, or with no command.
 pub const USAGE: &str = "usage: opensocial <command>
@@ -232,6 +237,26 @@ impl Client {
         answer(res, lxm).await
     }
 
+    /// Invites `invitee` to `group`, as the group: with a group token for
+    /// their inbox, from `getGroupAuth`, an invite written there through
+    /// `com.atproto.space.createRecord`.
+    pub async fn invite(
+        &self,
+        host: &Host,
+        group: &str,
+        invitee: &str,
+        message: Option<&str>,
+    ) -> Result<Value> {
+        let inbox = format!("at://{invitee}/space/fyi.opensocial.invites/self");
+        let session = GroupSession::start(self, host, group, &inbox).await?;
+        let mut record = json!({"$type": "fyi.opensocial.invite", "createdAt": now_iso()});
+        if let Some(words) = message {
+            record["message"] = json!(words);
+        }
+        let body = json!({"repo": group, "space": inbox, "collection": "fyi.opensocial.invite", "record": record});
+        session.call("com.atproto.space.createRecord", &body).await
+    }
+
     /// The DID `who` names, a handle or a DID, as `host` resolves it.
     pub async fn resolve(&self, host: &Host, who: &str) -> Result<String> {
         if who.starts_with("did:") {
@@ -240,6 +265,118 @@ impl Client {
         let lxm = "com.atproto.identity.resolveHandle";
         let said = self.query(host, lxm, &[("handle", who)]).await?;
         Ok(text(&said["did"]).to_string())
+    }
+}
+
+/// Now, as atproto writes a datetime.
+fn now_iso() -> String {
+    atproto::time::iso(atproto::time::now_millis())
+}
+
+const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
+
+/// A session as a group, from `getGroupAuth`: its token, bound to a DPoP
+/// key of its own, and the host's nonce as it last gave it.
+struct GroupSession<'a> {
+    client: &'a Client,
+    host: &'a Host,
+    /// The host's address as it names itself, which a proof names.
+    public: String,
+    key: Keypair,
+    nonce: Mutex<Option<String>>,
+    token: String,
+}
+
+impl<'a> GroupSession<'a> {
+    /// A group token for `space`, as far as the person's roles in `group`
+    /// let them write there as it.
+    async fn start(
+        client: &'a Client,
+        host: &'a Host,
+        group: &str,
+        space: &str,
+    ) -> Result<GroupSession<'a>> {
+        let url = format!("{}/.well-known/oauth-protected-resource", host.url);
+        let res = client.http.get(url).send().await;
+        let res = res.context(format!("reaching {}", host.url))?;
+        let resource = answer(res, "the host's metadata").await?;
+        let mut session = GroupSession {
+            client,
+            host,
+            public: text(&resource["resource"]).to_string(),
+            key: Keypair::generate(Curve::P256),
+            nonce: Mutex::new(None),
+            token: String::new(),
+        };
+        let service = client.token(&host.did, GET_GROUP_AUTH).await?;
+        let body = json!({"group": group, "space": space});
+        let auth = format!("Bearer {service}");
+        let said = session.send(GET_GROUP_AUTH, &auth, None, &body).await?;
+        session.token = text(&said["accessJwt"]).to_string();
+        Ok(session)
+    }
+
+    /// A DPoP proof of a POST to `nsid`, for `token` if it carries one.
+    fn proof(&self, nsid: &str, token: Option<&str>) -> String {
+        let mut claims = json!({
+            "jti": jose::random(12),
+            "htm": "POST",
+            "htu": format!("{}/xrpc/{nsid}", self.public),
+            "iat": atproto::time::now_millis() / 1000,
+        });
+        if let Some(nonce) = self.nonce.lock().expect("not poisoned").clone() {
+            claims["nonce"] = json!(nonce);
+        }
+        if let Some(token) = token {
+            claims["ath"] = json!(jose::sha256(token));
+        }
+        let header = json!({"typ": "dpop+jwt", "jwk": jose::jwk(&self.key.public())});
+        jose::sign(&self.key, &header, &claims)
+    }
+
+    /// POSTs `body` to `nsid` with `authorization` and a fresh proof, once
+    /// more with the host's nonce if it asks for one.
+    async fn send(
+        &self,
+        nsid: &str,
+        authorization: &str,
+        token: Option<&str>,
+        body: &Value,
+    ) -> Result<Value> {
+        let mut res = self.post(nsid, authorization, token, body).await?;
+        let stale = res
+            .headers()
+            .get("www-authenticate")
+            .is_some_and(|v| v.to_str().unwrap_or_default().contains("use_dpop_nonce"));
+        if stale {
+            res = self.post(nsid, authorization, token, body).await?;
+        }
+        answer(res, nsid).await
+    }
+
+    async fn post(
+        &self,
+        nsid: &str,
+        authorization: &str,
+        token: Option<&str>,
+        body: &Value,
+    ) -> Result<reqwest::Response> {
+        let url = format!("{}/xrpc/{nsid}", self.host.url);
+        let asked = self.client.http.post(url).json(body);
+        let asked = asked.header("authorization", authorization);
+        let sent = asked.header("dpop", self.proof(nsid, token)).send().await;
+        let res = sent.context(format!("reaching {}", self.host.url))?;
+        if let Some(nonce) = res.headers().get("dpop-nonce") {
+            let nonce = nonce.to_str().unwrap_or_default().to_string();
+            *self.nonce.lock().expect("not poisoned") = Some(nonce);
+        }
+        Ok(res)
+    }
+
+    /// The procedure `nsid` with `body`, as the group.
+    async fn call(&self, nsid: &str, body: &Value) -> Result<Value> {
+        let auth = format!("DPoP {}", self.token);
+        self.send(nsid, &auth, Some(&self.token), body).await
     }
 }
 
@@ -428,11 +565,17 @@ async fn membership(me: &Client, host: &Host, a: &Args<'_>) -> Result<String> {
     let call = match (what, rest.len()) {
         ("assign", 3) => "assignRoles",
         ("eject", 2) => "ejectMember",
-        ("invite", 2) => "createInvite",
+        ("invite", 2) => "",
         _ => return Err(usage()),
     };
     let group = me.resolve(host, group).await?;
     let person = me.resolve(host, who).await?;
+    // An invite is a record the group writes in their inbox.
+    if call.is_empty() {
+        let message = a.flags.get("message").copied();
+        me.invite(host, &group, &person, message).await?;
+        return Ok(format!("{who}: invited\n"));
+    }
     let mut body = json!({"group": group});
     let done = match what {
         "assign" => {
@@ -442,19 +585,12 @@ async fn membership(me: &Client, host: &Host, a: &Args<'_>) -> Result<String> {
             body["roles"] = json!(refs);
             roles.join(", ")
         }
-        "eject" => {
+        _ => {
             body["member"] = json!(person);
             if let Some(r) = a.flags.get("reason") {
                 body["reason"] = json!(r);
             }
             "put out".to_string()
-        }
-        _ => {
-            body["invitee"] = json!(person);
-            if let Some(words) = a.flags.get("message") {
-                body["message"] = json!(words);
-            }
-            "invited".to_string()
         }
     };
     me.call(host, &m(call), &body).await?;
@@ -691,8 +827,7 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
     out += "role       moderator\n";
     for who in invite {
         let person = me.resolve(host, who).await?;
-        let body = json!({"group": group, "invitee": person});
-        me.call(host, &m("createInvite"), &body).await?;
+        me.invite(host, &group, &person, None).await?;
         out += &format!("invited    {who}\n");
     }
     Ok(out)

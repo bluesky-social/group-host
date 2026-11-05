@@ -1,13 +1,15 @@
-//! Invites: written in the invitee's inbox, listed, taken back, turned
-//! down, and redeemed by asking to join; and who may read and write an
-//! inbox, as its authority asks.
+//! Invites: written as the group in the invitee's inbox, through
+//! `com.atproto.space.*` with a group token, listed, taken back by
+//! deleting them, turned down, and redeemed by asking to join; and who
+//! may read and write an inbox, as its authority asks.
 
 mod common;
 
 use common::groups::*;
+use common::oauth::*;
 use common::spaces::*;
 use common::{Running, start};
-use group_host::group::meta_space;
+use group_host::group::{members_space, meta_space};
 use group_host::group_invites::{inbox_of, millis_of};
 use group_host::repo::Write;
 use group_host::store::Invite;
@@ -15,6 +17,8 @@ use group_host::time::now_millis;
 use serde_json::{Value as Json, json};
 
 const NS: &str = "fyi.opensocial";
+const CREATE: &str = "com.atproto.space.createRecord";
+const DELETE: &str = "com.atproto.space.deleteRecord";
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
     let lxm = format!("{NS}.{method}");
@@ -30,6 +34,30 @@ fn error(said: &(u16, Json)) -> (u16, &str) {
     (said.0, said.1["error"].as_str().unwrap_or_default())
 }
 
+/// An invite as an app writes one: the record, with `fields`.
+fn invite(fields: Json) -> Json {
+    let mut record = json!({"$type": format!("{NS}.invite"), "createdAt": "2026-11-03T00:00:00Z"});
+    for (k, v) in fields.as_object().unwrap() {
+        record[k] = v.clone();
+    }
+    json!({"collection": format!("{NS}.invite"), "record": record})
+}
+
+/// `who` invites `invitee` to `group`, as the group, the invite holding
+/// `fields`: what writing it answered.
+async fn send(h: &Running, who: &Authority, group: &str, invitee: &str, fields: Json) -> Said {
+    let inbox = inbox_of(invitee);
+    inbox_write(h, who, group, &inbox, CREATE, invite(fields)).await
+}
+
+/// `who` takes back the invite at `uri`, as the group, by deleting it.
+async fn take_back(h: &Running, who: &Authority, group: &str, uri: &str) -> Said {
+    let (inbox, rest) = uri.split_once(&format!("/{group}/")).unwrap();
+    let rkey = rest.rsplit('/').next().unwrap();
+    let body = json!({"collection": format!("{NS}.invite"), "rkey": rkey});
+    inbox_write(h, who, group, inbox, DELETE, body).await
+}
+
 #[tokio::test]
 async fn an_invite_is_written_in_the_invitees_inbox() {
     let h = start(&[], false).await;
@@ -40,15 +68,16 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         json!({"handle": RIDERS, "displayName": "Riders", "joinPolicy": "invite"}),
     )
     .await;
-    let (status, made) = call(
+    let made = send(
         &h,
         &alice,
-        "createInvite",
-        json!({"group": did, "invitee": bob.did, "message": "Ride with us"}),
+        &did,
+        &bob.did,
+        json!({"message": "Ride with us"}),
     )
     .await;
-    assert_eq!(status, 200, "{made}");
-    let uri = made["uri"].as_str().unwrap().to_string();
+    assert_eq!(made.status, 200, "{}", made.body);
+    let uri = made.body["uri"].as_str().unwrap().to_string();
     let inbox = inbox_of(&bob.did);
     assert!(uri.starts_with(&format!("{inbox}/{did}/{NS}.invite/")));
     // In the group's repo in Bob's inbox, and told to his PDS, its authority.
@@ -64,29 +93,17 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         (None, json!("Ride with us"))
     );
     assert_eq!(bob.told.writes.lock().unwrap()[0].1["space"], inbox);
-    // Asked again, the same one.
+    // Written again, the same one answered, as it is.
+    let again = send(&h, &alice, &did, &bob.did, json!({"message": "Hello"})).await;
     assert_eq!(
-        call(
-            &h,
-            &alice,
-            "createInvite",
-            json!({"group": did, "invitee": bob.did})
-        )
-        .await
-        .1["uri"],
-        uri
+        (again.body["uri"].clone(), again.body["cid"].clone()),
+        (json!(uri), made.body["cid"].clone())
     );
 
     // Listed for those who invite, newest first, a page at a time; its
     // lapse as given, at an offset from UTC or in it.
     let soon = "2099-01-01T01:00:00.5+01:00";
-    call(
-        &h,
-        &alice,
-        "createInvite",
-        json!({"group": did, "invitee": carol.did, "expiresAt": soon}),
-    )
-    .await;
+    send(&h, &alice, &did, &carol.did, json!({"expiresAt": soon})).await;
     let (_, page) = ask(&h, &alice, "listInvites", &format!("group={did}&limit=1")).await;
     assert_eq!(
         (
@@ -162,41 +179,33 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         json!([])
     );
 
-    for (who, body, refused) in [
+    for (who, invitee, fields, refused) in [
+        (&alice, bob.did.as_str(), json!({}), (400, "AlreadyMember")),
+        (&alice, "bob", json!({}), (400, "InvalidRequest")),
         (
             &alice,
-            json!({"group": did, "invitee": bob.did}),
-            (400, "AlreadyMember"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "invitee": "bob"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"group": did, "invitee": carol.did, "expiresAt": "2027-02-30T00:00:00Z"}),
+            carol.did.as_str(),
+            json!({"expiresAt": "2027-02-30T00:00:00Z"}),
             (400, "InvalidRequest"),
         ),
         // One lapsed already would admit nobody.
         (
             &alice,
-            json!({"group": did, "invitee": carol.did, "expiresAt": "2020-01-01T00:00:00Z"}),
+            carol.did.as_str(),
+            json!({"expiresAt": "2020-01-01T00:00:00Z"}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "invitee": carol.did, "message": "ü".repeat(2001)}),
+            carol.did.as_str(),
+            json!({"message": "ü".repeat(2001)}),
             (400, "InvalidRequest"),
         ),
-        (
-            &bob,
-            json!({"group": did, "invitee": carol.did}),
-            (403, "Forbidden"),
-        ),
+        // Bob may not invite: no token for it.
+        (&bob, carol.did.as_str(), json!({}), (403, "Forbidden")),
     ] {
-        let said = call(&h, who, "createInvite", body.clone()).await;
-        assert_eq!(error(&said), refused, "{body}");
+        let said = send(&h, who, &did, invitee, fields.clone()).await;
+        assert_eq!(said.error(), refused, "{invitee} {fields}");
     }
     assert_eq!(
         error(&ask(&h, &bob, "listInvites", &format!("group={did}")).await),
@@ -206,6 +215,104 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         error(&ask(&h, &alice, "listInvites", &format!("group={did}&cursor=x")).await),
         (400, "InvalidRequest")
     );
+}
+
+#[tokio::test]
+async fn a_token_writes_invites_only_as_far_as_it_and_its_member_may() {
+    let h = start(&[], false).await;
+    let [alice, bob, carol] = people(&h).await;
+    let did = start_group(
+        &h,
+        &alice,
+        json!({"handle": RIDERS, "displayName": "Riders"}),
+    )
+    .await;
+    let app = App::new("console");
+    let inbox = inbox_of(&bob.did);
+    let given = group_token(&h, &app, &alice, &did, &inbox).await;
+    assert_eq!(given.status, 200, "{}", given.body);
+    assert_eq!(
+        given.body["scope"],
+        format!(
+            "atproto space:{NS}.invites?authority={}&skey=self&collection={NS}.invite&action=create&action=update&action=delete",
+            bob.did
+        )
+    );
+    assert_eq!(
+        (
+            given.body["collections"].clone(),
+            given.body["repoCollections"].clone()
+        ),
+        (json!([{"collection": format!("{NS}.invite")}]), json!([]))
+    );
+    let token = given.body["accessJwt"].as_str().unwrap().to_string();
+    let write = async |nsid: &str, mut body: Json| {
+        body["repo"] = json!(did);
+        if body.get("space").is_none() {
+            body["space"] = json!(inbox);
+        }
+        app.call(&h, nsid, &token, Some(&body)).await
+    };
+
+    // Its one inbox, and invites alone there, one at a time.
+    let elsewhere = json!({"space": inbox_of(&carol.did)});
+    let mut body = invite(json!({}));
+    body["space"] = elsewhere["space"].clone();
+    assert_eq!(write(CREATE, body).await.error(), (403, "ScopeMissing"));
+    let mut rule = invite(json!({}));
+    rule["collection"] = json!(format!("{NS}.rule"));
+    assert_eq!(write(CREATE, rule).await.error(), (400, "InvalidRequest"));
+    let record = invite(json!({}))["record"].clone();
+    let one = json!({"$type": "com.atproto.space.applyWrites#create", "collection": format!("{NS}.invite"), "value": record});
+    let two = json!({"writes": [one, one]});
+    let apply = "com.atproto.space.applyWrites";
+    assert_eq!(write(apply, two).await.error(), (400, "InvalidRequest"));
+    let said = write(apply, json!({"writes": [one]})).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let rkey = said.body["results"][0]["uri"]
+        .as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string();
+
+    // Put at its key, it replaces the one waiting.
+    let put = json!({
+        "collection": format!("{NS}.invite"),
+        "rkey": rkey,
+        "record": invite(json!({"message": "Come along"}))["record"],
+    });
+    let said = write("com.atproto.space.putRecord", put).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let listed = ask(&h, &alice, "listInvites", &format!("group={did}"))
+        .await
+        .1;
+    assert_eq!(listed["invites"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["invites"][0]["message"], "Come along");
+
+    // An inbox is at self.
+    let odd = format!("at://{}/space/{NS}.invites/other", bob.did);
+    let said = inbox_write(&h, &alice, &did, &odd, CREATE, invite(json!({}))).await;
+    assert_eq!(said.error(), (400, "InvalidRequest"));
+
+    // Its member no longer able to invite, it writes no invite.
+    let founder = json!({"$type": format!("{NS}.membership"), "member": alice.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
+    let rkey_of = |d: &str| group_host::group::did_rkey(d);
+    h.host
+        .space_write(
+            &did,
+            &members_space(&did),
+            &[Write::Update {
+                collection: format!("{NS}.membership"),
+                rkey: rkey_of(&alice.did),
+                value: founder,
+            }],
+        )
+        .await
+        .unwrap();
+    let said = write(CREATE, invite(json!({}))).await;
+    assert_eq!(said.error(), (403, "Forbidden"));
 }
 
 #[tokio::test]
@@ -224,55 +331,18 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
         .space_write(&did, &meta_space(&did), &[Write::Update { collection: format!("{NS}.profile"), rkey: "self".into(), value: json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "invite", "avatar": picture}) }])
         .await
         .unwrap();
-    let (_, made) = call(
-        &h,
-        &alice,
-        "createInvite",
-        json!({"group": did, "invitee": bob.did}),
-    )
-    .await;
-    let uri = made["uri"].as_str().unwrap().to_string();
+    let made = send(&h, &alice, &did, &bob.did, json!({})).await;
+    let uri = made.body["uri"].as_str().unwrap().to_string();
     assert_eq!(
         ask(&h, &bob, "getActorInvites", "").await.1["invites"][0]["group"]["avatar"],
         picture["ref"]["$link"]
     );
+    // Taken back by deleting it; then there is none to take back.
+    let said = take_back(&h, &alice, &did, &uri).await;
+    assert_eq!((said.status, said.body), (200, json!({})));
     assert_eq!(
-        call(
-            &h,
-            &alice,
-            "revokeInvite",
-            json!({"group": did, "uri": uri})
-        )
-        .await,
-        (200, json!({}))
-    );
-    assert_eq!(
-        error(
-            &call(
-                &h,
-                &alice,
-                "revokeInvite",
-                json!({"group": did, "uri": uri})
-            )
-            .await
-        ),
+        take_back(&h, &alice, &did, &uri).await.error(),
         (400, "InviteNotFound")
-    );
-    assert_eq!(
-        error(
-            &call(
-                &h,
-                &alice,
-                "revokeInvite",
-                json!({"group": did, "uri": "at://alice.example.com/fyi.opensocial.invite/x"})
-            )
-            .await
-        ),
-        (400, "InvalidRequest")
-    );
-    assert_eq!(
-        error(&call(&h, &alice, "revokeInvite", json!({"group": did})).await),
-        (400, "InvalidRequest")
     );
     assert_eq!(
         error(&call(&h, &bob, "requestJoin", json!({"group": did})).await),
@@ -280,13 +350,7 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     );
 
     // Turned down by its invitee.
-    call(
-        &h,
-        &alice,
-        "createInvite",
-        json!({"group": did, "invitee": bob.did}),
-    )
-    .await;
+    send(&h, &alice, &did, &bob.did, json!({})).await;
     assert_eq!(
         call(&h, &bob, "declineInvite", json!({"group": did})).await,
         (200, json!({}))
@@ -303,11 +367,11 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     // Lapsed, it is no invite, and is taken back once found so. A past
     // expiry is refused, so these lapse a second after they are made.
     let lapse = group_host::time::iso(now_millis() + 1000);
-    let lapsed = |who: &str| json!({"group": did, "invitee": who, "expiresAt": lapse});
-    let (status, made) = call(&h, &alice, "createInvite", lapsed(&carol.did)).await;
-    assert_eq!(status, 200, "{made}");
-    let (status, bobs) = call(&h, &alice, "createInvite", lapsed(&bob.did)).await;
-    assert_eq!(status, 200, "{bobs}");
+    let lapsed = json!({ "expiresAt": lapse });
+    let made = send(&h, &alice, &did, &carol.did, lapsed.clone()).await;
+    assert_eq!(made.status, 200, "{}", made.body);
+    let bobs = send(&h, &alice, &did, &bob.did, lapsed).await;
+    assert_eq!(bobs.status, 200, "{}", bobs.body);
     tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     assert_eq!(
         ask(&h, &alice, "listInvites", &format!("group={did}"))
@@ -327,26 +391,21 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
             .unwrap();
         record.is_none() && h.host.store.invited(&did, invitee).unwrap().is_none()
     };
-    assert!(gone(&made, &carol.did));
+    assert!(gone(&made.body, &carol.did));
     // Or by the host's sweep, asked of no one.
-    let made = bobs;
+    let made = bobs.body;
     assert!(!gone(&made, &bob.did));
     assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 1);
     assert!(gone(&made, &bob.did));
     assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 0);
     // Invited again, a fresh invite, which admits; its message as long as
     // the lexicon lets it be.
-    let (_, again) = call(
-        &h,
-        &alice,
-        "createInvite",
-        json!({"group": did, "invitee": carol.did, "message": "ü".repeat(2000)}),
-    )
-    .await;
+    let words = json!({"message": "ü".repeat(2000)});
+    let again = send(&h, &alice, &did, &carol.did, words).await;
     let listed = ask(&h, &alice, "listInvites", &format!("group={did}"))
         .await
         .1;
-    assert_eq!(listed["invites"][0]["uri"], again["uri"]);
+    assert_eq!(listed["invites"][0]["uri"], again.body["uri"]);
     assert_eq!(
         call(&h, &carol, "requestJoin", json!({"group": did}))
             .await
@@ -356,13 +415,7 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
 
     // A group switched off shows no invites.
     let dave = authority(&h, false, true).await;
-    call(
-        &h,
-        &alice,
-        "createInvite",
-        json!({"group": did, "invitee": dave.did}),
-    )
-    .await;
+    send(&h, &alice, &did, &dave.did, json!({})).await;
     h.host.deactivate_account(&did, &alice.did, &[]).unwrap();
     assert_eq!(
         ask(&h, &dave, "getActorInvites", "").await.1["invites"],

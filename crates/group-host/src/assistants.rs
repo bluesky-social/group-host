@@ -692,13 +692,18 @@ fn query_of(args: &Value) -> Vec<(String, String)> {
 
 impl Host {
     /// Calls `tool` with `args` as `who`, in their group: as the console
-    /// does, the host asking itself as them.
+    /// does, the host asking itself as them. A tool that writes an invite
+    /// makes the write their own session for the group would.
     async fn call_as(
         self: &Arc<Self>,
         who: &Connected,
         tool: Tool,
         mut args: Value,
     ) -> Result<Value, String> {
+        if tool.nsid.starts_with("com.atproto.space.") {
+            let made = self.invite_as(who, &tool.name, &args).await;
+            return made.map_err(|e| format!("{}: {}", e.error, e.message));
+        }
         args["group"] = json!(who.group);
         let cookie = self.session_cookie(&who.member, now_millis());
         let cookie = format!("{}={cookie}", crate::console_login::COOKIE);

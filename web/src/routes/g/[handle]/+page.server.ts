@@ -5,8 +5,12 @@ import type * as listInvites from '#lib/lexicons/fyi/opensocial/listInvites.ts';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
+import { asGroup } from '#lib/asGroup.ts';
 
 type Handle = `${string}.${string}`;
+
+/** Someone's inbox, where groups write their invites to them. */
+const inboxOf = (did: string) => `at://${did}/space/fyi.opensocial.invites/self`;
 
 /** The group the page's address names, by its handle: its DID. */
 async function groupOf(event: { fetch: typeof fetch; params: { handle?: string } }) {
@@ -73,7 +77,9 @@ export const actions: Actions = {
 		const found = await event.fetch(`/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
 		if (!found.ok) return fail(400, { failed: `We cannot find ${handle}.` });
 		const { did } = await found.json();
-		return act(event, 'fyi.opensocial.createInvite', { group, invitee: did });
+		// Written as the group, in their own inbox.
+		const record = { $type: 'fyi.opensocial.invite', createdAt: new Date().toISOString() };
+		return asGroup(event, group, inboxOf(did), 'com.atproto.space.createRecord', { collection: 'fyi.opensocial.invite', record });
 	},
 	disconnect: async (event) => {
 		const { group, form } = await asked(event);
@@ -81,6 +87,9 @@ export const actions: Actions = {
 	},
 	uninvite: async (event) => {
 		const { group, form } = await asked(event);
-		return act(event, 'fyi.opensocial.revokeInvite', { group, uri: String(form.get('uri')) });
+		// Taken back by deleting it, as the group, from their inbox.
+		const uri = String(form.get('uri') ?? '');
+		const [inbox, rkey] = [uri.split(`/${group}/`)[0], uri.split('/').pop()];
+		return asGroup(event, group, inbox, 'com.atproto.space.deleteRecord', { collection: 'fyi.opensocial.invite', rkey });
 	}
 };

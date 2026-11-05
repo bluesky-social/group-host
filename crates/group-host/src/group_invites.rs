@@ -1,26 +1,32 @@
 //! Invites. A group invites someone by writing an invite in its own repo
 //! in the invitee's inbox: a space under the invitee's own DID, at their
 //! PDS, which lets this host say who may write there
-//! (`com.atproto.managedspace.checkUserAccess`). The invitee's apps read
-//! it there; the host keeps its own list of what it sent, which is what
-//! redeems an invite, as the inbox is its owner's to read, not the
-//! group's.
+//! (`com.atproto.managedspace.checkUserAccess`). An app writes it as the
+//! group, through `com.atproto.space.*` with a session for the group, and
+//! takes it back by deleting it. The invitee's apps read it there; the
+//! host keeps its own list of what it sent, which is what redeems an
+//! invite, as the inbox is its owner's to read, not the group's.
 //!
 //! An invite is redeemed by asking to join: admitted at once, whatever
 //! the group's join policy, with its default roles.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
+use crate::assistants::Connected;
 use crate::group::meta_space;
 use crate::group_api::{caller, group_of, signed_in};
-use crate::group_members::acting;
+use crate::group_members::{Members, acting};
+use crate::lexicons::check_record;
+use crate::oauth_resource::Acting;
+use crate::oauth_store::Grant;
 use crate::rbac::NS;
 use crate::repo::Write;
+use crate::scopes::Permissions;
 use crate::store::Invite;
 use crate::time::{iso, now_millis};
+use crate::token_writes::{action, missing, no_longer};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
-use atproto::syntax;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -187,61 +193,188 @@ impl Host {
     }
 }
 
-/// Invites someone, for one holding `invite`: an invite written in the
-/// group's repo in their inbox, told to their PDS. One already waiting is
-/// the one answered.
-pub async fn create_invite(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let (members, me, _) = acting(&host, &headers, &body, "createInvite", Some("invite")).await?;
-    let invitee = body["invitee"].as_str().expect("its lexicon requires it");
-    if members.membership(invitee)?.is_some() {
-        return Err(bad("AlreadyMember", "they are a member already"));
+/// Whether `space` is someone's inbox, where groups write invites to them.
+pub fn is_inbox(space: &SpaceRef) -> bool {
+    space.kind == format!("{NS}.invites")
+}
+
+/// The scope a group's session takes to write invites in `inbox`, and
+/// only there.
+pub(crate) fn inviting_scope(inbox: &SpaceRef) -> String {
+    format!(
+        "atproto space:{NS}.invites?authority={}&skey={}&collection={NS}.invite&action=create&action=update&action=delete",
+        inbox.authority, inbox.skey
+    )
+}
+
+impl Host {
+    /// Makes `writes` in someone's inbox as the group, with `acting`'s
+    /// session: one invite at a time, as [`Host::write_invite`] has it.
+    pub(crate) async fn write_invites(
+        &self,
+        acting: &Acting,
+        inbox: &SpaceRef,
+        writes: Vec<Write>,
+    ) -> Result<Vec<Write>, XrpcError> {
+        let Ok([write]) = <[Write; 1]>::try_from(writes) else {
+            return Err(invalid("an inbox takes one invite write at a time"));
+        };
+        Ok(vec![self.write_invite(acting, inbox, write).await?])
     }
-    let expires_at = match body["expiresAt"].as_str() {
-        Some(at) => Some(millis_of(at).ok_or_else(|| invalid("expiresAt is a datetime"))?),
-        None => None,
-    };
-    // One that has lapsed already could admit nobody.
-    if expires_at.is_some_and(|at| at <= now_millis()) {
-        return Err(invalid("expiresAt is a time to come"));
+
+    /// Writes an invite in the group's repo in someone's inbox, or deletes
+    /// one, with `acting`'s session, for a member whose roles hold
+    /// `invite`: the write as made, told to the inbox's authority.
+    ///
+    /// A group has one invite to each person at a time. Written while one
+    /// waits, it is that one answered, unless it is written at that one's
+    /// key, which replaces it. An invite is for someone not yet a member,
+    /// and lapses, if it does, at a time still to come. Deleted, it is
+    /// taken back. The host's own list of invites, which redeems them,
+    /// keeps in step.
+    pub(crate) async fn write_invite(
+        &self,
+        acting: &Acting,
+        inbox: &SpaceRef,
+        write: Write,
+    ) -> Result<Write, XrpcError> {
+        let (group, member) = (&acting.grant.group, &acting.grant.member);
+        let kind = format!("{NS}.invite");
+        let (collection, rkey) = write.path();
+        if collection != kind || inbox.skey != "self" {
+            let only = format!("an inbox, at self, holds {kind} records, and no other");
+            return Err(invalid(only));
+        }
+        let asked = action(&write);
+        if !acting.permissions.space(inbox, Some(collection), asked) {
+            let scope = format!("space:{}?collection={kind}&action={asked}", inbox.kind);
+            return Err(missing(scope));
+        }
+        if !self.may_do(group, member, "invite")? {
+            return Err(no_longer(collection));
+        }
+        let (invitee, uri) = (&inbox.authority, inbox.to_string());
+        let waiting = self.waiting_invite(group, invitee).await?;
+        let Some(value) = write.value() else {
+            let named = waiting.filter(|w| w.rkey == rkey);
+            let invite = named.ok_or_else(|| bad("InviteNotFound", "no invite to them waits"))?;
+            self.take_back(&invite).await?;
+            self.wrote(acting, Some(&uri), std::slice::from_ref(&write))?;
+            return Ok(write);
+        };
+        check_record(collection, value)?;
+        if Members::of(self, group)?.membership(invitee)?.is_some() {
+            return Err(bad("AlreadyMember", "they are a member already"));
+        }
+        let expires_at = match value["expiresAt"].as_str() {
+            Some(at) => Some(millis_of(at).ok_or_else(|| invalid("expiresAt is a datetime"))?),
+            None => None,
+        };
+        // One that has lapsed already could admit nobody.
+        if expires_at.is_some_and(|at| at <= now_millis()) {
+            return Err(invalid("expiresAt is a time to come"));
+        }
+        if let Some(other) = waiting.as_ref().filter(|w| w.rkey != rkey) {
+            let record = self.group_record(group, &uri, &kind, &other.rkey);
+            let record = record.map_err(XrpcError::internal)?.unwrap_or_default();
+            let (collection, rkey) = (kind, other.rkey.clone());
+            return Ok(Write::Create {
+                collection,
+                rkey,
+                value: record,
+            });
+        }
+        let (collection, rkey, value) = (kind, rkey.to_string(), value.clone());
+        let message = value["message"].as_str().map(String::from);
+        let made = match &waiting {
+            Some(_) => Write::Update {
+                collection,
+                rkey: rkey.clone(),
+                value,
+            },
+            None => Write::Create {
+                collection,
+                rkey: rkey.clone(),
+                value,
+            },
+        };
+        let written = self.space_write(group, &uri, std::slice::from_ref(&made));
+        written.await?;
+        if waiting.is_some() {
+            let replaced = self.store.uninvite(group, invitee);
+            replaced.map_err(XrpcError::internal)?;
+        }
+        let invite = Invite {
+            seq: 0,
+            group: group.clone(),
+            invitee: invitee.clone(),
+            by: member.clone(),
+            message,
+            rkey,
+            created_at: now_millis(),
+            expires_at,
+        };
+        self.store.invite(&invite).map_err(XrpcError::internal)?;
+        self.wrote(acting, Some(&uri), std::slice::from_ref(&made))?;
+        Ok(made)
     }
-    let message = body["message"].as_str();
-    let group = members.group.clone();
-    // One waiting is the one answered; one lapsed is taken back, and a
-    // fresh one written.
-    if let Some(waiting) = host.waiting_invite(&group, invitee).await? {
-        return Ok(Json(json!({ "uri": invite_uri(&waiting) })));
+
+    /// What an assistant's invite tool does, as the member who connected
+    /// it, in their group: the write the member's own group session for
+    /// the invitee's inbox would make (`sendInvite`, or `takeBackInvite`
+    /// for the one waiting), logged as the assistant's. The invite's URI.
+    pub(crate) async fn invite_as(
+        &self,
+        who: &Connected,
+        tool: &str,
+        args: &Value,
+    ) -> Result<Value, XrpcError> {
+        let invitee = args["invitee"].as_str().unwrap_or_default();
+        let inbox = SpaceRef::parse(&inbox_of(invitee)).map_err(|e| invalid(e.to_string()))?;
+        let now = now_millis();
+        let grant = Grant {
+            id: format!("assistant-{}", who.id),
+            group: who.group.clone(),
+            member: who.member.clone(),
+            client_id: who.client_id.clone(),
+            client_auth: json!({}),
+            scope: inviting_scope(&inbox),
+            dpop_jkt: String::new(),
+            access_expires: now,
+            expires_at: now,
+            created_at: now,
+            source: "assistant".into(),
+            used_at: None,
+        };
+        let permissions = Permissions::new(&grant.scope, &grant.group);
+        let acting = Acting { grant, permissions };
+        let collection = format!("{NS}.invite");
+        let write = match tool {
+            "sendInvite" => {
+                let mut value = json!({"$type": collection, "createdAt": iso(now)});
+                for field in ["message", "expiresAt"] {
+                    if let Some(given) = args.get(field) {
+                        value[field] = given.clone();
+                    }
+                }
+                let rkey = self.clock.next();
+                Write::Create {
+                    collection,
+                    rkey,
+                    value,
+                }
+            }
+            _ => {
+                let waiting = self.store.invited(&who.group, invitee);
+                let waiting = waiting.map_err(XrpcError::internal)?;
+                let rkey = waiting.map(|w| w.rkey).unwrap_or_default();
+                Write::Delete { collection, rkey }
+            }
+        };
+        let made = self.write_invite(&acting, &inbox, write).await?;
+        let rkey = made.path().1;
+        Ok(json!({"uri": format!("{inbox}/{}/{NS}.invite/{rkey}", who.group)}))
     }
-    let invite = Invite {
-        seq: 0,
-        group: group.clone(),
-        invitee: invitee.into(),
-        by: me.clone(),
-        message: message.map(String::from),
-        rkey: host.clock.next(),
-        created_at: now_millis(),
-        expires_at,
-    };
-    let mut record = json!({"$type": format!("{NS}.invite"), "createdAt": iso(invite.created_at)});
-    if let Some(m) = &invite.message {
-        record["message"] = json!(m);
-    }
-    if let Some(at) = body["expiresAt"].as_str() {
-        record["expiresAt"] = json!(at);
-    }
-    let write = Write::Create {
-        collection: format!("{NS}.invite"),
-        rkey: invite.rkey.clone(),
-        value: record,
-    };
-    let inbox = inbox_of(invitee);
-    let written = host.space_write(&group, &inbox, std::slice::from_ref(&write));
-    written.await?;
-    host.store.invite(&invite).map_err(XrpcError::internal)?;
-    Ok(Json(json!({ "uri": invite_uri(&invite) })))
 }
 
 /// The group's invites waiting, newest first, for one holding `invite`.
@@ -270,27 +403,6 @@ pub async fn list_invites(
         .map(|i| i.seq.to_string());
     let invites: Vec<Value> = waiting.iter().map(view).collect();
     Ok(Json(json!({"invites": invites, "cursor": cursor})))
-}
-
-/// Takes back an invite, by its URI, for one holding `invite`.
-pub async fn revoke_invite(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let (members, _, _) = acting(&host, &headers, &body, "revokeInvite", Some("invite")).await?;
-    let uri = body["uri"].as_str().expect("its lexicon requires it");
-    let invitee = uri.strip_prefix("at://").and_then(|r| r.split('/').next());
-    let invitee = invitee
-        .filter(|d| syntax::is_did(d))
-        .ok_or_else(|| invalid("not an invite's URI"))?;
-    let invited = host
-        .store
-        .invited(&members.group, invitee)
-        .map_err(XrpcError::internal)?;
-    let invite = invited.ok_or_else(|| bad("InviteNotFound", "no invite to them waits"))?;
-    host.take_back(&invite).await?;
-    Ok(Json(json!({})))
 }
 
 /// The caller's own invites waiting, from the groups here, newest first;

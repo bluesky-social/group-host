@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Obtain a DPoP-bound OAuth access token to act as the group DID. The host is the group's PDS and authorization server: the caller authenticates with their personal account (service auth) and presents a DPoP proof; the host issues a short-lived token for the group DID whose space: scopes are exactly what the caller's roles are granted by the space's access record. No group password is involved. The same token may write those kinds of record in the group's public repo too (repoCollections): publishing them, as the group.",
+      "description": "Obtain a DPoP-bound OAuth access token to act as the group DID. The host is the group's PDS and authorization server: the caller authenticates with their personal account (service auth) and presents a DPoP proof; the host issues a short-lived token for the group DID whose space: scopes are exactly what the caller's roles are granted by the space's access record. No group password is involved. The same token may write those kinds of record in the group's public repo too (repoCollections): publishing them, as the group. For someone's inbox (fyi.opensocial.invites), a caller whose roles may invite gets a token to write the group's invite there, and nothing in the group's repo.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -21,7 +21,7 @@
             "space": {
               "type": "string",
               "format": "space-ref",
-              "description": "The space the caller intends to write into; the scopes its access record grants the caller's roles bound the grant."
+              "description": "The space the caller intends to write into: one of the group's, where the scopes its access record grants the caller's roles bound the grant, or someone's inbox, to invite them."
             }
           }
         }

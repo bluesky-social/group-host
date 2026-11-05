@@ -79,13 +79,14 @@ Details:
 
 ## Tools and calls
 
-The tools are the host's own methods for running a group, 21 of them,
+The tools are the host's own methods for running a group, 19 of them,
 each named after its method: the group's profile and rules, roles, join
-requests and invites, spaces, and the moderation queue and labels (see
-[moderation](moderation.md)). Each tool's description is its method's
-lexicon description, and its input schema is made from the lexicon,
-without the `group` parameter. [The MCP reference](../reference/mcp.md)
-lists them.
+requests and invites waiting, spaces, and the moderation queue and labels
+(see [moderation](moderation.md)). Each tool's description is its
+method's lexicon description, and its input schema is made from the
+lexicon, without the `group` parameter. Two more, `sendInvite` and
+`takeBackInvite`, write an invite as the group, which no method does.
+[The MCP reference](../reference/mcp.md) lists them.
 
 The safest way to keep an assistant within the member's power is to give
 it no other path than the member's own. So a tool call is the host
@@ -95,6 +96,12 @@ method's request through its own router. The method then decides by the
 member's roles, as it would for any caller. A refusal comes back as the
 tool's error, with the method's error and message; a success comes back
 as the method's JSON.
+
+An invite tool cannot take that path, since an invite is a record the
+group writes, not a method. So the host makes the write itself, as the
+member's own session for the group would make it: with the scope a group
+token for the invitee's inbox carries, and the member's roles as they are
+([membership](membership.md#invites)).
 
 Some methods are not tools. An assistant cannot list or end connections,
 so it cannot hide itself or end another assistant's. It cannot change

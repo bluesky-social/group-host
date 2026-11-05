@@ -310,16 +310,8 @@ pub fn router(host: Arc<Host>) -> Router {
             post(group_join::cancel_join_request),
         )
         .route(
-            "/xrpc/fyi.opensocial.createInvite",
-            post(group_invites::create_invite),
-        )
-        .route(
             "/xrpc/fyi.opensocial.listInvites",
             get(group_invites::list_invites),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.revokeInvite",
-            post(group_invites::revoke_invite),
         )
         .route(
             "/xrpc/fyi.opensocial.getActorInvites",

@@ -15,6 +15,7 @@ use crate::Host;
 use crate::api::{Params, invalid, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
+use crate::group_invites::{inviting_scope, is_inbox};
 use crate::oauth_resource::Refusal;
 use crate::oauth_scope::writes_in;
 use crate::oauth_store::{Grant, Tokens};
@@ -40,6 +41,10 @@ const ACTIVITY_SHOWN: u32 = 20;
 fn forbidden(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", message)
 }
+
+/// A group token's scope, and the kinds of record it writes in its space
+/// and in the group's repo.
+type Authed = Result<(String, Vec<String>, Vec<String>), Refusal>;
 
 fn objects(field: &str, items: impl IntoIterator<Item = impl Into<String>>) -> Value {
     items
@@ -73,6 +78,34 @@ impl Host {
             }
         }
         Ok(out)
+    }
+
+    /// What a group token for `space`, one of the group's, carries for
+    /// `member`: its scope, and the kinds of record it writes there and in
+    /// the group's repo.
+    fn space_auth(&self, group: &str, member: &str, space: &SpaceRef) -> Authed {
+        let uri = space.to_string();
+        let roles = self.roles(group, member).map_err(XrpcError::internal)?;
+        let access = self.group_record(group, &uri, &format!("{NS}.access"), "self");
+        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
+        let everything = self.may_issue(group, member)?;
+        let writes = writes_in(&Access::of(&access, &uri), &roles, member, everything);
+        if writes.is_empty() {
+            return Err(forbidden("no role of yours may act as the group in this space").into());
+        }
+        let collections: Vec<String> = writes.keys().cloned().collect();
+        let scope = scopes_for(space, &writes).join(" ");
+        Ok((scope, collections.clone(), collections))
+    }
+
+    /// What a group token for `inbox`, someone's, carries for `member`:
+    /// the invites they may write there as the group, if they may invite.
+    fn inbox_auth(&self, group: &str, member: &str, inbox: &SpaceRef) -> Authed {
+        if !self.may_do(group, member, "invite")? {
+            return Err(forbidden("no role of yours may invite").into());
+        }
+        let invites = vec![format!("{NS}.invite")];
+        Ok((inviting_scope(inbox), invites, Vec::new()))
     }
 
     /// `member`'s standing to act as `group`: may they configure it?
@@ -120,21 +153,18 @@ pub async fn get_group_auth(
     let uri = body["space"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     host.active(group)?;
-    let space = SpaceRef::parse(uri).ok().filter(|s| s.authority == group);
+    let parsed = SpaceRef::parse(uri).ok();
+    let inbox = parsed.clone().filter(is_inbox);
+    let space = parsed.filter(|s| s.authority == group || inbox.is_some());
     let space = space.ok_or_else(|| invalid("not one of this group's spaces"))?;
     let now = now_millis();
     let proof = host.dpop_proof(&headers, "POST", &format!("/xrpc/{nsid}"), None, now);
     let proof = proof.map_err(|e| host.refuse(e.error, e.description))?;
     let proof = proof.ok_or_else(|| host.refuse("invalid_dpop_proof", "DPoP proof required"))?;
-    let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
-    let access = host.group_record(group, uri, &format!("{NS}.access"), "self");
-    let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-    let everything = host.may_issue(group, &me)?;
-    let writes = writes_in(&Access::of(&access, uri), &roles, &me, everything);
-    if writes.is_empty() {
-        return Err(forbidden("no role of yours may act as the group in this space").into());
-    }
-    let scope = scopes_for(&space, &writes).join(" ");
+    let (scope, collections, published) = match inbox {
+        Some(inbox) => host.inbox_auth(group, &me, &inbox)?,
+        None => host.space_auth(group, &me, &space)?,
+    };
     let access_token = jose::random(32);
     let tokens = Tokens {
         access_hash: &jose::sha256(&access_token),
@@ -163,13 +193,12 @@ pub async fn get_group_auth(
     let took = format!("took a token for {uri}");
     host.record(group, &me, Some(GROUP_AUTH_CLIENT), &took)
         .map_err(XrpcError::internal)?;
-    let collections: Vec<&String> = writes.keys().collect();
     Ok(Json(json!({
         "did": group,
         "accessJwt": access_token,
         "pds": host.config.public_url,
-        "collections": objects("collection", collections.iter().map(|c| c.as_str())),
-        "repoCollections": objects("collection", collections.iter().map(|c| c.as_str())),
+        "collections": objects("collection", collections),
+        "repoCollections": objects("collection", published),
         "scope": scope,
         "expiresAt": iso(tokens.expires_at),
     })))

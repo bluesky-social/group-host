@@ -13,7 +13,8 @@ Anything else fails with its usage.
 
 It acts as a person: it signs in to their own PDS and asks it for a
 service token for each method it calls, as an app does, so an account on
-any PDS may run it against any host.
+any PDS may run it against any host. To write as a group, as an invite
+is written, it takes a group token from the host (`getGroupAuth`).
 
 | Command | What it does |
 | --- | --- |
@@ -22,7 +23,7 @@ any PDS may run it against any host.
 | `inspect <group>` | the group as you may see it: its roles, members and spaces |
 | `membership assign <group> <member> <role,role…>` | gives a member these roles, in place of theirs (`member` among them) |
 | `membership eject <group> <member> [--reason]` | puts a member out |
-| `membership invite <group> <person> [--message]` | invites someone in |
+| `membership invite <group> <person> [--message]` | invites someone in, as the group: an invite written in their inbox with a group token for it |
 | `migrate <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; run again after a run that handed it over but could not switch it on, it switches it on; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
 | `import <account> [--address <label>]` | moves an account from its server here, its spaces with it, to become a group run by you; its server emails a code ([moving](../design/moving.md#bringing-an-account-here-as-a-group)) |
 | `import <account> --code <code>` | with that code, has its server sign its identity over, and finishes, whatever `--address` the start was given |

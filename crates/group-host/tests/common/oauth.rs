@@ -263,6 +263,63 @@ impl App {
     }
 }
 
+/// A group token from `getGroupAuth` for `who` in `group`, for `space`,
+/// bound to `app`'s key: what it answered, once more with the nonce if
+/// asked.
+pub async fn group_token(
+    h: &Running,
+    app: &App,
+    who: &Authority,
+    group: &str,
+    space: &str,
+) -> Said {
+    let lxm = format!("{NS}.getGroupAuth");
+    let send = || {
+        let (k, v) = auth(h, who, &lxm);
+        h.http
+            .post(format!("{}/xrpc/{lxm}", h.url))
+            .json(&json!({"group": group, "space": space}))
+            .header(k, v)
+            .header(
+                "dpop",
+                app.proof_with(h, "POST", &format!("/xrpc/{lxm}"), |_| {}),
+            )
+    };
+    let said = app.said(send()).await;
+    let stale = said
+        .headers
+        .get("www-authenticate")
+        .is_some_and(|v| v.to_str().unwrap().contains("use_dpop_nonce"));
+    if !stale {
+        return said;
+    }
+    app.said(send()).await
+}
+
+/// `nsid`, a write as `group` in the inbox `inbox`, made for `who` with a
+/// group token for it, `body` given its repo and, unless it names one,
+/// its space: what it answered, or why there was no token.
+pub async fn inbox_write(
+    h: &Running,
+    who: &Authority,
+    group: &str,
+    inbox: &str,
+    nsid: &str,
+    mut body: Json,
+) -> Said {
+    let app = App::new("console");
+    let given = group_token(h, &app, who, group, inbox).await;
+    if given.status != 200 {
+        return given;
+    }
+    let token = given.body["accessJwt"].as_str().unwrap();
+    body["repo"] = json!(group);
+    if body.get("space").is_none() {
+        body["space"] = json!(inbox);
+    }
+    app.call(h, nsid, token, Some(&body)).await
+}
+
 /// `member` approves `request_uri` for `group`.
 pub async fn approve(
     h: &Running,

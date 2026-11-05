@@ -130,6 +130,12 @@ test('inviting someone by their handle', async () => {
   await page.getByRole('textbox', { name: 'Their handle' }).fill('@bob.test')
   await page.getByRole('button', { name: 'Invite' }).click()
   await expect(page.locator('.invites', { hasText: who.bob.did })).toBeVisible()
+  // Taken back, and sent again.
+  await page.getByRole('button', { name: 'Take back' }).click()
+  await expect(page.locator('.invites', { hasText: who.bob.did })).toHaveCount(0)
+  await page.getByRole('textbox', { name: 'Their handle' }).fill('bob.test')
+  await page.getByRole('button', { name: 'Invite' }).click()
+  await expect(page.locator('.invites', { hasText: who.bob.did })).toBeVisible()
 })
 
 test('taking up an invitation', async () => {
@@ -251,7 +257,8 @@ test('making an app password, and ending what it signed in', async () => {
   await page.goto(url('/g/hikers.groups.test/settings'))
   await expect(page.locator('.passwords', { hasText: 'Phone' })).toBeVisible()
   await page.getByRole('button', { name: "End app-password:Phone's access" }).click()
-  await expect(page.locator('.sessions')).toHaveCount(0)
+  // The console's own token, from inviting, stays.
+  await expect(page.locator('.sessions', { hasText: 'app-password:Phone' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Revoke “Phone”' }).click()
   await expect(page.locator('.passwords')).toHaveCount(0)
   expect((await signIn()).status).toBe(401)

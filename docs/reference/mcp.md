@@ -29,6 +29,13 @@ result is the method's JSON, as text and, for an object, as
 refuses, is `isError: true`, its text `<error>: <message>` in the method's
 words.
 
+Two tools write a record instead: `sendInvite` and `takeBackInvite`
+make the write in the invitee's inbox that the member's own session for
+the group would (`com.atproto.space.createRecord` and `deleteRecord`),
+with the scope a group token for that inbox carries and the member's
+roles as they are, logged under the assistant. Each answers the invite's
+`uri`.
+
 | Tool | What it does |
 | --- | --- |
 | `getGroup` | the group as the member may see it: its profile, rules, roster, roles and spaces |
@@ -37,7 +44,8 @@ words.
 | `putRole`, `deleteRole` | makes, changes or removes a role |
 | `assignRoles` | sets a member's roles |
 | `listJoinRequests`, `admitMember`, `denyJoinRequest` | the requests to join waiting, and letting one in or turning it down |
-| `listInvites`, `createInvite`, `revokeInvite` | the invites waiting, and inviting someone or taking an invite back |
+| `listInvites` | the invites waiting |
+| `sendInvite`, `takeBackInvite` | invites someone (`invitee`, with an optional `message` and `expiresAt`), or takes back the invite waiting for them |
 | `ejectMember` | puts a member out |
 | `createSpace` | adds a space to the group |
 | `listSpaceRecords` | the records in one of the group's spaces |

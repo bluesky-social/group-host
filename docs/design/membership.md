@@ -37,7 +37,8 @@ reports it to them as `viewer.accepted`.
 The host's methods ask about twelve actions, such as `invite`, `admit`,
 `eject`, `role.assign` and `group.configure`. Each is answered by exactly
 one scope, in atproto's permission syntax
-(`rpc:fyi.opensocial.createInvite?aud=*`, `space:*?manage=create`). A
+(`space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite`,
+`space:*?manage=create`). A
 member may do what any of their roles grants. Roles add up, with no deny,
 precedence or hierarchy, so every "may they?" is a lookup. A grant may
 also carry `repo:<collection>` scopes, the collections of the group's
@@ -111,26 +112,42 @@ An invite must reach someone outside the group, so the group writes it
 where they already look: their inbox,
 `at://<invitee>/space/fyi.opensocial.invites/self`, a space of their own at
 their PDS. The invite is an `fyi.opensocial.invite` record in the group's
-repo there, with an optional `message` and `expiresAt`. The host
-answers `com.atproto.managedspace.checkUserAccess` for inboxes: only a
-group on this host may write one, and only its owner may read it.
+repo there, with a `createdAt` and an optional `message` and
+`expiresAt`. The host answers
+`com.atproto.managedspace.checkUserAccess` for inboxes: only a group on
+this host may write one, and only its owner may read it.
+
+An app invites someone by writing that record as the group, through
+`com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
+one write) with a session for the group, and takes the invite back by
+deleting it (`deleteRecord`). A session gets there through the
+`manageMembers` permission set, a `space:fyi.opensocial.invites` scope,
+or a group token for the inbox from `getGroupAuth`, which the console
+uses ([signing in](signing-in.md)). Whichever, the member who signed the
+app in must hold `invite` at the time of each write. The host checks each
+write as it would make it itself:
+
+- An inbox holds invites and nothing else, at `self`.
+- The invitee may not be a member already (`AlreadyMember`).
+- A group has one invite to each person at a time. Writing one while one
+  waits answers the waiting one, unchanged, unless it is written at that
+  one's key, which replaces it.
+- Deleting an invite that does not wait is refused (`InviteNotFound`).
 
 The group tells the invitee's PDS of the write at once. If that fails it
 retries, the wait doubling from 10 seconds up to an hour, and gives up
 after a day.
 
 The inbox is the invitee's to read, so the host keeps its own list of
-invites sent, one per group and invitee, and redeems from that list.
-Redeeming takes the invite back, from the inbox and the list, once the
-membership is written, so a join that fails leaves the invite waiting.
-Inviting again answers the waiting invite. One past its `expiresAt` no
-longer admits: the host takes it back when the invitee asks to join, or
-within the hour on its own, and inviting again replaces it. The
-invitee may refuse with
-`declineInvite`, and the group may still invite them later. Holders of
-`invite` list invites with `listInvites` and take one back with
-`revokeInvite`. A site that cannot read someone's inbox shows them their
-invites through `getActorInvites`.
+invites sent, one per group and invitee, kept in step with each write,
+and redeems from that list. Redeeming takes the invite back, from the
+inbox and the list, once the membership is written, so a join that fails
+leaves the invite waiting. One past its `expiresAt` no longer admits: the
+host takes it back when the invitee asks to join, or within the hour on
+its own, and inviting again writes a fresh one. The invitee may refuse
+with `declineInvite`, and the group may still invite them later. Holders
+of `invite` list invites with `listInvites`. A site that cannot read
+someone's inbox shows them their invites through `getActorInvites`.
 
 Details:
 

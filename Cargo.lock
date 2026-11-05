@@ -1069,6 +1069,7 @@ name = "opensocial"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "atproto",
  "axum",
  "group-host",
  "reqwest",

@@ -177,10 +177,9 @@ fn query_of(scope: &str, name: &str) -> Vec<String> {
 }
 
 /// The actions a host method's `rpc:` scope grants, by method.
-const BY_METHOD: [(&str, &str); 7] = [
+const BY_METHOD: [(&str, &str); 6] = [
     ("assignRoles", "role.assign"),
     ("ejectMember", "eject"),
-    ("createInvite", "invite"),
     ("admitMember", "admit"),
     ("listSubjects", "mod.read"),
     ("resolveSubject", "mod.resolve"),
@@ -197,7 +196,7 @@ pub fn scope_of(action: &str) -> Option<String> {
         "space.configure" => format!("space:*?collection={NS}.access"),
         "role.assign" => rpc("assignRoles"),
         "eject" => rpc("ejectMember"),
-        "invite" => rpc("createInvite"),
+        "invite" => format!("space:{NS}.invites?authority=*&collection={NS}.invite"),
         "admit" => rpc("admitMember"),
         "mod.read" => rpc("listSubjects"),
         "mod.resolve" => rpc("resolveSubject"),
@@ -231,6 +230,11 @@ pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
                 .find(|(m, _)| method == format!("{NS}.{m}"));
             if let Some((_, action)) = action {
                 out.insert(*action);
+            }
+        } else if scope.starts_with(&format!("space:{NS}.invites?")) {
+            // Invites written in people's inboxes.
+            if query(scope, "collection").contains(&format!("{NS}.invite").as_str()) {
+                out.insert("invite");
             }
         } else if scope.starts_with("space:*") {
             let manage = query(scope, "manage");

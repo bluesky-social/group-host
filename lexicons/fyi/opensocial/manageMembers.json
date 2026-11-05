@@ -36,9 +36,7 @@
             "fyi.opensocial.admitMember",
             "fyi.opensocial.assignRoles",
             "fyi.opensocial.ejectMember",
-            "fyi.opensocial.createInvite",
-            "fyi.opensocial.listInvites",
-            "fyi.opensocial.revokeInvite"
+            "fyi.opensocial.listInvites"
           ]
         }
       ]

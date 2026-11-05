@@ -140,6 +140,8 @@ fn answers_each_action_by_its_scope() {
         "rpc:com.example.thing",
         "repo:*",
         "blob:*/*",
+        // An inbox scope for anything but invites.
+        "space:fyi.opensocial.invites?collection=fyi.opensocial.rule",
     ] {
         assert_eq!(
             actions_of(&[nothing.into()])

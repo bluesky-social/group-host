@@ -1,10 +1,11 @@
 //! An MCP server for a group on an opensocial host. Its tools are the
-//! core's methods, asked as the member who connected it, so an assistant
-//! may do only what that member's roles allow: read the group, and run its
-//! members, roles, invites and moderation.
+//! core's methods, asked as the member who connected it, and the records
+//! the member's own session for the group would write as it, so an
+//! assistant may do only what that member's roles allow: read the group,
+//! and run its members, roles, invites and moderation.
 //!
 //! This crate is the protocol and the tools: what an assistant may call,
-//! made from the methods' lexicons, and the answer to each message it
+//! made from the lexicons, and the answer to each message it
 //! sends (JSON-RPC, over MCP's Streamable HTTP, each answered on its own).
 //! The host serves it at `/mcp`, signs assistants in, and makes each call:
 //! as the member, in the one group they connected the assistant to, which
@@ -43,8 +44,6 @@ const METHODS: &[(&str, &str)] = &[
     lexicon!("admitMember"),
     lexicon!("denyJoinRequest"),
     lexicon!("listInvites"),
-    lexicon!("createInvite"),
-    lexicon!("revokeInvite"),
     lexicon!("ejectMember"),
     lexicon!("createSpace"),
     lexicon!("listSpaceRecords"),
@@ -55,10 +54,12 @@ const METHODS: &[(&str, &str)] = &[
     lexicon!("resolveSubject"),
 ];
 
-/// What the methods refer to: ours, and atproto's.
+/// What the methods refer to, and the records the tools write: ours, and
+/// atproto's.
 const REFERRED: &[(&str, &str)] = &[
     lexicon!("defs"),
     lexicon!("access"),
+    lexicon!("invite"),
     (
         "com.atproto.admin.defs",
         include_str!("../../../lexicons/upstream/com/atproto/admin/defs.json"),
@@ -70,12 +71,13 @@ const REFERRED: &[(&str, &str)] = &[
 ];
 
 /// A tool: a method of the host's, asked in the group the assistant was
-/// connected to.
+/// connected to, or a record written there as the group.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tool {
     /// Its name, the method's: `getGroup`.
     pub name: String,
-    /// The method, `fyi.opensocial.getGroup`.
+    /// The method, `fyi.opensocial.getGroup`; for a tool that writes a
+    /// record, the write it makes, `com.atproto.space.createRecord`.
     pub nsid: String,
     /// Whether it is a procedure (a POST of JSON), not a query.
     pub procedure: bool,
@@ -239,7 +241,51 @@ pub fn tools() -> Vec<Tool> {
             input_schema: input,
         }
     };
-    METHODS.iter().map(|(nsid, _)| tool(nsid)).collect()
+    let mut out: Vec<Tool> = METHODS.iter().map(|(nsid, _)| tool(nsid)).collect();
+    out.extend(invite_tools(&docs));
+    out
+}
+
+/// The tools that write invites as the group, as the member's own session
+/// for it would, through `com.atproto.space.*`: one sent, written in the
+/// invitee's inbox, and the one waiting taken back.
+fn invite_tools(docs: &Docs) -> Vec<Tool> {
+    let invite = "fyi.opensocial.invite";
+    let invitee =
+        json!({"type": "string", "format": "did", "description": "Who is invited, by their DID."});
+    let record = &docs.0[invite]["defs"]["main"]["record"];
+    let mut send = docs.object(invite, record, DEPTH);
+    send["properties"]["invitee"] = invitee.clone();
+    let properties = send["properties"].as_object_mut();
+    let properties = properties.expect("a record has properties");
+    properties.remove("createdAt");
+    send["required"] = json!(["invitee"]);
+    let take_back =
+        json!({"type": "object", "properties": {"invitee": invitee}, "required": ["invitee"]});
+    let made = |name: &str, nsid: &str, description: &str, input_schema: Value| Tool {
+        name: name.into(),
+        nsid: nsid.into(),
+        procedure: true,
+        description: description.into(),
+        input_schema,
+    };
+    vec![
+        made(
+            "sendInvite",
+            "com.atproto.space.createRecord",
+            "Invite someone not yet a member: an invite written as the group into their own inbox \
+             (fyi.opensocial.invites), told to their PDS. One already waiting for them is the one \
+             answered. Requires invite.",
+            send,
+        ),
+        made(
+            "takeBackInvite",
+            "com.atproto.space.deleteRecord",
+            "Take back the group's invite waiting for someone, deleting it from their inbox. \
+             Requires invite.",
+            take_back,
+        ),
+    ]
 }
 
 fn error(id: &Value, code: i64, message: &str) -> Value {

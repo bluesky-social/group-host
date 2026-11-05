@@ -10,10 +10,14 @@
 //! nothing grants it. Who holds which role, what each may do, and who may
 //! read a space change only through the host's methods, which check that
 //! nobody gives themselves more than they hold.
+//!
+//! In someone's inbox, a token writes the group's invite to them, as
+//! `group_invites` has it.
 
 use crate::Host;
 use crate::api::invalid;
 use crate::group::{join_policy, members_space, meta_space};
+use crate::group_invites::is_inbox;
 use crate::lexicons::{check_record, validation};
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{may_write, writes_in};
@@ -37,7 +41,7 @@ fn forbidden(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", message)
 }
 
-fn missing(scope: impl Into<String>) -> XrpcError {
+pub(crate) fn missing(scope: impl Into<String>) -> XrpcError {
     XrpcError::new(
         StatusCode::FORBIDDEN,
         "ScopeMissing",
@@ -45,7 +49,7 @@ fn missing(scope: impl Into<String>) -> XrpcError {
     )
 }
 
-fn no_longer(collection: &str) -> XrpcError {
+pub(crate) fn no_longer(collection: &str) -> XrpcError {
     forbidden(format!(
         "the member who signed this app in may no longer write {collection} as the group"
     ))
@@ -58,7 +62,7 @@ fn text<'a>(body: &'a Value, key: &str) -> Result<&'a str, XrpcError> {
 }
 
 /// What a write does, as a scope names it.
-fn action(write: &Write) -> &'static str {
+pub(crate) fn action(write: &Write) -> &'static str {
     match write {
         Write::Create { .. } => "create",
         Write::Update { .. } => "update",
@@ -140,7 +144,7 @@ impl Host {
 impl Host {
     /// Keeps word in the group's log of each of `writes`, made with
     /// `acting`'s grant, in `space` if one.
-    fn wrote(
+    pub(crate) fn wrote(
         &self,
         acting: &Acting,
         space: Option<&str>,
@@ -516,6 +520,11 @@ async fn space_writes(
     let (uri, space) = space_of(body)?;
     let group = acting.grant.group.clone();
     let writes = writes(host)?;
+    // Someone's inbox, where the group writes invites, is theirs.
+    if is_inbox(&space) {
+        let made = host.write_invites(&acting, &space, writes).await?;
+        return Ok((uri, group, made, true));
+    }
     let allow = |w: &[Write]| host.may_space(&acting, &uri, &space, w);
     let asked = Asked {
         put,
@@ -557,7 +566,7 @@ fn space_record_view(
     let (collection, rkey) = write.path();
     Ok(json!({
         "uri": space_uri(uri, group, collection, rkey),
-        "cid": record_cid(collection, &body["record"])?.to_string(),
+        "cid": record_cid(collection, write.value().unwrap_or(&body["record"]))?.to_string(),
         "validationStatus": validation(collection),
     }))
 }

@@ -466,6 +466,33 @@ async fn keeps_a_permission_set_for_roles_holding_all_it_covers() {
     assert_eq!(narrow(&["member"]), Vec::<String>::new());
 }
 
+#[tokio::test]
+async fn keeps_an_inbox_scope_for_roles_that_may_invite() {
+    let h = start(&[], false).await;
+    let (did, _, alice) = group(&h).await;
+    let space = members_space(&did);
+    let collection = format!("{NS}.permissions");
+    let found = h.host.group_record(&did, &space, &collection, "self");
+    let mut permissions = found.unwrap().unwrap();
+    let grants = permissions["grants"].as_array_mut().unwrap();
+    grants.push(Grant::with("host", &["invite"], &[], &[]).to_json());
+    write(&h, &did, &space, &collection, "self", permissions).await;
+    let any = format!("space:{NS}.invites?collection={NS}.invite&action=create");
+    let bobs = format!("space:{NS}.invites?authority=did:plc:bob&collection={NS}.invite");
+    let other = format!("space:{NS}.invites?collection={NS}.rule");
+    let wanted = [any.as_str(), bobs.as_str(), other.as_str(), "blob:image/*"];
+    let narrow = |r: &[&str]| {
+        let wanted = asked(&wanted);
+        h.host.narrow(&did, &roles(r), &alice.did, &wanted).unwrap()
+    };
+    // Invites, in anyone's inbox or one person's, and nothing else there.
+    assert_eq!(
+        narrow(&["host"]),
+        asked(&[any.as_str(), bobs.as_str(), "blob:image/*"])
+    );
+    assert_eq!(narrow(&["member"]), Vec::<String>::new());
+}
+
 #[test]
 fn makes_a_permission_set_concrete() {
     let did = "did:plc:riders";
@@ -489,9 +516,7 @@ fn makes_a_permission_set_concrete() {
             "rpc:fyi.opensocial.admitMember?aud=*".into(),
             "rpc:fyi.opensocial.assignRoles?aud=*".into(),
             "rpc:fyi.opensocial.ejectMember?aud=*".into(),
-            "rpc:fyi.opensocial.createInvite?aud=*".into(),
             "rpc:fyi.opensocial.listInvites?aud=*".into(),
-            "rpc:fyi.opensocial.revokeInvite?aud=*".into(),
             format!("space:fyi.opensocial.meta?authority={did}&skey=self&collection=fyi.opensocial.access&{all}"),
             format!("space:fyi.opensocial.members?authority={did}&skey=self&collection=fyi.opensocial.space&collection=fyi.opensocial.access&{all}"),
             format!("space:fyi.opensocial.meta?authority={did}&skey=self&collection=fyi.opensocial.label&{all}"),

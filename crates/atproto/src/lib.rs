@@ -24,6 +24,7 @@ pub mod space;
 pub mod space_auth;
 pub mod syntax;
 pub mod tid;
+pub mod time;
 
 pub use cid::Cid;
 pub use commit::Commit;

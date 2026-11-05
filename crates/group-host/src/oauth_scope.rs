@@ -211,6 +211,8 @@ impl Host {
     /// - `space:T?…`, where some space of the group's of type `T` lets the
     ///   roles write each collection asked for, as asked, as the group; or
     ///   read it, if reading is all it asks;
+    /// - `space:fyi.opensocial.invites?…`, people's inboxes, for roles that
+    ///   may invite, as far as it asks for invites;
     /// - `space:*?…`, made into one scope for each of the group's spaces
     ///   the roles read, writing there what they may of what it asks;
     /// - `blob:`, beside anything above that writes.
@@ -237,6 +239,7 @@ impl Host {
         let everything = repo.contains("*");
         let held = actions_for(&grants, roles);
         let rooms = self.rooms(group, roles, member, everything)?;
+        let invite = format!("{NS}.invite");
         let (mut kept, mut made) = (Vec::new(), Vec::new());
         for s in requested {
             let space = SpaceScope::parse(s).filter(|w| w.for_group(group));
@@ -250,6 +253,8 @@ impl Host {
             } else if let Some(m) = s.strip_prefix("rpc:") {
                 let method = m.split('?').next().unwrap_or_default();
                 everything && method != "*" && !method.starts_with(&format!("{NS}."))
+            } else if let Some(want) = inbox_scope(s) {
+                held.contains("invite") && want.collections.iter().all(|c| *c == invite)
             } else if let Some(want) = space.as_ref().filter(|w| w.kind == "*") {
                 made.extend(any_kind(group, want, &rooms));
                 false
@@ -280,6 +285,12 @@ impl Host {
         }
         Ok(out)
     }
+}
+
+/// `scope`, if it is for people's inboxes, where a group writes its
+/// invites: any inbox, or one person's.
+fn inbox_scope(scope: &str) -> Option<SpaceScope> {
+    SpaceScope::parse(scope).filter(|w| w.kind == format!("{NS}.invites"))
 }
 
 /// Whether `room` lets the roles have the space scope `want`.

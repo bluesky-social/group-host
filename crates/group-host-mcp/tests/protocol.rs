@@ -19,7 +19,8 @@ fn makes_a_tool_of_each_method_without_its_group() {
     let all = tools();
     assert!(all.len() > 15);
     for t in &all {
-        assert!(t.nsid.ends_with(&t.name), "{t:?}");
+        let method = t.nsid.ends_with(&t.name);
+        assert!(method || t.nsid.starts_with("com.atproto.space."), "{t:?}");
         assert!(
             t.input_schema["properties"].get("group").is_none(),
             "{}",
@@ -73,6 +74,23 @@ fn makes_a_tool_of_each_method_without_its_group() {
     );
     let online = &tool("updateProfile").input_schema["properties"]["online"];
     assert_eq!(online["type"], "boolean");
+
+    // Invites, written as the group: the record's fields but when it was
+    // made, which the host says, and whom it is for.
+    let send = tool("sendInvite");
+    assert_eq!(
+        (send.nsid.as_str(), send.procedure),
+        ("com.atproto.space.createRecord", true)
+    );
+    let fields = send.input_schema["properties"].as_object().unwrap();
+    let mut names: Vec<&str> = fields.keys().map(String::as_str).collect();
+    names.sort();
+    assert_eq!(names, ["expiresAt", "invitee", "message"]);
+    assert_eq!(send.input_schema["required"], json!(["invitee"]));
+    assert_eq!(fields["message"]["maxLength"], 20000);
+    let take_back = tool("takeBackInvite");
+    assert_eq!(take_back.nsid, "com.atproto.space.deleteRecord");
+    assert_eq!(take_back.input_schema["required"], json!(["invitee"]));
 }
 
 #[tokio::test]

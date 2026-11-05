@@ -453,15 +453,13 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         json!({"handle": "riders.groups.test", "displayName": "Riders"}),
     )
     .await;
-    let lxm = "fyi.opensocial.createInvite";
-    let (status, made) = common::groups::post(
-        &h,
-        lxm,
-        &json!({"group": group, "invitee": alice.did}),
-        &[common::groups::auth(&h, &founder, lxm)],
-    )
-    .await;
-    assert_eq!(status, 200, "{made}");
+    let invite = json!({
+        "collection": "fyi.opensocial.invite",
+        "record": {"$type": "fyi.opensocial.invite", "createdAt": "2026-11-03T00:00:00Z"},
+    });
+    let create = "com.atproto.space.createRecord";
+    let made = common::oauth::inbox_write(&h, &founder, &group, &inbox, create, invite).await;
+    assert_eq!(made.status, 200, "{}", made.body);
     // Nothing is owed: her PDS took the write.
     let later = group_host::time::now_millis() / 1000 + 3600;
     assert_eq!(
