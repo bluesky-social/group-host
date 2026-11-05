@@ -1,5 +1,5 @@
 // An https front for the console under test, at the harness's console
-// hostname, passing every request on to it over plain http, as knotless's.
+// hostname, passing every request on to it over plain http.
 //
 //   node harness/tls-proxy.mjs <cert> <key> <target port>
 //

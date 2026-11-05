@@ -3,11 +3,10 @@
 # is counted as it runs, so it is told to stop rather than killed.
 #
 # The tests that reach the network run against the reference PDS and PLC
-# (harness/pds.mjs), on the space alpha built at ATPROTO_COMMIT, as
-# knotless's test.yml builds it: the same commit, so the host and knotless
-# are held to the same alpha. Node, the harness's packages, the alpha's
-# build, cargo-llvm-cov and the build are kept between runs; each is made
-# again only when what it is made from changes.
+# (harness/pds.mjs), on the space alpha built at ATPROTO_COMMIT. Node,
+# the harness's packages, the alpha's build, cargo-llvm-cov and the build
+# are kept between runs; each is made again only when what it is made from
+# changes.
 image: rust:1.98
 # A pre-flight, as check is: the merge queue takes a pull into a batch only
 # once this has passed at its head.

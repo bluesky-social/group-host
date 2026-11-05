@@ -1,11 +1,10 @@
 //! Signing in to the console, as oneself.
 //!
-//! The host is a confidential OAuth client of each person's own PDS, as
-//! knotless-serve is of its accounts', under a client id of its own, its
-//! key derived from the host's secret. It asks for `atproto` alone: the
-//! console's methods act as the group, never as the person, so the host
-//! needs only to know who they are. Once their PDS says so, it revokes the
-//! token it was given, and keeps nothing of theirs.
+//! The host is a confidential OAuth client of each person's own PDS, under
+//! a client id of its own, its key derived from the host's secret. It asks
+//! for `atproto` alone: the console's methods act as the group, never as
+//! the person, so the host needs only to know who they are. Once their PDS
+//! says so, it revokes the token it was given, and keeps nothing of theirs.
 //!
 //! The browser holds only a cookie the host signed, naming the person,
 //! HttpOnly and SameSite=Lax. A sign-in is answered only in the browser

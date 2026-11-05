@@ -5,7 +5,7 @@
 //! (a DHKEM over P-256); and a repo is sent whole as a STAR archive.
 //!
 //! As `@atproto/space` has them, checked against vectors made by running it
-//! (`tests/reference/space-vectors.json`) and against knotless's client.
+//! (`tests/reference/space-vectors.json`).
 
 use crate::cid::Cid;
 use crate::drisl::{self, Value};

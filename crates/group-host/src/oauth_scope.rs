@@ -134,7 +134,7 @@ pub(crate) fn may_write(
 }
 
 /// Whether a kind of record and a kind of space are one app's: the same
-/// first two segments, as `dev.knotless`.
+/// first two segments, as `fyi.opensocial`.
 fn same_app(a: &str, b: &str) -> bool {
     let app = |n: &str| n.split('.').take(2).collect::<Vec<_>>().join(".");
     app(a) == app(b)

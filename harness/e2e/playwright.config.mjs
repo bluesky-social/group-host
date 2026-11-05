@@ -1,6 +1,5 @@
 // The console used as people use it: signed in to through the PDS's own
-// approval page, and an app signed in as a group through it, end to end,
-// as knotless's harness/e2e has its pages.
+// approval page, and an app signed in as a group through it, end to end.
 //
 //   just e2e    a world of its own, and the flows
 //

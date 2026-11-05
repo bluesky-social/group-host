@@ -1,7 +1,6 @@
 //! Service-auth JWTs: one the reference PDS signs
 //! (tests/reference/identity.json), one knotless signs
-//! (tests/reference/knotless.json), and our own, checked as knotless
-//! checks them.
+//! (tests/reference/knotless.json), and our own.
 
 use atproto::keys::{Curve, Keypair, PublicKey};
 use atproto::service_auth::{Claims, check, parts, sign, verify};

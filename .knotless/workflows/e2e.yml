@@ -5,7 +5,7 @@
 # seeded for the run (harness/e2e/setup.mjs). The tests show the host's
 # methods do what they say; this, that the console and the host and a PDS
 # do it together. Each flow that fails leaves the page as it was then
-# among the check's outputs, as a picture. As knotless's e2e.yml.
+# among the check's outputs, as a picture.
 #
 # Node, the packages, Chromium, the libraries it needs and the build are
 # kept between runs, as main's runs leave them: nothing is fetched again

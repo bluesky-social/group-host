@@ -2,7 +2,7 @@
 
 For every agent working here: CLAUDE.md is this file, imported.
 
-This is a group host for atproto, built in Rust and Svelte as knotless is,
+This is a group host for atproto, built in Rust and Svelte,
 implementing the opensocial proposal
 (https://tangled.org/opensocial.group/proposal). `docs/design/README.md`
 says what is here, what is still to come, and in what order.
@@ -39,10 +39,10 @@ its tests, and its page in `docs/`. The tests say what the part must get
 right, and come before the code they test.
 
 - The atproto primitives (DRISL, CIDs, keys, the MST, CAR, PLC, service
-  auth) are this repo's own, in `crates/atproto`, as knotless writes its
-  own: few dependencies, every line under the gate. Check each against
-  atproto's interop test vectors (github.com/bluesky-social/atproto-interop-tests)
-  and the reference implementation, not only against itself.
+  auth) are this repo's own, in `crates/atproto`: few dependencies, every
+  line under the gate. Check each against atproto's interop test vectors
+  (github.com/bluesky-social/atproto-interop-tests) and the reference
+  implementation, not only against itself.
 - What a PDS, the OAuth provider and the space alpha do is written here
   as far as the host uses it, and no further.
 

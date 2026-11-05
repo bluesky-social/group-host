@@ -1,6 +1,5 @@
-//! People, as the console shows them: who is asking (`getViewer`, as
-//! knotless's), a person (`getActor`), and the groups someone is in
-//! (`getActorGroups`).
+//! People, as the console shows them: who is asking (`getViewer`), a
+//! person (`getActor`), and the groups someone is in (`getActorGroups`).
 
 use crate::Host;
 use crate::api::{Params, page, param};

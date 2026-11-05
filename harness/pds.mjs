@@ -1,7 +1,7 @@
 // Runs the reference PDS (@atproto/pds, through @atproto/dev-env) and a PLC
 // directory on free ports, makes test accounts, prints one JSON line naming
 // them (and where the codes the PDS mails are read), and stops when stdin
-// closes. As knotless's harness/pds.mjs, less what only knotless needs.
+// closes.
 //
 //   node harness/pds.mjs [--accounts alice,bob]
 //
@@ -11,9 +11,9 @@
 // account's database each time it opens it; here only the first time.
 //
 // The console is an OAuth client, which the PDS reaches only over https at a
-// hostname, as knotless's gateway is. So the harness makes a certificate for
-// CONSOLE_HOST, trusts it, and resolves that name to 127.0.0.1; the flows
-// put harness/tls-proxy.mjs in front of the console with it.
+// hostname. So the harness makes a certificate for CONSOLE_HOST, trusts it,
+// and resolves that name to 127.0.0.1; the flows put harness/tls-proxy.mjs
+// in front of the console with it.
 
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve } from 'node:path'

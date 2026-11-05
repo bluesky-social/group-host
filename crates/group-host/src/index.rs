@@ -12,8 +12,6 @@
 //! the set hash by each write, and checks it against the commit their
 //! host vouches for; or reads it whole, as a STAR archive, and checks it
 //! the same way. A record that is not a DRISL map is left out.
-//!
-//! It reads a member's repo as knotless's `space_sync.rs` does.
 
 use crate::Host;
 use crate::authority::Access;

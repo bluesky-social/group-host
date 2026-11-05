@@ -1,7 +1,6 @@
 //! Service auth: the short-lived JWT one server hands another to say who
 //! is asking (`iss`), of whom (`aud`), and for which method (`lxm`),
-//! signed with the asker's signing key. As the reference PDS writes them,
-//! and as knotless checks them.
+//! signed with the asker's signing key, as the reference PDS writes them.
 
 use crate::keys::{Keypair, PublicKey};
 use base64::Engine;

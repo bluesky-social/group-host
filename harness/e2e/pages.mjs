@@ -11,7 +11,7 @@ export const who = Object.fromEntries(world.accounts.map((a) => [a.handle.split(
 export const url = (path) => world.base + path
 
 /// Signs in as `name` on the PDS's own page `page` has come to, and
-/// approves what was asked, as knotless's flows do.
+/// approves what was asked.
 export const approve = async (page, name) => {
   await page.waitForURL((u) => u.origin === new URL(world.pds).origin)
   await page.getByRole('textbox', { name: 'Password' }).fill(who[name].password)

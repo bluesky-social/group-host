@@ -1,6 +1,6 @@
-//! DID documents, read as knotless reads them: the services and keys an
-//! account's document names, each found by the end of its id, as a
-//! document may write `#atproto` or `did:…#atproto`.
+//! DID documents: the services and keys an account's document names, each
+//! found by the end of its id, as a document may write `#atproto` or
+//! `did:…#atproto`.
 
 use crate::keys::{KeyError, PublicKey};
 use serde_json::{Value, json};

@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Who is asking: by the console's session cookie, or their service auth. Nothing, for no one. As knotless's getViewer, for the console to show who is signed in.",
+      "description": "Who is asking: by the console's session cookie, or their service auth. Nothing, for no one. For the console to show who is signed in.",
       "parameters": {
         "type": "params",
         "properties": {}
