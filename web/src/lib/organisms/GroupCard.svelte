@@ -37,7 +37,7 @@
 		online?: boolean;
 		languages?: { language: string }[];
 		topics?: { topic: string }[];
-		links?: { url: string; title?: string }[];
+		links?: { url: string; title?: string; icon?: string | null }[];
 		rules?: { rkey: string; title: string; text?: string }[];
 		nav?: Snippet;
 		children?: Snippet;

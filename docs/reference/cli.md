@@ -58,7 +58,7 @@ stewards undo, but never delete it.
 
 | Command | What it does |
 | --- | --- |
-| `profile set <group> [--display-name <name>] [--join-policy <policy>] [--description] [--url] [--online] [--topics <json>] [--languages <json>] [--location <json>] [--links <json>]` | changes the group's profile in the fields given, as the group, keeping the rest and its pictures; a field given `""` is taken away |
+| `profile set <group> [--display-name <name>] [--join-policy <policy>] [--description] [--url] [--online] [--topics <json>] [--languages <json>] [--location <json>] [--links <json>]` | changes the group's profile in the fields given, as the group, keeping the rest and its pictures; a field given `""` is taken away; a new link is given its site's icon, from the favicon service `FAVICONS` names |
 
 ### rule
 

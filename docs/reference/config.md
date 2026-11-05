@@ -21,6 +21,7 @@ trimmed of spaces and a trailing `/`.
 | `GROUP_FOUNDERS` | who the host starts groups for, comma-separated DIDs: by `createGroup`, `provisionGroup`, or moving a group or an account here | anyone |
 | `BLOB_UPLOAD_LIMIT` | the most bytes one blob may be, uploaded, or brought with a group, an account or a space; `describeServer` answers it | 52428800 (50 MiB) |
 | `CONSOLE_URL` | where the console is: where the host sends a member to approve an app or an MCP client (`/authorize`), the console's OAuth client id and callback when people sign in (`/console/…`), and, when `https`, whether the session cookie is `Secure` | `PUBLIC_URL` |
+| `FAVICONS` | where it asks a link's site's icon when an MCP client writes a new link to a group's profile: the link's address follows, encoded, and a PNG is answered; empty asks nowhere | `https://cardyb.bsky.app/v1/favicon?url=` |
 | `PROVISIONING_CLIENTS` | the apps the host makes groups for with `provisionGroup`, comma-separated OAuth client ids, each matched as written, a trailing `/` included; `*` for any | none |
 | `ACTOR_SEARCH` | where `searchActors` looks for a handle being typed: `plc`, the handles in `PLC_URL`'s own export, read a page at a time and kept a minute; or the URL of a service answering `tech.waow.typeahead.searchActors` | typeahead.waow.tech's, when `PLC_URL` is `https://plc.directory`; else `plc` |
 | `SIGNUP_PDS` | the PDS where someone with no account makes one, from the console's "Create one": its authorization server's sign-up (`prompt=create`); a trailing `/` dropped | `https://bsky.social` |
@@ -33,7 +34,8 @@ It stops on SIGTERM or ctrl-c, answering the requests under way first.
 new address.
 
 The console reads `GROUP_HOST`, the host it asks (default
-`http://127.0.0.1:2600`), and, built (`node build`), what SvelteKit's
+`http://127.0.0.1:2600`); `FAVICONS`, as the host does, for a link
+added in its settings; and, built (`node build`), what SvelteKit's
 Node adapter reads: `ORIGIN`, the address people reach it at, and
 `BODY_SIZE_LIMIT`, the most a request it hands on may carry (by default
 512K): set it to at least `BLOB_UPLOAD_LIMIT`, or an upload larger than
@@ -42,6 +44,7 @@ that is refused before the host sees it.
 The `opensocial` command reads its own: `OPENSOCIAL_AS` and
 `OPENSOCIAL_PASSWORD` (who it signs in as), `PDS_URL` (where),
 `OPENSOCIAL_HOST` and `OPENSOCIAL_HOST_DID` (the host it asks),
-`OPENSOCIAL_SEED_INVITE` (who `group seed` invites), and
-`OPENSOCIAL_IMPORT_PASSWORD` (the account `account import` moves): see
+`OPENSOCIAL_SEED_INVITE` (who `group seed` invites),
+`OPENSOCIAL_IMPORT_PASSWORD` (the account `account import` moves), and
+`FAVICONS`, as the host does, for a link `profile set` writes: see
 [the commands](cli.md#opensocial).

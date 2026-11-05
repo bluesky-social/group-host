@@ -44,6 +44,10 @@ pub struct Config {
     /// `provisionGroup`, `PROVISIONING_CLIENTS`, comma-separated client
     /// ids, `*` for any: none unless set.
     pub provisioning_clients: Vec<String>,
+    /// Where a link's site's icon is asked when an MCP client writes a link
+    /// to a group's profile, `FAVICONS`: the link's address follows,
+    /// encoded. Bluesky's favicon service unless set; empty asks nowhere.
+    pub favicons: String,
     /// Where a handle being typed is looked for, `ACTOR_SEARCH`: `plc`,
     /// the handles in `PLC_URL`'s own export, or the URL of a service
     /// answering `tech.waow.typeahead.searchActors`. The typeahead service
@@ -134,6 +138,7 @@ impl Config {
         if reqwest::Url::parse(&console_url).is_err() {
             bail!("CONSOLE_URL is no URL: {console_url}");
         }
+        let favicons = var("FAVICONS").unwrap_or_else(|| group_host_mcp::FAVICONS.into());
         let signup_pds = var("SIGNUP_PDS").unwrap_or_else(|| "https://bsky.social".into());
         let signup_pds = signup_pds.trim_end_matches('/').to_string();
         if reqwest::Url::parse(&signup_pds).is_err() {
@@ -153,6 +158,7 @@ impl Config {
             blob_upload_limit,
             console_url,
             provisioning_clients,
+            favicons,
             actor_search,
             signup_pds,
         })

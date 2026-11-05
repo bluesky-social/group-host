@@ -8,6 +8,7 @@ import type * as listAppPasswords from '#lib/lexicons/fyi/opensocial/listAppPass
 import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/listGroupTokens.ts';
 import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecoveryKeys.ts';
 import { fail, redirect, type Action } from '@sveltejs/kit';
+import { FAVICONS } from '$app/env/private';
 import { act, xrpc, type Answer } from '#lib/data.ts';
 import { applyAsGroup, membersOf, withGroup, type Done, type GroupSession, type Write } from '#lib/asGroup.ts';
 import { SCOPES } from '#lib/actions.ts';
@@ -76,6 +77,22 @@ const MAX_TOPICS = 10;
 const MAX_LANGUAGES = 5;
 const TOPIC_AT_MOST = 64;
 const segments = new Intl.Segmenter();
+/** The most bytes a link's icon may be, as its lexicon says; and how long its site is waited for. */
+const ICON_AT_MOST = 100_000;
+const ICON_WAIT = 8_000;
+
+/**
+ * The icon of the site at `url`, as the favicon service gives it: a PNG
+ * no larger than a link's icon may be; or none, for a site with none, or
+ * one too slow, or no service.
+ */
+async function iconOf(url: string) {
+	if (!FAVICONS || !/^https?:\/\//.test(url)) return null;
+	const res = await fetch(`${FAVICONS}${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(ICON_WAIT) }).catch(() => null);
+	if (!res?.ok || res.headers.get('content-type') !== 'image/png') return null;
+	const bytes = await res.arrayBuffer().catch(() => null);
+	return bytes && bytes.byteLength <= ICON_AT_MOST ? bytes : null;
+}
 
 /**
  * Where the form says the group meets, as an address: its town and
@@ -216,12 +233,17 @@ const all = {
 	},
 	link: async (event) => {
 		const { group, form } = await asked(event);
-		// Added after those it has, with its title if it has one.
+		// Added after those it has, with its title if it has one, and its
+		// site's icon, kept as the group's own, if the site has one.
 		const url = text(form, 'url');
 		const title = text(form, 'title');
 		return asMeta(event, group, async (session, now) => {
-			const links = [...((now.links as object[] | undefined) ?? []), title ? { url, title } : { url }];
-			if (links.length > MAX_LINKS) return fail(400, { failed: `A group can have up to ${MAX_LINKS} links. Remove one first.` });
+			const had = (now.links as object[] | undefined) ?? [];
+			if (had.length >= MAX_LINKS) return fail(400, { failed: `A group can have up to ${MAX_LINKS} links. Remove one first.` });
+			const bytes = await iconOf(url);
+			const up = bytes ? await session.upload(bytes, 'image/png') : null;
+			const icon = up && 'blob' in up ? { icon: up.blob } : {};
+			const links = [...had, { url, ...(title ? { title } : {}), ...icon }];
 			return putProfile(session, { ...now, links });
 		});
 	},

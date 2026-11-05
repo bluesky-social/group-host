@@ -400,6 +400,9 @@ test("changing a group's profile", async () => {
   await addLink('https://gone.example/')
   await page.getByRole('button', { name: 'Remove gone.example' }).click()
   await expect(page.locator('.link-list', { hasText: 'gone.example' })).toHaveCount(0)
+  // Each by its site's icon, kept as the group's own, where the site has one.
+  await expect(page.locator('.link-list li', { hasText: 'Our chat' }).locator('img.link-icon')).toHaveAttribute('src', /^\/img\/did:/)
+  await expect(page.locator('.link-list li', { hasText: 'walks.example' }).locator('img')).toHaveCount(0)
   await page.goto(url('/g/hikers.groups.test'))
   await expect(page.getByRole('heading', { name: 'Hikers of the Hills' })).toBeVisible()
   await expect(page.getByText('Walks on Sundays.')).toBeVisible()
@@ -410,6 +413,9 @@ test("changing a group's profile", async () => {
   const links = page.getByRole('navigation', { name: "Hikers of the Hills's links" })
   await expect(links.getByRole('link', { name: 'Our chat' })).toHaveAttribute('href', 'https://chat.hikers.example')
   await expect(links.getByRole('link', { name: 'walks.example' })).toHaveAttribute('href', 'https://walks.example/')
+  const icon = links.getByRole('link', { name: 'Our chat' }).locator('img.link-icon')
+  await expect(icon).toHaveJSProperty('naturalWidth', 16)
+  await expect(links.getByRole('link', { name: 'walks.example' }).locator('svg.icon')).toBeVisible()
 })
 
 // A one-pixel PNG.

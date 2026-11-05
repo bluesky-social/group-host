@@ -3,12 +3,14 @@
 	import { inPlace } from '#lib/forms.ts';
 	import Empty from '#lib/molecules/Empty.svelte';
 	import FormDialog from '#lib/molecules/FormDialog.svelte';
+	import LinkIcon from '#lib/atoms/LinkIcon.svelte';
 	/**
-	 * Where else a group is, as its profile lists them, each to remove;
+	 * Where else a group is, as its profile lists them, each by its site's
+	 * icon, to remove;
 	 * and the dialog adding one, opened by a button whose `popovertarget`
 	 * is `add-link`.
 	 */
-	let { links = [] }: { links?: { url: string; title?: string }[] } = $props();
+	let { links = [] }: { links?: { url: string; title?: string; icon?: string | null }[] } = $props();
 	const shown = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 </script>
 
@@ -16,6 +18,7 @@
 	<ul class="link-list">
 		{#each links as l, i (i)}
 			<li>
+				<LinkIcon src={l.icon} />
 				<span class="row-main"><strong>{l.title ?? shown(l.url)}</strong><span class="what">{l.url}</span></span>
 				<form class="row-actions" method="post" action="?/unlink" use:enhance={inPlace}>
 					<input type="hidden" name="index" value={i} />

@@ -5,7 +5,7 @@
 	import ProfilePictures from '#lib/organisms/ProfilePictures.svelte';
 	import SwitchOff from '#lib/organisms/SwitchOff.svelte';
 	import Visibility from '#lib/organisms/Visibility.svelte';
-	import { image } from '#lib/images.ts';
+	import { image, linksOf } from '#lib/images.ts';
 	let { data, form } = $props();
 	const g = $derived(data.group);
 </script>
@@ -20,7 +20,7 @@
 	{#snippet actions()}
 		{#if (g.links?.length ?? 0) < 5}<button class="quiet" type="button" popovertarget="add-link">Add a link</button>{/if}
 	{/snippet}
-	<LinksEditor links={g.links} />
+	<LinksEditor links={linksOf(g.did, g.links)} />
 </Section>
 <Section title="Pictures">
 	<ProfilePictures name={g.displayName ?? g.handle} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} />

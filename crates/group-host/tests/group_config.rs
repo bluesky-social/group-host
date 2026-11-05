@@ -83,13 +83,15 @@ async fn an_admin_changes_the_profile() {
     assert_eq!(avatar["size"], 2_000_000);
     assert_eq!(avatar["mimeType"], "image/webp");
     let banner = uploaded(&h, &app, &token, b"road".to_vec(), "image/jpeg").await;
+    // As large as a link's icon may be.
+    let icon = uploaded(&h, &app, &token, vec![8; 100_000], "image/png").await;
     let record = riders(json!({
         "displayName": "Riders United",
         "description": "We ride.",
         "url": "https://riders.example",
         // As many links as a profile holds, a title as long as one may be.
         "links": [
-            {"url": "https://chat.riders.example", "title": "Our chat"},
+            {"url": "https://chat.riders.example", "title": "Our chat", "icon": icon},
             {"url": "http://calendar.riders.example/rides"},
             {"url": "https://a.example", "title": "x".repeat(64)},
             {"url": "https://b.example", "title": "B"},
@@ -150,6 +152,7 @@ async fn refuses_a_profile_it_should_not_keep() {
     let moving = uploaded(&h, &app, &token, b"GIF89a".to_vec(), "image/gif").await;
     let large = uploaded(&h, &app, &token, vec![0; 2_000_001], "image/png").await;
     let face = uploaded(&h, &app, &token, b"face".to_vec(), "image/webp").await;
+    let wide = uploaded(&h, &app, &token, vec![0; 100_001], "image/png").await;
     // Its type and size are the upload's, whatever the record says.
     let mut retyped = face.clone();
     retyped["mimeType"] = json!("image/png");
@@ -182,6 +185,10 @@ async fn refuses_a_profile_it_should_not_keep() {
         riders(json!({"avatar": never})),
         riders(json!({"avatar": anothers})),
         riders(json!({"avatar": {"ref": "x"}})),
+        // Icons that are not the group's own small PNGs, as it kept them.
+        riders(json!({"links": [{"url": "https://riders.example", "icon": face}]})),
+        riders(json!({"links": [{"url": "https://riders.example", "icon": wide}]})),
+        riders(json!({"links": [{"url": "https://riders.example", "icon": anothers}]})),
         // Longer than the lexicon has them, or not of its format.
         riders(json!({"displayName": "x".repeat(65)})),
         riders(json!({"topics": [{"topic": "x".repeat(65)}]})),

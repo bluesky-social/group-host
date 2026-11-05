@@ -426,7 +426,8 @@ async fn acts_as_the_member_in_the_group_they_chose() {
 
 #[tokio::test]
 async fn writes_the_groups_profile_and_rules_as_the_group() {
-    let h = start(&[], false).await;
+    let favicons = common::start_favicons().await;
+    let h = start(&[("FAVICONS", &favicons)], false).await;
     let [alice, ..] = people(&h).await;
     let group = start_group(
         &h,
@@ -459,6 +460,26 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     assert!(got.get("isError").is_none(), "{got}");
     want.as_object_mut().unwrap().remove("description");
     assert_eq!(kept("profile", "self").unwrap(), want);
+    // Its links, each new one with its site's icon, kept as the group's
+    // own, where the site has a small PNG; written again, each keeps it.
+    let links = json!([
+        {"url": "https://chat.riders.example", "title": "Our chat"},
+        {"url": "https://big.riders.example"},
+        {"url": "https://gif.riders.example"},
+        {"url": "https://riders.example"},
+    ]);
+    let got = tool(&h, access, "profile_set", json!({"links": links})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    let written = kept("profile", "self").unwrap()["links"].clone();
+    let icon = &written[0]["icon"];
+    assert_eq!(icon["mimeType"], "image/png");
+    assert_eq!(icon["size"], common::FAVICON.len());
+    for at in 1..4 {
+        assert_eq!(written[at].get("icon"), None, "{written}");
+    }
+    let got = tool(&h, access, "profile_set", json!({"links": links})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    assert_eq!(kept("profile", "self").unwrap()["links"], written);
 
     // A new rule, keyed by the clock; changed at its key; taken away.
     let got = tool(

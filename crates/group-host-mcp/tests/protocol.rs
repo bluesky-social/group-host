@@ -2,7 +2,8 @@
 //! the server answers each message an MCP client sends.
 
 use group_host_mcp::{
-    Action, Key, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, edited, plan, regrant, snake, tools,
+    Action, FAVICONS, Key, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, edited, iconed, iconless,
+    plan, regrant, snake, tools,
 };
 use serde_json::{Value, json};
 
@@ -613,4 +614,52 @@ async fn refuses_what_is_not_a_request_it_knows() {
         ),
         -32602
     );
+}
+
+#[test]
+fn asks_the_icon_of_each_new_link_once() {
+    let profile = "fyi.opensocial.profile";
+    let icon =
+        json!({"$type": "blob", "ref": {"$link": "bafkreia"}, "mimeType": "image/png", "size": 9});
+    let kept = json!({"links": [
+        {"url": "https://chat.example", "icon": icon},
+        {"url": "https://old.example"},
+    ]});
+    let given = || {
+        json!({"links": [
+            {"url": "https://chat.example", "title": "Our chat"},
+            {"url": "https://new.example/a b?c=d"},
+            {"url": "https://own.example", "icon": "its own"},
+            {"url": "ftp://files.example"},
+            "not a link",
+            {"url": "https://old.example"},
+        ]})
+        .as_object()
+        .unwrap()
+        .clone()
+    };
+    // A link it had keeps its icon; one new to it, on the web, is asked
+    // for, its address encoded; any other is left as given.
+    let mut fields = given();
+    let wanted = iconless(profile, &kept, &mut fields, FAVICONS);
+    let asked = format!("{FAVICONS}https%3A%2F%2Fnew.example%2Fa%20b%3Fc%3Dd");
+    let old = format!("{FAVICONS}https%3A%2F%2Fold.example");
+    assert_eq!(wanted, vec![(1, asked), (5, old)]);
+    assert_eq!(fields["links"][0]["icon"], icon);
+    assert_eq!(fields["links"][2]["icon"], "its own");
+    assert_eq!(fields["links"][3].get("icon"), None);
+    // Given one, it holds it; at no link, nothing is.
+    iconed(&mut fields, 1, json!("the icon"));
+    iconed(&mut fields, 9, json!("nowhere"));
+    assert_eq!(fields["links"][1]["icon"], "the icon");
+    assert_eq!(fields["links"].as_array().unwrap().len(), 6);
+    // With no service, none is asked; nor of a record but a profile.
+    assert_eq!(iconless(profile, &kept, &mut given(), ""), vec![]);
+    let rule = "fyi.opensocial.rule";
+    assert_eq!(iconless(rule, &kept, &mut given(), FAVICONS), vec![]);
+    // Nor of a profile with no links given.
+    let mut none = json!({"description": "x"}).as_object().unwrap().clone();
+    assert_eq!(iconless(profile, &kept, &mut none, FAVICONS), vec![]);
+    iconed(&mut none, 0, json!("nowhere"));
+    assert_eq!(none.get("links"), None);
 }

@@ -157,6 +157,35 @@ async fn last(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+/// The bytes the favicon service answers for a site whose name starts
+/// `chat.`.
+pub const FAVICON: &[u8] = b"\x89PNG a green dot";
+
+/// A favicon service, as the host asks one: where it is, the link's
+/// address to follow. A site whose name starts `chat.` has `FAVICON`, one
+/// whose starts `big.` an icon larger than a link's may be, `gif.` one
+/// that is no PNG; any other none.
+pub async fn start_favicons() -> String {
+    async fn icon(
+        axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
+    ) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        let site = q.get("url").map(String::as_str).unwrap_or_default();
+        let site = site.trim_start_matches("https://");
+        let png = [(axum::http::header::CONTENT_TYPE, "image/png")];
+        match site.split('.').next() {
+            Some("chat") => (png, FAVICON).into_response(),
+            Some("big") => (png, vec![0; 100_001]).into_response(),
+            Some("gif") => {
+                ([(axum::http::header::CONTENT_TYPE, "image/gif")], "GIF89a").into_response()
+            }
+            _ => StatusCode::NOT_FOUND.into_response(),
+        }
+    }
+    let at = serve(Router::new().route("/favicon", get(icon))).await;
+    format!("{at}/favicon?url=")
+}
+
 /// Serves `router` on a free port, answering its address.
 pub async fn serve(router: Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

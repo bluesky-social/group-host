@@ -23,6 +23,9 @@ type Answer = Result<Json<Value>, XrpcError>;
 /// The most bytes a profile's picture may be, as its lexicon has it.
 pub const IMAGE_AT_MOST: i64 = 2_000_000;
 
+/// The most bytes a link's icon may be, as its lexicon has it.
+pub const ICON_AT_MOST: i64 = 100_000;
+
 /// Where a group meets: the places `community.lexicon.location` has.
 const PLACES: [&str; 4] = [
     "community.lexicon.location.address",
@@ -162,23 +165,49 @@ fn site(profile: &Value) -> Result<(), XrpcError> {
 impl Host {
     /// Refuses a picture a profile names at `key`, unless it is one of the
     /// group's own uploads, of a kind of image a page is given and no
-    /// larger than a profile takes, with the type and size the host kept.
+    /// larger than a profile takes.
     fn picture(&self, group: &str, profile: &Value, key: &str) -> Result<(), XrpcError> {
         let Some(asked) = profile.get(key) else {
             return Ok(());
         };
-        let not_one = || {
-            invalid(format!(
-                "{key} is a PNG, JPEG or WebP image of at most {IMAGE_AT_MOST} bytes, as the group's uploadBlob answered it"
-            ))
-        };
+        let not_one = format!(
+            "{key} is a PNG, JPEG or WebP image of at most {IMAGE_AT_MOST} bytes, as the group's uploadBlob answered it"
+        );
+        self.image(group, asked, &PROFILE_IMAGES, IMAGE_AT_MOST, &not_one)
+    }
+
+    /// Refuses an icon a link names, unless it is one of the group's own
+    /// uploads, a PNG no larger than a link takes.
+    fn icons(&self, group: &str, profile: &Value) -> Result<(), XrpcError> {
+        let not_one = format!(
+            "a link's icon is a PNG image of at most {ICON_AT_MOST} bytes, as the group's uploadBlob answered it"
+        );
+        let links = profile["links"].as_array().into_iter().flatten();
+        for icon in links.filter_map(|link| link.get("icon")) {
+            self.image(group, icon, &["image/png"], ICON_AT_MOST, &not_one)?;
+        }
+        Ok(())
+    }
+
+    /// Refuses the blob `asked`, unless it is one of the group's own
+    /// uploads, of one of `kinds` and at most `at_most` bytes, with the
+    /// type and size the host kept: `not_one` says why.
+    fn image(
+        &self,
+        group: &str,
+        asked: &Value,
+        kinds: &[&str],
+        at_most: i64,
+        not_one: &str,
+    ) -> Result<(), XrpcError> {
+        let not_one = || invalid(not_one.to_string());
         let link = asked["ref"]["$link"].as_str().unwrap_or_default();
         let cid = Cid::parse(link).map_err(|_| not_one())?;
         let kept = self.store.blob(group, &cid).map_err(XrpcError::internal)?;
         let kept = kept.ok_or_else(not_one)?;
-        let image = PROFILE_IMAGES.contains(&kept.mime_type.as_str());
+        let image = kinds.contains(&kept.mime_type.as_str());
         let as_kept = asked["mimeType"] == kept.mime_type && asked["size"] == kept.size;
-        if !image || kept.size > IMAGE_AT_MOST || !as_kept {
+        if !image || kept.size > at_most || !as_kept {
             return Err(not_one());
         }
         Ok(())
@@ -186,8 +215,8 @@ impl Host {
 
     /// Refuses a profile the group should not keep: one with no name, a
     /// join policy the host does not know, a place that is none, a site or
-    /// link not on the web, words blank or listed twice, or a picture that is
-    /// not one of its own.
+    /// link not on the web, words blank or listed twice, or a picture or a
+    /// link's icon that is not one of its own.
     fn profile(&self, group: &str, profile: &Value) -> Result<(), XrpcError> {
         if !said(&profile["displayName"]) {
             return Err(invalid("displayName is required"));
@@ -200,7 +229,8 @@ impl Host {
         words(profile, "topics", "topic")?;
         words(profile, "languages", "language")?;
         self.picture(group, profile, "avatar")?;
-        self.picture(group, profile, "banner")
+        self.picture(group, profile, "banner")?;
+        self.icons(group, profile)
     }
 
     /// Refuses a write of the group's profile or one of its rules, in its

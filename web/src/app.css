@@ -219,6 +219,7 @@ span.av::before{content:attr(data-initial)}
 .links a,.profile-links a{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--control);padding:0 var(--space-3);border:var(--border);border-radius:var(--radius-pill);background:var(--panel);color:var(--fg);font-size:var(--text-sm);font-weight:var(--weight-medium);text-decoration:none}
 .links a:hover,.profile-links a:hover{border-color:var(--primary);color:var(--fg)}
 .profile-links{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.link-icon{width:var(--icon);height:var(--icon);flex:none;border-radius:var(--radius-xs);object-fit:contain}
 .icon{width:var(--icon);height:var(--icon);flex:none;fill:none;stroke:var(--faint);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .rules{font-size:var(--text-sm);color:var(--mute)}
 .rules summary{cursor:pointer;font-weight:var(--weight-medium);color:var(--fg)}

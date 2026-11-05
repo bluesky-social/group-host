@@ -325,7 +325,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "profile_set",
         &[],
         "Changes the group's profile as the group. Changes only the fields given, keeping the \
-         rest; a field given empty, or null, is taken away.",
+         rest; a field given empty, or null, is taken away. A new link is given its site's icon.",
         Made::Edit("profile", META, "self"),
     ),
     (
@@ -944,6 +944,77 @@ pub fn edited(
         rkey: Some(rkey),
         record: Some(Value::Object(record)),
     }
+}
+
+/// Where a link's site's icon is asked unless another service is named:
+/// the link's address follows, encoded, and a PNG is answered.
+pub const FAVICONS: &str = "https://cardyb.bsky.app/v1/favicon?url=";
+
+/// The most bytes a link's icon may be, as its lexicon has it.
+pub const ICON_AT_MOST: usize = 100_000;
+
+/// The links of a profile `fields` gives, in the `collection` it is
+/// written to, that want their site's icon: each by where it is in the
+/// list, and the address its icon is asked at, of the favicon service at
+/// `favicons`. A link given with no icon, at an address the record `kept`
+/// has one for, is given that one instead, so a list written again keeps
+/// its icons. With no service, none are asked.
+pub fn iconless(
+    collection: &str,
+    kept: &Value,
+    fields: &mut Map<String, Value>,
+    favicons: &str,
+) -> Vec<(usize, String)> {
+    if collection != format!("{NS}.profile") {
+        return Vec::new();
+    }
+    let had = kept["links"].as_array().into_iter().flatten();
+    let had: HashMap<&str, &Value> = had
+        .filter_map(|l| Some((l["url"].as_str()?, l.get("icon")?)))
+        .collect();
+    let mut wanted = Vec::new();
+    let links = fields.get_mut("links").and_then(Value::as_array_mut);
+    for (at, link) in links.into_iter().flatten().enumerate() {
+        let url = link["url"].as_str().unwrap_or_default().to_string();
+        if link.get("icon").is_some() || !link.is_object() {
+            continue;
+        }
+        match had.get(url.as_str()) {
+            Some(icon) => link["icon"] = (*icon).clone(),
+            None if web(&url) && !favicons.is_empty() => {
+                wanted.push((at, format!("{favicons}{}", encoded(&url))))
+            }
+            None => {}
+        }
+    }
+    wanted
+}
+
+/// `fields`' link at `at`, given the blob `icon`.
+pub fn iconed(fields: &mut Map<String, Value>, at: usize, icon: Value) {
+    if let Some(link) = fields.get_mut("links").and_then(|l| l.get_mut(at)) {
+        link["icon"] = icon;
+    }
+}
+
+/// Whether `url` is an address on the web.
+fn web(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
+/// `text` as it stands in a URL's query: each byte but a letter, a digit
+/// and `-._~` as `%` and its hex.
+fn encoded(text: &str) -> String {
+    let mut out = String::new();
+    for b in text.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 fn error(id: &Value, code: i64, message: &str) -> Value {

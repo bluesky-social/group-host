@@ -57,7 +57,10 @@ given, or not as text, is refused before anything is asked:
 A write replaces the record whole, a field not given dropped, but
 `profile_set` and `role_grant`, which change only what they are given.
 A picture cannot be uploaded through MCP; `profile_set` keeps the
-group's as they are.
+group's as they are. A link `profile_set` writes that the profile did
+not have is given its site's icon, which the host asks of the favicon
+service `FAVICONS` names and keeps as the group's; a link it had keeps
+its icon.
 
 ## group
 

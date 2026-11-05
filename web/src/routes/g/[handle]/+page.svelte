@@ -10,7 +10,7 @@
 	import Section from '#lib/molecules/Section.svelte';
 	import Standing from '#lib/molecules/Standing.svelte';
 	import SwitchedOff from '#lib/molecules/SwitchedOff.svelte';
-	import { image } from '#lib/images.ts';
+	import { image, linksOf } from '#lib/images.ts';
 	import GroupPage from '#lib/templates/GroupPage.svelte';
 	import Welcome from '#lib/templates/Welcome.svelte';
 	let { data, form } = $props();
@@ -38,7 +38,7 @@
 			{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 		{/snippet}
 		{#snippet card()}
-			<GroupCard handle={g.handle} name={g.displayName} description={g.description} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} location={g.location} online={g.online} languages={g.languages} topics={g.topics} links={g.links} rules={g.rules}>
+			<GroupCard handle={g.handle} name={g.displayName} description={g.description} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} location={g.location} online={g.online} languages={g.languages} topics={g.topics} links={linksOf(g.did, g.links)} rules={g.rules}>
 				{#snippet nav()}
 					{#if member && (data.settings || may.includes('mod.read'))}
 						<nav class="group-nav" aria-label="The group">

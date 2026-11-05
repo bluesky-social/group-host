@@ -167,7 +167,13 @@ A picture must be a blob in the group's own repo, because a blob in
 another account's repo would not resolve for the group's profile. So the
 app uploads it as the group (`com.atproto.repo.uploadBlob`, which a
 token for `meta` may do for images) and names the blob it gets back in
-the profile. An upload no record takes within a day is swept away, and a
+the profile. A link's `icon`, its site's favicon, is kept the same way:
+a PNG of at most 100,000 bytes, so that someone looking at the group asks
+the host for it and never the site. The console, the `opensocial`
+command and the host's MCP tools each ask the favicon service `FAVICONS`
+names for it when they write a new link, and upload it as the group; a
+link whose site has none, or answers too slowly, is kept without one,
+and a link written again keeps the icon it had. An upload no record takes within a day is swept away, and a
 blob goes when its last reference does.
 
 The host serves images at `/img/{did}/{cid}` to whoever may see a record
