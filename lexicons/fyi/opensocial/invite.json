@@ -5,7 +5,7 @@
     "main": {
       "type": "record",
       "key": "tid",
-      "description": "An invitation, written by the inviting group into the invitee's own inbox (fyi.opensocial.inbox). The group is the record's author.",
+      "description": "An invitation, written by the inviting group into the invitee's own inbox (fyi.opensocial.invites). The group is the record's author.",
       "record": {
         "type": "object",
         "required": ["createdAt"],
@@ -22,11 +22,6 @@
           "createdAt": {
             "type": "string",
             "format": "datetime"
-          },
-          "by": {
-            "type": "string",
-            "format": "did",
-            "description": "Who in the group sent it."
           }
         }
       }

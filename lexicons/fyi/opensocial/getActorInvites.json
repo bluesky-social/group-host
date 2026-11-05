@@ -39,11 +39,6 @@
           "type": "ref",
           "ref": "fyi.opensocial.defs#groupViewBasic"
         },
-        "by": {
-          "type": "string",
-          "format": "did",
-          "description": "Who in the group sent it."
-        },
         "message": {
           "type": "string"
         },

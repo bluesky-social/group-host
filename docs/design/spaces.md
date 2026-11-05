@@ -50,7 +50,7 @@ repo, the space, the revision and that digest.
 
 The group also writes in spaces it is not the authority for. An invite
 goes in the group's repo in the invitee's inbox,
-`at://<invitee>/space/fyi.opensocial.inbox/self`. The inbox's authority
+`at://<invitee>/space/fyi.opensocial.invites/self`. The inbox's authority
 asks this host who may use it, with
 `com.atproto.managedspace.checkUserAccess`: its owner may read, and a
 group here may write ([membership](membership.md)).

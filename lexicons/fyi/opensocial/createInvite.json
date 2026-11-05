@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Write an invite into someone's own inbox (fyi.opensocial.inbox). Requires invite.",
+      "description": "Write an invite into someone's own inbox (fyi.opensocial.invites). Requires invite.",
       "input": {
         "encoding": "application/json",
         "schema": {

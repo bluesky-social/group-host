@@ -58,9 +58,10 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         .group_record(&did, &inbox, &format!("{NS}.invite"), rkey)
         .unwrap()
         .unwrap();
+    // What it says, and no word of who sent it.
     assert_eq!(
-        (record["by"].clone(), record["message"].clone()),
-        (json!(alice.did), json!("Ride with us"))
+        (record.get("by"), record["message"].clone()),
+        (None, json!("Ride with us"))
     );
     assert_eq!(bob.told.writes.lock().unwrap()[0].1["space"], inbox);
     // Asked again, the same one.
@@ -113,7 +114,7 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
     // Bob sees his, from the group here.
     let (_, mine) = ask(&h, &bob, "getActorInvites", "").await;
     assert_eq!(mine["invites"][0]["group"]["displayName"], "Riders");
-    assert_eq!(mine["invites"][0]["by"], alice.did);
+    assert_eq!(mine["invites"][0].get("by"), None);
     let (_, filtered) = ask(&h, &bob, "getActorInvites", "group=did:plc:other").await;
     assert_eq!(filtered["invites"], json!([]));
 

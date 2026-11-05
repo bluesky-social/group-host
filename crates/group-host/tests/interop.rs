@@ -436,7 +436,7 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         "com.atproto.space.createSpace",
         jwt,
         &json!({
-            "spaceType": "fyi.opensocial.inbox",
+            "spaceType": "fyi.opensocial.invites",
             "skey": "self",
             "policy": {"$type": "com.atproto.managedspace.policy", "managingApp": service},
         }),

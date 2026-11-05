@@ -1,11 +1,11 @@
 {
   "lexicon": 1,
-  "id": "fyi.opensocial.inbox",
+  "id": "fyi.opensocial.invites",
   "defs": {
     "main": {
       "type": "space",
       "key": "literal:self",
-      "name": "Inbox",
+      "name": "Group invites",
       "description": "Each person's own inbox, hosted by them rather than by a group: where groups' invites arrive.",
       "collections": [
         "fyi.opensocial.invite"

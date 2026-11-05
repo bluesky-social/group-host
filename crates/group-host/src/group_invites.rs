@@ -38,7 +38,7 @@ fn bad(error: &'static str, message: impl Into<String>) -> XrpcError {
 
 /// Someone's inbox: where groups' invites to them arrive.
 pub fn inbox_of(did: &str) -> String {
-    format!("at://{did}/space/{NS}.inbox/self")
+    format!("at://{did}/space/{NS}.invites/self")
 }
 
 fn uri_of(invite: &Invite) -> String {
@@ -224,8 +224,7 @@ pub async fn create_invite(
         created_at: now_millis(),
         expires_at,
     };
-    let mut record =
-        json!({"$type": format!("{NS}.invite"), "by": me, "createdAt": iso(invite.created_at)});
+    let mut record = json!({"$type": format!("{NS}.invite"), "createdAt": iso(invite.created_at)});
     if let Some(m) = &invite.message {
         record["message"] = json!(m);
     }
@@ -331,8 +330,7 @@ pub async fn get_actor_invites(
         if let Some(cid) = profile["avatar"]["ref"]["$link"].as_str() {
             group["avatar"] = json!(cid);
         }
-        let mut shown =
-            json!({"group": group, "by": invite.by, "createdAt": iso(invite.created_at)});
+        let mut shown = json!({"group": group, "createdAt": iso(invite.created_at)});
         if let Some(m) = &invite.message {
             shown["message"] = json!(m);
         }
@@ -381,7 +379,7 @@ pub async fn check_user_access(
         ));
     }
     let user = param(&p, "user")?;
-    let inbox = space.kind == format!("{NS}.inbox");
+    let inbox = space.kind == format!("{NS}.invites");
     let authorized = match p.get("access").map(String::as_str) {
         // Its owner reads it; a group here writes in it.
         Some("write") => {

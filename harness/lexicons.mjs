@@ -51,6 +51,8 @@ const retracted = new Set([
   'fyi.opensocial.listSpaceRecords#main.output.rev',
   'fyi.opensocial.listSpaceRecords#main.output.actors',
   'fyi.opensocial.requestJoin#main.input.invite',
+  'fyi.opensocial.invite#main.record.by',
+  'fyi.opensocial.getActorInvites#actorInvite.by',
 ])
 
 const problems = []

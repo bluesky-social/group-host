@@ -103,9 +103,9 @@ Details:
 
 An invite must reach someone outside the group, so the group writes it
 where they already look: their inbox,
-`at://<invitee>/space/fyi.opensocial.inbox/self`, a space of their own at
+`at://<invitee>/space/fyi.opensocial.invites/self`, a space of their own at
 their PDS. The invite is an `fyi.opensocial.invite` record in the group's
-repo there, with `by`, an optional `message` and `expiresAt`. The host
+repo there, with an optional `message` and `expiresAt`. The host
 answers `com.atproto.managedspace.checkUserAccess` for inboxes: only a
 group on this host may write one, and only its owner may read it.
 
