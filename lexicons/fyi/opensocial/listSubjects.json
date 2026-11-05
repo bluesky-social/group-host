@@ -4,10 +4,12 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "The moderation queue. Requires mod.read.",
+      "description": "List subjects in the moderation queue. Requires mod.read.",
       "parameters": {
         "type": "params",
-        "required": ["group"],
+        "required": [
+          "group"
+        ],
         "properties": {
           "group": {
             "type": "string",
@@ -16,12 +18,18 @@
           },
           "status": {
             "type": "string",
-            "knownValues": ["open", "escalated", "resolved"]
+            "enum": [
+              "open",
+              "escalated",
+              "resolved"
+            ],
+            "default": "open"
           },
           "limit": {
             "type": "integer",
-            "default": 50,
-            "maximum": 100
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
           },
           "cursor": {
             "type": "string"
@@ -32,7 +40,9 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["subjects"],
+          "required": [
+            "subjects"
+          ],
           "properties": {
             "cursor": {
               "type": "string"

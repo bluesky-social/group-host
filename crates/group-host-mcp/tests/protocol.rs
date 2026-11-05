@@ -48,10 +48,13 @@ fn makes_a_tool_of_each_method_without_its_group() {
     assert_eq!(role["type"], "object");
     assert_eq!(role["properties"]["role"]["type"], "string");
 
-    // Known values said in words, beside what the lexicon says.
+    // Known values said in words, beside what the lexicon says; a closed
+    // set, as JSON Schema's own.
+    let policy = &tool("updateProfile").input_schema["properties"]["joinPolicy"];
+    let said = policy["description"].as_str().unwrap();
+    assert!(said.contains("One of: "), "{said}");
     let status = &tool("listSubjects").input_schema["properties"]["status"];
-    let said = status["description"].as_str().unwrap();
-    assert!(said.contains("One of: open"), "{said}");
+    assert_eq!(status["enum"], json!(["open", "escalated", "resolved"]));
     let limit = &tool("listSubjects").input_schema["properties"]["limit"];
     assert_eq!(limit["type"], "integer");
     assert!(limit.get("maximum").is_some());

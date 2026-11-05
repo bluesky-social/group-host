@@ -33,7 +33,7 @@ pub fn did_rkey(did: &str) -> String {
 }
 
 /// What the labeler every group starts with says: the labels the host
-/// acts on, and reports about records.
+/// acts on, and reports about accounts and records.
 fn labeler(at: &str) -> Value {
     let reasons = ["Spam", "Violation", "Misleading", "Sexual", "Rude", "Other"]
         .map(|r| format!("com.atproto.moderation.defs#reason{r}"));
@@ -41,7 +41,7 @@ fn labeler(at: &str) -> Value {
         "$type": format!("{NS}.labeler"),
         "policies": {"labelValues": ["!hide", "!takedown"]},
         "reasonTypes": reasons,
-        "subjectTypes": ["record"],
+        "subjectTypes": ["account", "record"],
         "createdAt": at,
     })
 }

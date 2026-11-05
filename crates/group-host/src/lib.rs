@@ -392,7 +392,7 @@ pub fn router(host: Arc<Host>) -> Router {
             post(moderation::resolve_subject),
         )
         .route(
-            "/xrpc/com.atproto.moderation.createReport",
+            "/xrpc/fyi.opensocial.createReport",
             post(moderation::create_report),
         )
         .route(

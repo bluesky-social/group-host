@@ -53,6 +53,20 @@ const retracted = new Set([
   'fyi.opensocial.requestJoin#main.input.invite',
   'fyi.opensocial.invite#main.record.by',
   'fyi.opensocial.getActorInvites#actorInvite.by',
+  'fyi.opensocial.defs#subjectView',
+  'fyi.opensocial.defs#subjectView.subject',
+  'fyi.opensocial.defs#subjectView.status',
+  'fyi.opensocial.defs#subjectView.reportCount',
+  'fyi.opensocial.defs#subjectView.lastReportedAt',
+  'fyi.opensocial.getSubjectHistory#main.output.subject',
+  'fyi.opensocial.getSubjectHistory#main.output.events[]',
+  'fyi.opensocial.labeler#main.record.policies',
+  'fyi.opensocial.labeler#main.record.subjectCollections[]',
+  'fyi.opensocial.listSubjects#main.parameters.limit',
+  'fyi.opensocial.resolveSubject#main.input',
+  'fyi.opensocial.resolveSubject#main.input.subject',
+  'fyi.opensocial.resolveSubject#main.input.action',
+  'fyi.opensocial.resolveSubject#main.output',
   ...['readableBy', 'credentialScopes', 'createdAt'].map((f) => `fyi.opensocial.access#main.record.${f}`),
   ...['readableBy', 'credentialScopes', 'writableBy', 'spaceType'].map((f) => `fyi.opensocial.createSpace#main.input.${f}`),
   'fyi.opensocial.createSpace#main.output.uri',
@@ -64,13 +78,18 @@ const retracted = new Set([
 // from the style above: each finding, exactly as said. A space grant's
 // scopes are bare strings, as OAuth scopes are; createSpace names a
 // space's `type` so; and the access record and createSpace require what
-// the proposal's do.
+// the proposal's do. A moderation subject's status is a closed set, and
+// a report's and an event's `id` is the proposal's name for it.
 const proposal = new Set([
   'fyi.opensocial.defs#spaceGrant.scopes: an array holds objects, which can grow, not bare values',
   'fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type',
   'fyi.opensocial.access#main.record: grants is required now: only new optional fields',
   ...['type', 'access'].map((f) => `fyi.opensocial.createSpace#main.input: ${f} is required now: only new optional fields`),
   ...['space', 'access'].map((f) => `fyi.opensocial.createSpace#main.output: ${f} is required now: only new optional fields`),
+  ...['createReport', 'defs'].map((n) => `fyi.opensocial.${n}: field-name-syntax: name is a commonly reserved keyword: id`),
+  ...['defs#subjectStatus', 'listSubjects#main.parameters.status', 'resolveSubject#main.input.status'].map(
+    (p) => `fyi.opensocial.${p}: knownValues, not enum: an enum can never grow`,
+  ),
 ])
 
 const problems = []
@@ -211,7 +230,9 @@ const loosened = (before, after, path) => {
 
 // Schemas taken out on purpose, each named here as it goes, which a
 // change may remove: what is said of each is why.
-const RETIRED = new Set([])
+// - com.atproto.moderation.createReport: reports come to the group's own
+//   fyi.opensocial.createReport, as the opensocial proposal has them.
+const RETIRED = new Set(['com.atproto.moderation.createReport'])
 
 // None of ours is published yet, so nothing out there was written to it.
 // Until one is, a schema, a def or a field may go when nothing here refers

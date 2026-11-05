@@ -54,7 +54,7 @@ async fn starts_a_group_with_its_spaces() {
     );
     assert_eq!(
         record(&meta, "labeler", "self")["subjectTypes"],
-        json!(["record"])
+        json!(["account", "record"])
     );
     assert_eq!(
         record(&members, "access", "self")["grants"],

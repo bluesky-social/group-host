@@ -427,7 +427,7 @@ async fn one_put_out_reads_no_more() {
     );
     assert_eq!(record(&h, &did, "membership", &bob.did), None);
     // The ejection stays in the group's queue, on him, with its reason.
-    let events = h.host.store.events(&did, &bob.did).unwrap();
+    let events = h.host.store.events(&did, &bob.did, None, 0, 100).unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].kind, "eject");
     assert_eq!(events[0].actor.as_deref(), Some(dave.did.as_str()));

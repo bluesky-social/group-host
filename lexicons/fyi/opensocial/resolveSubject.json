@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Resolve or escalate a subject, optionally with a note. Requires mod.resolve.",
+      "description": "Resolve or escalate a subject, optionally with a note. Repeating the current status adds the note. Requires mod.resolve.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -12,7 +12,7 @@
           "required": [
             "group",
             "subject",
-            "action"
+            "status"
           ],
           "properties": {
             "group": {
@@ -21,22 +21,23 @@
               "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
             },
             "subject": {
-              "type": "string",
-              "format": "uri",
-              "description": "A record's at-uri, or an account's DID."
+              "type": "union",
+              "refs": [
+                "fyi.opensocial.defs#accountSubject",
+                "fyi.opensocial.defs#recordSubject"
+              ]
             },
-            "action": {
+            "status": {
               "type": "string",
-              "knownValues": [
-                "resolve",
-                "escalate",
-                "note"
+              "enum": [
+                "resolved",
+                "escalated"
               ]
             },
             "note": {
               "type": "string",
-              "maxLength": 3000,
-              "maxGraphemes": 300
+              "maxGraphemes": 2000,
+              "maxLength": 20000
             }
           }
         }
@@ -44,10 +45,20 @@
       "output": {
         "encoding": "application/json",
         "schema": {
-          "type": "object",
-          "properties": {}
+          "type": "ref",
+          "ref": "fyi.opensocial.defs#subjectView"
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "InvalidSubject",
+          "description": "The subject isn't an account or record in this group."
+        },
+        {
+          "name": "SubjectNotFound",
+          "description": "The subject has never been reported."
+        }
+      ]
     }
   }
 }

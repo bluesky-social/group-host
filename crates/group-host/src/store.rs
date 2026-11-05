@@ -400,6 +400,20 @@ pub const MIGRATIONS: &[&str] = &[
     UPDATE assistant_client SET connected = 1
         WHERE id IN (SELECT client_id FROM assistant_grant);
 ",
+    // A moderation event says which version of a record it is about, the
+    // rule a report cites and the label record written; resolving,
+    // escalating and noting are each a status set, a note beside it.
+    "
+    ALTER TABLE mod_event ADD COLUMN cid TEXT;
+    ALTER TABLE mod_event ADD COLUMN rule TEXT;
+    ALTER TABLE mod_event ADD COLUMN uri TEXT;
+    ALTER TABLE mod_event ADD COLUMN status TEXT;
+    UPDATE mod_event SET kind = 'status', status = 'resolved' WHERE kind = 'resolve';
+    UPDATE mod_event SET kind = 'status', status = 'escalated' WHERE kind = 'escalate';
+    UPDATE mod_event SET kind = 'status', status = coalesce((SELECT p.status FROM mod_event p
+        WHERE p.grp = mod_event.grp AND p.subject = mod_event.subject AND p.seq < mod_event.seq
+        AND p.status IS NOT NULL ORDER BY p.seq DESC LIMIT 1), 'open') WHERE kind = 'note';
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";

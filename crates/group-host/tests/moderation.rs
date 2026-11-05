@@ -1,5 +1,5 @@
-//! A group's moderation: reports from anyone, labels written beside what
-//! they label, and the queue between.
+//! A group's moderation: reports from those who can read what they
+//! report, labels written beside what they label, and the queue between.
 
 mod common;
 
@@ -7,11 +7,15 @@ use common::groups::*;
 use common::spaces::*;
 use common::{Running, start};
 use group_host::group::{members_space, meta_space};
-use group_host::moderation::space_of;
+use group_host::moderation::{Event, space_of};
 use group_host::repo::{Write, record_cid};
+use group_host::store::Store;
 use serde_json::{Value as Json, json};
 
 const CALENDAR: &str = "com.example.calendar";
+const ACCOUNT: &str = "fyi.opensocial.defs#accountSubject";
+const RECORD: &str = "fyi.opensocial.defs#recordSubject";
+const CID: &str = "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let roles: Vec<Json> = roles.iter().map(|r| json!({"role": r})).collect();
@@ -51,18 +55,37 @@ async fn query(h: &Running, who: &Authority, method: &str, q: &str) -> (u16, Jso
     get(h, &lxm, q, &[auth(h, who, &lxm)]).await
 }
 
-async fn report(h: &Running, who: &Authority, subject: Json) -> (u16, Json) {
-    let lxm = "com.atproto.moderation.createReport";
-    let body = json!({"reasonType": "com.atproto.moderation.defs#reasonSpam", "reason": "ads", "subject": subject});
-    post(h, lxm, &body, &[auth(h, who, lxm)]).await
+async fn report(h: &Running, who: &Authority, group: &str, subject: Json) -> (u16, Json) {
+    let body = json!({"group": group, "reasonType": "com.atproto.moderation.defs#reasonSpam", "reason": "ads", "subject": subject});
+    call(h, who, "createReport", body).await
 }
 
 fn error(said: &(u16, Json)) -> (u16, &str) {
     (said.0, said.1["error"].as_str().unwrap_or_default())
 }
 
-/// Riders, Alice's, with a calendar, Bob a member and Carol not; and a
-/// post in the calendar, by its URI and CID.
+fn record(uri: &str) -> Json {
+    json!({"$type": RECORD, "uri": uri})
+}
+
+fn account(did: &str) -> Json {
+    json!({"$type": ACCOUNT, "did": did})
+}
+
+/// Each event's kind, as the history answers it: `reportEvent`, …
+fn kinds(history: &Json) -> Vec<String> {
+    let events = history["events"].as_array().unwrap();
+    let kind = |e: &Json| {
+        e["event"]["$type"]
+            .as_str()
+            .unwrap()
+            .replace("fyi.opensocial.defs#", "")
+    };
+    events.iter().map(kind).collect()
+}
+
+/// Riders, Alice's, with a calendar its members read, Bob a member and
+/// Carol not; and a post in the calendar, by its URI and CID.
 async fn group(h: &Running) -> (String, String, Json, [Authority; 3]) {
     let [alice, bob, carol] = people(h).await;
     let did = start_group(
@@ -81,28 +104,52 @@ async fn group(h: &Running) -> (String, String, Json, [Authority; 3]) {
     assert_eq!(status, 200, "{made}");
     membership(h, &did, &bob.did, &["member"]).await;
     let space = made["space"].as_str().unwrap().to_string();
-    let post = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("{space}/{}/com.example.event/ride", bob.did), "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm"});
+    let post = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("{space}/{}/com.example.event/ride", bob.did), "cid": CID});
     (did, space, post, [alice, bob, carol])
 }
 
 #[tokio::test]
-async fn takes_a_report_from_anyone() {
+async fn takes_a_report_from_one_who_reads_it() {
     let h = start(&[], false).await;
-    let (did, _, record, [alice, _, carol]) = group(&h).await;
-    let (status, said) = report(&h, &carol, record.clone()).await;
+    let (did, space, post, [alice, bob, carol]) = group(&h).await;
+    let uri = post["uri"].as_str().unwrap();
+    let subject = json!({"$type": RECORD, "uri": uri, "cid": CID});
+    let (status, said) = report(&h, &bob, &did, subject.clone()).await;
     assert_eq!(status, 200, "{said}");
-    assert_eq!(said["reportedBy"], carol.did.as_str());
-    assert_eq!(said["reason"], "ads");
-    assert_eq!(said["subject"], record);
+    assert!(said["createdAt"].is_string());
     // Each report its own id, however close together they come.
-    let (_, again) = report(&h, &carol, record.clone()).await;
-    let ids = (said["id"].as_i64().unwrap(), again["id"].as_i64().unwrap());
-    assert_eq!(ids.1, ids.0 + 1, "{ids:?}");
+    let (_, again) = report(&h, &bob, &did, subject.clone()).await;
+    assert_ne!(said["id"], again["id"]);
+    assert!(said["id"].is_string());
     let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
-    assert_eq!(queue["subjects"][0]["subject"], record["uri"]);
+    assert_eq!(queue["subjects"][0]["subject"], record(uri));
     assert_eq!(queue["subjects"][0]["status"], "open");
     assert_eq!(queue["subjects"][0]["reportCount"], 2);
-    assert!(queue["subjects"][0]["lastReportedAt"].is_string());
+
+    // A rule the group's, cited.
+    let rule = format!("{}/{did}/{NS}.rule/3mzjdd6rnfise", meta_space(&did));
+    let body = json!({"group": did, "subject": account(&alice.did), "reasonType": "com.atproto.moderation.defs#reasonRude", "rule": rule});
+    let (status, said) = call(&h, &bob, "createReport", body).await;
+    assert_eq!(status, 200, "{said}");
+    let (_, history) = query(
+        &h,
+        &alice,
+        "getSubjectHistory",
+        &format!("group={did}&subject={}", alice.did),
+    )
+    .await;
+    let event = &history["events"][0];
+    assert_eq!(event["id"], said["id"]);
+    assert_eq!(event["createdBy"], bob.did.as_str());
+    assert_eq!(event["event"]["$type"], "fyi.opensocial.defs#reportEvent");
+    assert_eq!(
+        event["event"]["reasonType"],
+        "com.atproto.moderation.defs#reasonRude"
+    );
+    assert_eq!(event["event"]["rule"], rule);
+    // The account in the queue, as the union it was sent as.
+    let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
+    assert_eq!(queue["subjects"][0]["subject"], account(&alice.did));
 
     let other = start_group(
         &h,
@@ -110,57 +157,120 @@ async fn takes_a_report_from_anyone() {
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
-    let elsewhere = json!({"uri": format!("at://did:plc:elsewhere/space/{CALENDAR}/rides/{}/c.d.e/f", carol.did), "cid": "x"});
-    let not_ours = json!({"uri": format!("at://{other}/space/{CALENDAR}/none/{}/c.d.e/f", carol.did), "cid": "x"});
-    for (subject, refused) in [
-        (json!({"did": carol.did}), (400, "InvalidRequest")),
+    let in_space = |rest: &str| record(&format!("{space}/{}/{rest}", bob.did));
+    for (who, subject, refused) in [
+        // Carol cannot read the calendar, nor the members space.
+        (&carol, subject.clone(), (400, "InvalidSubject")),
+        (&carol, account(&bob.did), (400, "InvalidSubject")),
+        // Carol is in no group of Riders'.
+        (&bob, account(&carol.did), (400, "InvalidSubject")),
         (
-            json!({"uri": format!("at://{did}/app.bsky.feed.post/x"), "cid": "x"}),
-            (400, "InvalidRequest"),
+            &bob,
+            record(&format!("at://{did}/app.bsky.feed.post/x")),
+            (400, "InvalidSubject"),
         ),
-        (elsewhere, (400, "NotHosted")),
-        (not_ours, (400, "NotHosted")),
+        (
+            &bob,
+            record(&format!(
+                "at://{other}/space/{CALENDAR}/rides/{}/c.d.e/f",
+                bob.did
+            )),
+            (400, "InvalidSubject"),
+        ),
+        (
+            &bob,
+            record(&format!(
+                "at://{did}/space/{CALENDAR}/none/{}/c.d.e/f",
+                bob.did
+            )),
+            (400, "InvalidSubject"),
+        ),
         // Each part of its URI what it says, so none is unbounded.
         (
-            json!({"uri": format!("at://{did}/space/{CALENDAR}/rides/{}/c.d.e/{}", carol.did, "r".repeat(513)), "cid": "x"}),
+            &bob,
+            in_space(&format!("c.d.e/{}", "r".repeat(513))),
             (400, "InvalidRequest"),
         ),
+        // A subject of a kind the open union does not list.
+        (
+            &bob,
+            json!({"$type": "com.example.thing", "did": bob.did}),
+            (400, "InvalidSubject"),
+        ),
+        (&bob, json!({"did": bob.did}), (400, "InvalidRequest")),
     ] {
         assert_eq!(
-            error(&report(&h, &carol, subject.clone()).await),
+            error(&report(&h, who, &did, subject.clone()).await),
             refused,
             "{subject}"
         );
     }
-    let lxm = "com.atproto.moderation.createReport";
-    let said = post(
-        &h,
-        lxm,
-        &json!({"subject": record}),
-        &[auth(&h, &carol, lxm)],
-    )
-    .await;
-    assert_eq!(error(&said), (400, "InvalidRequest"));
+    assert_eq!(
+        error(&report(&h, &bob, "did:plc:nothing", subject.clone()).await),
+        (400, "GroupNotFound")
+    );
     for body in [
-        json!({"subject": record, "reasonType": "x".repeat(257)}),
-        json!({"subject": record, "reasonType": "com.atproto.moderation.defs#reasonSpam", "reason": "x".repeat(20_001)}),
+        json!({"group": did, "subject": subject}),
+        json!({"group": did, "subject": subject, "reasonType": "x".repeat(257)}),
+        json!({"group": did, "subject": subject, "reasonType": "com.atproto.moderation.defs#reasonSpam", "reason": "x".repeat(20_001)}),
+        json!({"group": did, "subject": subject, "reasonType": "com.atproto.moderation.defs#reasonSpam", "rule": format!("{space}/{did}/{NS}.rule/x")}),
+        json!({"group": did, "subject": subject, "reasonType": "com.atproto.moderation.defs#reasonSpam", "rule": format!("at://{did}/{NS}.rule/x")}),
     ] {
-        let said = post(&h, lxm, &body, &[auth(&h, &carol, lxm)]).await;
-        assert_eq!(error(&said), (400, "InvalidRequest"), "{}", said.1);
+        let said = call(&h, &bob, "createReport", body.clone()).await;
+        assert_eq!(error(&said), (400, "InvalidRequest"), "{body} {}", said.1);
     }
-    assert_eq!(post(&h, lxm, &json!({}), &[]).await.0, 401);
+    let lxm = format!("{NS}.createReport");
+    assert_eq!(common::groups::post(&h, &lxm, &json!({"group": did, "subject": subject, "reasonType": "com.atproto.moderation.defs#reasonSpam"}), &[]).await.0, 401);
+}
+
+#[tokio::test]
+async fn takes_only_the_reports_its_labeler_does() {
+    let h = start(&[], false).await;
+    let (did, space, post, [alice, bob, _]) = group(&h).await;
+    let labeler = json!({
+        "$type": format!("{NS}.labeler"),
+        "policies": {"labelValues": ["!hide"]},
+        "reasonTypes": ["com.atproto.moderation.defs#reasonSpam"],
+        "subjectTypes": ["record"],
+        "subjectCollections": ["com.example.event"],
+        "createdAt": "2026-11-04T00:00:00Z",
+    });
+    let write = Write::Update {
+        collection: format!("{NS}.labeler"),
+        rkey: "self".into(),
+        value: labeler,
+    };
+    h.host
+        .space_write(&did, &meta_space(&did), &[write])
+        .await
+        .unwrap();
+    let uri = post["uri"].as_str().unwrap();
+    assert_eq!(report(&h, &bob, &did, record(uri)).await.0, 200);
+    let rude = json!({"group": did, "subject": record(uri), "reasonType": "com.atproto.moderation.defs#reasonRude"});
+    assert_eq!(
+        error(&call(&h, &bob, "createReport", rude).await),
+        (400, "InvalidRequest")
+    );
+    let note = record(&format!("{space}/{}/com.example.note/n", bob.did));
+    for subject in [account(&alice.did), note] {
+        assert_eq!(
+            error(&report(&h, &bob, &did, subject.clone()).await),
+            (400, "InvalidSubject"),
+            "{subject}"
+        );
+    }
 }
 
 #[tokio::test]
 async fn writes_a_label_beside_what_it_labels() {
     let h = start(&[], false).await;
-    let (did, space, record, [alice, bob, carol]) = group(&h).await;
+    let (did, space, post, [alice, bob, carol]) = group(&h).await;
     let rule = format!("{}/{did}/{NS}.rule/3mzjdd6rnfise", meta_space(&did));
     let (status, made) = call(
         &h,
         &alice,
         "applyLabel",
-        json!({"group": did, "subject": record, "val": "spam", "rule": rule}),
+        json!({"group": did, "subject": post, "val": "spam", "rule": rule}),
     )
     .await;
     assert_eq!(status, 200, "{made}");
@@ -175,7 +285,7 @@ async fn writes_a_label_beside_what_it_labels() {
         .group_record(&did, &space, &format!("{NS}.label"), rkey)
         .unwrap()
         .unwrap();
-    assert_eq!(label["subject"]["uri"], record["uri"]);
+    assert_eq!(label["subject"]["uri"], post["uri"]);
     assert_eq!(label["subject"]["$type"], "com.atproto.repo.strongRef");
     assert_eq!(label["val"], "spam");
     assert_eq!(label["rule"], rule);
@@ -188,7 +298,7 @@ async fn writes_a_label_beside_what_it_labels() {
         &h,
         &alice,
         "negateLabel",
-        json!({"group": did, "subject": record, "val": "spam"}),
+        json!({"group": did, "subject": post, "val": "spam"}),
     )
     .await;
     assert_eq!(status, 200, "{negated}");
@@ -214,6 +324,19 @@ async fn writes_a_label_beside_what_it_labels() {
         .unwrap();
     assert_eq!(labels.len(), 2);
     assert!(labels.iter().any(|(_, l)| l["neg"] == true));
+    // Each a label event, the negation the label taken back.
+    let (_, history) = query(
+        &h,
+        &alice,
+        "getSubjectHistory",
+        &format!("group={did}&subject={}", post["uri"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(kinds(&history), ["labelEvent", "labelEvent"]);
+    assert_eq!(history["events"][0]["event"]["uri"], made["uri"]);
+    assert_eq!(history["events"][0]["event"]["deleted"], false);
+    assert_eq!(history["events"][1]["event"]["uri"], negated["uri"]);
+    assert_eq!(history["events"][1]["event"]["deleted"], true);
 
     // An account's label goes in the members space, whoever they are.
     let (status, made) = call(
@@ -237,9 +360,8 @@ async fn writes_a_label_beside_what_it_labels() {
         &format!("group={did}&subject={}", carol.did),
     )
     .await;
-    assert_eq!(history["events"][0]["kind"], "label");
-    assert_eq!(history["events"][0]["val"], "troll");
-    assert_eq!(history["events"][0]["actor"], alice.did.as_str());
+    assert_eq!(history["events"][0]["event"]["val"], "troll");
+    assert_eq!(history["events"][0]["createdBy"], alice.did.as_str());
 
     let other = start_group(
         &h,
@@ -247,7 +369,7 @@ async fn writes_a_label_beside_what_it_labels() {
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
-    let cid = record["cid"].clone();
+    let cid = post["cid"].clone();
     let theirs = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": cid});
     for (body, refused) in [
         (
@@ -255,7 +377,7 @@ async fn writes_a_label_beside_what_it_labels() {
             (400, "InvalidRequest"),
         ),
         (
-            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": record["uri"]}, "val": "x"}),
+            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": post["uri"]}, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         (
@@ -264,7 +386,7 @@ async fn writes_a_label_beside_what_it_labels() {
         ),
         // A CID that is none.
         (
-            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": record["uri"], "cid": "bafynotacid"}, "val": "x"}),
+            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": post["uri"], "cid": "bafynotacid"}, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         // A subject of a kind the open union does not list.
@@ -278,16 +400,16 @@ async fn writes_a_label_beside_what_it_labels() {
         ),
         // A value longer than the lexicon has it, in characters or bytes.
         (
-            json!({"group": did, "subject": record, "val": "x".repeat(129)}),
+            json!({"group": did, "subject": post, "val": "x".repeat(129)}),
             (400, "InvalidRequest"),
         ),
         (
-            json!({"group": did, "subject": record, "val": "\u{e9}".repeat(100)}),
+            json!({"group": did, "subject": post, "val": "\u{e9}".repeat(100)}),
             (400, "InvalidRequest"),
         ),
         // A rule that is no record's URI.
         (
-            json!({"group": did, "subject": record, "val": "x", "rule": "at://did:plc:x/fyi.opensocial.rule/z"}),
+            json!({"group": did, "subject": post, "val": "x", "rule": "at://did:plc:x/fyi.opensocial.rule/z"}),
             (400, "InvalidRequest"),
         ),
         (
@@ -295,15 +417,15 @@ async fn writes_a_label_beside_what_it_labels() {
             (403, "Forbidden"),
         ),
         (
-            json!({"group": did, "subject": record, "val": ""}),
+            json!({"group": did, "subject": post, "val": ""}),
             (400, "InvalidRequest"),
         ),
         (
-            json!({"subject": record, "val": "x"}),
+            json!({"subject": post, "val": "x"}),
             (400, "InvalidRequest"),
         ),
         (
-            json!({"group": "did:plc:nothing", "subject": record, "val": "x"}),
+            json!({"group": "did:plc:nothing", "subject": post, "val": "x"}),
             (400, "GroupNotFound"),
         ),
     ] {
@@ -318,8 +440,8 @@ async fn writes_a_label_beside_what_it_labels() {
 #[tokio::test]
 async fn holds_each_label_to_the_action_it_needs() {
     let h = start(&[], false).await;
-    let (did, _, record, [alice, bob, _]) = group(&h).await;
-    let label = |val: &str| json!({"group": did, "subject": record, "val": val});
+    let (did, _, post, [alice, bob, _]) = group(&h).await;
+    let label = |val: &str| json!({"group": did, "subject": post, "val": val});
     assert_eq!(
         error(&call(&h, &bob, "applyLabel", label("spam")).await),
         (403, "Forbidden")
@@ -349,123 +471,146 @@ async fn holds_each_label_to_the_action_it_needs() {
 }
 
 #[tokio::test]
-async fn resolves_escalates_and_notes() {
+async fn resolves_and_escalates_with_a_note() {
     let h = start(&[], false).await;
-    let (did, _, record, [alice, bob, carol]) = group(&h).await;
-    report(&h, &carol, record.clone()).await;
-    let uri = record["uri"].as_str().unwrap();
-    let resolve = |action: &str, note: Option<&str>| {
-        let mut body = json!({"group": did, "subject": uri, "action": action});
+    let (did, _, post, [alice, bob, _]) = group(&h).await;
+    let uri = post["uri"].as_str().unwrap();
+    report(&h, &bob, &did, record(uri)).await;
+    let resolve = |status: &str, note: Option<&str>| {
+        let mut body = json!({"group": did, "subject": record(uri), "status": status});
         if let Some(n) = note {
             body["note"] = json!(n);
         }
         body
     };
-    let status = async || {
-        let (_, history) = query(
-            &h,
-            &alice,
-            "getSubjectHistory",
-            &format!("group={did}&subject={uri}"),
-        )
-        .await;
-        history["subject"]["status"].as_str().unwrap().to_string()
-    };
-    assert_eq!(
-        call(&h, &alice, "resolveSubject", resolve("escalate", None))
-            .await
-            .0,
-        200
-    );
-    assert_eq!(status().await, "escalated");
-    assert_eq!(
-        call(
-            &h,
-            &alice,
-            "resolveSubject",
-            resolve("note", Some("Asked them"))
-        )
-        .await
-        .0,
-        200
-    );
-    assert_eq!(status().await, "escalated");
-    assert_eq!(
-        call(&h, &alice, "resolveSubject", resolve("resolve", None))
-            .await
-            .0,
-        200
-    );
-    assert_eq!(status().await, "resolved");
+    let (status, view) = call(&h, &alice, "resolveSubject", resolve("escalated", None)).await;
+    assert_eq!(status, 200, "{view}");
+    assert_eq!(view["status"], "escalated");
+    assert_eq!(view["subject"], record(uri));
+    assert_eq!(view["reportCount"], 1);
+    // Setting the status it has keeps a note.
+    let (_, view) = call(
+        &h,
+        &alice,
+        "resolveSubject",
+        resolve("escalated", Some("Asked them")),
+    )
+    .await;
+    assert_eq!(view["status"], "escalated");
+    let (_, view) = call(&h, &alice, "resolveSubject", resolve("resolved", None)).await;
+    assert_eq!(view["status"], "resolved");
     // A label leaves it resolved; a new report opens it again.
     call(
         &h,
         &alice,
         "applyLabel",
-        json!({"group": did, "subject": record, "val": "spam"}),
+        json!({"group": did, "subject": post, "val": "spam"}),
     )
     .await;
-    assert_eq!(status().await, "resolved");
-    report(&h, &carol, record.clone()).await;
-    assert_eq!(status().await, "open");
-
-    let (_, history) = query(
+    let listed = async |status: &str| {
+        let q = format!("group={did}&status={status}");
+        query(&h, &alice, "listSubjects", &q).await.1["subjects"]
+            .as_array()
+            .unwrap()
+            .len()
+    };
+    assert_eq!(listed("resolved").await, 1);
+    report(
         &h,
-        &alice,
-        "getSubjectHistory",
-        &format!("group={did}&subject={uri}"),
+        &bob,
+        &did,
+        json!({"$type": RECORD, "uri": uri, "cid": CID}),
     )
     .await;
-    let kinds: Vec<&str> = history["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|e| e["kind"].as_str().unwrap())
-        .collect();
+    assert_eq!(listed("open").await, 1);
+
+    let history = async |q: &str| {
+        let q = format!("group={did}&subject={uri}{q}");
+        query(&h, &alice, "getSubjectHistory", &q).await
+    };
+    let (_, all) = history("").await;
     assert_eq!(
-        kinds,
-        ["report", "escalate", "note", "resolve", "label", "report"]
+        kinds(&all),
+        [
+            "reportEvent",
+            "statusEvent",
+            "statusEvent",
+            "statusEvent",
+            "labelEvent",
+            "reportEvent"
+        ]
     );
     assert_eq!(
-        history["events"][0]["reasonType"],
+        all["events"][0]["event"]["reasonType"],
         "com.atproto.moderation.defs#reasonSpam"
     );
-    assert_eq!(history["events"][0]["reason"], "ads");
-    assert_eq!(history["events"][2]["note"], "Asked them");
+    assert_eq!(all["events"][0]["event"]["reason"], "ads");
+    assert_eq!(all["events"][2]["event"]["status"], "escalated");
+    assert_eq!(all["events"][2]["event"]["note"], "Asked them");
+    assert!(all["events"][1]["event"].get("note").is_none());
+    assert!(all.get("cursor").is_none());
+    // Narrowed to one version of the record: what was said of it.
+    let (_, version) = history(&format!("&cid={CID}")).await;
+    assert_eq!(kinds(&version), ["labelEvent", "reportEvent"]);
+    // A page at a time, oldest first.
+    let mut seen = Vec::new();
+    let mut cursor = String::new();
+    loop {
+        let (_, page) = history(&format!("&limit=4{cursor}")).await;
+        seen.extend(kinds(&page));
+        match page["cursor"].as_str() {
+            Some(c) => cursor = format!("&cursor={c}"),
+            None => break,
+        }
+    }
+    assert_eq!(seen, kinds(&all));
+    assert_eq!(
+        error(&history("&cursor=soon").await),
+        (400, "InvalidRequest")
+    );
+    // An account nobody has said anything of has no history.
+    let q = format!("group={did}&subject={}", bob.did);
+    let (status, none) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!((status, none["events"].clone()), (200, json!([])));
+    let q = format!("group={did}&subject=at://nothing");
+    let said = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(error(&said), (400, "InvalidSubject"));
 
-    // No action is no action it knows.
-    let said = call(
-        &h,
-        &alice,
-        "resolveSubject",
-        json!({"group": did, "subject": uri}),
-    )
-    .await;
-    assert_eq!(said.1["message"], "input must have the property \"action\"");
-    let long = "x".repeat(301);
+    let long = "x".repeat(2001);
+    let never = record(&format!("{uri}2"));
     for (who, body, refused) in [
-        (&alice, resolve("shrug", None), (400, "InvalidRequest")),
+        (&alice, resolve("open", None), (400, "InvalidRequest")),
         (
             &alice,
-            resolve("note", Some(&long)),
+            resolve("resolved", Some(&long)),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "subject": "at://nothing", "action": "resolve"}),
+            json!({"group": did, "subject": never, "status": "resolved"}),
             (400, "SubjectNotFound"),
         ),
         (
             &alice,
-            json!({"group": did, "action": "resolve"}),
+            json!({"group": did, "subject": record(&format!("at://{did}/app.bsky.feed.post/x")), "status": "resolved"}),
+            (400, "InvalidSubject"),
+        ),
+        (
+            &alice,
+            json!({"group": did, "subject": uri, "status": "resolved"}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"subject": uri, "action": "resolve"}),
+            json!({"group": did, "status": "resolved"}),
             (400, "InvalidRequest"),
         ),
-        (&bob, resolve("resolve", None), (403, "Forbidden")),
+        (
+            &alice,
+            json!({"subject": record(uri), "status": "resolved"}),
+            (400, "InvalidRequest"),
+        ),
+        (&bob, resolve("resolved", None), (403, "Forbidden")),
     ] {
         assert_eq!(
             error(&call(&h, who, "resolveSubject", body.clone()).await),
@@ -473,37 +618,30 @@ async fn resolves_escalates_and_notes() {
             "{body}"
         );
     }
-    let said = query(
-        &h,
-        &alice,
-        "getSubjectHistory",
-        &format!("group={did}&subject=at://nothing"),
-    )
-    .await;
-    assert_eq!(error(&said), (400, "SubjectNotFound"));
 }
 
 #[tokio::test]
 async fn lists_the_queue_by_status_a_page_at_a_time() {
     let h = start(&[], false).await;
-    let (did, space, _, [alice, bob, carol]) = group(&h).await;
+    let (did, space, _, [alice, bob, _]) = group(&h).await;
     let subjects: Vec<String> = (0..3)
         .map(|i| format!("{space}/{}/com.example.event/r{i}", bob.did))
         .collect();
     for s in &subjects {
-        report(&h, &carol, json!({"uri": s, "cid": "x"})).await;
+        report(&h, &bob, &did, record(s)).await;
     }
-    let body = json!({"group": did, "subject": subjects[0], "action": "resolve"});
+    let body = json!({"group": did, "subject": record(&subjects[0]), "status": "resolved"});
     call(&h, &alice, "resolveSubject", body).await;
     let listed = async |q: String| {
         query(&h, &alice, "listSubjects", &format!("group={did}{q}"))
             .await
             .1
     };
-    let open = listed("&status=open".into()).await;
+    // Open, unless asked.
+    let open = listed(String::new()).await;
     assert_eq!(open["subjects"].as_array().unwrap().len(), 2);
     let resolved = listed("&status=resolved".into()).await;
-    assert_eq!(resolved["subjects"][0]["subject"], subjects[0].as_str());
+    assert_eq!(resolved["subjects"][0]["subject"], record(&subjects[0]));
 
     let mut seen = Vec::new();
     let mut cursor = String::new();
@@ -512,7 +650,7 @@ async fn lists_the_queue_by_status_a_page_at_a_time() {
         let got = page["subjects"].as_array().unwrap();
         seen.extend(
             got.iter()
-                .map(|s| s["subject"].as_str().unwrap().to_string()),
+                .map(|s| s["subject"]["uri"].as_str().unwrap().to_string()),
         );
         match page["cursor"].as_str() {
             Some(c) => cursor = format!("&cursor={}", urlencode(c)),
@@ -520,22 +658,12 @@ async fn lists_the_queue_by_status_a_page_at_a_time() {
         }
     }
     seen.sort();
-    let mut all = subjects.clone();
-    all.sort();
-    assert_eq!(seen, all);
+    assert_eq!(seen, subjects[1..]);
 
-    assert_eq!(
-        error(
-            &query(
-                &h,
-                &alice,
-                "listSubjects",
-                &format!("group={did}&cursor=soon")
-            )
-            .await
-        ),
-        (400, "InvalidRequest")
-    );
+    for q in ["&cursor=soon", "&status=closed"] {
+        let said = query(&h, &alice, "listSubjects", &format!("group={did}{q}")).await;
+        assert_eq!(error(&said), (400, "InvalidRequest"), "{q}");
+    }
     assert_eq!(
         error(&query(&h, &bob, "listSubjects", &format!("group={did}")).await),
         (403, "Forbidden")
@@ -558,4 +686,82 @@ fn finds_the_space_a_record_is_in() {
     );
     assert_eq!(space_of("at://did:plc:a/c.d.e/r"), None);
     assert_eq!(space_of("https://x"), None);
+}
+
+#[tokio::test]
+async fn answers_an_ejection_as_one() {
+    let h = start(&[], false).await;
+    let (did, _, _, [alice, _, carol]) = group(&h).await;
+    let event = Event {
+        kind: "eject".into(),
+        actor: Some(alice.did.clone()),
+        reason: Some("spam".into()),
+        created_at: 1,
+        ..Event::default()
+    };
+    h.host.store.moderate(&did, &carol.did, &event).unwrap();
+    let q = format!("group={did}&subject={}", carol.did);
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(
+        history["events"][0]["event"],
+        json!({"$type": "fyi.opensocial.defs#ejectEvent"})
+    );
+}
+
+#[test]
+fn keeps_what_was_resolved_escalated_and_noted_as_a_status_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("host.sqlite");
+    drop(Store::open(&path).unwrap());
+    // As a database from before: events of each kind, its schema a
+    // version back.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.pragma_update(None, "foreign_keys", false).unwrap();
+    for column in ["cid", "rule", "uri", "status"] {
+        let sql = format!("ALTER TABLE mod_event DROP COLUMN {column}");
+        conn.execute(&sql, []).unwrap();
+    }
+    for (subject, kind, note) in [
+        ("did:plc:b", "report", None),
+        ("did:plc:b", "escalate", None),
+        ("did:plc:b", "note", Some("asked")),
+        ("did:plc:b", "resolve", None),
+        ("did:plc:b", "note", Some("done")),
+        ("did:plc:c", "note", Some("first")),
+    ] {
+        conn.execute(
+            "INSERT INTO mod_event (grp, subject, kind, note, created_at) VALUES ('did:plc:a', ?1, ?2, ?3, 0)",
+            rusqlite::params![subject, kind, note],
+        )
+        .unwrap();
+    }
+    let version = group_host::store::MIGRATIONS.len() as i64 - 1;
+    conn.pragma_update(None, "user_version", version).unwrap();
+    drop(conn);
+    let store = Store::open(&path).unwrap();
+    let said = |subject: &str| {
+        let events = store.events("did:plc:a", subject, None, 0, 10).unwrap();
+        let said = events
+            .iter()
+            .map(|e| (e.kind.clone(), e.status.clone(), e.note.clone()));
+        said.collect::<Vec<_>>()
+    };
+    let status = |s: &str, n: Option<&str>| {
+        (
+            "status".to_string(),
+            Some(s.to_string()),
+            n.map(String::from),
+        )
+    };
+    assert_eq!(
+        said("did:plc:b"),
+        [
+            ("report".to_string(), None, None),
+            status("escalated", None),
+            status("escalated", Some("asked")),
+            status("resolved", None),
+            status("resolved", Some("done")),
+        ]
+    );
+    assert_eq!(said("did:plc:c"), [status("open", Some("first"))]);
 }

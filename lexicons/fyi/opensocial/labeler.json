@@ -15,7 +15,7 @@
         "properties": {
           "policies": {
             "type": "ref",
-            "ref": "#labelerPolicies"
+            "ref": "fyi.opensocial.defs#labelerPolicies"
           },
           "reasonTypes": {
             "type": "array",
@@ -23,7 +23,7 @@
               "type": "ref",
               "ref": "com.atproto.moderation.defs#reasonType"
             },
-            "description": "The report reasons it accepts."
+            "description": "Accepted report reasons. Omit to accept all."
           },
           "subjectTypes": {
             "type": "array",
@@ -31,44 +31,20 @@
               "type": "ref",
               "ref": "com.atproto.moderation.defs#subjectType"
             },
-            "description": "The kinds of subject it accepts reports about."
+            "description": "Accepted report subject types. Omit to accept all."
           },
           "subjectCollections": {
             "type": "array",
+            "description": "Record types that can be reported. Omit to accept all.",
             "items": {
-              "type": "ref",
-              "ref": "fyi.opensocial.defs#collectionRef"
-            },
-            "description": "The record collections it accepts reports about. Omitted means any."
+              "type": "string",
+              "format": "nsid"
+            }
           },
           "createdAt": {
             "type": "string",
             "format": "datetime"
           }
-        }
-      }
-    },
-    "labelerPolicies": {
-      "type": "object",
-      "required": [
-        "labelValues"
-      ],
-      "properties": {
-        "labelValues": {
-          "type": "array",
-          "items": {
-            "type": "ref",
-            "ref": "com.atproto.label.defs#labelValue"
-          },
-          "description": "The label values it applies."
-        },
-        "labelValueDefinitions": {
-          "type": "array",
-          "items": {
-            "type": "ref",
-            "ref": "com.atproto.label.defs#labelValueDefinition"
-          },
-          "description": "Its own label values, defined."
         }
       }
     }

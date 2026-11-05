@@ -17,7 +17,7 @@ is (see [membership](membership.md)). Four of the host's actions are
 about moderation:
 
 - `mod.read`: see the queue and a subject's history.
-- `mod.resolve`: resolve, escalate or add a note to a subject.
+- `mod.resolve`: resolve or escalate a subject, with a note.
 - `label`: write a label.
 - `takedown`: write the labels that ask for content to be hidden or
   taken down.
@@ -92,48 +92,85 @@ already done about it. The queue answers that. It is the host's own,
 kept in its database rather than published in the group's repo, and only
 those with `mod.read` see it.
 
-A subject in the queue is a record, by its URI, or an account, by its
-DID. It has a status: `open`, `escalated` or `resolved`. Its events are
-kept in order, each with a kind (`report`, `label`, `negate`, `resolve`,
-`escalate`, `note`, `eject`), the actor, and what applies of a reason,
-value and note. A subject enters the queue with its first report, label
-or ejection, opened. An ejection is kept on the member's DID, with who
-put them out and the reason `ejectMember` was given.
+A subject is an account, sent and answered as
+`fyi.opensocial.defs#accountSubject` with its `did`, or a record, as
+`fyi.opensocial.defs#recordSubject` with its `uri` and, optionally, the
+`cid` of one version. The queue keeps a record as a whole, by its URI;
+the version a report or label names stays on that event. A subject has a
+status: `open`, `escalated` or `resolved`.
 
-`listSubjects` lists the queue, latest changed first, filtered by status
-if asked. Every event moves a subject to the top. `getSubjectHistory`
-shows one subject with its events. `resolveSubject` acts on a subject
-already in the queue: `resolve` sets it `resolved`, `escalate` sets it
-`escalated`, and `note` keeps a note without changing the status. A
-note is 300 characters at most.
+Its history is a list of events, each with an `id`, `createdAt`, who did
+it as `createdBy`, and one of four kinds as `event`:
+
+- `reportEvent`: someone reported it, with a `reasonType`, an optional
+  `reason` and the `rule` it cites, if any.
+- `statusEvent`: a moderator set its `status`, with an optional `note`.
+- `labelEvent`: a label was written, by the label record's `uri` and its
+  `val`. A negation is a label taken back, so it is answered with
+  `deleted: true` and the negating record's `uri`.
+- `ejectEvent`: the member was put out of the group. It says nothing
+  more; the host keeps the reason `ejectMember` was given, but does not
+  answer it.
+
+A subject enters the queue with its first report, label or ejection,
+opened.
+
+`listSubjects` lists the subjects of one status, `open` unless asked,
+latest changed first. Every event moves a subject to the top.
+`getSubjectHistory` answers a subject's events, oldest first, a page at a
+time, and with a `cid` only those about that version. A subject nothing
+has happened to has no events. `resolveSubject` sets a subject already in
+the queue `resolved` or `escalated`, with an optional note of 2,000
+characters at most. Setting the status a subject has keeps the note, so a
+note is added that way. It answers the subject as the queue now has it.
 Escalating is only a status, for a group to give its own meaning; no one
 is told.
 
 A resolved subject should come back when someone reports it again. A
 label is a moderator's own act, so it should not undo a resolution. So
 only a report reopens a resolved subject; a label or an ejection opens a
-subject nobody reported, and leaves a resolved one resolved. An escalated subject stays
-escalated through new reports.
+subject nobody reported, and leaves a resolved one resolved. An
+escalated subject stays escalated through new reports.
 
 Deleting a group deletes its queue.
 
+Details:
+
+- A subject that is neither a DID nor a record in one of the group's
+  spaces is `InvalidSubject`. Resolving one never in the queue is
+  `SubjectNotFound`.
+- A page is 50 events or subjects unless `limit` says, 100 at most; the
+  `cursor` an answer gives asks for the next.
+
 ## Reports
 
-Anyone signed in may report, member or not. A reporter needs no role and
-need not be able to read the space. A report arrives at
-`com.atproto.moderation.createReport`, by service auth or the console's
-session.
+A report comes from someone who can see what they report, so a group
+hears from the people its content reaches and not from strangers. A
+report arrives at `fyi.opensocial.createReport`, by service auth or the
+console's session. It names the `group`, the subject, a `reasonType`,
+and optionally a `reason` and the `rule` it cites. It needs no role.
 
-A report here is of a record, by its URI. The record must be in a space
-hosted here. The report goes into the queue of the group that is that
-space's authority, as a `report` event with the reporter, a `reasonType`
-and an optional `reason`. Nobody is notified: the report waits in the
-queue for a moderator.
+The subject is an account that is a member of the group, or a record in
+one of the group's spaces hosted here. The reporter must be able to read
+the space the subject is in: a record's own space, or for an account the
+members space, where its labels go. The report goes into the group's
+queue as a `reportEvent`, and is answered with its `id` and `createdAt`.
+Nobody is notified: the report waits in the queue for a moderator.
+
+The group's labeler, in its meta space, says what reports it takes. Each
+of its lists, when present, limits them: `reasonTypes` the reasons,
+`subjectTypes` the kinds of subject (`account`, `record`), and
+`subjectCollections` the collections a reported record may be in. A new
+group's labeler takes reports of accounts and records, for the common
+reasons, of any collection.
 
 Details:
 
-- A report of an account is refused; a URI outside a space hosted here
-  is `NotHosted`.
+- A group not hosted here is `GroupNotFound`. A subject the reporter
+  cannot read, that is not in the group, or of a kind or collection the
+  labeler does not take, is `InvalidSubject`; a reason it does not take
+  is `InvalidRequest`.
+- A `rule` must be a record's URI in the group's meta space.
 - The host does not check that the reported record exists or that its
   CID matches.
 - Limits and the answer's fields are in [the API

@@ -129,7 +129,11 @@ impl Docs {
                 copy(
                     def,
                     &mut s,
-                    &[("maxLength", "maxLength"), ("format", "format")],
+                    &[
+                        ("maxLength", "maxLength"),
+                        ("format", "format"),
+                        ("enum", "enum"),
+                    ],
                 );
                 if let Some(known) = def["knownValues"].as_array() {
                     let known: Vec<&str> = known.iter().filter_map(Value::as_str).collect();

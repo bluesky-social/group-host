@@ -171,10 +171,10 @@ its tools are in [MCP tools](mcp.md).
 
 | Method | What it does |
 | --- | --- |
-| `POST com.atproto.moderation.createReport` | reports a record in a group's space here to that group, from anyone signed in; an account cannot be reported, and a record elsewhere is `NotHosted` |
-| `GET fyi.opensocial.listSubjects` | the moderation queue |
-| `GET fyi.opensocial.getSubjectHistory` | every event on one subject |
-| `POST fyi.opensocial.resolveSubject` | resolves or escalates a subject |
+| `POST fyi.opensocial.createReport` | reports a member or a record in one of the group's spaces here, from one who can read its space and as the group's labeler takes reports; answers the report's `id` and `createdAt`. A reason or note is 2,000 characters (20,000 bytes) at most |
+| `GET fyi.opensocial.listSubjects` | the moderation queue of one status, `open` unless asked |
+| `GET fyi.opensocial.getSubjectHistory` | a subject's events, oldest first, a page at a time; with a `cid`, those about that version |
+| `POST fyi.opensocial.resolveSubject` | sets a subject `resolved` or `escalated`, with an optional note; answers the subject |
 | `POST fyi.opensocial.applyLabel` | labels a subject |
 | `POST fyi.opensocial.negateLabel` | takes a label back, with a record of its own |
 

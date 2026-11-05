@@ -13,11 +13,8 @@
 	<p><a href={`/g/${g.handle}`}>Back to the group</a></p>
 	{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 	{#if data.subjects}
-		<p>
-			<a href="?">Everything</a> · <a href="?status=open">Open</a> · <a href="?status=escalated">Escalated</a> ·
-			<a href="?status=resolved">Resolved</a>
-		</p>
-		<ModerationQueue subjects={data.subjects} canResolve={data.actions.includes('mod.resolve')} />
+		<p><a href="?status=open">Open</a> · <a href="?status=escalated">Escalated</a> · <a href="?status=resolved">Resolved</a></p>
+		<ModerationQueue subjects={data.subjects} status={data.status} canResolve={data.actions.includes('mod.resolve')} />
 	{:else}
 		<p>Nothing here is yours to see.</p>
 	{/if}
