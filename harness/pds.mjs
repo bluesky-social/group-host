@@ -108,7 +108,7 @@ const net = await TestNetworkNoAppView.create({ pds: { hostname: 'localhost' } }
 
 const accounts = [];
 for (const name of names) {
-  const password = `${name}-password`;
+  const password = 'password';
   const res = await fetch(`${net.pds.url}/xrpc/com.atproto.server.createAccount`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

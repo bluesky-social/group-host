@@ -114,6 +114,6 @@ move here from ${w.base}/move; the code its server emails is at
   ${w.net.mail}?to=harbor@test.com
 
 The command, as alice:
-  OPENSOCIAL_HOST=${w.host} PDS_URL=${w.net.pds} OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=alice-password just opensocial group show riders.groups.test
+  OPENSOCIAL_HOST=${w.host} PDS_URL=${w.net.pds} OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=password just opensocial group show riders.groups.test
 
 ctrl-c stops it all.`);

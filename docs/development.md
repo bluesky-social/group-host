@@ -18,9 +18,10 @@ PDS and a PLC directory with alice, bob and harbor on them, the host
 over them, and the console at https://group-host.localtest.me, with
 Riders, a group of alice's, and Hikers, a group of bob's that has
 invited alice, so her invite waits when she signs in. The console is the dev server's, so a change to a page
-shows at once; a change to the host means starting it again. It prints
-each one's password, where the codes the PDS emails are read, and how to
-run the command against it. ctrl-c stops it all, and each start is empty
+shows at once; a change to the host means starting it again. Each
+account signs in as its handle (`alice.test`, `bob.test`,
+`harbor.test`) with the password `password`. It prints them, where the
+codes the PDS emails are read, and how to run the command against it. ctrl-c stops it all, and each start is empty
 again.
 
 Signing in to the console takes https at a name: the host is the
