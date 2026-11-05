@@ -164,7 +164,7 @@ thing itself.
 same way on both: the same component, the same words, the same order of
 controls.
 
-- *Asking for input.* An act that takes a form (inviting, adding a
+- _Asking for input._ An act that takes a form (inviting, adding a
   rule, a link, a role, a recovery key, an app password, labelling,
   giving roles, a picture, resolving) is a button that opens a
   `FormDialog` holding the form, as "Invite someone" does: its title the
@@ -173,7 +173,7 @@ controls.
   editing what is already there field by field (a group's profile, who
   sees it) is a form in place, and finding (a search box) is never a
   dialog. A handle is typed into `HandleInput`, wherever it is asked for.
-- *In place.* An act on the page you are on keeps you where you are:
+- _In place._ An act on the page you are on keeps you where you are:
   its form is sent with `use:enhance`, by `inPlace` from
   `#lib/forms.ts`, and `FormDialog` and `ConfirmDialog` send theirs by
   `inDialog`. Done, the page is drawn again where it was, and a dialog
@@ -182,14 +182,14 @@ controls.
   a plain post that reloads the page at its top. Only a form that goes
   somewhere else (signing out, starting a group, approving an app) may
   post plainly.
-- *Confirming.* An act that cannot be undone (leaving, removing
+- _Confirming._ An act that cannot be undone (leaving, removing
   someone, deleting a rule or role, removing a key, revoking,
   disconnecting) opens a `ConfirmDialog`: its title the question
   ("Leave this group?", "Delete this rule?"), what will happen in a
   sentence, a quiet Cancel, and the act in `danger`, its verb alone
   ("Delete"). What is undone by doing it again (cancelling an invite,
   removing a picture, declining an invite) needs no asking.
-- *Titles.* A dialog's title is a few fixed words: "Remove this
+- _Titles._ A dialog's title is a few fixed words: "Remove this
   member?", "Change roles", "Invite someone". Never put a name, handle,
   or anything someone typed in it ("bob.test's roles", "Revoke
   “Phone”?"). Those are as long as people make them, and the title then
@@ -198,7 +198,7 @@ controls.
   access…"), anything else by its name in the sentence ("Apps using
   “Phone” are signed out"). `node harness/dialogs.mjs` fails on a title
   built around a value.
-- *Lists.* `ul` or `ol` with a class, a row per thing, inside the part's
+- _Lists._ `ul` or `ol` with a class, a row per thing, inside the part's
   card: its `Avatar`, `ordinal` or picture first; its name, and under it
   what is said about it (`.row-main` with `.what`); its acts at the
   row's end in `.row-actions`, `small`, quiet ones before the one that
@@ -206,11 +206,11 @@ controls.
   `#lib/dates.ts`, never as a record holds them. The empty state in the
   rows' place; a quiet "Show more" under the last row while there are
   more, a page at a time, never every row at once.
-- *A part's heading.* `Section`: its title, with its count when that is
+- _A part's heading._ `Section`: its title, with its count when that is
   worth saying, and the one act on the whole part (Invite someone, Add a
   rule, Create an app password) across from it, as a quiet button; never
   a link or a button lower down the card doing the same.
-- *Where to go.* A group's own pages (Moderation, Settings) sit together
+- _Where to go._ A group's own pages (Moderation, Settings) sit together
   beside its name, as quiet small `a.button`s; a page under a group says
   so with `Page`'s `back`, its name, above its heading.
 

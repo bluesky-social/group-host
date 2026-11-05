@@ -10,204 +10,206 @@
 
 :root,
 [data-theme='light'] {
-	color-scheme: light;
+  color-scheme: light;
 
-	/* Hues, each meaning one thing wherever it shows. */
-	--green: #2f7a4b;
-	--red: #b9382c;
-	--purple: #6a4bb0;
-	--yellow: #94620a;
-	--gray: #6f6458;
+  /* Hues, each meaning one thing wherever it shows. */
+  --green: #2f7a4b;
+  --red: #b9382c;
+  --purple: #6a4bb0;
+  --yellow: #94620a;
+  --gray: #6f6458;
 
-	/* Surfaces, from the page up: the paper, a card on it, a well in a card, its edges. */
-	--bg: #f6f1ea;
-	--panel: #fffdfa;
-	--soft: #f1e9df;
-	--line: #e7ddd0;
-	--line-strong: #d6c8b7;
+  /* Surfaces, from the page up: the paper, a card on it, a well in a card, its edges. */
+  --bg: #f6f1ea;
+  --panel: #fffdfa;
+  --soft: #f1e9df;
+  --line: #e7ddd0;
+  --line-strong: #d6c8b7;
 
-	/* Text: the body, then quieter for what is said about it, then quieter still. */
-	--fg: #2a2119;
-	--mute: #5c5045;
-	--faint: #6f6153;
+  /* Text: the body, then quieter for what is said about it, then quieter still. */
+  --fg: #2a2119;
+  --mute: #5c5045;
+  --faint: #6f6153;
 
-	/* What acts: a button's fill and the text on it, its hover, a soft
+  /* What acts: a button's fill and the text on it, its hover, a soft
 	   wash of it behind what it marks, and the edge of what has focus. */
-	--primary: #b8482b;
-	--primary-hover: #9c3b22;
-	--on-primary: #fff;
-	--primary-soft: #f8e3da;
-	--link-line: #d9a593;
+  --primary: #b8482b;
+  --primary-hover: #9c3b22;
+  --on-primary: #fff;
+  --primary-soft: #f8e3da;
+  --link-line: #d9a593;
 
-	/* A card lifted off the paper, and a dialog lifted off the page. */
-	--shadow: 0 1px 2px rgb(72 48 24 / 6%), 0 6px 20px rgb(72 48 24 / 6%);
-	--shadow-pop: 0 2px 6px rgb(72 48 24 / 10%), 0 24px 64px rgb(72 48 24 / 22%);
-	/* What dims the page behind a dialog. */
-	--scrim: rgb(42 33 25 / 35%);
+  /* A card lifted off the paper, and a dialog lifted off the page. */
+  --shadow: 0 1px 2px rgb(72 48 24 / 6%), 0 6px 20px rgb(72 48 24 / 6%);
+  --shadow-pop: 0 2px 6px rgb(72 48 24 / 10%), 0 24px 64px rgb(72 48 24 / 22%);
+  /* What dims the page behind a dialog. */
+  --scrim: rgb(42 33 25 / 35%);
 
-	/* A picture's stand-in, where there is none: its initial, on a wash of
+  /* A picture's stand-in, where there is none: its initial, on a wash of
 	   a hue of its own (a lightness and chroma, the hue its name's). */
-	--initial-wash: 90% 0.045;
-	--initial-ink: 42% 0.09;
+  --initial-wash: 90% 0.045;
+  --initial-ink: 42% 0.09;
 
-	/* What a colour is for, over the hues above: the pages take these, never a hue. */
-	--success: var(--green);
-	--danger: var(--red);
-	--danger-soft: #f9e2df;
-	--on-danger: #fff;
-	--attention: var(--yellow);
-	--done: var(--purple);
-	--neutral: var(--gray);
+  /* What a colour is for, over the hues above: the pages take these, never a hue. */
+  --success: var(--green);
+  --danger: var(--red);
+  --danger-soft: #f9e2df;
+  --on-danger: #fff;
+  --attention: var(--yellow);
+  --done: var(--purple);
+  --neutral: var(--gray);
 }
 
 @media (prefers-color-scheme: dark) {
-	:root:not([data-theme='light']) {
-		color-scheme: dark;
-		--green: #5cc483;
-		--red: #ff7b6b;
-		--purple: #b39dff;
-		--yellow: #e0a83a;
-		--gray: #a59886;
-		--bg: #17120e;
-		--panel: #201a15;
-		--soft: #2a221b;
-		--line: #362c23;
-		--line-strong: #4a3d31;
-		--fg: #f4ece2;
-		--mute: #b7a796;
-		--faint: #918271;
-		--primary: #f08a63;
-		--primary-hover: #ffa07c;
-		--on-primary: #23120a;
-		--primary-soft: #3b2219;
-		--link-line: #7a4a38;
-		--shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 6px 20px rgb(0 0 0 / 25%);
-		--shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
-		--scrim: rgb(0 0 0 / 55%);
-		--danger-soft: #3d1d19;
-		--on-danger: #23120a;
-		--initial-wash: 34% 0.05;
-		--initial-ink: 86% 0.07;
-	}
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --green: #5cc483;
+    --red: #ff7b6b;
+    --purple: #b39dff;
+    --yellow: #e0a83a;
+    --gray: #a59886;
+    --bg: #17120e;
+    --panel: #201a15;
+    --soft: #2a221b;
+    --line: #362c23;
+    --line-strong: #4a3d31;
+    --fg: #f4ece2;
+    --mute: #b7a796;
+    --faint: #918271;
+    --primary: #f08a63;
+    --primary-hover: #ffa07c;
+    --on-primary: #23120a;
+    --primary-soft: #3b2219;
+    --link-line: #7a4a38;
+    --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 6px 20px rgb(0 0 0 / 25%);
+    --shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
+    --scrim: rgb(0 0 0 / 55%);
+    --danger-soft: #3d1d19;
+    --on-danger: #23120a;
+    --initial-wash: 34% 0.05;
+    --initial-ink: 86% 0.07;
+  }
 }
 
 [data-theme='dark'] {
-	color-scheme: dark;
-	--green: #5cc483;
-	--red: #ff7b6b;
-	--purple: #b39dff;
-	--yellow: #e0a83a;
-	--gray: #a59886;
-	--bg: #17120e;
-	--panel: #201a15;
-	--soft: #2a221b;
-	--line: #362c23;
-	--line-strong: #4a3d31;
-	--fg: #f4ece2;
-	--mute: #b7a796;
-	--faint: #918271;
-	--primary: #f08a63;
-	--primary-hover: #ffa07c;
-	--on-primary: #23120a;
-	--primary-soft: #3b2219;
-	--link-line: #7a4a38;
-	--shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 6px 20px rgb(0 0 0 / 25%);
-	--shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
-	--scrim: rgb(0 0 0 / 55%);
-	--danger-soft: #3d1d19;
-	--on-danger: #23120a;
-	--initial-wash: 34% 0.05;
-	--initial-ink: 86% 0.07;
+  color-scheme: dark;
+  --green: #5cc483;
+  --red: #ff7b6b;
+  --purple: #b39dff;
+  --yellow: #e0a83a;
+  --gray: #a59886;
+  --bg: #17120e;
+  --panel: #201a15;
+  --soft: #2a221b;
+  --line: #362c23;
+  --line-strong: #4a3d31;
+  --fg: #f4ece2;
+  --mute: #b7a796;
+  --faint: #918271;
+  --primary: #f08a63;
+  --primary-hover: #ffa07c;
+  --on-primary: #23120a;
+  --primary-soft: #3b2219;
+  --link-line: #7a4a38;
+  --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 6px 20px rgb(0 0 0 / 25%);
+  --shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 55%);
+  --scrim: rgb(0 0 0 / 55%);
+  --danger-soft: #3d1d19;
+  --on-danger: #23120a;
+  --initial-wash: 34% 0.05;
+  --initial-ink: 86% 0.07;
 }
 
 :root {
-	--border: 1px solid var(--line);
+  --border: 1px solid var(--line);
 
-	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-	--font-round: ui-rounded, 'SF Pro Rounded', 'Nunito', 'Varela Round', system-ui, -apple-system, sans-serif;
-	--font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-	/* The initial of a person named in a line of text. */
-	--text-2xs: 10px;
-	--text-xs: 12px;
-	--text-sm: 13px;
-	--text-base: 15px;
-	--text-lg: 17px;
-	--text-xl: 20px;
-	--text-2xl: 28px;
-	/* A page's one heading, for someone not signed in: the host's, and a group's handle. */
-	--text-3xl: 40px;
-	--text-hero: 52px;
-	/* What is typed into a field: 16px on a phone, so Safari does not zoom to it. */
-	--text-field: var(--text-base);
-	--leading: 1.6;
-	--leading-tight: 1.2;
-	--weight-normal: 400;
-	--weight-medium: 500;
-	--weight-semibold: 600;
-	--weight-bold: 700;
-	--tracking-tight: -0.02em;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-round:
+    ui-rounded, 'SF Pro Rounded', 'Nunito', 'Varela Round', system-ui, -apple-system, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  /* The initial of a person named in a line of text. */
+  --text-2xs: 10px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  /* A page's one heading, for someone not signed in: the host's, and a group's handle. */
+  --text-3xl: 40px;
+  --text-hero: 52px;
+  /* What is typed into a field: 16px on a phone, so Safari does not zoom to it. */
+  --text-field: var(--text-base);
+  --leading: 1.6;
+  --leading-tight: 1.2;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --tracking-tight: -0.02em;
 
-	--space-1: 0.25rem;
-	--space-2: 0.5rem;
-	--space-3: 0.75rem;
-	--space-4: 1rem;
-	--space-5: 1.25rem;
-	--space-6: 1.5rem;
-	--space-8: 2rem;
-	--space-10: 2.5rem;
-	--space-16: 4rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-16: 4rem;
 
-	--radius-xs: 3px;
-	--radius-sm: 8px;
-	--radius-md: 12px;
-	--radius-lg: 18px;
-	--radius-pill: 999px;
+  --radius-xs: 3px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
 
-	--control: 40px;
-	/* A button in a row of a list, beside what it acts on. */
-	--control-sm: 32px;
-	--avatar: 24px;
-	/* A person named in a line of text: their picture, small, before their handle. */
-	--avatar-sm: 18px;
-	/* Something waiting for whoever is signed in, marked on their picture. */
-	--dot: 10px;
-	--avatar-md: 44px;
-	--avatar-lg: 88px;
-	/* An account suggested under a field for a handle. */
-	--avatar-pick: 32px;
-	/* A small picture set in a line of text: a link's mark. */
-	--icon: 14px;
-	/* An icon beside a row's title, as what an app would get is listed. */
-	--icon-lg: 22px;
-	/* A column of ticks, as Create, Update and Delete are. */
-	--tick-column: 4.5rem;
-	/* A group's banner: as wide as its card, a third as high. */
-	--banner-ratio: 3 / 1;
-	--header: 4rem;
-	--page: 46rem;
-	--dialog: 26rem;
-	/* A menu dropped from the header. */
-	--menu: 15rem;
-	--drop-list: 16rem;
-	/* A line of prose at its longest, set larger than the body. */
-	--measure: 32rem;
-	--ring: 3px;
-	--speed: 120ms;
+  --control: 40px;
+  /* A button in a row of a list, beside what it acts on. */
+  --control-sm: 32px;
+  --avatar: 24px;
+  /* A person named in a line of text: their picture, small, before their handle. */
+  --avatar-sm: 18px;
+  /* Something waiting for whoever is signed in, marked on their picture. */
+  --dot: 10px;
+  --avatar-md: 44px;
+  --avatar-lg: 88px;
+  /* An account suggested under a field for a handle. */
+  --avatar-pick: 32px;
+  /* A small picture set in a line of text: a link's mark. */
+  --icon: 14px;
+  /* An icon beside a row's title, as what an app would get is listed. */
+  --icon-lg: 22px;
+  /* A column of ticks, as Create, Update and Delete are. */
+  --tick-column: 4.5rem;
+  /* A group's banner: as wide as its card, a third as high. */
+  --banner-ratio: 3 / 1;
+  --header: 4rem;
+  --page: 46rem;
+  --dialog: 26rem;
+  /* A menu dropped from the header. */
+  --menu: 15rem;
+  --drop-list: 16rem;
+  /* A line of prose at its longest, set larger than the body. */
+  --measure: 32rem;
+  --ring: 3px;
+  --speed: 120ms;
 
-	/* The Atmosphere's apps in the sign-in dialog: each icon, and the time
+  /* The Atmosphere's apps in the sign-in dialog: each icon, and the time
 	   the row takes to run past once. */
-	--app-icon: 40px;
-	--apps-run: 60s;
-	/* What a mask lets through, wholly: no colour is drawn with it. */
-	--opaque: #000;
+  --app-icon: 40px;
+  --apps-run: 60s;
+  /* What a mask lets through, wholly: no colour is drawn with it. */
+  --opaque: #000;
 }
 
 @media (max-width: 640px) {
-	:root {
-		--text-field: var(--text-lg);
-		--text-2xl: 24px;
-		--text-3xl: 28px;
-		--text-hero: 36px;
-		--avatar-lg: 72px;
-	}
+  :root {
+    --text-field: var(--text-lg);
+    --text-2xl: 24px;
+    --text-3xl: 28px;
+    --text-hero: 36px;
+    --avatar-lg: 72px;
+  }
 }

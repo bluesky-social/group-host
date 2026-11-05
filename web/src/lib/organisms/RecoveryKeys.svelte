@@ -1,35 +1,51 @@
 <script lang="ts">
-	import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
-	import FormDialog from '#lib/molecules/FormDialog.svelte';
-	/**
-	 * The group's rotation keys, the highest ranked first: the stewards'
-	 * recovery keys, each to remove (asked to be sure of), and this
-	 * host's; and the dialog adding a key, opened by a button whose
-	 * `popovertarget` is `add-key`. A recovery key's holder can undo what
-	 * this host does to the group's identity, and take the group elsewhere
-	 * without it.
-	 */
-	type Key = { key: string; holder: string; addedBy?: string };
-	let { keys, hostHolds }: { keys: Key[]; hostHolds: boolean } = $props();
+  import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
+  import FormDialog from '#lib/molecules/FormDialog.svelte';
+  /**
+   * The group's rotation keys, the highest ranked first: the stewards'
+   * recovery keys, each to remove (asked to be sure of), and this
+   * host's; and the dialog adding a key, opened by a button whose
+   * `popovertarget` is `add-key`. A recovery key's holder can undo what
+   * this host does to the group's identity, and take the group elsewhere
+   * without it.
+   */
+  type Key = { key: string; holder: string; addedBy?: string };
+  let { keys, hostHolds }: { keys: Key[]; hostHolds: boolean } = $props();
 </script>
 
 <ol class="recovery-keys">
-	{#each keys as k, i (k.key)}
-		<li>
-			<span class="row-main">
-				<code class="key">{k.key}</code>
-				<span class="what">{k.holder === 'host' ? 'This host' : `A steward's${k.addedBy ? `, added by ${k.addedBy}` : ''}`}</span>
-			</span>
-			{#if k.holder === 'steward' && hostHolds}
-				<span class="row-actions"><button class="quiet small" type="button" popovertarget={`unkey-${i}`}>Remove</button></span>
-				<ConfirmDialog id={`unkey-${i}`} title="Remove this key?" action="?/unkey" confirm="Remove" fields={{ key: k.key }}>
-					The person who holds it can no longer use it to recover the group.
-				</ConfirmDialog>
-			{/if}
-		</li>
-	{/each}
+  {#each keys as k, i (k.key)}
+    <li>
+      <span class="row-main">
+        <code class="key">{k.key}</code>
+        <span class="what"
+          >{k.holder === 'host'
+            ? 'This host'
+            : `A steward's${k.addedBy ? `, added by ${k.addedBy}` : ''}`}</span
+        >
+      </span>
+      {#if k.holder === 'steward' && hostHolds}
+        <span class="row-actions"
+          ><button class="quiet small" type="button" popovertarget={`unkey-${i}`}>Remove</button
+          ></span
+        >
+        <ConfirmDialog
+          id={`unkey-${i}`}
+          title="Remove this key?"
+          action="?/unkey"
+          confirm="Remove"
+          fields={{ key: k.key }}
+        >
+          The person who holds it can no longer use it to recover the group.
+        </ConfirmDialog>
+      {/if}
+    </li>
+  {/each}
 </ol>
 <FormDialog id="add-key" title="Add a recovery key" action="?/key" submit="Add">
-	{#snippet intro()}A key you hold. With it you can recover the group, or move it, without this host.{/snippet}
-	<label class="field">A key of yours, as a did:key <input name="key" required placeholder="did:key:z…" /></label>
+  {#snippet intro()}A key you hold. With it you can recover the group, or move it, without this
+    host.{/snippet}
+  <label class="field"
+    >A key of yours, as a did:key <input name="key" required placeholder="did:key:z…" /></label
+  >
 </FormDialog>

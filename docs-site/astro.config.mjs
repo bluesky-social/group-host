@@ -1,14 +1,14 @@
-import { unified } from '@astrojs/markdown-remark'
-import starlight from '@astrojs/starlight'
-import { defineConfig } from 'astro/config'
-import { REPO, remarkLinks } from './plugins.mjs'
-import { remarkReference } from './reference.mjs'
+import { unified } from '@astrojs/markdown-remark';
+import starlight from '@astrojs/starlight';
+import { defineConfig } from 'astro/config';
+import { REPO, remarkLinks } from './plugins.mjs';
+import { remarkReference } from './reference.mjs';
 
 /** Where the site is served: a private repository's site is at its own host's root. */
-const base = '/'
+const base = '/';
 
 // The sidebar follows docs/README.md: design, then reference, then deploying and development.
-const page = (label, slug) => ({ label, slug })
+const page = (label, slug) => ({ label, slug });
 
 export default defineConfig({
   base,
@@ -32,8 +32,8 @@ export default defineConfig({
           codeFontFamily: 'var(--font-mono)',
           codeFontSize: 'var(--text-sm)',
           uiFontFamily: 'var(--font-sans)',
-          frames: { frameBoxShadowCssValue: 'none' },
-        },
+          frames: { frameBoxShadowCssValue: 'none' }
+        }
       },
       pagination: true,
       sidebar: [
@@ -50,8 +50,8 @@ export default defineConfig({
             page('Sites', 'design/sites'),
             page('MCP', 'design/mcp'),
             page('Recovery', 'design/recovery'),
-            page('Moving', 'design/moving'),
-          ],
+            page('Moving', 'design/moving')
+          ]
         },
         {
           label: 'Reference',
@@ -59,12 +59,12 @@ export default defineConfig({
             page('HTTP and XRPC API', 'reference/api'),
             page('MCP tools', 'reference/mcp'),
             page('Commands', 'reference/cli'),
-            page('Configuration', 'reference/config'),
-          ],
+            page('Configuration', 'reference/config')
+          ]
         },
         { label: 'Running it', items: [page('Deploying', 'deploying')] },
-        { label: 'Contributing', items: [page('Development', 'development')] },
-      ],
-    }),
-  ],
-})
+        { label: 'Contributing', items: [page('Development', 'development')] }
+      ]
+    })
+  ]
+});

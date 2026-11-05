@@ -15,7 +15,9 @@ Node is the version `.node-version` names, CI's.
 Build and test on the runner where you can: open the pull early, push to
 its branch as you go, and read what its checks say with `knotless checks
 knotless://chadtmiller.com/group-host --pull <uri> --wait <secs> --log`.
-`cargo fmt` costs nothing, so run it before pushing.
+`just fmt` (rustfmt, and oxfmt for the console, the harness and the docs
+site) costs nothing, so run it before pushing; Claude Code runs it on
+each file it writes (`.claude/settings.json`).
 
 Build here for a loop the runner is too slow for, such as one test being
 fixed, with `CARGO_BUILD_JOBS=2`: other agents build on this machine too.
@@ -178,8 +180,8 @@ pulls into it or into a `feature/` branch:
 
 - `check`: `cargo fmt --check` and clippy, warnings denied.
 - `test`: every test, under the 100% gate of lines and functions.
-- `web`: the component layers, dialogs' titles, svelte-check (failing
-  on any warning), and the build.
+- `web`: oxfmt's format, the component layers, dialogs' titles,
+  svelte-check (failing on any warning), and the build.
 - `lexicons`: `just lex`.
 - `e2e`: `just e2e`, the console in Chromium over the reference PDS.
 - `docs`: `just docs`, every link and anchor landing, and the docs site's

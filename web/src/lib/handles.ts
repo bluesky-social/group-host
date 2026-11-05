@@ -6,13 +6,13 @@
  * is dropped only by `finished`.
  */
 export function labelOf(text: string) {
-	return text
-		.toLowerCase()
-		.normalize('NFKD')
-		.replace(/\p{M}+/gu, '')
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+/, '')
-		.slice(0, 63);
+  return text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 63);
 }
 
 /** A label as it is asked for: no dash left at its end. */

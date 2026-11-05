@@ -1,42 +1,43 @@
 {
-	"name": "group-host-web",
-	"private": true,
-	"type": "module",
-	"description": "The console: the pages where people start and run their groups, drawn from the group host's XRPC methods",
-	"scripts": {
-		"lex": "lex build --lexicons ../lexicons --out src/lib/lexicons --clear --import-ext .ts",
-		"dev": "npm run lex && vite dev",
-		"build": "npm run lex && vite build",
-		"prepare": "svelte-kit sync || echo ''",
-		"check": "npm run lex && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
-	},
-	"devDependencies": {
-		"@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/oauth-scopes": "^0.0.0-spaces-alpha-20261029171913",
-		"@sveltejs/adapter-node": "^6.0.0",
-		"@sveltejs/kit": "^3.0.0",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"@types/node": "^24.19.2",
-		"svelte": "^5.57.1",
-		"svelte-check": "^4.6.0",
-		"typescript": "^6.0.3",
-		"vite": "^8.3.0"
-	},
-	"imports": {
-		"#lib/*": "./src/lib/*"
-	},
-	"overrides": {
-		"@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-builder": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-cbor": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-client": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-data": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-document": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-installer": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-json": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-resolver": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-schema": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lex-server": "0.0.0-spaces-alpha-20261029171913",
-		"@atproto/lexicon": "0.0.0-spaces-alpha-20261029171913"
-	}
+  "name": "group-host-web",
+  "private": true,
+  "description": "The console: the pages where people start and run their groups, drawn from the group host's XRPC methods",
+  "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
+  "scripts": {
+    "lex": "lex build --lexicons ../lexicons --out src/lib/lexicons --clear --import-ext .ts",
+    "dev": "npm run lex && vite dev",
+    "build": "npm run lex && vite build",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "npm run lex && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
+  },
+  "devDependencies": {
+    "@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/oauth-scopes": "^0.0.0-spaces-alpha-20261029171913",
+    "@sveltejs/adapter-node": "^6.0.0",
+    "@sveltejs/kit": "^3.0.0",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@types/node": "^24.19.2",
+    "oxfmt": "0.76.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.6.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.0"
+  },
+  "overrides": {
+    "@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-builder": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-cbor": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-client": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-data": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-document": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-installer": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-json": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-resolver": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-schema": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex-server": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lexicon": "0.0.0-spaces-alpha-20261029171913"
+  }
 }

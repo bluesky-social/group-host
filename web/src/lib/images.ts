@@ -9,5 +9,12 @@ export const image = (did: string, cid?: string | null) => (cid ? `/img/${did}/$
  * is served, by the CID its blob reference names (`ref.$link`, as JSON
  * carries it), or none.
  */
-export const linksOf = (did: string, links: { url: string; title?: string; icon?: unknown }[] = []) =>
-	links.map(({ url, title, icon }) => ({ url, title, icon: image(did, (icon as { ref?: { $link?: string } } | undefined)?.ref?.$link) }));
+export const linksOf = (
+  did: string,
+  links: { url: string; title?: string; icon?: unknown }[] = []
+) =>
+  links.map(({ url, title, icon }) => ({
+    url,
+    title,
+    icon: image(did, (icon as { ref?: { $link?: string } } | undefined)?.ref?.$link)
+  }));

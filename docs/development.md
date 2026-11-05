@@ -115,9 +115,18 @@ docs-deploy` after a change to the docs lands.
 ## The checks
 
 `just lint` runs what `check` and `web` do but the console's build:
-`cargo fmt --check`, clippy with warnings denied, the console's
-component layers (`harness/layers.mjs`), that no dialog's title holds a
-name or anything typed (`harness/dialogs.mjs`), and svelte-check. `just lex` is
-the `lexicons` check, with goat 0.2.8 in CI, and `just docs` with the
-site's build the `docs` check. `AGENTS.md` says what each workflow runs,
+`cargo fmt --check`, `oxfmt --check`, clippy with warnings denied, the
+console's component layers (`harness/layers.mjs`), that no dialog's
+title holds a name or anything typed (`harness/dialogs.mjs`), and
+svelte-check.
+
+`just fmt` formats everything the checks hold to a format: the Rust with
+rustfmt, and the console, the harness and the docs site with
+[oxfmt](https://oxc.rs/docs/guide/usage/formatter), set in
+`.oxfmtrc.json` (two spaces, single quotes, 100 columns, `.svelte` files
+included). An agent need not run it: `.claude/settings.json` has Claude
+Code format each file as it is written (`.claude/hooks/format.mjs`).
+
+`just lex` is the `lexicons` check, with goat 0.2.8 in CI, and `just
+docs` with the site's build the `docs` check. `AGENTS.md` says what each workflow runs,
 and when.

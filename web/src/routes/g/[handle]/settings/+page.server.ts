@@ -7,9 +7,9 @@ import { listed, profileActions } from '#lib/server/settings.ts';
  * one who may only make app passwords goes to those.
  */
 export const load: PageServerLoad = async (event) => {
-	const view = await event.parent();
-	if (!view.configures && view.passwords) redirect(303, `/g/${event.params.handle}/settings/apps`);
-	return { listed: listed(view) };
+  const view = await event.parent();
+  if (!view.configures && view.passwords) redirect(303, `/g/${event.params.handle}/settings/apps`);
+  return { listed: listed(view) };
 };
 
 export const actions = profileActions;

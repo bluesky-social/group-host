@@ -14,9 +14,10 @@ export type Asked<Q extends Query> = InferInput<Q['parameters']>;
 
 /** A query's parameters as its address has them: an array's values each under its name. */
 function searched(params: object): URLSearchParams {
-	const query = new URLSearchParams();
-	for (const [k, v] of Object.entries(params)) for (const one of v === undefined ? [] : [v].flat()) query.append(k, String(one));
-	return query;
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(params))
+    for (const one of v === undefined ? [] : [v].flat()) query.append(k, String(one));
+  return query;
 }
 
 /**
@@ -24,19 +25,34 @@ function searched(params: object): URLSearchParams {
  * `params`. A failure is the page's, but for a thing not there when the
  * page can do without it (`missing`), as null.
  */
-export async function xrpc<Q extends Query>(load: Load, nsid: Q['nsid'], params: Asked<Q>, missing: true): Promise<Answer<Q> | null>;
-export async function xrpc<Q extends Query>(load: Load, nsid: Q['nsid'], params: Asked<Q>, missing?: false): Promise<Answer<Q>>;
-export async function xrpc<Q extends Query>({ fetch }: Load, nsid: Q['nsid'], params: Asked<Q>, missing = false): Promise<Answer<Q> | null> {
-	const query = searched(params);
-	const res = await fetch(`/xrpc/${nsid}${query.size ? `?${query}` : ''}`);
-	if (!res.ok) {
-		const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
-		// An XRPC method says a thing is not there by the name of its failure.
-		const status = failure?.error?.endsWith('NotFound') ? 404 : res.status;
-		if (status === 404 && missing) return null;
-		error(status, failure?.message ?? res.statusText);
-	}
-	return res.json();
+export async function xrpc<Q extends Query>(
+  load: Load,
+  nsid: Q['nsid'],
+  params: Asked<Q>,
+  missing: true
+): Promise<Answer<Q> | null>;
+export async function xrpc<Q extends Query>(
+  load: Load,
+  nsid: Q['nsid'],
+  params: Asked<Q>,
+  missing?: false
+): Promise<Answer<Q>>;
+export async function xrpc<Q extends Query>(
+  { fetch }: Load,
+  nsid: Q['nsid'],
+  params: Asked<Q>,
+  missing = false
+): Promise<Answer<Q> | null> {
+  const query = searched(params);
+  const res = await fetch(`/xrpc/${nsid}${query.size ? `?${query}` : ''}`);
+  if (!res.ok) {
+    const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
+    // An XRPC method says a thing is not there by the name of its failure.
+    const status = failure?.error?.endsWith('NotFound') ? 404 : res.status;
+    if (status === 404 && missing) return null;
+    error(status, failure?.message ?? res.statusText);
+  }
+  return res.json();
 }
 
 /**
@@ -45,12 +61,16 @@ export async function xrpc<Q extends Query>({ fetch }: Load, nsid: Q['nsid'], pa
  * page's, with the method's own words.
  */
 export async function call<T>({ fetch }: Load, nsid: string, input: object): Promise<T> {
-	const res = await fetch(`/xrpc/${nsid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
-	if (!res.ok) {
-		const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
-		error(res.status, failure?.message ?? res.statusText);
-	}
-	return res.json();
+  const res = await fetch(`/xrpc/${nsid}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  if (!res.ok) {
+    const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
+    error(res.status, failure?.message ?? res.statusText);
+  }
+  return res.json();
 }
 
 /**
@@ -59,8 +79,12 @@ export async function call<T>({ fetch }: Load, nsid: string, input: object): Pro
  * sent from, rather than the page failing.
  */
 export async function act({ fetch }: Load, nsid: string, input: object) {
-	const res = await fetch(`/xrpc/${nsid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
-	if (res.ok) return;
-	const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
-	return fail(res.status, { failed: failure?.message ?? res.statusText });
+  const res = await fetch(`/xrpc/${nsid}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  if (res.ok) return;
+  const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
+  return fail(res.status, { failed: failure?.message ?? res.statusText });
 }

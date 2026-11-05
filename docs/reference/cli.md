@@ -148,6 +148,7 @@ An unknown command or flag fails with its usage; any failure exits 1.
 | `setup` | installs the console's and the harness's packages, llvm-tools and cargo-llvm-cov |
 | `test`, `t <args>` | every test, or those `args` pick |
 | `cov`, `cov-html` | the tests under the 100% gate, or their coverage as a page |
+| `fmt` | formats the Rust with rustfmt, and the console, the harness and the docs site with oxfmt |
 | `lint` | formatting, clippy, the console's layers and svelte-check |
 | `lex` | the lexicons' checks |
 | `dev` | the console to use, over a world of its own: the reference PDS with alice, bob and harbor, the host, the console at https://group-host.localtest.me, and an invite waiting for alice ([development](../development.md#using-it)) |

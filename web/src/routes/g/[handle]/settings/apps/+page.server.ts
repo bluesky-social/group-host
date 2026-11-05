@@ -7,8 +7,8 @@ import { appActions, tokensOf } from '#lib/server/settings.ts';
  * and to whoever may make one.
  */
 export const load: PageServerLoad = async (event) => {
-	const view = await event.parent();
-	return { tokens: view.configures ? await tokensOf(event, view.group.did) : null };
+  const view = await event.parent();
+  return { tokens: view.configures ? await tokensOf(event, view.group.did) : null };
 };
 
 export const actions = appActions;

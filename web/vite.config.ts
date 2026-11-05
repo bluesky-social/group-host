@@ -13,33 +13,35 @@ const host = process.env.GROUP_HOST ?? 'http://127.0.0.1:2600';
 const origin = process.env.ORIGIN ? new URL(process.env.ORIGIN) : null;
 
 export default defineConfig({
-	server: {
-		allowedHosts: origin ? [origin.hostname] : [],
-		hmr: origin ? { clientPort: Number(origin.port || (origin.protocol === 'https:' ? 443 : 80)) } : undefined,
-		proxy: { '^/xrpc/': host, '^/oauth/': host, '^/\\.well-known/': host, '^/img/': host }
-	},
-	plugins: [
-		sveltekit({
-			compilerOptions: { runes: true },
-			adapter: adapter(),
-			csrf: { trustedOrigins: origin ? [origin.origin] : [] },
-			// One stylesheet, small enough to come with each page.
-			inlineStyleThreshold: Infinity,
-			csp: {
-				mode: 'hash',
-				directives: {
-					'default-src': ['none'],
-					'img-src': ['self', 'https:', 'data:', 'blob:'],
-					// Avatars take their hue from a style attribute.
-					'style-src': ['unsafe-inline'],
-					'script-src': ['self'],
-					// Handles suggested as they are typed ask the host (lib/typeahead.ts).
-					'connect-src': ['self'],
-					'base-uri': ['none'],
-					'form-action': ['self'],
-					'frame-ancestors': ['none']
-				}
-			}
-		})
-	]
+  server: {
+    allowedHosts: origin ? [origin.hostname] : [],
+    hmr: origin
+      ? { clientPort: Number(origin.port || (origin.protocol === 'https:' ? 443 : 80)) }
+      : undefined,
+    proxy: { '^/xrpc/': host, '^/oauth/': host, '^/\\.well-known/': host, '^/img/': host }
+  },
+  plugins: [
+    sveltekit({
+      compilerOptions: { runes: true },
+      adapter: adapter(),
+      csrf: { trustedOrigins: origin ? [origin.origin] : [] },
+      // One stylesheet, small enough to come with each page.
+      inlineStyleThreshold: Infinity,
+      csp: {
+        mode: 'hash',
+        directives: {
+          'default-src': ['none'],
+          'img-src': ['self', 'https:', 'data:', 'blob:'],
+          // Avatars take their hue from a style attribute.
+          'style-src': ['unsafe-inline'],
+          'script-src': ['self'],
+          // Handles suggested as they are typed ask the host (lib/typeahead.ts).
+          'connect-src': ['self'],
+          'base-uri': ['none'],
+          'form-action': ['self'],
+          'frame-ancestors': ['none']
+        }
+      }
+    })
+  ]
 });

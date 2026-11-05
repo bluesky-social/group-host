@@ -1,8 +1,8 @@
 {
   "name": "group-host-harness",
   "private": true,
-  "type": "module",
   "description": "The checks beside the tests, and the reference PDS and PLC the host's tests run against (pds.mjs)",
+  "type": "module",
   "dependencies": {
     "@atproto/dev-env": "0.6.26"
   },

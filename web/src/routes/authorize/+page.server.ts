@@ -10,14 +10,18 @@ import { call, xrpc } from '#lib/data.ts';
  * asked to sign in first.
  */
 export const load: PageServerLoad = async (event) => {
-	const requestUri = event.url.searchParams.get('request_uri');
-	if (!requestUri) error(400, 'This page is for an app signing in, and no app asked.');
-	const { actor } = await xrpc<typeof getViewer.main>(event, 'fyi.opensocial.getViewer', {});
-	if (!actor) return { requestUri, request: null, expired: false };
-	// Answered already (as when the page is drawn after its form), or
-	// lapsed: the page says so, or goes back to the app.
-	const request = await xrpc<typeof getAuthorization.main>(event, 'fyi.opensocial.getAuthorization', { requestUri }).catch(() => null);
-	return { requestUri, request, expired: request === null };
+  const requestUri = event.url.searchParams.get('request_uri');
+  if (!requestUri) error(400, 'This page is for an app signing in, and no app asked.');
+  const { actor } = await xrpc<typeof getViewer.main>(event, 'fyi.opensocial.getViewer', {});
+  if (!actor) return { requestUri, request: null, expired: false };
+  // Answered already (as when the page is drawn after its form), or
+  // lapsed: the page says so, or goes back to the app.
+  const request = await xrpc<typeof getAuthorization.main>(
+    event,
+    'fyi.opensocial.getAuthorization',
+    { requestUri }
+  ).catch(() => null);
+  return { requestUri, request, expired: request === null };
 };
 
 /**
@@ -27,14 +31,14 @@ export const load: PageServerLoad = async (event) => {
  * browser's to warn about, as an insecure form.
  */
 export const actions: Actions = {
-	approve: async (event) => {
-		const form = await event.request.formData();
-		const input = { requestUri: String(form.get('requestUri')), group: String(form.get('group')) };
-		return call<{ redirectUrl: string }>(event, 'fyi.opensocial.approveAuthorization', input);
-	},
-	decline: async (event) => {
-		const form = await event.request.formData();
-		const input = { requestUri: String(form.get('requestUri')) };
-		return call<{ redirectUrl: string }>(event, 'fyi.opensocial.declineAuthorization', input);
-	}
+  approve: async (event) => {
+    const form = await event.request.formData();
+    const input = { requestUri: String(form.get('requestUri')), group: String(form.get('group')) };
+    return call<{ redirectUrl: string }>(event, 'fyi.opensocial.approveAuthorization', input);
+  },
+  decline: async (event) => {
+    const form = await event.request.formData();
+    const input = { requestUri: String(form.get('requestUri')) };
+    return call<{ redirectUrl: string }>(event, 'fyi.opensocial.declineAuthorization', input);
+  }
 };

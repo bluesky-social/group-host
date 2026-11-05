@@ -11,8 +11,18 @@ import { xrpc } from '#lib/data.ts';
  * makes one, as the host says, Bluesky's when it does not.
  */
 export const load: LayoutLoad = async (event) => {
-	const answer = await xrpc<typeof getViewer.main>(event, 'fyi.opensocial.getViewer', {}).catch(() => null);
-	const viewer = answer?.actor ?? null;
-	const invited = viewer ? await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', {}).catch(() => null) : null;
-	return { viewer, invitations: invited?.invites ?? [], signUpAt: answer?.signUpAt ?? 'https://bsky.social' };
+  const answer = await xrpc<typeof getViewer.main>(event, 'fyi.opensocial.getViewer', {}).catch(
+    () => null
+  );
+  const viewer = answer?.actor ?? null;
+  const invited = viewer
+    ? await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', {}).catch(
+        () => null
+      )
+    : null;
+  return {
+    viewer,
+    invitations: invited?.invites ?? [],
+    signUpAt: answer?.signUpAt ?? 'https://bsky.social'
+  };
 };

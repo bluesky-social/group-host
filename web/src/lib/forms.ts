@@ -11,8 +11,8 @@ type SubmitFunction = NonNullable<Parameters<typeof enhance>[1]>;
 
 /** Scrolls to `el`, gently unless the reader asks for less motion. */
 function show(el: Element | null) {
-	const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-	el?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' });
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' });
 }
 
 /**
@@ -24,11 +24,18 @@ function show(el: Element | null) {
  * value follows.
  */
 export function empty(form: HTMLFormElement) {
-	for (const field of form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
-		if (['hidden', 'checkbox', 'radio'].includes(field.type) || field.defaultValue !== '' || field.value === '') continue;
-		field.value = '';
-		field.dispatchEvent(new Event('input', { bubbles: true }));
-	}
+  for (const field of form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+    'input, textarea'
+  )) {
+    if (
+      ['hidden', 'checkbox', 'radio'].includes(field.type) ||
+      field.defaultValue !== '' ||
+      field.value === ''
+    )
+      continue;
+    field.value = '';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }
 }
 
 /**
@@ -37,12 +44,12 @@ export function empty(form: HTMLFormElement) {
  * scrolled to; sent elsewhere (a group just made), the page goes there.
  */
 export const inPlace: SubmitFunction = () => {
-	return async ({ result, update }) => {
-		await update({ reset: false });
-		if (result.type !== 'failure') return;
-		await tick();
-		show(document.querySelector('main p.danger'));
-	};
+  return async ({ result, update }) => {
+    await update({ reset: false });
+    if (result.type !== 'failure') return;
+    await tick();
+    show(document.querySelector('main p.danger'));
+  };
 };
 
 /**
@@ -52,21 +59,21 @@ export const inPlace: SubmitFunction = () => {
  * to say in the dialog.
  */
 export function inDialog(id: string, failed: (why: string | null) => void): SubmitFunction {
-	return () => {
-		failed(null);
-		return async ({ result, update }) => {
-			if (result.type === 'failure') {
-				const why = (result.data as { failed?: string } | undefined)?.failed;
-				failed(why ?? 'That didn’t work. Check what you entered.');
-				return;
-			}
-			if (result.type === 'error') {
-				failed(result.error?.message ?? 'Something went wrong on the host.');
-				return;
-			}
-			// Closing it empties it (Dialog.svelte).
-			document.getElementById(id)?.hidePopover();
-			await update({ reset: false });
-		};
-	};
+  return () => {
+    failed(null);
+    return async ({ result, update }) => {
+      if (result.type === 'failure') {
+        const why = (result.data as { failed?: string } | undefined)?.failed;
+        failed(why ?? 'That didn’t work. Check what you entered.');
+        return;
+      }
+      if (result.type === 'error') {
+        failed(result.error?.message ?? 'Something went wrong on the host.');
+        return;
+      }
+      // Closing it empties it (Dialog.svelte).
+      document.getElementById(id)?.hidePopover();
+      await update({ reset: false });
+    };
+  };
 }

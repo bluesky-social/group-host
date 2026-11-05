@@ -4,6 +4,9 @@
 toolchain := `dirname "$(rustup which --toolchain stable cargo)"`
 cargo := "env PATH='" + toolchain + ":" + env_var('PATH') + "' rustup run stable cargo"
 ignore := "(tests/|harness/)"
+# oxfmt, from the console's packages, and what it formats.
+oxfmt := "web/node_modules/.bin/oxfmt"
+js := "web harness docs-site"
 
 # Install the web pages' packages, the harness's (the reference PDS the
 # tests reach the network through), and coverage tools.
@@ -49,10 +52,17 @@ docs-deploy:
 
 lint:
     {{cargo}} fmt --all --check
+    {{oxfmt}} --check {{js}}
     {{cargo}} clippy --workspace --all-targets -- -D warnings
     node harness/layers.mjs
     node harness/dialogs.mjs
     cd web && npm run check
+
+# Formats the Rust (rustfmt) and the console's, the harness's and the docs
+# site's code (oxfmt, by .oxfmtrc.json), as `lint` and the checks expect.
+fmt:
+    {{cargo}} fmt --all
+    {{oxfmt}} {{js}}
 
 # The host, on PORT (2600 by default): docs/reference/config.md.
 serve *args:

@@ -5,39 +5,88 @@
 // for maximilianaquinces.
 
 export default async ({ world, opensocial, ask, page, picture, who, exists }) => {
-  const g = 'lanterns.groups.test'
-  if (!(await exists(g))) opensocial('alice', 'group', 'seed', g)
-  const about = 'Evening walks on the ridge trails, lanterns lit, every Thursday from April to October.'
-  const where = { $type: 'community.lexicon.location.address', locality: 'Ljubljana', country: 'SI' }
-  const topics = ['night hikes', 'ridge trails', 'lanterns'].map((topic) => ({ topic }))
-  const languages = ['sl', 'en'].map((language) => ({ language }))
-  opensocial('alice', 'profile', 'set', g, '--display-name', 'Lantern Hikers', '--description', about,
-    '--location', JSON.stringify(where), '--online', '--topics', JSON.stringify(topics), '--languages', JSON.stringify(languages))
+  const g = 'lanterns.groups.test';
+  if (!(await exists(g))) opensocial('alice', 'group', 'seed', g);
+  const about =
+    'Evening walks on the ridge trails, lanterns lit, every Thursday from April to October.';
+  const where = {
+    $type: 'community.lexicon.location.address',
+    locality: 'Ljubljana',
+    country: 'SI'
+  };
+  const topics = ['night hikes', 'ridge trails', 'lanterns'].map((topic) => ({ topic }));
+  const languages = ['sl', 'en'].map((language) => ({ language }));
+  opensocial(
+    'alice',
+    'profile',
+    'set',
+    g,
+    '--display-name',
+    'Lantern Hikers',
+    '--description',
+    about,
+    '--location',
+    JSON.stringify(where),
+    '--online',
+    '--topics',
+    JSON.stringify(topics),
+    '--languages',
+    JSON.stringify(languages)
+  );
   for (const name of ['bob', 'carol', 'dan', 'erin', 'frank']) {
-    await ask(name, g)
-    opensocial('alice', 'member', 'assign', g, who[name].handle, name === 'carol' ? 'member,moderator' : 'member')
+    await ask(name, g);
+    opensocial(
+      'alice',
+      'member',
+      'assign',
+      g,
+      who[name].handle,
+      name === 'carol' ? 'member,moderator' : 'member'
+    );
   }
-  await ask('harbor', g, 'I walk the north ridge most weeks and would love company.')
-  opensocial('alice', 'invite', 'send', g, who.maximilianaquinces.handle, '--message', 'Come walk with us.')
+  await ask('harbor', g, 'I walk the north ridge most weeks and would love company.');
+  opensocial(
+    'alice',
+    'invite',
+    'send',
+    g,
+    who.maximilianaquinces.handle,
+    '--message',
+    'Come walk with us.'
+  );
   // Its pictures and links, through its settings, as only the console
   // uploads them and keeps a link's icon.
-  const p = await page('alice')
-  await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' })
-  for (const [address, title] of [['https://chat.lanterns.example', 'Our chat'], ['https://maps.lanterns.example/routes']]) {
-    if (await p.locator('.link-list li', { hasText: address }).count()) continue
-    await p.getByRole('button', { name: 'Add a link' }).click()
-    const dialog = p.getByRole('dialog', { name: 'Add a link' })
-    await dialog.getByRole('textbox', { name: 'Its address' }).fill(address)
-    if (title) await dialog.getByRole('textbox', { name: 'Title, if you like' }).fill(title)
-    await dialog.getByRole('button', { name: 'Add', exact: true }).click()
-    await p.locator('.link-list li', { hasText: address }).waitFor()
+  const p = await page('alice');
+  await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' });
+  for (const [address, title] of [
+    ['https://chat.lanterns.example', 'Our chat'],
+    ['https://maps.lanterns.example/routes']
+  ]) {
+    if (await p.locator('.link-list li', { hasText: address }).count()) continue;
+    await p.getByRole('button', { name: 'Add a link' }).click();
+    const dialog = p.getByRole('dialog', { name: 'Add a link' });
+    await dialog.getByRole('textbox', { name: 'Its address' }).fill(address);
+    if (title) await dialog.getByRole('textbox', { name: 'Title, if you like' }).fill(title);
+    await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+    await p.locator('.link-list li', { hasText: address }).waitFor();
   }
-  for (const [slot, png] of [['Avatar', picture(256, 256)], ['Banner', picture(1500, 500, [47, 122, 75], [246, 241, 234])]]) {
-    await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' })
-    await p.getByRole('button', { name: new RegExp(`^(Add|Change) the ${slot.toLowerCase()}$`) }).click()
-    await p.getByLabel(slot, { exact: true }).setInputFiles({ name: 'picture.png', mimeType: 'image/png', buffer: png })
-    await p.getByRole('dialog').filter({ visible: true }).getByRole('button', { name: new RegExp(`the ${slot.toLowerCase()}$`) }).click()
-    await p.waitForLoadState('networkidle')
+  for (const [slot, png] of [
+    ['Avatar', picture(256, 256)],
+    ['Banner', picture(1500, 500, [47, 122, 75], [246, 241, 234])]
+  ]) {
+    await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' });
+    await p
+      .getByRole('button', { name: new RegExp(`^(Add|Change) the ${slot.toLowerCase()}$`) })
+      .click();
+    await p
+      .getByLabel(slot, { exact: true })
+      .setInputFiles({ name: 'picture.png', mimeType: 'image/png', buffer: png });
+    await p
+      .getByRole('dialog')
+      .filter({ visible: true })
+      .getByRole('button', { name: new RegExp(`the ${slot.toLowerCase()}$`) })
+      .click();
+    await p.waitForLoadState('networkidle');
   }
-  await p.context().close()
-}
+  await p.context().close();
+};

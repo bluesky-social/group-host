@@ -6,12 +6,12 @@
 // The flows go in order in one worker, as each goes on from where the one
 // before left the browser and the world.
 
-import { defineConfig } from '@playwright/test'
-import { join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { resolving } from '../world.mjs'
+import { defineConfig } from '@playwright/test';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolving } from '../world.mjs';
 
-const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '../..')
+const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '../..');
 
 export default defineConfig({
   testDir: '.',
@@ -31,6 +31,6 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     launchOptions: { args: [resolving] },
     trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-  },
-})
+    screenshot: 'only-on-failure'
+  }
+});

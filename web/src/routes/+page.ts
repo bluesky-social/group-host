@@ -9,8 +9,10 @@ import { xrpc } from '#lib/data.ts';
  * drawn as one with none.
  */
 export const load: PageLoad = async (event) => {
-	const { viewer } = await event.parent();
-	if (!viewer) return { mine: null };
-	const mine = await xrpc<typeof getActorGroups.main>(event, 'fyi.opensocial.getActorGroups', { actor: viewer.did });
-	return { mine: mine.groups };
+  const { viewer } = await event.parent();
+  if (!viewer) return { mine: null };
+  const mine = await xrpc<typeof getActorGroups.main>(event, 'fyi.opensocial.getActorGroups', {
+    actor: viewer.did
+  });
+  return { mine: mine.groups };
 };
