@@ -162,7 +162,7 @@ test('asking to join with a note, and being approved', async () => {
 
 test('leaving a group', async () => {
   // Asked to be sure of; cancelled, he is still in.
-  const sure = bob.getByRole('dialog', { name: 'Leave Hikers?' })
+  const sure = bob.getByRole('dialog', { name: 'Leave this group?' })
   await bob.getByRole('button', { name: 'Leave the group' }).click()
   await sure.getByRole('button', { name: 'Cancel' }).click()
   await expect(sure).toBeHidden()
@@ -173,7 +173,7 @@ test('leaving a group', async () => {
 
 /** Alice invites bob to Hikers from its page, picking him as she types, with a note. */
 async function send() {
-  const dialog = page.getByRole('dialog', { name: 'Invite someone to Hikers' })
+  const dialog = page.getByRole('dialog', { name: 'Invite someone' })
   await page.getByRole('button', { name: 'Invite someone' }).click()
   const handle = dialog.getByRole('combobox', { name: 'Their handle' })
   await handle.pressSequentially('bo')
@@ -187,7 +187,7 @@ async function send() {
 
 test('inviting someone from the dialog', async () => {
   await page.goto(url('/g/hikers.groups.test'))
-  const dialog = page.getByRole('dialog', { name: 'Invite someone to Hikers' })
+  const dialog = page.getByRole('dialog', { name: 'Invite someone' })
   const invite = page.getByRole('button', { name: 'Invite someone' })
   await invite.click()
   await expect(dialog.getByText("They'll see it the next time they sign in, here or in any app that shows invites.")).toBeVisible()
@@ -270,13 +270,14 @@ test('giving roles, and putting someone out', async () => {
   const row = () => page.locator('.member', { hasText: 'bob.test' })
   // His roles in a dialog, those she may give to tick.
   await row().getByRole('button', { name: "Change bob.test's roles" }).click()
-  const roles = page.getByRole('dialog', { name: "bob.test's roles" })
+  const roles = page.getByRole('dialog', { name: 'Change roles' }).filter({ visible: true })
   await expect(roles.getByRole('checkbox', { name: 'member' })).toBeChecked()
   await roles.getByRole('button', { name: 'Save' }).click()
   await expect(row()).toContainText('member')
   // Removed, once she is sure.
   await row().getByRole('button', { name: 'Remove bob.test' }).click()
-  const sure = page.getByRole('dialog', { name: 'Remove @bob.test from Hikers?' })
+  const sure = page.getByRole('dialog', { name: 'Remove this member?' }).filter({ visible: true })
+  await expect(sure).toContainText('bob.test')
   await expect(sure.getByText('They can ask to join again.')).toBeVisible()
   await sure.getByRole('button', { name: 'Remove', exact: true }).click()
   await expect(page.locator('.members', { hasText: 'bob.test' })).toHaveCount(0)
@@ -285,7 +286,7 @@ test('giving roles, and putting someone out', async () => {
 test('being told why the host refused', async () => {
   // The group's only admin may not leave it: the page says so.
   await page.getByRole('button', { name: 'Leave the group' }).click()
-  await page.getByRole('dialog', { name: 'Leave Hikers?' }).getByRole('button', { name: 'Leave the group' }).click()
+  await page.getByRole('dialog', { name: 'Leave this group?' }).getByRole('button', { name: 'Leave the group' }).click()
   await expect(page.locator('p.danger')).toBeVisible()
   await expect(page.getByText(/You're a member/)).toBeVisible()
 })
@@ -508,7 +509,7 @@ test('creating an app password, and revoking what it signed in', async () => {
   // The console's own token, from inviting, stays.
   await expect(page.locator('.sessions', { hasText: 'With an app password' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Revoke “Phone”' }).click()
-  await page.getByRole('dialog', { name: 'Revoke “Phone”?' }).getByRole('button', { name: 'Revoke', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Revoke this app password?' }).filter({ visible: true }).getByRole('button', { name: 'Revoke', exact: true }).click()
   await expect(page.locator('.passwords')).toHaveCount(0)
   expect((await signIn()).status).toBe(401)
 })
@@ -600,7 +601,7 @@ test('connecting an AI app, and disconnecting it', async () => {
   await page.goto(url('/g/riders.groups.test'))
   await expect(page.locator('.ai-apps', { hasText: 'Pocket helper' })).toBeVisible()
   await page.locator('.ai-apps', { hasText: 'Pocket helper' }).getByRole('button', { name: 'Disconnect' }).click()
-  await page.getByRole('dialog', { name: 'Disconnect Pocket helper?' }).getByRole('button', { name: 'Disconnect', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Disconnect this app?' }).filter({ visible: true }).getByRole('button', { name: 'Disconnect', exact: true }).click()
   await expect(page.getByText('No AI app connected yet')).toBeVisible()
   expect((await client.tool(tokens.access_token, 'group_show', {})).status).toBe(401)
 })

@@ -116,7 +116,8 @@ docs-deploy` after a change to the docs lands.
 
 `just lint` runs what `check` and `web` do but the console's build:
 `cargo fmt --check`, clippy with warnings denied, the console's
-component layers (`harness/layers.mjs`) and svelte-check. `just lex` is
+component layers (`harness/layers.mjs`), that no dialog's title holds a
+name or anything typed (`harness/dialogs.mjs`), and svelte-check. `just lex` is
 the `lexicons` check, with goat 0.2.8 in CI, and `just docs` with the
 site's build the `docs` check. `AGENTS.md` says what each workflow runs,
 and when.

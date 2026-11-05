@@ -49,7 +49,7 @@
 				{#if g.deactivated}
 					<p>This group is switched off.</p>
 				{:else if member}
-					<Standing {name} roles={g.viewer?.roles.map((r) => r.role) ?? []} />
+					<Standing roles={g.viewer?.roles.map((r) => r.role) ?? []} />
 				{:else if g.displayName}
 					<p class="mute small">{joining[g.joinPolicy ?? 'approval'] ?? joining.approval}</p>
 				{/if}
@@ -71,11 +71,11 @@
 					{#snippet actions()}
 						{#if data.invites}<button class="quiet" type="button" popovertarget="invite">Invite someone</button>{/if}
 					{/snippet}
-					<MemberList members={data.members} q={data.q} shown={data.shown} more={data.more} me={data.viewer?.did} {assignable} canEject={may.includes('eject')} {name} />
+					<MemberList members={data.members} q={data.q} shown={data.shown} more={data.more} me={data.viewer?.did} {assignable} canEject={may.includes('eject')} />
 				</Section>
 			{/if}
 			{#if data.invites}
-				<InviteDialog id="invite" {name} />
+				<InviteDialog id="invite" />
 				{#if data.invites.length}
 					<Section title="Invites waiting" count={data.invites.length}>
 						<Invites invites={data.invites} />

@@ -117,6 +117,9 @@ host's own command, `group-host move-host`, stands alone.
   for what it means is its role (`--danger`, `--success`, `--attention`,
   `--done`, `--neutral`), never the hue under it.
 - In Svelte markup, keep a run of inline text one expression or one line.
+- A dialog's title is fixed words ("Remove this member?"), never a name,
+  handle or anything typed, which can be any length; the body says which
+  thing. `node harness/dialogs.mjs` checks it.
 - Sentence case everywhere; an empty list says what is empty in the
   reader's terms, and the way out (`Empty.svelte`).
 
@@ -166,8 +169,8 @@ pulls into it or into a `feature/` branch:
 
 - `check`: `cargo fmt --check` and clippy, warnings denied.
 - `test`: every test, under the 100% gate of lines and functions.
-- `web`: the component layers, svelte-check (failing on any warning), and
-  the build.
+- `web`: the component layers, dialogs' titles, svelte-check (failing
+  on any warning), and the build.
 - `lexicons`: `just lex`.
 - `e2e`: `just e2e`, the console in Chromium over the reference PDS.
 - `docs`: `just docs`, every link and anchor landing, and the docs site's

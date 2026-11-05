@@ -176,10 +176,19 @@ controls.
 - *Confirming.* An act that cannot be undone (leaving, removing
   someone, deleting a rule or role, removing a key, revoking,
   disconnecting) opens a `ConfirmDialog`: its title the question
-  ("Leave Riders?", "Delete this rule?"), what will happen in a
+  ("Leave this group?", "Delete this rule?"), what will happen in a
   sentence, a quiet Cancel, and the act in `danger`, its verb alone
   ("Delete"). What is undone by doing it again (cancelling an invite,
   removing a picture, declining an invite) needs no asking.
+- *Titles.* A dialog's title is a few fixed words: "Remove this
+  member?", "Change roles", "Invite someone". Never put a name, handle,
+  or anything someone typed in it ("bob.test's roles", "Revoke
+  “Phone”?"). Those are as long as people make them, and the title then
+  wraps over three lines or runs off the dialog. Say which thing in the
+  body, where it wraps as text: a person by `Person` ("`@bob.test` loses
+  access…"), anything else by its name in the sentence ("Apps using
+  “Phone” are signed out"). `node harness/dialogs.mjs` fails on a title
+  built around a value.
 - *Lists.* `ul` or `ol` with a class, a row per thing, inside the part's
   card: its `Avatar`, `ordinal` or picture first; its name, and under it
   what is said about it (`.row-main` with `.what`); its acts at the

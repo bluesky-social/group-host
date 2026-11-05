@@ -13,8 +13,8 @@
 			<li>
 				<span class="row-main"><strong>{a.name}</strong><span class="what">Connected {day(a.connectedAt)}, last used {day(a.usedAt)}</span></span>
 				<span class="row-actions"><button class="quiet small" type="button" popovertarget={`disconnect-${i}`}>Disconnect</button></span>
-				<ConfirmDialog id={`disconnect-${i}`} title={`Disconnect ${a.name}?`} action="?/disconnect" confirm="Disconnect" fields={{ clientId: a.clientId }}>
-					It can no longer act for you here. You can connect it again later.
+				<ConfirmDialog id={`disconnect-${i}`} title="Disconnect this app?" action="?/disconnect" confirm="Disconnect" fields={{ clientId: a.clientId }}>
+					{a.name} can no longer act for you here. You can connect it again later.
 				</ConfirmDialog>
 			</li>
 		{/each}

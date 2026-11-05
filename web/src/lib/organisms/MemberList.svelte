@@ -4,13 +4,14 @@
 	import Empty from '#lib/molecules/Empty.svelte';
 	import FormDialog from '#lib/molecules/FormDialog.svelte';
 	import MemberRow from '#lib/molecules/MemberRow.svelte';
+	import Person from '#lib/molecules/Person.svelte';
 	type Member = { actor: { did: string; handle?: string }; roles: { role: string }[] };
 	/**
 	 * Who is in the group, `shown` at a time, found by part of their handle
 	 * (`q`), with more to show while there are (`more`); and their roles:
 	 * for one who may give roles, the ones they may give, to give or take,
 	 * in a dialog; for one who may remove people, the way to, asked to be
-	 * sure of, from the group `name`. Their own row they leave from, not here.
+	 * sure of. Their own row they leave from, not here.
 	 */
 	let {
 		members,
@@ -19,9 +20,8 @@
 		more = false,
 		me,
 		assignable = [],
-		canEject = false,
-		name
-	}: { members: Member[]; q?: string; shown: number; more?: boolean; me?: string; assignable?: string[]; canEject?: boolean; name: string } = $props();
+		canEject = false
+	}: { members: Member[]; q?: string; shown: number; more?: boolean; me?: string; assignable?: string[]; canEject?: boolean } = $props();
 	const named = (m: Member) => m.actor.handle ?? m.actor.did;
 	// Found again as it is typed, the field keeping its place; sent as a form without a script.
 	function find(e: Event) {
@@ -46,8 +46,8 @@
 					{/if}
 				</MemberRow>
 				{#if m.actor.did !== me && assignable.length}
-					<FormDialog id={`roles-${i}`} title={`${named(m)}'s roles`} action="?/roles" submit="Save">
-						{#snippet intro()}Choose the roles you can give. Everyone keeps the member role.{/snippet}
+					<FormDialog id={`roles-${i}`} title="Change roles" action="?/roles" submit="Save">
+						{#snippet intro()}Choose the roles <Person actor={m.actor} /> holds. Everyone keeps the member role.{/snippet}
 						<input type="hidden" name="did" value={m.actor.did} />
 						{#each m.roles.filter((r) => !assignable.includes(r.role)) as kept (kept.role)}
 							<input type="hidden" name="role" value={kept.role} />
@@ -61,8 +61,8 @@
 					</FormDialog>
 				{/if}
 				{#if m.actor.did !== me && canEject}
-					<ConfirmDialog id={`eject-${i}`} title={`Remove ${m.actor.handle ? `@${m.actor.handle}` : m.actor.did} from ${name}?`} action="?/eject" confirm="Remove" fields={{ did: m.actor.did }}>
-						They can ask to join again.
+					<ConfirmDialog id={`eject-${i}`} title="Remove this member?" action="?/eject" confirm="Remove" fields={{ did: m.actor.did }}>
+						<Person actor={m.actor} /> loses access to what only members see. They can ask to join again.
 					</ConfirmDialog>
 				{/if}
 			</li>

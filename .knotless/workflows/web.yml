@@ -1,16 +1,17 @@
 # The console's checks, as `just lint` runs them: that each component uses
-# only its own layer and those below (harness/layers.mjs), and svelte-check,
+# only its own layer and those below (harness/layers.mjs), that every
+# dialog's title is its own fixed words (harness/dialogs.mjs), and svelte-check,
 # which fails on any warning. The packages are kept between runs and
 # installed again only when the lockfile changes.
 image: node:24.22.1
 # Pushes to main, and pulls that change the pages, the lexicons their types
-# are made from, the layers' check or this file. A pull changing none passes
+# are made from, the layers' or dialogs' check or this file. A pull changing none passes
 # at once, noted as skipped.
 on:
   push: {refs: [refs/heads/main]}
   pull:
     base: [refs/heads/main, refs/heads/feature/*]
-    paths: [web/**, lexicons/**, harness/layers.mjs, .knotless/workflows/web.yml, .knotless/uses.lock]
+    paths: [web/**, lexicons/**, harness/layers.mjs, harness/dialogs.mjs, .knotless/workflows/web.yml, .knotless/uses.lock]
 cache: [web/node_modules]
 steps:
   - uses: chadtmiller.com/steps/npm-ci@1
@@ -18,6 +19,8 @@ steps:
     with: {dir: web}
   - name: layers
     run: node harness/layers.mjs
+  - name: dialogs
+    run: node harness/dialogs.mjs
   - name: svelte-check
     run: cd web && npm run check
   - name: build

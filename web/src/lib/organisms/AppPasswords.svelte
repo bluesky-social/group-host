@@ -25,8 +25,8 @@
 					<span class="what">By <Person actor={p.actor ?? { did: p.member }} />{p.privileged ? ', with chat' : ''}{p.lastUsedAt ? `; last used ${day(p.lastUsedAt)}` : ''}</span>
 				</span>
 				<span class="row-actions"><button class="quiet small" type="button" popovertarget={`unpassword-${i}`} aria-label={`Revoke “${p.name}”`}>Revoke</button></span>
-				<ConfirmDialog id={`unpassword-${i}`} title={`Revoke “${p.name}”?`} action="?/unpassword" confirm="Revoke" fields={{ name: p.name }}>
-					Apps using it are signed out, and it stops working.
+				<ConfirmDialog id={`unpassword-${i}`} title="Revoke this app password?" action="?/unpassword" confirm="Revoke" fields={{ name: p.name }}>
+					Apps using “{p.name}” are signed out, and it stops working.
 				</ConfirmDialog>
 			</li>
 		{/each}

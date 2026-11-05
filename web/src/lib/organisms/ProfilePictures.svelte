@@ -9,8 +9,8 @@
 	 */
 	let { name, avatar, banner }: { name: string; avatar: string | null; banner: string | null } = $props();
 	const slots = $derived([
-		{ slot: 'avatar', name: 'Avatar', src: avatar },
-		{ slot: 'banner', name: 'Banner', src: banner }
+		{ slot: 'avatar', name: 'Avatar', src: avatar, act: avatar ? 'Change the avatar' : 'Add the avatar' },
+		{ slot: 'banner', name: 'Banner', src: banner, act: banner ? 'Change the banner' : 'Add the banner' }
 	]);
 </script>
 
@@ -29,9 +29,9 @@
 				{#if s.src}
 					<form method="post" action="?/unpicture"><input type="hidden" name="slot" value={s.slot} /><button class="quiet small" type="submit">Remove the {s.name.toLowerCase()}</button></form>
 				{/if}
-				<button class="quiet small" type="button" popovertarget={`picture-${s.slot}`}>{s.src ? 'Change' : 'Add'} the {s.name.toLowerCase()}</button>
+				<button class="quiet small" type="button" popovertarget={`picture-${s.slot}`}>{s.act}</button>
 			</span>
-			<FormDialog id={`picture-${s.slot}`} title={`${s.src ? 'Change' : 'Add'} the ${s.name.toLowerCase()}`} action="?/picture" submit={`${s.src ? 'Change' : 'Add'} the ${s.name.toLowerCase()}`} multipart>
+			<FormDialog id={`picture-${s.slot}`} title={s.act} action="?/picture" submit={s.act} multipart>
 				{#snippet intro()}{s.slot === 'avatar' ? 'A square picture, drawn round beside its name.' : 'A wide picture, three times as wide as it is high, across the top of its page.'}{/snippet}
 				<input type="hidden" name="slot" value={s.slot} />
 				<label class="field">{s.name} <input name="file" type="file" accept="image/png,image/jpeg,image/webp" required /></label>

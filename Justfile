@@ -51,6 +51,7 @@ lint:
     {{cargo}} fmt --all --check
     {{cargo}} clippy --workspace --all-targets -- -D warnings
     node harness/layers.mjs
+    node harness/dialogs.mjs
     cd web && npm run check
 
 # The host, on PORT (2600 by default): docs/reference/config.md.
