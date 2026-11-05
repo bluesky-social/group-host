@@ -60,6 +60,8 @@ main.wrap{flex:1;padding-top:var(--space-8);padding-bottom:var(--space-16);displ
 
 input,select,textarea,button{font:inherit;font-size:var(--text-field);color:inherit}
 input:not([type='checkbox'],[type='radio'],[type='file'],[type='hidden']),select,textarea{min-height:var(--control);padding:var(--space-2) var(--space-3);background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--radius-sm);transition:border-color var(--speed),box-shadow var(--speed)}
+/* One line, so a text field and a list stand the same height side by side. */
+input:not([type='checkbox'],[type='radio'],[type='file'],[type='hidden']),select{line-height:var(--leading-tight)}
 textarea{min-height:calc(var(--control) * 2.5);resize:vertical}
 input:focus,select:focus,textarea:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 var(--ring) var(--primary-soft)}
 input[type='checkbox'],input[type='radio']{accent-color:var(--primary);width:1rem;height:1rem;margin:0}

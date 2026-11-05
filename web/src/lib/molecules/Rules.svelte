@@ -5,7 +5,7 @@
 
 {#if rules.length}
 	<details class="rules">
-		<summary>Rules ({rules.length})</summary>
+		<summary>Rules<span class="count">{rules.length}</span></summary>
 		<ol>
 			{#each rules as r (r.rkey)}
 				<li><strong>{r.title}</strong>{#if r.text} {r.text}{/if}</li>

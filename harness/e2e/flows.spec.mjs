@@ -447,7 +447,8 @@ test('adding a rule, and taking it away', async () => {
   await expect(page.locator('.rule-rows', { hasText: 'Leave no trace' })).toBeVisible()
   // On the group's page, folded under how many there are.
   await page.goto(url('/g/hikers.groups.test'))
-  await page.getByText('Rules (1)').click()
+  await page.locator('summary', { hasText: 'Rules' }).click()
+  await expect(page.locator('.rules .count')).toHaveText('1')
   await expect(page.getByText('Leave no trace')).toBeVisible()
   await page.goto(url('/g/hikers.groups.test/settings/rules'))
   await page.getByRole('button', { name: 'Delete “Leave no trace”' }).click()
