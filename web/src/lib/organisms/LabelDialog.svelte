@@ -6,7 +6,7 @@
 </script>
 
 <FormDialog {id} title="Label someone" action="?/label" submit="Label them">
-	{#snippet intro()}The label is the group's, on their account, for apps that follow the group's labels to act on.{/snippet}
+	{#snippet intro()}The group puts the label on their account. Apps that follow the group's labels can act on it.{/snippet}
 	<HandleInput id="{id}-handle" label="Their handle" placeholder="someone.bsky.social" />
 	<label class="field">Label <input name="val" required maxlength="128" placeholder="spam" /></label>
 </FormDialog>

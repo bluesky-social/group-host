@@ -16,8 +16,8 @@
 		const kind = (e.$type ?? '').split('#')[1] ?? '';
 		if (kind === 'reportEvent') return ['Reported', [e.reasonType?.split('#')[1], e.reason].filter(Boolean).join(': ')].filter(Boolean).join(': ');
 		if (kind === 'statusEvent') return [e.status === 'resolved' ? 'Resolved' : e.status === 'escalated' ? 'Escalated' : (e.status ?? ''), e.note].filter(Boolean).join(': ');
-		if (kind === 'labelEvent') return `${e.deleted ? 'Label taken back' : 'Labelled'}: ${e.val}`;
-		if (kind === 'ejectEvent') return 'Put out';
+		if (kind === 'labelEvent') return `${e.deleted ? 'Label removed' : 'Labelled'}: ${e.val}`;
+		if (kind === 'ejectEvent') return 'Removed';
 		return kind;
 	}
 </script>
@@ -51,5 +51,5 @@
 		{/each}
 	</ul>
 {:else}
-	<Empty title={`Nothing ${status}`}>Reports, labels and ejections show here while they are {status}.</Empty>
+	<Empty title={`Nothing ${status}`}>Anything {status} in the queue shows up here.</Empty>
 {/if}

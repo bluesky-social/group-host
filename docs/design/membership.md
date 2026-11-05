@@ -58,6 +58,12 @@ precedence or hierarchy, so every "may they?" is a lookup. A grant may
 also carry `repo:<collection>` scopes, the collections of the group's
 public repo its holders may write as the group.
 
+The console takes what each person may change from `getGroup`: its
+settings are for a member whose roles grant `group.configure`, or who
+may make app passwords (a grant of `repo:*`), and show those only the
+parts that are theirs. Anyone else sees no way to them, and an address
+under them says nothing there is theirs to change.
+
 Power over other members needs its own limit. A grant's `assignable` lists
 the roles its holders may give or take, and whose holders they may eject.
 It counts only through the grant that carries the action: whom a member
@@ -131,7 +137,7 @@ holds `member` (`MemberRole`), and names only roles the group defines.
   away must be one the writer's `role.assign` grants may assign. A
   request of theirs still waiting goes.
 - Deleting one puts the member out, if each role they hold is one the
-  writer's `eject` grants may assign ([below](#leaving-and-being-put-out)).
+  writer's `eject` grants may assign ([below](#leaving-and-being-removed)).
 
 A token from `getGroupAuth` for the members space writes what the
 member's grants let them write there, and the console's member and
@@ -215,7 +221,12 @@ host takes it back when the invitee asks to join, or within the hour on
 its own, and inviting again writes a fresh one. The invitee may refuse
 with `declineInvite`, and the group may still invite them later. Holders
 of `invite` list invites with `listInvites`. A site that cannot read
-someone's inbox shows them their invites through `getActorInvites`.
+someone's inbox shows them their invites through `getActorInvites`. The
+console reads them once for each page, beside who is signed in: a dot on
+their picture in the header and a count in its menu say some are
+waiting, and the home page lists them, each to join or decline, as
+the group's own page does for one who opens it invited. Declining one
+asks nothing first, as another can be sent.
 
 Details:
 
@@ -223,7 +234,7 @@ Details:
   must be still to come.
 - An invite's message is 2,000 characters at most.
 
-## Leaving and being put out
+## Leaving and being removed
 
 A member leaves with `leaveGroup`. A holder of `eject` puts one out by
 deleting their membership as the group, if every role the member holds
@@ -238,7 +249,7 @@ is one the ejecter's `eject` grants may assign. Either way the host:
 
 Credentials go first, so that if revoking fails they are still in and
 the call, or the write deleting their membership, can be made again.
-Put out, the rest follows the write; deleting a membership that is gone
+Removed, the rest follows the write; deleting a membership that is gone
 already changes nothing and does nothing more. A credential lasts ten minutes; the group keeps
 each it issues until it lapses, to revoke it at once. For writers on other
 PDSes it sends `com.atproto.space.notifyCredentialRevoked`, best effort.
@@ -246,7 +257,7 @@ With no membership they hold no roles, so the access records grant them
 nothing.
 
 An ejection is then kept in the group's [moderation](moderation.md)
-queue, as an `ejectEvent` on the member's DID, with who put them out.
+queue, as an `ejectEvent` on the member's DID, with who removed them.
 Leaving keeps nothing there.
 
 What they wrote stays in their own repos at their own PDSes. The group's

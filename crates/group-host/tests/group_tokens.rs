@@ -167,6 +167,34 @@ async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them()
         .call(&h, "com.atproto.space.putRecord", token, Some(&body))
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
+    // Bob made a member with it; the log says each write in its parts,
+    // and whom a membership is about.
+    let made = json!({"$type": c("membership"), "member": bob.did, "roles": ["member"], "createdAt": "2026-11-05T00:00:00Z"});
+    let body = json!({"repo": did, "space": members, "collection": c("membership"), "rkey": bob.did, "record": made});
+    let said = app
+        .call(&h, "com.atproto.space.putRecord", token, Some(&body))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let lxm = format!("{NS}.listGroupTokens");
+    let (_, listed) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
+    let [membership, role] = [&listed["activity"][0], &listed["activity"][1]];
+    assert_eq!(
+        membership["write"],
+        json!({"operation": membership["write"]["operation"], "collection": c("membership"), "rkey": bob.did, "space": members})
+    );
+    assert_eq!(membership["subject"]["did"], bob.did.as_str());
+    assert_eq!(
+        (
+            &role["write"]["collection"],
+            &role["write"]["rkey"],
+            role.get("subject")
+        ),
+        (&json!(c("role")), &json!("leader"), None)
+    );
+    // What was not a write has no parts.
+    let took = &listed["activity"][2];
+    assert!(took["action"].as_str().unwrap().starts_with("took a token"));
+    assert_eq!(took.get("write"), None);
     // A member the group grants nothing writes nothing there.
     let said = group_auth(&h, &app, &bob, &json!({"group": did, "space": members})).await;
     assert_eq!(said.error(), (403, "Forbidden"));
@@ -249,6 +277,8 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
     let oauth = sessions.iter().find(|s| s["source"] == "oauth").unwrap();
     assert_eq!(oauth["clientId"], app.id.as_str());
     assert_eq!(oauth["member"], alice.did.as_str());
+    // Each names whom by their handle, where it can be read.
+    assert_eq!(oauth["actor"]["did"], alice.did.as_str());
     assert_eq!(oauth["scope"], "atproto repo:app.bsky.feed.post");
     assert!(oauth["lastUsedAt"].is_string() && oauth["grantedAt"].is_string());
     let groups = sessions
@@ -272,6 +302,7 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
         ]
     );
     assert_eq!(listed["activity"][1]["clientId"], app.id.as_str());
+    assert_eq!(listed["activity"][1]["actor"]["did"], alice.did.as_str());
 
     // Only for its configurers.
     assert_eq!(list(&bob, &did).await.0, 403);

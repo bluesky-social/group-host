@@ -146,10 +146,10 @@ The host is each group's OAuth server ([signing in](../design/signing-in.md)):
 | `GET fyi.opensocial.getAuthorization` | an app's request to sign in as a group, as the caller would approve it |
 | `POST fyi.opensocial.approveAuthorization` | approves it, with what the caller's roles allow |
 | `POST fyi.opensocial.declineAuthorization` | declines it |
-| `GET fyi.opensocial.listGroupTokens` | the apps signed in as the group |
+| `GET fyi.opensocial.listGroupTokens` | the apps signed in as the group, and what they did lately, each with who let it in by their handle; a write also in its parts (`write`: operation, collection, key, space) and with whom it is about (`subject`) |
 | `POST fyi.opensocial.revokeGroupToken` | signs one out |
 | `POST fyi.opensocial.createAppPassword` | an app password for the group, for an app that signs in with one |
-| `GET fyi.opensocial.listAppPasswords` | the group's app passwords, never the passwords |
+| `GET fyi.opensocial.listAppPasswords` | the group's app passwords, never the passwords, each with whose it is by their handle |
 | `POST fyi.opensocial.revokeAppPassword` | revokes one, and signs out its apps |
 
 An app signed in so, or with an app password, uses these as the group:

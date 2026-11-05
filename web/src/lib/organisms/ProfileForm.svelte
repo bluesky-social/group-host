@@ -18,11 +18,11 @@
 	<label class="field">
 		How people join
 		<select name="joinPolicy" value={policy}>
-			<option value="approval">They ask, and someone who may lets them in</option>
-			<option value="open">Anyone signed in, at once</option>
-			<option value="invite">Only by invitation</option>
+			<option value="approval">People ask to join, and an admin approves them</option>
+			<option value="open">Anyone can join right away</option>
+			<option value="invite">Only people who are invited</option>
 		</select>
 	</label>
 	<label class="field">Its own site <input name="url" type="url" value={url ?? ''} /></label>
-	<button type="submit">Save the profile</button>
+	<button type="submit">Save</button>
 </form>

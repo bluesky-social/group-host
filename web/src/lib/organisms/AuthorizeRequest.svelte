@@ -32,7 +32,7 @@
 <div class="stack">
 	{#if mcp}
 		<p>An AI app calling itself <strong>{name}</strong> wants to act as you in one of your groups.</p>
-		<p class="mute">That name is its own word for itself, not checked. It came from <span class="mono">{client.clientId}</span>.</p>
+		<p class="mute">The app chose this name, and it isn't checked. It came from <span class="mono">{client.clientId}</span>.</p>
 	{:else}
 		<p><strong>{name}</strong> wants to sign in as one of your groups.</p>
 	{/if}
@@ -44,19 +44,19 @@
 				<input type="hidden" name="group" value={g.did} />
 				<GroupRow name={g.displayName ?? g.handle} handle={g.handle} />
 				{#if g.roles.length && mcp}
-					<p>It could do what your roles there let you: {g.roles.map((r) => r.role).join(', ')}.</p>
+					<p>It could do what your roles there let you do ({g.roles.map((r) => r.role).join(', ')}).</p>
 					<button type="submit">Connect it to {g.displayName ?? g.handle}</button>
 				{:else if g.roles.length}
 					<ScopeList title="It would be able to" scopes={g.granted} {labels} />
 					<ScopeList title="It would not get" scopes={g.withheld} {labels} />
 					<button type="submit">Sign it in as {g.displayName ?? g.handle}</button>
 				{:else}
-					<p class="mute">You hold no role in this group, so you cannot sign an app in as it.</p>
+					<p class="mute">You don't have a role in this group, so you can't sign an app in as it.</p>
 				{/if}
 			</form>
 		{/each}
 	{:else}
-		<Empty title="No group you can sign it in as">You hold no role in any group on this host.</Empty>
+		<Empty title="No group you can sign it in as">You don't have a role in any group on this host.</Empty>
 	{/if}
 	<form method="post" action={action('decline')}>
 		<input type="hidden" name="requestUri" value={requestUri} />

@@ -4,7 +4,7 @@
 	/**
 	 * A group's pictures, to change: its avatar, round beside its name, and
 	 * its banner, across the top of its page, each as it is now; a new one
-	 * uploaded from a dialog, or the one there taken away. `avatar` and
+	 * uploaded from a dialog, or the one there removed. `avatar` and
 	 * `banner` are where they are served, if set; `name`, the group's.
 	 */
 	let { name, avatar, banner }: { name: string; avatar: string | null; banner: string | null } = $props();
@@ -27,7 +27,7 @@
 			<span class="row-main"><strong>{s.name}</strong><span class="what">{s.src ? 'Shown on its page' : 'None yet'}</span></span>
 			<span class="row-actions">
 				{#if s.src}
-					<form method="post" action="?/unpicture"><input type="hidden" name="slot" value={s.slot} /><button class="quiet small" type="submit">Take the {s.name.toLowerCase()} away</button></form>
+					<form method="post" action="?/unpicture"><input type="hidden" name="slot" value={s.slot} /><button class="quiet small" type="submit">Remove the {s.name.toLowerCase()}</button></form>
 				{/if}
 				<button class="quiet small" type="button" popovertarget={`picture-${s.slot}`}>{s.src ? 'Change' : 'Add'} the {s.name.toLowerCase()}</button>
 			</span>

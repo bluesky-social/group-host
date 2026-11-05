@@ -61,11 +61,11 @@ one question per mechanism.
 2. What makes someone a member, and where is that recorded?
 3. How does someone join: open, by approval, by invite?
 4. How are invites delivered, seen, declined and revoked?
-5. What happens when a member leaves or is put out, to their access and
+5. What happens when a member leaves or is removed, to their access and
    to what they connected?
 6. Where is membership recorded (the members space: membership, role and
    permissions records), and what does each hold?
-7. What does putting someone out take with them: credentials, the OAuth
+7. What does removing someone take with them: credentials, the OAuth
    grants they approved, their MCP clients, their app passwords and
    sessions?
 8. How long does the host keep trying to deliver an invite to someone's

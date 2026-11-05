@@ -238,7 +238,7 @@ asked the same way: the scope must take the file's type, and the roles
 must still let the member write something as the group.
 
 A member whose roles shrink therefore gives every app they signed in
-less at once, and a member who leaves or is put out ends every grant
+less at once, and a member who leaves or is removed ends every grant
 they approved. A group switched off refuses every write and upload, but its tokens
 still refresh and `getSession` answers `status: "deactivated"`, so its
 apps carry on when it is switched on again.
@@ -298,10 +298,10 @@ nothing for anyone else. If they write nothing there, the request fails
 403. For the members space, the token also writes the records there
 the member's grants let them (roles and the permissions record, and
 memberships as above), each with a space scope and no repo scope, which
-is how the console defines roles, admits, gives roles and puts people
-out. For someone's inbox instead, a member who holds `invite` gets a
+is how the console creates roles, approves requests, gives roles and
+removes members. For someone's inbox instead, a member who holds `invite` gets a
 scope for writing invites there and nothing else, which is how the
-console invites someone and takes an invite back. The token lasts 15
+console invites someone and cancels an invite. The token lasts 15
 minutes and is an ordinary grant with source `getGroupAuth`, checked at
 each write as above. The console's settings take one for `meta` to
 write the group's profile, pictures and rules. The console ends each
@@ -328,7 +328,7 @@ naming the member, the action, the time and the client. The log records
 sign-ins, group tokens taken, each write made with a token, app
 passwords made and revoked, and grants revoked with `revokeGroupToken`.
 It does not record refreshes, or grants that end another way: at
-`/oauth/revoke`, by `deleteSession`, or when a member is put out.
+`/oauth/revoke`, by `deleteSession`, or when a member is removed.
 
 ## App passwords
 

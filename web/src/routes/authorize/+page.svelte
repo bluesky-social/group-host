@@ -18,7 +18,7 @@
 	{:else if data.request}
 		<AuthorizeRequest client={data.request.client} groups={data.request.groups} labels={data.request.labels ?? []} requestUri={data.requestUri} mcp={data.request.mcp ?? false} />
 	{:else}
-		<p>An app wants to sign in as one of your groups. Sign in first, as yourself.</p>
+		<p>An app wants to sign in as one of your groups. Sign in first.</p>
 		<p><SignIn /></p>
 	{/if}
 </Page>

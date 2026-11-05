@@ -409,9 +409,16 @@ pub async fn list_app_passwords(
         .grants_of(group, now_millis())
         .map_err(XrpcError::internal)?;
     let held = host.app_passwords(group)?;
+    let held: Vec<_> = held
+        .into_iter()
+        .filter(|p| configures || p.member == me)
+        .collect();
+    // Whose each is, by their handle where it can be read.
+    let actors = host
+        .actor_views(held.iter().map(|p| p.member.as_str()))
+        .await;
     let passwords: Vec<Value> = held
         .iter()
-        .filter(|p| configures || p.member == me)
         .map(|p| {
             let client = app_password_client(&p.name);
             let used = sessions
@@ -422,6 +429,7 @@ pub async fn list_app_passwords(
             let mut view = json!({
                 "name": p.name,
                 "member": p.member,
+                "actor": actors[&p.member],
                 "privileged": p.privileged,
                 "createdAt": iso(p.created_at),
             });

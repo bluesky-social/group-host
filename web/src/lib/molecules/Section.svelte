@@ -5,12 +5,12 @@
 	 * how many it holds (`count`) when that is worth saying, and the one
 	 * act on the whole of it (`actions`), a quiet button, across from it;
 	 * `intro`, a line on what it is; then what it holds, its rows or its
-	 * empty state.
+	 * empty state. `id`, where a link elsewhere goes straight to it.
 	 */
-	let { title, count, actions, intro, children }: { title: string; count?: number; actions?: Snippet; intro?: Snippet; children: Snippet } = $props();
+	let { id, title, count, actions, intro, children }: { id?: string; title: string; count?: number; actions?: Snippet; intro?: Snippet; children: Snippet } = $props();
 </script>
 
-<section class="card stack">
+<section class="card stack" {id}>
 	<div class="section-head">
 		<h2>{title}{#if count !== undefined}<span class="count">{count}</span>{/if}</h2>
 		{@render actions?.()}

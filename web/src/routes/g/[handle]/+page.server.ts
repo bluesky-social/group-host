@@ -8,6 +8,7 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
 import { asGroup, membersOf } from '#lib/asGroup.ts';
+import { changes } from '#lib/server/settings.ts';
 
 type Handle = `${string}.${string}`;
 
@@ -28,8 +29,8 @@ const STEP = 5;
  * A group, by its handle, as the person looking may see it: to a member
  * who may read them, its members, `shown` of them (five more each time)
  * whose handle holds `q`; its invites waiting, for one who may invite;
- * the AI apps a member connected; and to one not in it, whether it has
- * invited them.
+ * the AI apps a member connected; whether its settings have anything
+ * for them; and to one not in it, whether it has invited them.
  */
 export const load: PageServerLoad = async (event) => {
 	const group = await groupOf(event);
@@ -48,7 +49,8 @@ export const load: PageServerLoad = async (event) => {
 	// The AI apps a member connected here, and where they connect one.
 	const apps = viewer?.member ? (await xrpc<typeof listConnectedApps.main>(event, 'fyi.opensocial.listConnectedApps', { group })).apps : null;
 	const invited = viewer && !viewer.member ? (await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', { group })).invites.length > 0 : false;
-	return { ...view, members: page?.members ?? null, more: !!page?.cursor, q, shown, invites, apps, invited, mcp: `${event.url.origin}/mcp` };
+	const { configures, issues } = changes(view);
+	return { ...view, settings: configures || issues, members: page?.members ?? null, more: !!page?.cursor, q, shown, invites, apps, invited, mcp: `${event.url.origin}/mcp` };
 };
 
 /** The group a form on its page is about, and the DID a form names. */
@@ -77,6 +79,10 @@ export const actions: Actions = {
 		const message = String(form.get('message') ?? '').trim();
 		const failed = await act(event, 'fyi.opensocial.requestJoin', { group, ...(message ? { message } : {}) });
 		return failed ?? { joined: true };
+	},
+	decline: async (event) => {
+		const { group } = await asked(event);
+		return act(event, 'fyi.opensocial.declineInvite', { group });
 	},
 	cancel: async (event) => {
 		const { group } = await asked(event);
@@ -109,7 +115,7 @@ export const actions: Actions = {
 		const { group, form } = await asked(event);
 		const handle = String(form.get('handle') ?? '').trim().replace(/^@/, '').toLowerCase() as Handle;
 		const found = await event.fetch(`/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
-		if (!found.ok) return fail(400, { failed: `We cannot find ${handle}.` });
+		if (!found.ok) return fail(400, { failed: `We can't find ${handle}.` });
 		const { did } = await found.json();
 		// Written as the group, in their own inbox, with the note if there is one.
 		const message = String(form.get('message') ?? '').trim();
@@ -122,7 +128,7 @@ export const actions: Actions = {
 	},
 	uninvite: async (event) => {
 		const { group, form } = await asked(event);
-		// Taken back by deleting it, as the group, from their inbox.
+		// Cancelled by deleting it, as the group, from their inbox.
 		const uri = String(form.get('uri') ?? '');
 		const [inbox, rkey] = [uri.split(`/${group}/`)[0], uri.split('/').pop()];
 		return asGroup(event, group, inbox, 'com.atproto.space.deleteRecord', { collection: 'fyi.opensocial.invite', rkey });

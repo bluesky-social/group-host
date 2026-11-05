@@ -16,11 +16,9 @@
 	<Page title="Your groups">
 		{#snippet actions()}<a class="button" href="/new">Start a group</a>{/snippet}
 		{#if form?.failed}<p class="danger">{form.failed}</p>{/if}
-		{#if data.invitations.length}
-			<Section title="You are invited" count={data.invitations.length}>
-				<Invitations invitations={data.invitations} />
-			</Section>
-		{/if}
+		<Section id="invites" title="Invites waiting" count={data.invitations.length}>
+			<Invitations invitations={data.invitations} />
+		</Section>
 		{#if data.mine}
 			<Section title="Groups you are in" count={data.mine.length}>
 				<GroupList groups={data.mine} />

@@ -231,6 +231,36 @@ pub async fn get_group_auth(
     })))
 }
 
+/// What a write in the group's log was, as its words say it (`created
+/// <collection>/<rkey> in <space>`): its operation, the record's
+/// collection and key, the space, if it was in one, and the DID of whom
+/// it is about, if any: a record kept under someone's DID (a
+/// membership), or one written in their inbox (an invite). Nothing, for
+/// what was not a write.
+fn write_of(action: &str) -> Option<(Value, Option<String>)> {
+    let (done, rest) = action.split_once(' ')?;
+    let at = ["created", "updated", "deleted"]
+        .iter()
+        .position(|d| *d == done)?;
+    let (path, space) = rest
+        .split_once(" in ")
+        .map_or((rest, None), |(p, s)| (p, Some(s)));
+    let (collection, rkey) = path.split_once('/')?;
+    let inbox = space.and_then(|s| SpaceRef::parse(s).ok()).filter(is_inbox);
+    let about = rkey.starts_with("did:").then(|| rkey.to_string());
+    let about = about.or(inbox.map(|s| s.authority));
+    let operation = ["create", "update", "delete"][at];
+    let mut write = json!({
+        "operation": operation,
+        "collection": collection,
+        "rkey": rkey,
+    });
+    if let Some(space) = space {
+        write["space"] = json!(space);
+    }
+    Some((write, about))
+}
+
 /// Every grant that acts as the group, and what grants did lately, for
 /// one who configures it.
 pub async fn list_group_tokens(
@@ -245,6 +275,19 @@ pub async fn list_group_tokens(
         .store
         .grants_of(group, now_millis())
         .map_err(XrpcError::internal)?;
+    let log = host
+        .store
+        .activity(group, ACTIVITY_SHOWN)
+        .map_err(XrpcError::internal)?;
+    let writes: Vec<_> = log.iter().map(|a| write_of(&a.action)).collect();
+    // Whom each names, by their handle where it can be read.
+    let members = grants.iter().map(|g| g.member.as_str());
+    let members = members.chain(log.iter().map(|a| a.member.as_str()));
+    let abouts = writes
+        .iter()
+        .flatten()
+        .filter_map(|(_, about)| about.as_deref());
+    let actors = host.actor_views(members.chain(abouts)).await;
     let sessions: Vec<Value> = grants
         .iter()
         .map(|g| {
@@ -252,6 +295,7 @@ pub async fn list_group_tokens(
                 "tokenId": g.id,
                 "clientId": g.client_id,
                 "member": g.member,
+                "actor": actors[&g.member],
                 "source": g.source,
                 "scope": g.scope,
                 "grantedAt": iso(g.created_at),
@@ -263,16 +307,22 @@ pub async fn list_group_tokens(
             view
         })
         .collect();
-    let log = host
-        .store
-        .activity(group, ACTIVITY_SHOWN)
-        .map_err(XrpcError::internal)?;
     let activity: Vec<Value> = log
         .iter()
-        .map(|a| {
-            let mut view = json!({"member": a.member, "action": a.action, "at": iso(a.at)});
+        .zip(writes)
+        .map(|(a, write)| {
+            let actor = &actors[&a.member];
+            let mut view =
+                json!({"member": a.member, "actor": actor, "action": a.action, "at": iso(a.at)});
             if let Some(client) = &a.client_id {
                 view["clientId"] = json!(client);
+            }
+            // A write, said as its parts, and whom it is about.
+            if let Some((write, about)) = write {
+                view["write"] = write;
+                if let Some(about) = about {
+                    view["subject"] = actors[&about].clone();
+                }
             }
             view
         })

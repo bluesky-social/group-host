@@ -16,7 +16,7 @@
 	{#if plan}
 		<p>Moving <span class="mono">@{name}</span>, from <span class="mono">{moving.pds}</span>.</p>
 		{#if plan.refused}
-			<p class="danger">It can't have that address here: choose another.</p>
+			<p class="danger">That address is taken. Try another.</p>
 		{/if}
 		<p>
 			Here it will be <span class="mono">@{plan.handle}</span>{#if plan.keeps}, its own handle{/if}.
@@ -30,17 +30,17 @@
 		</form>
 		<form class="stack" method="post" action="?/start">
 			<input type="hidden" name="address" value={plan.label} />
-			<p>Its posts, files and spaces are copied here, and its server emails you a code that lets it move.</p>
+			<p>Everything in the account is copied here. Then its server emails you a code to finish the move.</p>
 			<button type="submit" disabled={!!plan.refused}>Copy it here</button>
 		</form>
 	{:else}
-		<p><span class="mono">@{name}</span> is copied here. Its server has emailed a code to the address the account has there.</p>
+		<p><span class="mono">@{name}</span> is copied here. Its server has emailed a code to the account's email address.</p>
 		<form class="stack" method="post" action="?/finish">
 			<label class="field">The code <input name="code" required autocomplete="one-time-code" maxlength="64" /></label>
 			<button type="submit">Finish moving it</button>
 		</form>
 	{/if}
 	<form method="post" action="?/cancel">
-		<button class="quiet" type="submit">Stop, and sign out of it</button>
+		<button class="quiet" type="submit">Cancel the move</button>
 	</form>
 </div>

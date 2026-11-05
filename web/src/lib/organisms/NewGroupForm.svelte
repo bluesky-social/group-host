@@ -54,15 +54,15 @@
 			{#if taken.next}<button class="quiet" type="button" onclick={() => ((edited = true), (label = taken?.next ?? label))}>Use {taken.next}{domain}</button>{/if}
 		</p>
 	{:else}
-		<p class="mute small">Made from its name; change it if you like. It is the group's handle, and where its pages are.</p>
+		<p class="mute small">This is the group's handle and web address. You can change it.</p>
 	{/if}
 	<label class="field">What it is for <textarea name="description" maxlength="2000"></textarea></label>
 	<label class="field">
 		How people join
 		<select name="joinPolicy">
-			<option value="approval">They ask, and someone who may lets them in</option>
-			<option value="open">Anyone signed in, at once</option>
-			<option value="invite">Only by invitation</option>
+			<option value="approval">People ask to join, and an admin approves them</option>
+			<option value="open">Anyone can join right away</option>
+			<option value="invite">Only people who are invited</option>
 		</select>
 	</label>
 	<button type="submit">Start the group</button>

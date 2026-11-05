@@ -8,8 +8,8 @@
 </script>
 
 <form class="stack" method="post" action="?/visibility">
-	<label><input type="radio" name="seen" value="public" checked={listed} /> Anyone, and found on the network</label>
-	<label><input type="radio" name="seen" value="members" checked={!listed} /> Its members alone: to others, just its handle</label>
-	<p class="mute">Hiding it stops it being found from now on. It cannot take back what someone has already seen.</p>
-	<button class="quiet" type="submit">Save who sees it</button>
+	<label><input type="radio" name="seen" value="public" checked={listed} /> Anyone, and it can be found</label>
+	<label><input type="radio" name="seen" value="members" checked={!listed} /> Members only. Others see just its handle.</label>
+	<p class="mute">Hiding it stops new people finding it. It can't undo what people have already seen.</p>
+	<button class="quiet" type="submit">Save</button>
 </form>

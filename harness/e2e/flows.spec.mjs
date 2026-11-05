@@ -132,7 +132,7 @@ test('starting a group', async () => {
   await expect(page.getByRole('textbox', { name: 'Its address' })).toHaveValue('sunday-walks-')
 })
 
-test('asking to join with a note, and being let in', async () => {
+test('asking to join with a note, and being approved', async () => {
   await bob.goto(url('/g/hikers.groups.test'))
   await signIn(bob, 'bob')
   // The group, and how joining it works: someone looks at each request.
@@ -144,7 +144,7 @@ test('asking to join with a note, and being let in', async () => {
   await bob.getByRole('button', { name: 'Send request' }).click()
   await expect(bob.getByRole('heading', { name: 'Your request is waiting' })).toBeVisible()
   // Withdrawn, and asked again.
-  await bob.getByRole('button', { name: 'Withdraw it' }).click()
+  await bob.getByRole('button', { name: 'Cancel request' }).click()
   await expect(bob.getByRole('heading', { name: 'Ask to join' })).toBeVisible()
   await note.fill('I walk most Sundays.')
   await bob.getByRole('button', { name: 'Send request' }).click()
@@ -153,7 +153,7 @@ test('asking to join with a note, and being let in', async () => {
   await page.goto(url('/g/hikers.groups.test'))
   const asking = page.locator('.requests li', { hasText: 'bob.test' })
   await expect(asking).toContainText('I walk most Sundays.')
-  await asking.getByRole('button', { name: 'Let in' }).click()
+  await asking.getByRole('button', { name: 'Approve' }).click()
   await expect(page.locator('.members', { hasText: 'bob.test' })).toBeVisible()
   await expect(page.getByText('Nobody is asking to join')).toBeVisible()
   await bob.goto(url('/g/hikers.groups.test'))
@@ -171,6 +171,20 @@ test('leaving a group', async () => {
   await expect(bob.getByRole('heading', { name: 'Ask to join' })).toBeVisible()
 })
 
+/** Alice invites bob to Hikers from its page, picking him as she types, with a note. */
+async function send() {
+  const dialog = page.getByRole('dialog', { name: 'Invite someone to Hikers' })
+  await page.getByRole('button', { name: 'Invite someone' }).click()
+  const handle = dialog.getByRole('combobox', { name: 'Their handle' })
+  await handle.pressSequentially('bo')
+  await dialog.getByRole('option', { name: 'Bob @bob.test' }).click()
+  await expect(handle).toHaveValue('bob.test')
+  await expect(dialog.getByRole('listbox')).toBeHidden()
+  await dialog.getByRole('textbox', { name: 'A note, if you like' }).fill('Come walk with us.')
+  await dialog.getByRole('button', { name: 'Send invite' }).click()
+  await expect(page.locator('.invites', { hasText: 'bob.test' })).toBeVisible()
+}
+
 test('inviting someone from the dialog', async () => {
   await page.goto(url('/g/hikers.groups.test'))
   const dialog = page.getByRole('dialog', { name: 'Invite someone to Hikers' })
@@ -179,36 +193,51 @@ test('inviting someone from the dialog', async () => {
   await expect(dialog.getByText("They'll see it the next time they sign in, here or in any app that shows invites.")).toBeVisible()
   await dialog.getByRole('combobox', { name: 'Their handle' }).fill('nobody.test')
   await dialog.getByRole('button', { name: 'Send invite' }).click()
-  await expect(page.getByText('We cannot find nobody.test.')).toBeVisible()
+  await expect(page.getByText("We can't find nobody.test.")).toBeVisible()
   // Cancelled, it sends nothing.
   await invite.click()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.locator('.invites')).toHaveCount(0)
-  // Sent, with a note; taken back; and sent again.
-  const send = async () => {
-    await invite.click()
-    // Picked from the accounts suggested as part of his handle is typed.
-    const handle = dialog.getByRole('combobox', { name: 'Their handle' })
-    await handle.pressSequentially('bo')
-    await dialog.getByRole('option', { name: 'Bob @bob.test' }).click()
-    await expect(handle).toHaveValue('bob.test')
-    await expect(dialog.getByRole('listbox')).toBeHidden()
-    await dialog.getByRole('textbox', { name: 'A note, if you like' }).fill('Come walk with us.')
-    await dialog.getByRole('button', { name: 'Send invite' }).click()
-    await expect(page.locator('.invites', { hasText: 'bob.test' })).toBeVisible()
-  }
+  // Sent, with a note, picked from the accounts suggested as part of his
+  // handle is typed; cancelled; and sent again.
   await send()
-  await page.getByRole('button', { name: 'Take back' }).click()
+  await page.getByRole('button', { name: 'Cancel invite' }).click()
   await expect(page.locator('.invites', { hasText: 'bob.test' })).toHaveCount(0)
   await send()
 })
 
+test("turning down an invitation from the group's page", async () => {
+  // Marked on every page: a dot on his picture, and a count in his menu,
+  // leading to it on his own page, with its note.
+  await bob.goto(url('/new'))
+  await expect(bob.locator('.user-menu .waiting.dot')).toBeVisible()
+  await bob.locator('.user-menu summary').click()
+  await bob.locator('.menu').getByRole('link', { name: 'Invites 1' }).click()
+  await bob.waitForURL(url('/#invites'))
+  await expect(bob.locator('#invites').getByRole('heading', { name: 'Invites waiting' })).toBeVisible()
+  await expect(bob.locator('#invites').getByText('Come walk with us.')).toBeVisible()
+  // Declined on the group's page, asked nothing: it then says how
+  // joining works for anyone not invited.
+  await bob.goto(url('/g/hikers.groups.test'))
+  await expect(bob.getByRole('heading', { name: "You're invited" })).toBeVisible()
+  await bob.getByRole('button', { name: 'Decline' }).click()
+  await expect(bob.getByRole('heading', { name: 'Ask to join' })).toBeVisible()
+  await expect(bob.locator('.user-menu .waiting.dot')).toHaveCount(0)
+  // None waiting: his own page says so, and his menu counts none.
+  await bob.goto(url('/'))
+  await expect(bob.locator('#invites').getByText('No invites waiting')).toBeVisible()
+  await bob.locator('.user-menu summary').click()
+  await expect(bob.locator('.menu').getByRole('link', { name: 'Invites', exact: true })).toBeVisible()
+  await page.goto(url('/g/hikers.groups.test'))
+  await expect(page.locator('.invites', { hasText: 'bob.test' })).toHaveCount(0)
+})
+
 test('taking up an invitation', async () => {
+  await send()
   // On his own page, with its note; and on the group's.
   await bob.goto(url('/'))
-  await expect(bob.getByRole('heading', { name: 'You are invited' })).toBeVisible()
-  await expect(bob.getByText('Come walk with us.')).toBeVisible()
+  await expect(bob.locator('#invites').getByText('Come walk with us.')).toBeVisible()
   await bob.goto(url('/g/hikers.groups.test'))
   await expect(bob.getByRole('heading', { name: "You're invited" })).toBeVisible()
   await expect(bob.getByText('Someone in Hikers invited you to join.')).toBeVisible()
@@ -217,10 +246,24 @@ test('taking up an invitation', async () => {
   await expect(bob.getByText('Welcome to Hikers.')).toBeVisible()
   await expect(bob.getByText(/You're a member/)).toBeVisible()
   await bob.goto(url('/'))
-  await expect(bob.getByRole('heading', { name: 'You are invited' })).toHaveCount(0)
+  await expect(bob.locator('#invites').getByText('No invites waiting')).toBeVisible()
   await expect(bob.locator('.group-row', { hasText: 'Hikers' }).first()).toBeVisible()
   await page.goto(url('/g/hikers.groups.test'))
   await expect(page.locator('.members', { hasText: 'bob.test' })).toBeVisible()
+})
+
+test('a member with nothing to change sees no settings', async () => {
+  // Bob, a member and no more: no way to its settings on its page.
+  await bob.goto(url('/g/hikers.groups.test'))
+  await expect(bob.getByText(/You're a member/)).toBeVisible()
+  await expect(bob.getByRole('link', { name: 'Settings' })).toHaveCount(0)
+  // At their addresses all the same, nothing is his, and the way back.
+  for (const part of ['', '/rules', '/apps']) {
+    await bob.goto(url(`/g/hikers.groups.test/settings${part}`))
+    await expect(bob.getByText('Nothing here is yours to change')).toBeVisible()
+  }
+  await bob.getByRole('link', { name: 'Back to Hikers' }).click()
+  await bob.waitForURL(url('/g/hikers.groups.test'))
 })
 
 test('giving roles, and putting someone out', async () => {
@@ -229,11 +272,13 @@ test('giving roles, and putting someone out', async () => {
   await row().getByRole('button', { name: "Change bob.test's roles" }).click()
   const roles = page.getByRole('dialog', { name: "bob.test's roles" })
   await expect(roles.getByRole('checkbox', { name: 'member' })).toBeChecked()
-  await roles.getByRole('button', { name: 'Save their roles' }).click()
+  await roles.getByRole('button', { name: 'Save' }).click()
   await expect(row()).toContainText('member')
-  // Put out, once she is sure.
-  await row().getByRole('button', { name: 'Put bob.test out' }).click()
-  await page.getByRole('dialog', { name: 'Put bob.test out?' }).getByRole('button', { name: 'Put them out' }).click()
+  // Removed, once she is sure.
+  await row().getByRole('button', { name: 'Remove bob.test' }).click()
+  const sure = page.getByRole('dialog', { name: 'Remove @bob.test from Hikers?' })
+  await expect(sure.getByText('They can ask to join again.')).toBeVisible()
+  await sure.getByRole('button', { name: 'Remove', exact: true }).click()
   await expect(page.locator('.members', { hasText: 'bob.test' })).toHaveCount(0)
 })
 
@@ -251,9 +296,9 @@ test("joining a group anyone can join", async () => {
   await page.goto(settings)
   await page.getByRole('combobox', { name: 'How people join' }).selectOption('open')
   const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/profile'))
-  await page.getByRole('button', { name: 'Save the profile' }).click()
+  await page.locator('form[action="?/profile"]').getByRole('button', { name: 'Save' }).click()
   await saved
-  // Bob, put out, joins it at once.
+  // Bob, removed, joins it at once.
   await bob.goto(url('/g/hikers.groups.test'))
   await expect(bob.getByRole('heading', { name: 'Join Hikers' })).toBeVisible()
   await expect(bob.locator('.join')).toContainText('Anyone can join.')
@@ -287,7 +332,7 @@ test('connecting an AI app is shown to those who run the group', async () => {
   const connect = page.locator('section', { has: page.getByRole('heading', { name: 'Connect an AI app' }) })
   await expect(connect).toContainText('It acts for you in Hikers, with what your roles let you do.')
   await expect(connect.locator('code')).toHaveText(`${world.base}/mcp`)
-  await expect(connect).toContainText("It'll ask you to sign in here, and to say yes.")
+  await expect(connect).toContainText('It will ask you to sign in here and approve it.')
   await expect(connect.locator('.asks li')).toHaveCount(3)
   // Not to a plain member.
   await bob.goto(url('/g/hikers.groups.test'))
@@ -300,21 +345,21 @@ test("changing a group's profile", async () => {
   await page.getByRole('link', { name: 'Settings' }).click()
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Hikers of the Hills')
   const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/profile'))
-  await page.getByRole('button', { name: 'Save the profile' }).click()
+  await page.locator('form[action="?/profile"]').getByRole('button', { name: 'Save' }).click()
   await saved
   // Its links, each added from a dialog: with what it is, or without.
   const add = async (address, title) => {
     await page.getByRole('button', { name: 'Add a link' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add a link' })
     await dialog.getByRole('textbox', { name: 'Its address' }).fill(address)
-    if (title) await dialog.getByRole('textbox', { name: 'What it is, if you like' }).fill(title)
-    await dialog.getByRole('button', { name: 'Add the link' }).click()
+    if (title) await dialog.getByRole('textbox', { name: 'Title, if you like' }).fill(title)
+    await dialog.getByRole('button', { name: 'Add', exact: true }).click()
     await expect(page.locator('.link-list', { hasText: address })).toBeVisible()
   }
   await add('https://chat.hikers.example', 'Our chat')
   await add('https://walks.example/')
   await add('https://gone.example/')
-  await page.getByRole('button', { name: 'Take away gone.example' }).click()
+  await page.getByRole('button', { name: 'Remove gone.example' }).click()
   await expect(page.locator('.link-list', { hasText: 'gone.example' })).toHaveCount(0)
   await page.goto(url('/g/hikers.groups.test'))
   await expect(page.getByRole('heading', { name: 'Hikers of the Hills' })).toBeVisible()
@@ -339,7 +384,7 @@ test("giving a group a picture, and taking it away", async () => {
   await expect(avatar).toBeVisible()
   await expect.poll(() => avatar.evaluate((img) => img.naturalWidth)).toBe(1)
   await page.goto(url('/g/hikers.groups.test/settings'))
-  await page.getByRole('button', { name: 'Take the avatar away' }).click()
+  await page.getByRole('button', { name: 'Remove the avatar' }).click()
   await page.goto(url('/g/hikers.groups.test'))
   await expect(page.locator('.identity img.av')).toHaveCount(0)
 })
@@ -362,14 +407,14 @@ test("hiding a group's profile, and showing it again", async () => {
     await page.goto(settings)
     await page.getByLabel(label).check()
     const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/visibility'))
-    await page.getByRole('button', { name: 'Save who sees it' }).click()
+    await page.locator('form[action="?/visibility"]').getByRole('button', { name: 'Save' }).click()
     await saved
     await page.goto(settings)
     await expect(page.getByLabel(label)).toBeChecked()
   }
-  await save('Its members alone: to others, just its handle')
+  await save('Members only. Others see just its handle.')
   await expect.poll(listed).toBe(false)
-  await save('Anyone, and found on the network')
+  await save('Anyone, and it can be found')
   await expect.poll(listed).toBe(true)
 })
 
@@ -381,36 +426,36 @@ test('adding a rule, and taking it away', async () => {
   await expect(page.getByText('No rules yet')).toBeVisible()
   await page.getByRole('button', { name: 'Add a rule' }).click()
   await page.getByRole('textbox', { name: 'Rule' }).fill('Leave no trace')
-  await page.getByRole('button', { name: 'Add the rule' }).click()
+  await page.getByRole('dialog', { name: 'Add a rule' }).getByRole('button', { name: 'Add', exact: true }).click()
   await expect(page.locator('.rule-rows', { hasText: 'Leave no trace' })).toBeVisible()
   // On the group's page, folded under how many there are.
   await page.goto(url('/g/hikers.groups.test'))
   await page.getByText('Rules (1)').click()
   await expect(page.getByText('Leave no trace')).toBeVisible()
   await page.goto(url('/g/hikers.groups.test/settings/rules'))
-  await page.getByRole('button', { name: 'Take away “Leave no trace”' }).click()
-  await page.getByRole('dialog', { name: 'Take this rule away?' }).getByRole('button', { name: 'Take it away' }).click()
+  await page.getByRole('button', { name: 'Delete “Leave no trace”' }).click()
+  await page.getByRole('dialog', { name: 'Delete this rule?' }).filter({ visible: true }).getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(page.locator('.rule-rows')).toHaveCount(0)
 })
 
 test('defining a role', async () => {
   await page.goto(url('/g/hikers.groups.test/settings/roles'))
-  await page.getByRole('button', { name: 'Define a role' }).click()
+  await page.getByRole('button', { name: 'Create a role' }).click()
   await page.getByRole('textbox', { name: 'Its key' }).fill('leader')
   await page.getByRole('textbox', { name: 'Its name' }).fill('Ride leader')
   await page.getByRole('checkbox', { name: 'invite' }).check()
-  await page.getByRole('button', { name: 'Define the role' }).click()
+  await page.getByRole('dialog', { name: 'Create a role' }).getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('.roles li', { hasText: 'Ride leader' })).toContainText('invite')
-  await page.getByRole('button', { name: 'Take away Ride leader' }).click()
-  await page.getByRole('dialog', { name: 'Take away Ride leader?' }).getByRole('button', { name: 'Take it away' }).click()
+  await page.getByRole('button', { name: 'Delete Ride leader' }).click()
+  await page.getByRole('dialog', { name: 'Delete this role?' }).filter({ visible: true }).getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(page.locator('.roles li', { hasText: 'Ride leader' })).toHaveCount(0)
 })
 
-test('making an app password, and ending what it signed in', async () => {
+test('creating an app password, and revoking what it signed in', async () => {
   await page.goto(url('/g/hikers.groups.test/settings/apps'))
-  await page.getByRole('button', { name: 'Make an app password' }).click()
+  await page.getByRole('button', { name: 'Create an app password' }).click()
   await page.getByRole('textbox', { name: 'Where it is used' }).fill('Phone')
-  await page.getByRole('button', { name: 'Make it' }).click()
+  await page.getByRole('dialog', { name: 'Create an app password' }).getByRole('button', { name: 'Create', exact: true }).click()
   const password = (await page.locator('code.password').textContent()).trim()
   const signIn = () =>
     fetch(`${world.host}/xrpc/com.atproto.server.createSession`, {
@@ -421,31 +466,37 @@ test('making an app password, and ending what it signed in', async () => {
   expect((await signIn()).status).toBe(200)
   await page.goto(url('/g/hikers.groups.test/settings/apps'))
   await expect(page.locator('.passwords', { hasText: 'Phone' })).toBeVisible()
+  // Whose it is, and who did what lately, by handle; what was done said
+  // as what it is, not as the records' addresses.
+  await expect(page.locator('.passwords li', { hasText: 'Phone' })).toContainText('alice.test')
+  await expect(page.locator('.activity li', { hasText: '@alice.test deleted a role' }).first()).toBeVisible()
+  await expect(page.locator('.activity')).not.toContainText('at://')
+  await expect(page.locator('.activity')).not.toContainText('did:')
   // Its sessions a page at a time: shown all, to find it.
   while (await page.getByRole('button', { name: 'Show more' }).count()) await page.getByRole('button', { name: 'Show more' }).click()
-  await page.getByRole('button', { name: "End app-password:Phone's access" }).click()
-  await page.getByRole('dialog', { name: "End this app's access?" }).filter({ visible: true }).getByRole('button', { name: 'End its access' }).click()
+  await page.getByRole('button', { name: "Revoke app-password:Phone's access" }).click()
+  await page.getByRole('dialog', { name: "Revoke this app's access?" }).filter({ visible: true }).getByRole('button', { name: 'Revoke', exact: true }).click()
   // The console's own token, from inviting, stays.
-  await expect(page.locator('.sessions', { hasText: 'app-password:Phone' })).toHaveCount(0)
+  await expect(page.locator('.sessions', { hasText: 'With an app password' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Revoke “Phone”' }).click()
-  await page.getByRole('dialog', { name: 'Revoke “Phone”?' }).getByRole('button', { name: 'Revoke it' }).click()
+  await page.getByRole('dialog', { name: 'Revoke “Phone”?' }).getByRole('button', { name: 'Revoke', exact: true }).click()
   await expect(page.locator('.passwords')).toHaveCount(0)
   expect((await signIn()).status).toBe(401)
 })
 
-test('adding a recovery key, and taking it off', async () => {
+test('adding a recovery key, and removing it', async () => {
   const key = didKey()
   await page.goto(url('/g/hikers.groups.test/settings/recovery'))
   await expect(page.locator('.recovery-keys li')).toHaveCount(1)
   await page.getByRole('button', { name: 'Add a recovery key' }).click()
   await page.getByRole('textbox', { name: 'A key of yours, as a did:key' }).fill(key)
-  await page.getByRole('button', { name: 'Add the key' }).click()
+  await page.getByRole('dialog', { name: 'Add a recovery key' }).getByRole('button', { name: 'Add', exact: true }).click()
   const keys = page.locator('.recovery-keys li')
   await expect(keys).toHaveCount(2)
   await expect(keys.first()).toContainText(key)
   await expect(keys.last()).toContainText('This host')
-  await keys.first().getByRole('button', { name: 'Take off' }).click()
-  await page.getByRole('dialog', { name: 'Take this key off?' }).getByRole('button', { name: 'Take it off' }).click()
+  await keys.first().getByRole('button', { name: 'Remove' }).click()
+  await page.getByRole('dialog', { name: 'Remove this key?' }).filter({ visible: true }).getByRole('button', { name: 'Remove', exact: true }).click()
   await expect(page.locator('.recovery-keys li')).toHaveCount(1)
 })
 
@@ -454,7 +505,7 @@ test('moderating: a label, and the queue', async () => {
   await page.getByRole('link', { name: 'Moderation' }).click()
   // Putting him out is already in the queue, on him.
   const ejected = page.locator('.subject', { hasText: who.bob.did })
-  await expect(ejected.locator('.events')).toContainText('Put out')
+  await expect(ejected.locator('.events')).toContainText('Removed')
   await page.getByRole('button', { name: 'Label someone' }).click()
   await page.getByRole('combobox', { name: 'Their handle' }).fill('bob.test')
   await page.getByRole('textbox', { name: 'Label' }).fill('troll')
@@ -505,7 +556,7 @@ test('connecting an AI app, and disconnecting it', async () => {
   const client = await new McpClient().listen()
   await page.goto(await client.authorize('Pocket helper'))
   await expect(page.getByText('wants to act as you in one of your groups')).toBeVisible()
-  await expect(page.getByText('That name is its own word for itself')).toBeVisible()
+  await expect(page.getByText("The app chose this name, and it isn't checked")).toBeVisible()
   await page.getByRole('button', { name: 'Connect it to Riders' }).click()
   const back = await client.back
   client.close()
@@ -520,7 +571,7 @@ test('connecting an AI app, and disconnecting it', async () => {
   await page.goto(url('/g/riders.groups.test'))
   await expect(page.locator('.ai-apps', { hasText: 'Pocket helper' })).toBeVisible()
   await page.locator('.ai-apps', { hasText: 'Pocket helper' }).getByRole('button', { name: 'Disconnect' }).click()
-  await page.getByRole('dialog', { name: 'Disconnect Pocket helper?' }).getByRole('button', { name: 'Disconnect it' }).click()
+  await page.getByRole('dialog', { name: 'Disconnect Pocket helper?' }).getByRole('button', { name: 'Disconnect', exact: true }).click()
   await expect(page.getByText('No AI app connected yet')).toBeVisible()
   expect((await client.tool(tokens.access_token, 'group_show', {})).status).toBe(401)
 })
@@ -566,7 +617,7 @@ test('signing out', async () => {
   // From her menu, under her handle: what is hers, and signing out last.
   await page.getByRole('banner').getByText('@alice.test', { exact: true }).click()
   const menu = page.locator('.user-menu .menu')
-  await expect(menu.getByRole('link')).toHaveText(['Your groups', 'Start a group', 'Move an account here'])
+  await expect(menu.getByRole('link')).toHaveText(['Invites', 'Your groups', 'Start a group', 'Move an account here'])
   await menu.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in' })).toBeVisible()
   await expect.poll(() => signedInAs(page)).toBe('')

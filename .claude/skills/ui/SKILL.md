@@ -48,6 +48,8 @@ the rest, once per kept world:
 - `long`: a group of dan's with the longest handle, name, words, link
   and rule the host takes; frank asking with a long note.
 - `waiting`: bob asking to join Riders; carol invited to it.
+- `apps`: an app signed in to Riders with alice's app password
+  "Phone", having posted as it, and taken a post down.
 
 A state none of them makes is a seed of your own: a module that writes
 it, `--seed path/to/it.mjs` (the top of `harness/look/look.mjs` says
@@ -78,7 +80,7 @@ harness/layers.mjs` holds each to its layer:
 - `atoms`: one element (`Avatar`, `Tag`, `Copy`).
 - `molecules`: a few atoms that mean something together (`Section`,
   `Empty`, `Dialog`, `FormDialog`, `ConfirmDialog`, `Tabs`, `UserMenu`,
-  `MemberRow`, `GroupRow`, `HandleInput`).
+  `MemberRow`, `Person`, `GroupRow`, `HandleInput`).
 - `organisms`: a part of a page (`MemberList`, `GroupCard`,
   `SiteHeader`, `RulesEditor`).
 - `templates`: a page's layout, without its data (`Page`, `GroupPage`,
@@ -145,12 +147,12 @@ sit closer than things that do not: a heading to its list, less than the
 list to the next part.
 
 **Weight.** One primary button on a view at most, for the act the view
-is for (Start a group, Join, Save the profile, a dialog's act). What
-undoes, removes or turns down is `class="quiet"` (Leave, Take back,
-Turn down, Cancel, Sign out), and a quiet button never outweighs what it
+is for (Start a group, Join, Save, a dialog's act). What undoes,
+removes or declines is `class="quiet"` (Leave, Cancel invite, Decline,
+Cancel, Sign out), and a quiet button never outweighs what it
 sits beside: leaving a group is a small quiet button at the end of the
 member's standing, never the loudest thing on the card. A list whose
-rows each wait on an act (letting someone in, taking up an invite) may
+rows each wait on an act (approving a request, joining from an invite) may
 carry it on each row, `small`, the one thing in the row that is not
 quiet. What cannot be undone is `class="danger"`, and only as the act of
 a `ConfirmDialog`. A link that goes where a button would act (Start a
@@ -171,12 +173,13 @@ controls.
   editing what is already there field by field (a group's profile, who
   sees it) is a form in place, and finding (a search box) is never a
   dialog. A handle is typed into `HandleInput`, wherever it is asked for.
-- *Confirming.* An act that cannot be undone (leaving, putting someone
-  out, taking a rule, role or key away, revoking, ending an app's
-  access, disconnecting) opens a `ConfirmDialog`: its title the question
-  ("Leave Riders?"), what will happen in a sentence, a quiet Cancel, and
-  the act in `danger`. What is undone by doing it again (taking back an
-  invite, taking a picture away) needs no asking.
+- *Confirming.* An act that cannot be undone (leaving, removing
+  someone, deleting a rule or role, removing a key, revoking,
+  disconnecting) opens a `ConfirmDialog`: its title the question
+  ("Leave Riders?", "Delete this rule?"), what will happen in a
+  sentence, a quiet Cancel, and the act in `danger`, its verb alone
+  ("Delete"). What is undone by doing it again (cancelling an invite,
+  removing a picture, declining an invite) needs no asking.
 - *Lists.* `ul` or `ol` with a class, a row per thing, inside the part's
   card: its `Avatar`, `ordinal` or picture first; its name, and under it
   what is said about it (`.row-main` with `.what`); its acts at the
@@ -187,18 +190,68 @@ controls.
   more, a page at a time, never every row at once.
 - *A part's heading.* `Section`: its title, with its count when that is
   worth saying, and the one act on the whole part (Invite someone, Add a
-  rule, Make an app password) across from it, as a quiet button; never
+  rule, Create an app password) across from it, as a quiet button; never
   a link or a button lower down the card doing the same.
 - *Where to go.* A group's own pages (Moderation, Settings) sit together
   beside its name, as quiet small `a.button`s; a page under a group says
   so with `Page`'s `back`, its name, above its heading.
+
+**Verbs.** The words people know from other apps, the same everywhere:
+
+- **Delete** a thing the group made and owns: a rule, a role.
+- **Remove** something or someone from a list: a member ("Remove
+  @bob.test from Riders?"), a link, a picture, a key.
+- **Cancel** what you sent and can call back: an invite ("Cancel
+  invite"), your request ("Cancel request").
+- **Approve** or **Decline** someone else's request, or an invite to you.
+- **Revoke** access: an app's, an app password.
+- **Create** a new thing that is then listed (a role, an app password);
+  **Add** one to a list (a rule, a link, a key); **Save** changes made
+  in place, and as a dialog's act, the verb alone ("Create", "Add",
+  "Save").
+- Kept as they are: Send invite, Send request, Join, Leave the group,
+  Disconnect.
+
+Never "take away", "take back", "put out", "turn down", "let in", "take
+off" or "end access". The names of commands, tools and lexicons
+(`eject`, `--undo`) stay as they are.
+
+**Plain words.** Every string on a page reads as a normal app's would:
+short, concrete, in the second person, friendly without chatter. What
+gives writing away as a machine's
+([Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)),
+and is never written here:
+
+- triplets ("Its chat, its calendar, its site: …");
+- colon chains, an "X: Y" where a sentence does ("Copy it now: it is
+  not shown again");
+- negative parallels, "not X, but Y";
+- the elliptical "who may" ("someone who may lets them in"): say who,
+  and what they do ("an admin approves them");
+- an abstract noun for a person ("Whoever asks shows here");
+- a line under a heading that says the heading again;
+- default microcopy ("No items found", "Submit", "Try again later")
+  where a line of this page's own fits;
+- the stock words: seamless, effortless, simply, robust, delve,
+  leverage, crucial; em dashes; emoji.
+
+As it should read:
+
+- "Its members alone: to others, just its handle" → "Members only.
+  Others see just its handle."
+- "Whoever asks shows here, with their note." → "Requests to join show
+  up here."
+- "Copy it now: it is not shown again." → "Copy it now. You won't see
+  it again."
+- "It can't have that address here: choose another." → "That address
+  is taken. Try another."
 
 **Pictures.** `Avatar` is given the name of whom it draws: with no
 picture, it draws their initial on a hue their name gives them, never a
 blank disc. A group with no banner shows no banner block: its picture,
 name and nav sit at the top of its card.
 
-**People.** A person is their avatar and handle, by `MemberRow` or the
+**People.** A person is their avatar and handle, by `MemberRow` (a row), `Person` (in a line of text) or the
 header's menu, never a bare DID where a handle is known.
 
 ## Critique
@@ -209,7 +262,9 @@ tool, a fresh one, given the paths under `target/look` (and a sibling
 page's), this file's House rules, and only this question: "What looks
 wrong, out of place, or unlike its siblings here? Be specific: element,
 what is wrong, which rule." Not the code, nor what you meant: it judges
-what is drawn. Fix what it finds, or say in the pull why not.
+what is drawn. Ask it, too, to read every string it can see against
+"Verbs" and "Plain words". Fix what it finds, or say in the pull why
+not.
 
 ## Then
 

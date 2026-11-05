@@ -226,6 +226,7 @@ async fn is_made_by_whoever_may_do_anything_as_the_group() {
     let (_, own) = list(&h, &bob, &did).await;
     assert_eq!(names(&own), ["Laptop"]);
     assert_eq!(own["passwords"][0]["member"], bob.did.as_str());
+    assert_eq!(own["passwords"][0]["actor"]["did"], bob.did.as_str());
     assert_eq!(list(&h, &carol, &did).await.0, 403);
     assert_eq!(list(&h, &alice, "did:plc:nothing").await.0, 400);
 }

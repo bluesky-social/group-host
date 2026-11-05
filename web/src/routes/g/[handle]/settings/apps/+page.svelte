@@ -17,12 +17,13 @@
 {/if}
 {#if data.passwords}
 	<Section title="App passwords" count={data.passwords.length}>
-		{#snippet actions()}<button class="quiet" type="button" popovertarget="make-password">Make an app password</button>{/snippet}
+		{#snippet actions()}<button class="quiet" type="button" popovertarget="make-password">Create an app password</button>{/snippet}
 		<AppPasswords passwords={data.passwords} made={form?.made} />
 	</Section>
 {/if}
 {#if data.tokens}
-	<Section title="Lately">
+	<Section title="What apps did as the group">
+		{#snippet intro()}Each write an app made while signed in as the group, newest first.{/snippet}
 		<GroupActivity activity={data.tokens.activity} />
 	</Section>
 {/if}

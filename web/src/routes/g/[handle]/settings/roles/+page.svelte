@@ -10,7 +10,7 @@
 
 {#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 <Section title="Roles" count={data.roles?.length ?? 0}>
-	{#snippet actions()}<button class="quiet" type="button" popovertarget="define-role">Define a role</button>{/snippet}
-	{#snippet intro()}What each role lets its holders do here. Members are given roles from the group's page.{/snippet}
+	{#snippet actions()}<button class="quiet" type="button" popovertarget="define-role">Create a role</button>{/snippet}
+	{#snippet intro()}What people with each role can do. You give roles to members from the group's page.{/snippet}
 	<RolesEditor roles={data.roles} bindings={data.bindings} actions={ACTIONS} />
 </Section>

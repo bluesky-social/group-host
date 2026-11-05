@@ -6,6 +6,6 @@
 	let { data, children } = $props();
 </script>
 
-<SiteHeader viewer={data.viewer} />
+<SiteHeader viewer={data.viewer} invites={data.invitations.length} />
 <main class="wrap">{@render children()}</main>
 <SiteFooter host={page.url.hostname} />

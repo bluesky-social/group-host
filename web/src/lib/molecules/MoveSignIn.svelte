@@ -11,6 +11,6 @@
 <form class="stack" method="get" action="/console/move/login">
 	<input type="hidden" name="back" value={back} />
 	<HandleInput id="move-handle" label="The account to move" placeholder="riders.bsky.social" />
-	<p>Its server asks you to sign in to it, and to let this host move it.</p>
+	<p>You'll sign in to the account's server and let this host move it.</p>
 	<button type="submit">Sign in to it</button>
 </form>

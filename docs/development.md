@@ -15,8 +15,9 @@ just web-dev   # the console alone, asking that host
 
 `just dev` starts a world of its own (`harness/dev.mjs`): the reference
 PDS and a PLC directory with alice, bob and harbor on them, the host
-over them, and the console at https://group-host.localtest.me, with a
-group of alice's. The console is the dev server's, so a change to a page
+over them, and the console at https://group-host.localtest.me, with
+Riders, a group of alice's, and Hikers, a group of bob's that has
+invited alice, so her invite waits when she signs in. The console is the dev server's, so a change to a page
 shows at once; a change to the host means starting it again. It prints
 each one's password, where the codes the PDS emails are read, and how to
 run the command against it. ctrl-c stops it all, and each start is empty
@@ -81,7 +82,7 @@ pictures show the source as it is now, with no build. Signing in as an
 account goes through its PDS's own page, as a person does, and is kept
 for the next look. A seed (`--seed`, from `harness/look/seeds` or a
 file of your own) writes the state a page should show: a group in full,
-everything long, people waiting. Starting a world takes half a minute;
+everything long, people waiting, an app that wrote as a group. Starting a world takes half a minute;
 `just look-up`, left running, keeps one for every look until ctrl-c,
 each seed written to it once. The pictures go to `target/look`
 (`--out` for another place), desktop light and phone dark unless asked

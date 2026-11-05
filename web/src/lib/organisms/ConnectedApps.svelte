@@ -13,12 +13,12 @@
 			<li>
 				<span class="row-main"><strong>{a.name}</strong><span class="what">Connected {day(a.connectedAt)}, last used {day(a.usedAt)}</span></span>
 				<span class="row-actions"><button class="quiet small" type="button" popovertarget={`disconnect-${i}`}>Disconnect</button></span>
-				<ConfirmDialog id={`disconnect-${i}`} title={`Disconnect ${a.name}?`} action="?/disconnect" confirm="Disconnect it" fields={{ clientId: a.clientId }}>
-					It can no longer act for you here. To use it again, you connect it again.
+				<ConfirmDialog id={`disconnect-${i}`} title={`Disconnect ${a.name}?`} action="?/disconnect" confirm="Disconnect" fields={{ clientId: a.clientId }}>
+					It can no longer act for you here. You can connect it again later.
 				</ConfirmDialog>
 			</li>
 		{/each}
 	</ul>
 {:else}
-	<Empty title="No AI app connected yet">Add the address above to one, and it shows here.</Empty>
+	<Empty title="No AI app connected yet">Add the address above to an AI app, and it shows up here.</Empty>
 {/if}

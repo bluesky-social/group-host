@@ -14,7 +14,7 @@
 	<div class="well stack">
 		<strong>In your AI app, add a connector with this address</strong>
 		<div class="address"><code>{mcp}</code><Copy text={mcp} /></div>
-		<small class="mute">It'll ask you to sign in here, and to say yes.</small>
+		<small class="mute">It will ask you to sign in here and approve it.</small>
 	</div>
 	<div class="stack">
 		<strong>Then ask it things like</strong>

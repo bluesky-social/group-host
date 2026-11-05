@@ -39,10 +39,10 @@
 		{#snippet card()}
 			<GroupCard handle={g.handle} name={g.displayName} description={g.description} avatar={image(g.did, g.avatar)} banner={image(g.did, g.banner)} links={g.links} rules={g.rules}>
 				{#snippet nav()}
-					{#if member}
+					{#if member && (data.settings || may.includes('mod.read'))}
 						<nav class="group-nav" aria-label="The group">
 							{#if may.includes('mod.read')}<a class="button quiet small" href={`/g/${g.handle}/moderation`}>Moderation</a>{/if}
-							<a class="button quiet small" href={`/g/${g.handle}/settings`}>Settings</a>
+							{#if data.settings}<a class="button quiet small" href={`/g/${g.handle}/settings`}>Settings</a>{/if}
 						</nav>
 					{/if}
 				{/snippet}
@@ -71,7 +71,7 @@
 					{#snippet actions()}
 						{#if data.invites}<button class="quiet" type="button" popovertarget="invite">Invite someone</button>{/if}
 					{/snippet}
-					<MemberList members={data.members} q={data.q} shown={data.shown} more={data.more} me={data.viewer?.did} {assignable} canEject={may.includes('eject')} />
+					<MemberList members={data.members} q={data.q} shown={data.shown} more={data.more} me={data.viewer?.did} {assignable} canEject={may.includes('eject')} {name} />
 				</Section>
 			{/if}
 			{#if data.invites}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Empty from '#lib/molecules/Empty.svelte';
 	import MemberRow from '#lib/molecules/MemberRow.svelte';
-	/** The invites the group has sent that are still waiting, each to take back. */
+	/** The invites the group has sent that are still waiting, each to cancel. */
 	let { invites }: { invites: { uri: string; invitee: string; actor?: { did: string; handle?: string } }[] } = $props();
 </script>
 
@@ -10,11 +10,11 @@
 		{#each invites as i (i.uri)}
 			<li>
 				<MemberRow actor={i.actor ?? { did: i.invitee }}>
-					<form method="post" action="?/uninvite"><input type="hidden" name="uri" value={i.uri} /><button class="quiet small" type="submit">Take back</button></form>
+					<form method="post" action="?/uninvite"><input type="hidden" name="uri" value={i.uri} /><button class="quiet small" type="submit">Cancel invite</button></form>
 				</MemberRow>
 			</li>
 		{/each}
 	</ul>
 {:else}
-	<Empty title="No invites waiting">Whoever you invite shows here until they join or turn it down.</Empty>
+	<Empty title="No invites waiting">People you invite show up here until they join or decline.</Empty>
 {/if}

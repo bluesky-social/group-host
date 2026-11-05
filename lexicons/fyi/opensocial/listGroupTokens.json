@@ -67,6 +67,11 @@
           "format": "did",
           "description": "Who let it in."
         },
+        "actor": {
+          "type": "ref",
+          "ref": "fyi.opensocial.defs#actorView",
+          "description": "Who let it in, with their handle where it can be read."
+        },
         "role": {
           "type": "string",
           "description": "The role it was given, if one."
@@ -110,6 +115,11 @@
           "format": "did",
           "description": "Who let the app in."
         },
+        "actor": {
+          "type": "ref",
+          "ref": "fyi.opensocial.defs#actorView",
+          "description": "Who let the app in, with their handle where it can be read."
+        },
         "clientId": {
           "type": "string",
           "description": "The app's OAuth client id."
@@ -118,9 +128,50 @@
           "type": "string",
           "description": "The method it called, or the record it wrote."
         },
+        "write": {
+          "type": "ref",
+          "ref": "#writeView",
+          "description": "The record it wrote, in parts, when it was a write."
+        },
+        "subject": {
+          "type": "ref",
+          "ref": "fyi.opensocial.defs#actorView",
+          "description": "Whom the write is about, with their handle where it can be read: whose DID keys the record (a membership), or whose inbox it was written in (an invite)."
+        },
         "at": {
           "type": "string",
           "format": "datetime"
+        }
+      }
+    },
+    "writeView": {
+      "type": "object",
+      "description": "A record an app wrote as the group.",
+      "required": [
+        "operation",
+        "collection",
+        "rkey"
+      ],
+      "properties": {
+        "operation": {
+          "type": "string",
+          "knownValues": [
+            "create",
+            "update",
+            "delete"
+          ]
+        },
+        "collection": {
+          "type": "string",
+          "format": "nsid"
+        },
+        "rkey": {
+          "type": "string",
+          "description": "The record's key."
+        },
+        "space": {
+          "type": "string",
+          "description": "The space it was written in, by its at:// address; none for the group's public repo."
         }
       }
     }

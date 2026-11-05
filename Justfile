@@ -69,10 +69,11 @@ web-dev:
 # The console to use yourself, over a world of its own (harness/dev.mjs):
 # the reference PDS with alice, bob and harbor, the host, and the console
 # at https://group-host.localtest.me, behind portless, redrawn as its
-# source changes. Empty each time; the host is built again first.
+# source changes; Riders, alice's, and Hikers, bob's, inviting her. Empty
+# each time; the host and the command are built again first.
 dev:
     cd web && npm run lex
-    {{cargo}} build -p group-host
+    {{cargo}} build -p group-host -p opensocial
     node harness/dev.mjs
 
 # The console used as people use it (harness/e2e/flows.spec.mjs): in

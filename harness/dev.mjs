@@ -1,7 +1,8 @@
 // `just dev`: a world to use the console in (world.mjs), for a person to
 // look at: the reference PDS with alice, bob and harbor on it, the host, the
 // console at https://group-host.localtest.me, served by the dev server so a
-// change to it shows at once, and a group of alice's.
+// change to it shows at once, a group of alice's, and one of bob's that has
+// invited her.
 // Stops on ctrl-c, and forgets everything: the PDS, the directory and the
 // host start empty each time.
 //
@@ -53,6 +54,29 @@ const w = await start({
   live: true,
 })
 
+// Hikers, bob's, inviting alice: an invite waiting for her when she signs
+// in, as the header, its menu and the home page mark one.
+const as = (account, ...args) =>
+  execFileSync(join(root, 'target/debug/opensocial'), args, {
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      OPENSOCIAL_HOST: w.host,
+      OPENSOCIAL_HOST_DID: w.did,
+      PDS_URL: w.net.pds,
+      OPENSOCIAL_AS: account.handle,
+      OPENSOCIAL_PASSWORD: account.password,
+    },
+  })
+const [alice, bob] = ['alice.test', 'bob.test'].map((h) => w.net.accounts.find((a) => a.handle === h))
+try {
+  as(bob, 'group', 'create', 'hikers.groups.test', '--display-name', 'Hikers')
+  as(bob, 'invite', 'send', 'hikers.groups.test', alice.handle, '--message', 'Walk with us on Sundays.')
+} catch (e) {
+  w.stop()
+  throw e
+}
+
 const stop = () => {
   try {
     execFileSync(portless, ['alias', '--remove', NAME], { stdio: 'ignore' })
@@ -74,7 +98,8 @@ The directory ${w.net.plc}
 Sign in as any of them, with their password at the PDS's own page:
 ${people}
 
-alice runs Riders (riders.groups.test). harbor is an account of its own, to
+alice runs Riders (riders.groups.test). bob runs Hikers (hikers.groups.test),
+which has invited alice: her invite waits on the home page. harbor is an account of its own, to
 move here from ${w.base}/move; the code its server emails is at
   ${w.net.mail}?to=harbor@test.com
 

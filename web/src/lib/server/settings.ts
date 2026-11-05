@@ -22,15 +22,30 @@ export async function groupOf(event: Event) {
 }
 
 /**
+ * What the person looking may change of a group, as getGroup says of
+ * them: whether they configure it (`group.configure` among their
+ * actions), and whether they may make app passwords for it (their roles
+ * may write any collection as the group, as the host asks of one who
+ * makes one). Settings is for one who may do either.
+ */
+export function changes(view: Answer<typeof getGroup.main>) {
+	const viewer = view.group.viewer;
+	const mine = new Set(viewer?.roles.map((r) => r.role) ?? []);
+	const configures = viewer?.actions?.includes('group.configure') ?? false;
+	const issues = (view.bindings ?? []).some((b) => mine.has(b.role) && (b.repoCollections ?? []).some((c) => c.collection === '*'));
+	return { configures, issues };
+}
+
+/**
  * What every settings page shows: the group, whether the person looking
- * may configure it, and whether they may make app passwords for it; the
- * pages they may see, as the tabs list them.
+ * may configure it, and the app passwords theirs to see, where they may
+ * make them; the pages they may see, as the tabs list them.
  */
 export async function settings(event: Event) {
 	const group = await groupOf(event);
 	const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
-	const configures = view.group.viewer?.actions?.includes('group.configure') ?? false;
-	const passwords = await xrpc<typeof listAppPasswords.main>(event, 'fyi.opensocial.listAppPasswords', { group }).catch(() => null);
+	const { configures, issues } = changes(view);
+	const passwords = configures || issues ? await xrpc<typeof listAppPasswords.main>(event, 'fyi.opensocial.listAppPasswords', { group }) : null;
 	return { ...view, configures, passwords: passwords?.passwords ?? null };
 }
 
@@ -163,7 +178,7 @@ const all = {
 		const title = text(form, 'title');
 		return asMeta(event, group, async (session, now) => {
 			const links = [...((now.links as object[] | undefined) ?? []), title ? { url, title } : { url }];
-			if (links.length > MAX_LINKS) return fail(400, { failed: `A group has ${MAX_LINKS} links at most: take one away first.` });
+			if (links.length > MAX_LINKS) return fail(400, { failed: `A group can have up to ${MAX_LINKS} links. Remove one first.` });
 			return putProfile(session, { ...now, links });
 		});
 	},

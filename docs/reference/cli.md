@@ -139,7 +139,7 @@ An unknown command or flag fails with its usage; any failure exits 1.
 | `cov`, `cov-html` | the tests under the 100% gate, or their coverage as a page |
 | `lint` | formatting, clippy, the console's layers and svelte-check |
 | `lex` | the lexicons' checks |
-| `dev` | the console to use, over a world of its own: the reference PDS with alice, bob and harbor, the host, and the console at https://group-host.localtest.me ([development](../development.md#using-it)) |
+| `dev` | the console to use, over a world of its own: the reference PDS with alice, bob and harbor, the host, the console at https://group-host.localtest.me, and an invite waiting for alice ([development](../development.md#using-it)) |
 | `serve` | the host |
 | `web`, `web-dev` | the console built, or served as its source changes |
 | `look <path>… [options]` | draws the console's pages as pictures in `target/look`, in any state: `--as <account>`, `--seed <name\|file>`, `--click`, `--type`, `--element`, `--phone`, `--desktop`, `--light`, `--dark`, `--all` ([development](../development.md#looking-at-the-console)) |

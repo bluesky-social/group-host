@@ -4,7 +4,7 @@
 	 * first letter of `name` on a hue of its own, the same for the same
 	 * name wherever it is drawn.
 	 */
-	let { src, size, name = '' }: { src?: string | null; size?: 'md' | 'lg'; name?: string } = $props();
+	let { src, size, name = '' }: { src?: string | null; size?: 'sm' | 'md' | 'lg'; name?: string } = $props();
 	let cls = $derived(size ? `av ${size}` : 'av');
 	// Its first letter, past the @ and the did: a handle or DID starts with;
 	// drawn by the stylesheet, so it is never read as part of a name beside it.

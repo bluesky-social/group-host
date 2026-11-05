@@ -144,7 +144,7 @@ Disconnecting a client with `revokeConnectedApp` ends every connection
 the member made with that client in that group, and its tokens with it.
 A connection also ends when:
 
-- the member is put out of the group, by ejection or by leaving;
+- the member is removed from the group, by ejection, or leaves it;
 - the group is deleted, which removes its connections and pending
   requests too;
 - its refresh token lapses.

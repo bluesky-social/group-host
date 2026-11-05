@@ -14,6 +14,7 @@ use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use serde_json::{Value, json};
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
@@ -41,6 +42,17 @@ impl Host {
             Some(handle) => json!({"did": did, "handle": handle}),
             None => json!({"did": did}),
         }
+    }
+
+    /// Each of `dids` as a list names them, each DID read once however
+    /// often it comes.
+    pub(crate) async fn actor_views<'a>(
+        &self,
+        dids: impl IntoIterator<Item = &'a str>,
+    ) -> HashMap<String, Value> {
+        let dids: BTreeSet<&str> = dids.into_iter().collect();
+        let views = futures::future::join_all(dids.iter().map(|d| self.actor_view(d))).await;
+        dids.into_iter().map(String::from).zip(views).collect()
     }
 
     /// A group as a list of someone's shows it, to `viewer`, a member: its

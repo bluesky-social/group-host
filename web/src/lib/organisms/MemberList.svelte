@@ -9,8 +9,8 @@
 	 * Who is in the group, `shown` at a time, found by part of their handle
 	 * (`q`), with more to show while there are (`more`); and their roles:
 	 * for one who may give roles, the ones they may give, to give or take,
-	 * in a dialog; for one who may put people out, the way to, asked to be
-	 * sure of. Their own row they leave from, not here.
+	 * in a dialog; for one who may remove people, the way to, asked to be
+	 * sure of, from the group `name`. Their own row they leave from, not here.
 	 */
 	let {
 		members,
@@ -19,8 +19,9 @@
 		more = false,
 		me,
 		assignable = [],
-		canEject = false
-	}: { members: Member[]; q?: string; shown: number; more?: boolean; me?: string; assignable?: string[]; canEject?: boolean } = $props();
+		canEject = false,
+		name
+	}: { members: Member[]; q?: string; shown: number; more?: boolean; me?: string; assignable?: string[]; canEject?: boolean; name: string } = $props();
 	const named = (m: Member) => m.actor.handle ?? m.actor.did;
 	// Found again as it is typed, the field keeping its place; sent as a form without a script.
 	function find(e: Event) {
@@ -41,18 +42,18 @@
 						<button class="quiet small" type="button" popovertarget={`roles-${i}`} aria-label={`Change ${named(m)}'s roles`}>Roles</button>
 					{/if}
 					{#if m.actor.did !== me && canEject}
-						<button class="quiet small" type="button" popovertarget={`eject-${i}`} aria-label={`Put ${named(m)} out`}>Put out</button>
+						<button class="quiet small" type="button" popovertarget={`eject-${i}`} aria-label={`Remove ${named(m)}`}>Remove</button>
 					{/if}
 				</MemberRow>
 				{#if m.actor.did !== me && assignable.length}
-					<FormDialog id={`roles-${i}`} title={`${named(m)}'s roles`} action="?/roles" submit="Save their roles">
-						{#snippet intro()}What they may do here, as each role lets them. Every member is a member; the rest are yours to give.{/snippet}
+					<FormDialog id={`roles-${i}`} title={`${named(m)}'s roles`} action="?/roles" submit="Save">
+						{#snippet intro()}Choose the roles you can give. Everyone keeps the member role.{/snippet}
 						<input type="hidden" name="did" value={m.actor.did} />
 						{#each m.roles.filter((r) => !assignable.includes(r.role)) as kept (kept.role)}
 							<input type="hidden" name="role" value={kept.role} />
 						{/each}
 						<fieldset>
-							<legend>The roles you may give</legend>
+							<legend>Roles you can give</legend>
 							{#each assignable as role (role)}
 								<label><input type="checkbox" name="role" value={role} checked={m.roles.some((r) => r.role === role)} /> {role}</label>
 							{/each}
@@ -60,8 +61,8 @@
 					</FormDialog>
 				{/if}
 				{#if m.actor.did !== me && canEject}
-					<ConfirmDialog id={`eject-${i}`} title={`Put ${named(m)} out?`} action="?/eject" confirm="Put them out" fields={{ did: m.actor.did }}>
-						They stop being a member at once, and lose every role they hold here. They can ask to join again, as anyone can.
+					<ConfirmDialog id={`eject-${i}`} title={`Remove ${m.actor.handle ? `@${m.actor.handle}` : m.actor.did} from ${name}?`} action="?/eject" confirm="Remove" fields={{ did: m.actor.did }}>
+						They can ask to join again.
 					</ConfirmDialog>
 				{/if}
 			</li>
@@ -76,5 +77,5 @@
 	{/if}
 {:else}
 	<!-- A group always holds someone: none shown is none found. -->
-	<Empty title="No member's handle has that in it">Try fewer letters of it, or clear the search to see everyone.</Empty>
+	<Empty title="No member's handle has that in it">Try fewer letters, or clear the search to see everyone.</Empty>
 {/if}

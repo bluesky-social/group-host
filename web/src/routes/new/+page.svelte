@@ -9,7 +9,7 @@
 
 <Page title="Start a group">
 	{#if !data.actor}
-		<p>Sign in first, as yourself: you will be its founder.</p>
+		<p>Sign in first. You'll be the group's founder.</p>
 		<p><SignIn /></p>
 	{:else if !data.actor.canCreateGroup}
 		<p>This host starts groups only for the people it names.</p>

@@ -28,7 +28,7 @@
 			<ModerationQueue subjects={data.subjects} status={data.status} canResolve={data.actions.includes('mod.resolve')} />
 		</Section>
 	{:else}
-		<Empty title="Nothing here is yours to see">Those who may read the group's moderation queue see it here.</Empty>
+		<Empty title="Nothing here is yours to see">Only people whose roles let them read the moderation queue can see it.</Empty>
 	{/if}
 	{#if label}<LabelDialog id="label" />{/if}
 </Page>
