@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
-/// Who is asking, by the console's cookie or service auth: nothing, for
-/// no one.
+/// Who is asking, by the console's cookie or service auth, and the other
+/// accounts the browser is signed in to: nothing, for no one.
 pub async fn get_viewer(State(host): State<Arc<Host>>, headers: HeaderMap) -> Answer {
     let signup = host.config.signup_pds.as_str();
     let Some(me) = caller(&host, &headers, &format!("{NS}.getViewer")).await? else {
@@ -30,7 +30,14 @@ pub async fn get_viewer(State(host): State<Arc<Host>>, headers: HeaderMap) -> An
     if let Some(handle) = doc.as_ref().and_then(did::handle) {
         actor["handle"] = json!(handle);
     }
-    Ok(Json(json!({ "actor": actor, "signUpAt": signup })))
+    let mut answer = json!({ "actor": actor, "signUpAt": signup });
+    let others = host.console_others(&headers, Some(&me));
+    let others = others.map_err(XrpcError::internal)?;
+    if !others.is_empty() {
+        let views = futures::future::join_all(others.iter().map(|(d, _)| host.actor_view(d)));
+        answer["accounts"] = json!(views.await);
+    }
+    Ok(Json(answer))
 }
 
 impl Host {

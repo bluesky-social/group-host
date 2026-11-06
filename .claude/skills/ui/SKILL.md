@@ -31,6 +31,7 @@ just look /g/riders.groups.test --as bob      # a group bob is not in
 just look /g/lanterns.groups.test --as alice --click 'button[popovertarget=invite]'  # a dialog open
 just look /g/lanterns.groups.test/settings --as alice --element .group-card --all   # one element, in all four
 just look / --as alice --phone --dark --click '.user-menu summary'                 # a menu, on a phone
+just look / --as bob,alice --click '.user-menu summary'   # signed in to both, alice in use, bob to switch to
 just look /new --as alice --type '[name=displayName]=A name long enough to wrap twice over on a phone'  # typed into, then shot
 just look /g/lanterns.groups.test --as alice --out target/look/before --name group  # pictures to keep apart
 ```

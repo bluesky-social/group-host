@@ -17,7 +17,9 @@
 //
 //   --as <name>             signed in as that account (alice, bob, ...),
 //                           at its PDS's own page, as a person signs in;
-//                           signed out without it
+//                           signed out without it. Several, a comma
+//                           between (alice,bob), adds each in turn, the
+//                           last the one in use, the others to switch to
 //   --seed <name|file>      runs a seed first: one of harness/look/seeds
 //                           by name (full, long, waiting, apps), or a file of
 //                           your own. On a kept world each runs once
@@ -88,7 +90,7 @@ const targets = [];
 const steps = [];
 const seeds = [];
 const sides = new Set();
-let as = null;
+let as = [];
 let element;
 let up = false;
 let out = join(root, 'target/look');
@@ -98,7 +100,10 @@ for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   const next = () => argv[++i] ?? fail(`${a} needs a value`);
   if (a === '--up') up = true;
-  else if (a === '--as') as = next().replace(/^@/, '').split('.')[0];
+  else if (a === '--as')
+    as = next()
+      .split(',')
+      .map((n) => n.trim().replace(/^@/, '').split('.')[0]);
   else if (a === '--seed') seeds.push(next());
   else if (a === '--click') steps.push({ click: next() });
   else if (a === '--type') {
@@ -116,8 +121,8 @@ for (let i = 0; i < argv.length; i++) {
 }
 if (!up && !targets.length) fail('which page? a path, as / or /g/riders.groups.test/settings');
 for (const t of targets) if (!t.startsWith('/')) fail(`${t}: a page is its path, starting with /`);
-if (as && !ACCOUNTS.includes(as))
-  fail(`--as ${as}: no such account; one of ${ACCOUNTS.join(', ')}`);
+for (const n of as)
+  if (!ACCOUNTS.includes(n)) fail(`--as ${n}: no such account; one of ${ACCOUNTS.join(', ')}`);
 
 /// The projects asked for: each of the sizes and schemes given, or
 /// desktop light and phone dark.
@@ -197,16 +202,25 @@ const who = Object.fromEntries(world.accounts.map((a) => [a.handle.split('.')[0]
 
 const browser = await chromium.launch({ args: [resolving] });
 
-/// A browser signed in as `name`, at their PDS's own page, as a person
-/// does: kept as the world keeps it, so each look after need not.
-async function signedIn(name) {
-  if (world.signedIn[name]) return world.signedIn[name];
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+/// A browser signed in as each of `names` in turn, at their PDS's own
+/// page, as a person does, adding each after the first from the header's
+/// menu: kept as the world keeps it, so each look after need not.
+async function signedIn(names) {
+  const key = names.join(',');
+  if (world.signedIn[key]) return world.signedIn[key];
+  const before = names.length > 1 ? await signedIn(names.slice(0, -1)) : undefined;
+  const name = names.at(-1);
+  const context = await browser.newContext({ ignoreHTTPSErrors: true, storageState: before });
   const page = await context.newPage();
   // Once its script has run, as a person's click comes: before, the
   // form posts itself, which the page's policy stops going elsewhere.
   await page.goto(world.base, { waitUntil: 'networkidle' });
-  await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click();
+  if (before) {
+    await page.locator('.user-menu summary').click();
+    await page.getByRole('button', { name: 'Add account' }).click();
+  } else {
+    await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click();
+  }
   const dialog = page.getByRole('dialog', { name: 'Sign in with your Atmosphere account' });
   // Sent as typed, under any accounts the field suggests.
   const handle = dialog.getByRole('combobox', { name: 'Handle' });
@@ -217,10 +231,10 @@ async function signedIn(name) {
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: /^(accept|authorize|allow)$/i }).click();
   await page.locator('.user-menu').waitFor({ timeout: 30_000 });
-  world.signedIn[name] = await context.storageState();
+  world.signedIn[key] = await context.storageState();
   await context.close();
   save();
-  return world.signedIn[name];
+  return world.signedIn[key];
 }
 
 /// What a seed is given: ways to write to the world as its people do.
@@ -271,7 +285,7 @@ const tools = {
   page: async (name) => {
     const context = await browser.newContext({
       ignoreHTTPSErrors: true,
-      storageState: await signedIn(name)
+      storageState: await signedIn([name])
     });
     return context.newPage();
   },
@@ -298,7 +312,7 @@ for (const seed of seeds) {
   save();
 }
 
-const storageState = as ? await signedIn(as) : undefined;
+const storageState = as.length ? await signedIn(as) : undefined;
 const named = (t) => name ?? (t.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'home');
 
 mkdirSync(out, { recursive: true });
@@ -360,7 +374,10 @@ try {
         say(
           `${named(target)}-${project}: ${wide.by}px wider than the screen, at ${wide.at.join(', ')}`
         );
-      const file = join(out, `${named(target)}${as ? `-${as}` : ''}-${project}.png`);
+      const file = join(
+        out,
+        `${named(target)}${as.length ? `-${as.join('-')}` : ''}-${project}.png`
+      );
       const opts = { path: file, animations: 'disabled', caret: 'hide' };
       if (element) await page.locator(element).first().screenshot(opts);
       else await page.screenshot({ ...opts, fullPage: !steps.length });

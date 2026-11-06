@@ -8,7 +8,8 @@ import { xrpc } from '#lib/data.ts';
  * does not say, or fails to, as the page is no less worth drawing. With
  * them, the invites waiting for them, which every page's header marks:
  * none, from a host that fails to say. And where someone with no account
- * makes one, as the host says, Bluesky's when it does not.
+ * makes one, as the host says, Bluesky's when it does not; and the other
+ * accounts this browser is signed in to, to switch to.
  */
 export const load: LayoutLoad = async (event) => {
   const answer = await xrpc<typeof getViewer.main>(event, 'fyi.opensocial.getViewer', {}).catch(
@@ -23,6 +24,7 @@ export const load: LayoutLoad = async (event) => {
   return {
     viewer,
     invitations: invited?.invites ?? [],
+    accounts: viewer ? (answer?.accounts ?? []) : [],
     signUpAt: answer?.signUpAt ?? 'https://bsky.social'
   };
 };

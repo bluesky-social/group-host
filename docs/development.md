@@ -73,6 +73,7 @@ which states to look at and what the pages are held to.
 
 ```sh
 just look /g/riders.groups.test --as alice           # signed in as alice
+just look / --as bob,alice --click '.user-menu summary'  # signed in to both, alice in use
 just look / --seed full --as bob --phone --dark     # a seeded state, on a phone, dark
 just look /g/lanterns.groups.test --as alice --click 'button[popovertarget=invite]'
 ```

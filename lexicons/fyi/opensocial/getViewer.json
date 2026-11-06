@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Who is asking: by the console's session cookie, or their service auth. Nothing, for no one. For the console to show who is signed in.",
+      "description": "Who is asking: by the console's session cookie, or their service auth. Nothing, for no one. For the console to show who is signed in, and the other accounts it can switch to.",
       "parameters": {
         "type": "params",
         "properties": {}
@@ -18,6 +18,14 @@
               "type": "ref",
               "ref": "fyi.opensocial.defs#actorView",
               "description": "Who is asking, with the handle their DID document names and canCreateGroup; absent when no one is."
+            },
+            "accounts": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.defs#actorView"
+              },
+              "description": "The other accounts this browser is signed in to, by the console's cookies, the one used last first, which it can switch to; absent when there are none."
             },
             "signUpAt": {
               "type": "string",

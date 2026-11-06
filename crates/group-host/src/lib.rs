@@ -440,6 +440,7 @@ pub fn router(host: Arc<Host>) -> Router {
             post(account_move::cancel_account_move),
         )
         .route("/console/callback", get(console_login::callback))
+        .route("/console/switch", post(console_login::switch))
         .route("/console/logout", post(console_login::logout))
         .merge(token_routes())
         .merge(oauth_routes())

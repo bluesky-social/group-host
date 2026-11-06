@@ -12,6 +12,12 @@
 //! else's approval cannot sign a person in as them. Signing out refuses
 //! every cookie signed before.
 //!
+//! A browser can be signed in to several accounts at once: signing in to
+//! another keeps the one before in a second cookie, of such signed
+//! cookies, the one used last first, and switching (`/console/switch`)
+//! swaps one of those for the one in use, with no sign-in. Signing out
+//! goes on as the one used last, if any is left.
+//!
 //! Every server a person's handle leads to (their PDS, its authorization
 //! server) is reached only at a public address, as a client's metadata is.
 //!
@@ -24,10 +30,10 @@ use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use atproto::jose;
 use atproto::{Curve, Keypair, did};
-use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
+use axum::{Form, Json};
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -36,6 +42,12 @@ use std::sync::Arc;
 /// The session cookie, and the cookie naming a sign-in under way.
 pub const COOKIE: &str = "group_host_session";
 const STARTED: &str = "group_host_login";
+/// The cookie holding the other accounts a browser is signed in to: their
+/// session cookies, `~` between, the one used last first.
+const OTHERS: &str = "group_host_accounts";
+/// How many other accounts a browser stays signed in to; signing in to one
+/// more lets go of the one used least lately.
+const MOST: usize = 4;
 /// How long a sign-in lasts, and how long approving one may take.
 const LASTS: i64 = 30 * 86_400_000;
 const TAKES: i64 = 15 * 60_000;
@@ -158,6 +170,14 @@ pub fn cookie_of<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         .map(|(_, v)| v)
 }
 
+/// The `Set-Cookie` keeping `others`, as many as a browser keeps: none
+/// clears it.
+fn others_cookie(host: &Host, others: &[(String, String)]) -> String {
+    let kept: Vec<&str> = others.iter().take(MOST).map(|(_, v)| v.as_str()).collect();
+    let max_age = if kept.is_empty() { 0 } else { LASTS / 1000 };
+    cookie(host, OTHERS, &kept.join("~"), max_age)
+}
+
 /// A page of the console's to go back to: a path there, never elsewhere.
 fn back_to(asked: Option<&String>) -> String {
     let path = asked.map_or("/", String::as_str);
@@ -206,7 +226,36 @@ impl Host {
     /// Who a request's session cookie names, while it lasts and they have
     /// not signed out since it was signed.
     pub fn console_caller(&self, headers: &HeaderMap) -> anyhow::Result<Option<String>> {
-        let Some((claims, sig)) = cookie_of(headers, COOKIE).and_then(|c| c.split_once('.')) else {
+        match cookie_of(headers, COOKIE) {
+            Some(value) => self.session_of(value),
+            None => Ok(None),
+        }
+    }
+
+    /// The other accounts a request's cookies hold, with their session
+    /// cookies, the one used last first: only those that still hold, each
+    /// once, and never `but`.
+    pub fn console_others(
+        &self,
+        headers: &HeaderMap,
+        but: Option<&str>,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        let mut found: Vec<(String, String)> = Vec::new();
+        for value in cookie_of(headers, OTHERS).unwrap_or_default().split('~') {
+            let Some(did) = self.session_of(value)? else {
+                continue;
+            };
+            if Some(did.as_str()) != but && found.iter().all(|(d, _)| *d != did) {
+                found.push((did, value.to_string()));
+            }
+        }
+        Ok(found)
+    }
+
+    /// Who the session cookie `value` names, while it lasts and they have
+    /// not signed out since it was signed.
+    fn session_of(&self, value: &str) -> anyhow::Result<Option<String>> {
+        let Some((claims, sig)) = value.split_once('.') else {
             return Ok(None);
         };
         if jose::b64(hmac(&self.cookie_key(), claims.as_bytes())) != sig {
@@ -565,22 +614,96 @@ pub async fn callback(
         &host.session_cookie(&p.did, now),
         LASTS / 1000,
     );
+    // The account in use before, if another, is kept beside it.
+    let before = host.console_caller(&headers).map_err(XrpcError::internal)?;
+    let mut others = host
+        .console_others(&headers, Some(&p.did))
+        .map_err(XrpcError::internal)?;
+    if let (Some(did), Some(value)) = (before, cookie_of(&headers, COOKIE))
+        && did != p.did
+    {
+        others.retain(|(d, _)| *d != did);
+        others.insert(0, (did, value.to_string()));
+    }
     tracing::info!(did = p.did, "signed in to the console");
-    let headers = AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, done)]);
-    Ok((headers, Redirect::to(&p.back)).into_response())
+    let mut res = Redirect::to(&p.back).into_response();
+    let set = res.headers_mut();
+    for c in [session, done] {
+        set.append(header::SET_COOKIE, c.parse().expect("a cookie is a header"));
+    }
+    if !others.is_empty() || cookie_of(&headers, OTHERS).is_some() {
+        let kept = others_cookie(&host, &others);
+        set.append(
+            header::SET_COOKIE,
+            kept.parse().expect("a cookie is a header"),
+        );
+    }
+    Ok(res)
 }
 
-/// Signs out: this cookie, and every one signed before now.
+/// Switches the browser to `did`, another account it is signed in to,
+/// and back to the page `back`: its cookie becomes the one in use, and the
+/// one in use is kept beside it, first.
+pub async fn switch(
+    State(host): State<Arc<Host>>,
+    headers: HeaderMap,
+    Form(form): Form<HashMap<String, String>>,
+) -> Result<Response, XrpcError> {
+    let to = form.get("did").map(String::as_str).unwrap_or_default();
+    let current = host.console_caller(&headers).map_err(XrpcError::internal)?;
+    let mut others = host
+        .console_others(&headers, current.as_deref())
+        .map_err(XrpcError::internal)?;
+    let Some(at) = others.iter().position(|(did, _)| did == to) else {
+        let why = "this browser is not signed in to that account";
+        return Ok(failed(StatusCode::BAD_REQUEST, why));
+    };
+    let (_, value) = others.remove(at);
+    if let (Some(did), Some(was)) = (current, cookie_of(&headers, COOKIE)) {
+        others.insert(0, (did, was.to_string()));
+    }
+    let headers = AppendHeaders([
+        (
+            header::SET_COOKIE,
+            cookie(&host, COOKIE, &value, LASTS / 1000),
+        ),
+        (header::SET_COOKIE, others_cookie(&host, &others)),
+    ]);
+    Ok((headers, Redirect::to(&back_to(form.get("back")))).into_response())
+}
+
+/// Signs out: this cookie, and every one signed before now. The browser
+/// goes on as the other account it used last, if it is signed in to one.
 pub async fn logout(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
 ) -> Result<Response, XrpcError> {
     let who = host.console_caller(&headers).map_err(XrpcError::internal)?;
-    if let Some(did) = who {
+    if let Some(did) = &who {
         host.store
-            .sign_out(&did, now_millis())
+            .sign_out(did, now_millis())
             .map_err(XrpcError::internal)?;
     }
-    let gone = cookie(&host, COOKIE, "", 0);
-    Ok(([(header::SET_COOKIE, gone)], Redirect::to("/")).into_response())
+    // Read once they are signed out, so none of their cookies is left.
+    let mut others = host
+        .console_others(&headers, who.as_deref())
+        .map_err(XrpcError::internal)?;
+    let next = match others.is_empty() {
+        true => cookie(&host, COOKIE, "", 0),
+        false => cookie(&host, COOKIE, &others.remove(0).1, LASTS / 1000),
+    };
+    let mut res = Redirect::to("/").into_response();
+    let set = res.headers_mut();
+    set.append(
+        header::SET_COOKIE,
+        next.parse().expect("a cookie is a header"),
+    );
+    if cookie_of(&headers, OTHERS).is_some() {
+        let kept = others_cookie(&host, &others);
+        set.append(
+            header::SET_COOKIE,
+            kept.parse().expect("a cookie is a header"),
+        );
+    }
+    Ok(res)
 }

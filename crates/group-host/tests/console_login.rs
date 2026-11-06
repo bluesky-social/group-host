@@ -1,5 +1,6 @@
 //! Signing in to the console as oneself, at one's own PDS, as a
-//! confidential client; and signing out.
+//! confidential client; to several accounts in one browser, switching
+//! between them; and signing out.
 
 mod common;
 
@@ -229,6 +230,16 @@ fn location(res: &reqwest::Response) -> String {
 /// Signs in as `who`, going back to `back`: the last answer, and the
 /// cookie naming the sign-in.
 async fn sign_in(h: &Running, who: &str, back: &str) -> (reqwest::Response, Option<String>) {
+    sign_in_beside(h, who, back, "").await
+}
+
+/// Signs in as `who` in a browser holding the cookies `jar` (`;` between).
+async fn sign_in_beside(
+    h: &Running,
+    who: &str,
+    back: &str,
+    jar: &str,
+) -> (reqwest::Response, Option<String>) {
     let b = browser();
     let url = reqwest::Url::parse_with_params(
         &format!("{}/console/login", h.url),
@@ -243,7 +254,7 @@ async fn sign_in(h: &Running, who: &str, back: &str) -> (reqwest::Response, Opti
     let approved = b.get(location(&started)).send().await.unwrap();
     let back = b
         .get(location(&approved))
-        .header("cookie", login.clone().unwrap())
+        .header("cookie", format!("{}; {jar}", login.clone().unwrap()))
         .send()
         .await
         .unwrap();
@@ -623,4 +634,133 @@ async fn viewer(h: &Running, cookie: &str) -> (u16, Json_) {
         .await
         .unwrap();
     (res.status().as_u16(), res.json().await.unwrap_or_default())
+}
+
+/// The cookies a browser holds, `;` between, once `res` set them over
+/// `jar`: a cookie set empty is gone, and the sign-in's own is left out.
+fn kept(jar: &str, res: &reqwest::Response) -> String {
+    let mut all: Vec<(String, String)> = jar
+        .split(';')
+        .filter_map(|p| p.trim().split_once('='))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    for set in res.headers().get_all("set-cookie") {
+        let pair = set.to_str().unwrap().split(';').next().unwrap();
+        let (name, value) = pair.split_once('=').unwrap();
+        all.retain(|(k, _)| k != name);
+        if !value.is_empty() && name != "group_host_login" {
+            all.push((name.to_string(), value.to_string()));
+        }
+    }
+    let pairs: Vec<String> = all.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    pairs.join("; ")
+}
+
+async fn switch(h: &Running, jar: &str, did: &str, back: &str) -> reqwest::Response {
+    browser()
+        .post(format!("{}/console/switch", h.url))
+        .header("cookie", jar)
+        .form(&[("did", did), ("back", back)])
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn sign_out(h: &Running, jar: &str) -> reqwest::Response {
+    browser()
+        .post(format!("{}/console/logout", h.url))
+        .header("cookie", jar)
+        .send()
+        .await
+        .unwrap()
+}
+
+/// The DIDs of the other accounts the viewer is signed in to.
+fn others(viewer: &Json_) -> Vec<String> {
+    let all = viewer["accounts"].as_array().cloned().unwrap_or_default();
+    all.iter()
+        .map(|a| a["did"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn switches_between_accounts_signed_in_in_one_browser() {
+    let h = start_reachable(&[]).await;
+    let (one, _) = person(&h, true).await;
+    let (two, _) = person(&h, true).await;
+    let (three, _) = person(&h, true).await;
+
+    // One account: nothing else to switch to.
+    let (back, _) = sign_in(&h, &one, "/").await;
+    assert!(set_cookie(&back, "group_host_accounts").is_none());
+    let first = kept("", &back);
+    let (_, shown) = viewer(&h, &first).await;
+    assert_eq!(shown["actor"]["did"], one);
+    assert_eq!(shown.get("accounts"), None);
+
+    // Signing in to another keeps the first beside it, and the same one
+    // again keeps it once.
+    let (back, _) = sign_in_beside(&h, &two, "/g/riders", &first).await;
+    assert_eq!(location(&back), "/g/riders");
+    let both = kept(&first, &back);
+    let (_, shown) = viewer(&h, &both).await;
+    assert_eq!(shown["actor"]["did"], two);
+    assert_eq!(others(&shown), [one.as_str()]);
+    assert_eq!(shown["accounts"][0]["handle"], "person.test");
+    let (back, _) = sign_in_beside(&h, &two, "/", &both).await;
+    let again = kept(&both, &back);
+    assert_eq!(others(&viewer(&h, &again).await.1), [one.as_str()]);
+    // Signing in to one already beside makes it the one in use, once.
+    let (back, _) = sign_in_beside(&h, &one, "/", &both).await;
+    let flipped = kept(&both, &back);
+    let (_, shown) = viewer(&h, &flipped).await;
+    assert_eq!(shown["actor"]["did"], one);
+    assert_eq!(others(&shown), [two.as_str()]);
+
+    // Switching swaps them, with no sign-in, going back to the page it
+    // was asked from; only to an account this browser is signed in to.
+    let res = switch(&h, &both, &one, "/g/riders").await;
+    assert_eq!(res.status(), 303);
+    assert_eq!(location(&res), "/g/riders");
+    let swapped = kept(&both, &res);
+    let (_, shown) = viewer(&h, &swapped).await;
+    assert_eq!(shown["actor"]["did"], one);
+    assert_eq!(others(&shown), [two.as_str()]);
+    let res = switch(&h, &first, &two, "//elsewhere.test").await;
+    assert_eq!(res.status(), 400);
+    let res = switch(&h, "", &two, "/").await;
+    assert_eq!(res.status(), 400);
+    // Elsewhere is never where it goes back to.
+    let res = switch(&h, &swapped, &two, "//elsewhere.test").await;
+    assert_eq!(location(&res), "/");
+
+    // Three: the one used last first.
+    let (back, _) = sign_in_beside(&h, &three, "/", &swapped).await;
+    let all = kept(&swapped, &back);
+    let (_, shown) = viewer(&h, &all).await;
+    assert_eq!(shown["actor"]["did"], three);
+    assert_eq!(others(&shown), [one.as_str(), two.as_str()]);
+
+    // Signing out of one goes on as the one used before it, and that one
+    // is never offered again by the cookies signed before.
+    let res = sign_out(&h, &all).await;
+    assert_eq!(res.status(), 303);
+    let left = kept(&all, &res);
+    let (_, shown) = viewer(&h, &left).await;
+    assert_eq!(shown["actor"]["did"], one);
+    assert_eq!(others(&shown), [two.as_str()]);
+    assert_eq!(others(&viewer(&h, &swapped).await.1), [two.as_str()]);
+    let res = switch(&h, &all, &three, "/").await;
+    assert_eq!(res.status(), 400);
+
+    // Out of the next, and the last, as no one.
+    let res = sign_out(&h, &left).await;
+    let last = kept(&left, &res);
+    assert!(!last.contains("group_host_accounts="), "{last}");
+    let (_, shown) = viewer(&h, &last).await;
+    assert_eq!(shown["actor"]["did"], two);
+    assert_eq!(shown.get("accounts"), None);
+    let res = sign_out(&h, &last).await;
+    let none = kept(&last, &res);
+    assert_eq!(viewer(&h, &none).await.1.get("actor"), None);
 }
