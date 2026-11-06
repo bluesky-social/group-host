@@ -6,6 +6,7 @@
 pub mod account_move;
 pub mod actor_search;
 pub mod actors;
+pub mod admin;
 pub mod api;
 pub mod app_passwords;
 pub mod authority;
@@ -32,6 +33,7 @@ pub mod index;
 pub mod index_api;
 pub mod lexicons;
 pub mod lifecycle;
+pub mod logs;
 pub mod mcp;
 pub mod member_writes;
 pub mod migration;
@@ -43,6 +45,7 @@ pub mod oauth_dpop;
 pub mod oauth_resource;
 pub mod oauth_scope;
 pub mod oauth_store;
+pub mod observe;
 pub mod plc;
 pub mod provision;
 pub mod rbac;
@@ -53,6 +56,7 @@ pub mod secrets;
 pub mod sites;
 pub mod space;
 pub mod space_api;
+pub mod stats;
 pub mod store;
 pub mod time;
 pub mod token_writes;
@@ -91,6 +95,10 @@ pub struct Host {
     pub(crate) clients: oauth_clients::Clients,
     /// The handles the directory names, as last read for a search.
     pub(crate) handles: actor_search::Handles,
+    /// The lines it logged, kept for its operators.
+    pub logs: Arc<logs::Logs>,
+    /// How it is used, counted for its operators.
+    pub stats: stats::Stats,
 }
 
 impl Host {
@@ -99,6 +107,8 @@ impl Host {
         std::fs::create_dir_all(&config.data_dir)?;
         let store = store::Store::open(&config.data_dir.join("host.sqlite"))?;
         let secrets = secrets::Secrets::load(&config.data_dir)?;
+        let logs = logs::Logs::open(&config.data_dir.join("logs.sqlite"), config.logs_keep)?;
+        let stats = stats::Stats::open(&config.data_dir.join("stats.sqlite"))?;
         let plc = plc::Directory::new(&config.plc_url);
         let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme);
         // A clock id of its own, so two hosts' revisions never collide.
@@ -118,6 +128,8 @@ impl Host {
             index_wake: Default::default(),
             clients: Default::default(),
             handles: Default::default(),
+            logs: Arc::new(logs),
+            stats,
         })
     }
 }
@@ -132,8 +144,16 @@ pub fn client() -> reqwest::Client {
     built.expect("a client with a timeout builds")
 }
 
-/// The host's routes.
+/// The host's routes, each request logged and counted
+/// ([`observe`]).
 pub fn router(host: Arc<Host>) -> Router {
+    let observing = axum::middleware::from_fn_with_state(host.clone(), observe::observe);
+    routes(host).layer(observing)
+}
+
+/// The host's routes, as the MCP server calls them for a tool, within
+/// the request that called it.
+pub(crate) fn routes(host: Arc<Host>) -> Router {
     // A site is published whole, its files in one body: as large as one
     // upload may be, as the lexicons' check reads it.
     let site_limit = usize::try_from(host.config.blob_upload_limit).unwrap_or(usize::MAX);
@@ -411,6 +431,8 @@ pub fn router(host: Arc<Host>) -> Router {
             "/xrpc/fyi.opensocial.completeImport",
             post(import::complete_import),
         )
+        .route("/xrpc/fyi.opensocial.getLogs", get(admin::get_logs))
+        .route("/xrpc/fyi.opensocial.getStats", get(admin::get_stats))
         .route(
             "/xrpc/fyi.opensocial.importAccountSpace",
             post(import_space::import_account_space),
@@ -618,6 +640,11 @@ pub async fn run(args: &[String], config: Config) -> anyhow::Result<()> {
 pub async fn serve(config: Config) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;
     println!("listening on {}", listener.local_addr()?);
+    let host = Arc::new(Host::open(config)?);
+    // Every line from here kept for the operators too, written as it goes.
+    logs::sink(&host.logs);
+    tokio::spawn(admin::keeping(host.clone(), admin::FLUSH));
+    let config = &host.config;
     tracing::info!(
         public_url = %config.public_url,
         did = %config.service_did,
@@ -625,7 +652,6 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
         commit = COMMIT,
         "serving"
     );
-    let host = Arc::new(Host::open(config)?);
     // Uploads no record took, moves kept a day, and invites lapsed, swept
     // now and each hour after.
     let sweeping = host.clone();
@@ -660,11 +686,15 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });
-    let app = router(host);
+    let app = router(host.clone());
     axum::serve(listener, app)
         .with_graceful_shutdown(stopped())
         .await?;
     tracing::info!("stopped");
+    // What was logged and counted since the last write, kept before it
+    // goes.
+    admin::wrote("logs", host.logs.flush());
+    admin::wrote("stats", host.stats.flush());
     Ok(())
 }
 

@@ -58,6 +58,12 @@ pub struct Config {
     /// trailing slash: the PDS the console's "Create one" signs them up at,
     /// by its authorization server's sign-up (`prompt=create`).
     pub signup_pds: String,
+    /// Who runs this host, `HOST_ADMINS`, comma-separated DIDs: the
+    /// accounts that may read its logs and stats. None unless set.
+    pub host_admins: Vec<String>,
+    /// How many of the lines it logs at info and below it keeps to read
+    /// back, `LOGS_KEEP`; any line is kept 30 days at most.
+    pub logs_keep: u64,
 }
 
 /// The service that finds anyone on the network by what is typed.
@@ -144,6 +150,13 @@ impl Config {
         if reqwest::Url::parse(&signup_pds).is_err() {
             bail!("SIGNUP_PDS is no URL: {signup_pds}");
         }
+        let host_admins = list("HOST_ADMINS");
+        let logs_keep = match var("LOGS_KEEP") {
+            Some(n) => n
+                .parse()
+                .with_context(|| format!("LOGS_KEEP is no number of lines: {n}"))?,
+            None => crate::logs::KEEP,
+        };
         Ok(Config {
             port,
             public_url,
@@ -161,6 +174,8 @@ impl Config {
             favicons,
             actor_search,
             signup_pds,
+            host_admins,
+            logs_keep,
         })
     }
 

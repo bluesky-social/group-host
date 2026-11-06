@@ -32,7 +32,8 @@ words by the tool's schema, so the two cannot drift.
 The commands with no tool make, move or delete a group or an account:
 `group create`, `group seed`, `group move`, `group delete` and `account
 import`. A client connected to a group can switch it off, which its
-stewards undo, but never delete it.
+stewards undo, but never delete it. Nor have `admin logs` and `admin
+stats`, which read the whole host, while a client acts in one group.
 
 Each tool is asked as the member who connected the client, in that
 group, and does one of four things: asks one of the host's methods, as

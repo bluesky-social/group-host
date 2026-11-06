@@ -17,10 +17,15 @@ impl Running {
 }
 
 fn start(data: &std::path::Path) -> Running {
+    start_logging(data, "off")
+}
+
+/// The binary, logging what `filter` lets through.
+fn start_logging(data: &std::path::Path, filter: &str) -> Running {
     let mut child = Command::new(env!("CARGO_BIN_EXE_group-host"))
         .env("PORT", "0")
         .env("DATA_DIR", data)
-        .env("RUST_LOG", "off")
+        .env("RUST_LOG", filter)
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -65,6 +70,54 @@ async fn answers_health_and_refuses_unknown_methods() {
     }
 
     assert!(host.stop().success());
+}
+
+/// What it logs is kept, beside what it counts, for its operators to
+/// read; what was logged and counted last is kept as it stops.
+#[tokio::test]
+async fn keeps_the_lines_it_logs_and_counts_its_requests() {
+    let data = tempfile::tempdir().unwrap();
+    let host = start_logging(data.path(), "info");
+    let http = reqwest::Client::new();
+    let asked = http.get(format!("{}/xrpc/fyi.opensocial.noSuchQuery", host.1));
+    let res = asked.send().await.unwrap();
+    let trace = res.headers()["x-trace-id"].to_str().unwrap().to_string();
+    assert_eq!(trace.len(), 32);
+    let health = http.get(format!("{}/xrpc/_health", host.1)).send().await;
+    let health = health.unwrap().headers()["x-trace-id"]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(host.stop().success());
+
+    let logs = group_host::logs::Logs::open(&data.path().join("logs.sqlite"), 100).unwrap();
+    let read = |trace: Option<&str>, message: Option<&str>| {
+        let asked = group_host::logs::Asked {
+            trace: trace.map(String::from),
+            message: message.map(String::from),
+            ..Default::default()
+        };
+        logs.read(&asked).unwrap()
+    };
+    let lines = read(Some(&trace), None);
+    assert_eq!(lines.len(), 1, "{:?}", read(None, None));
+    let fields = &lines[0]["fields"];
+    assert_eq!(fields["message"], "request");
+    assert_eq!(fields["route"], "/xrpc/{nsid}");
+    assert_eq!(fields["path"], "/xrpc/fyi.opensocial.noSuchQuery");
+    assert_eq!(fields["status"], 501);
+    // The health checks are logged at debug, below what it was told.
+    assert!(read(Some(&health), None).is_empty());
+    for said in ["serving", "stopped"] {
+        assert_eq!(read(None, Some(said)).len(), 1, "{said}");
+    }
+
+    let stats = group_host::stats::Stats::open(&data.path().join("stats.sqlite")).unwrap();
+    let store = group_host::store::Store::open(&data.path().join("host.sqlite")).unwrap();
+    let now = group_host::time::now_millis();
+    let report = stats.report(&store, 1, now).unwrap();
+    assert_eq!(report["days"][0]["requests"], 1, "{report}");
+    assert_eq!(report["routes"][0]["route"], "/xrpc/{nsid}");
 }
 
 #[test]

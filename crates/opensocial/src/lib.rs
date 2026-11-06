@@ -85,6 +85,14 @@ mod
                          resolve or escalate a subject
   mod label <group> <subject> <val> [--cid <cid>] [--rule <uri>] [--undo]
                          label a subject, or with --undo take the label back
+admin
+  admin logs [--trace <id>] [--message <message>] [--level <level>] [--min-ms <n>] [--limit <n>]
+                         the lines the host logged, oldest first: one request's by the
+                         x-trace-id it was answered with, or the last of a message, a
+                         level or a duration; for the host's operators
+  admin stats [--days <n>]
+                         how the host is used, day by day, and what it holds; for the
+                         host's operators
 account
   account import <account> [--address <label>]
                          move an account from its server here, its spaces with it, to
@@ -96,8 +104,8 @@ account
   record's at:// URI. A flag is a field of what the command writes or asks,
   in kebab case; a list is comma-separated, and anything more than text or
   a number is JSON. Every command but group create, seed, move and
-  delete and account import is also the MCP tool <group>_<action> (member_assign),
-  which an MCP client connected to a group calls there.
+  delete, account import and admin is also the MCP tool <group>_<action>
+  (member_assign), which an MCP client connected to a group calls there.
 
   You sign in as OPENSOCIAL_AS (a handle) with OPENSOCIAL_PASSWORD, at
   PDS_URL; the host is OPENSOCIAL_HOST, its DID OPENSOCIAL_HOST_DID (by
@@ -635,6 +643,26 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             let [account] = a.take()?;
             import(&signed_in(env).await?, &host, env, account, &a).await
         }
+        ["admin", "logs", rest @ ..] => {
+            let a = parse(rest, &["trace", "message", "level", "min-ms", "limit"])?;
+            let [] = a.take()?;
+            let asked: Vec<(&str, &str)> = a
+                .flags
+                .iter()
+                .map(|(flag, value)| (if *flag == "min-ms" { "minMs" } else { flag }, *value))
+                .collect();
+            let me = signed_in(env).await?;
+            let said = me.query(&host, &m("getLogs"), &asked).await?;
+            Ok(log_lines(&said))
+        }
+        ["admin", "stats", rest @ ..] => {
+            let a = parse(rest, &["days"])?;
+            let [] = a.take()?;
+            let asked: Vec<(&str, &str)> = a.flags.iter().map(|(k, v)| (*k, *v)).collect();
+            let me = signed_in(env).await?;
+            let said = me.query(&host, &m("getStats"), &asked).await?;
+            Ok(stats_lines(&said))
+        }
         ["site", "publish", rest @ ..] => {
             let a = parse(rest, &["fallback", "not-found"])?;
             let [group, dir] = a.take()?;
@@ -660,6 +688,63 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
         }
         [other] => bail!("no command {other}\n\n{USAGE}"),
     }
+}
+
+/// The lines `getLogs` answered, each as the host logged it, one to a
+/// line.
+fn log_lines(said: &Value) -> String {
+    rows(&said["lines"], |l| l["line"].to_string())
+}
+
+/// A line for each item of `list`, as `f` writes it.
+fn rows(list: &Value, f: impl Fn(&Value) -> String) -> String {
+    let items = list.as_array().into_iter().flatten();
+    items.map(|i| format!("{}\n", f(i))).collect()
+}
+
+/// What `getStats` answered, as lines: what the host holds, a row for
+/// each day, then each route and tool.
+fn stats_lines(said: &Value) -> String {
+    let h = &said["host"];
+    let mut out = format!(
+        "host\t{} groups, {} switched off, {} spaces, {} bytes of files\n",
+        h["groups"], h["deactivated"], h["spaces"], h["blobBytes"]
+    );
+    out.push_str("day\trequests\trefused\tfailed\tslow\ttool calls\tgroups made\tspaces made\n");
+    out.push_str(&rows(&said["days"], |d| {
+        let fields = [
+            "requests",
+            "refused",
+            "failed",
+            "slow",
+            "toolCalls",
+            "groupsMade",
+            "spacesMade",
+        ];
+        let counts = fields.map(|f| d[f].to_string()).join("\t");
+        format!("{}\t{counts}", text(&d["day"]))
+    }));
+    out.push_str(&rows(&said["routes"], |r| {
+        format!(
+            "route\t{} {}\t{} requests, {} refused, {} failed, {} ms on average, {} slow",
+            text(&r["method"]),
+            text(&r["route"]),
+            r["requests"],
+            r["refused"],
+            r["failed"],
+            r["meanMs"],
+            r["slow"]
+        )
+    }));
+    out.push_str(&rows(&said["tools"], |t| {
+        format!(
+            "tool\t{}\t{} calls, {} failed",
+            text(&t["tool"]),
+            t["calls"],
+            t["failed"]
+        )
+    }));
+    out
 }
 
 /// The files under `dir`, for `putSite`: each at its path under it, as

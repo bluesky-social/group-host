@@ -37,6 +37,7 @@ accounts on their own PDSes, anywhere on the network.
 | What members write in its spaces | each member's own repo in the space, on their own PDS |
 | Invites | the invitee's inbox, a space of their own on their PDS ([membership](membership.md)) |
 | Join requests, the moderation queue, tokens, the index | the host's database |
+| What it logged, and how it is used | files beside its database, for its operators ([deploying](../deploying.md#checking-it-is-up)) |
 
 ## The pieces
 

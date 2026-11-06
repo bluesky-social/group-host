@@ -126,6 +126,14 @@ docker compose logs -f host
 journalctl CONTAINER_NAME=group-host-host-1 --since today
 ```
 
+The host keeps its lines in `logs.sqlite`, in its data directory, as well: the last 500,000 at info and below (`LOGS_KEEP`), and none longer than 30 days. Beside them, in `stats.sqlite`, it counts its requests by day and route, and the MCP tools called. Name the accounts that run it in `HOST_ADMINS`, and they read both from anywhere with `opensocial admin logs` and `opensocial admin stats`, signed in as themselves. Each answer carries `x-trace-id`, which `admin logs --trace` takes to show every line of that request:
+
+```sh
+opensocial admin logs --level warn
+opensocial admin logs --trace 0af7651916cd43dd8448eb211c80319c
+opensocial admin stats --days 30
+```
+
 Compose checks the host at `/xrpc/_health` and the console at `/_app/version.json`, a file the build writes, which the console answers without the host. Each is checked every second for up to 60 seconds while starting, then every 30 seconds.
 
 ## Upgrading
@@ -151,7 +159,7 @@ The workflow runs only on `ci.knotless.dev`, the runner that runs its owner's re
 
 ## Backing up
 
-The data directory holds everything the host knows: `host.sqlite`, the database of accounts, repos, spaces, members, tokens and the index; the blobs; and `host-secrets.json`, the host's keys.
+The data directory holds everything the host knows: `host.sqlite`, the database of accounts, repos, spaces, members, tokens and the index; the blobs; and `host-secrets.json`, the host's keys. `logs.sqlite` and `stats.sqlite`, its logs and counts, need no backing up.
 
 The host writes `host-secrets.json` the first time it starts; it is not set in config. Among its keys is the rotation key the host signs every group's PLC operations with. If it is lost, a group whose stewards hold no recovery key of their own can never change its identity again. [Recovery](design/recovery.md) explains what stewards can hold.
 

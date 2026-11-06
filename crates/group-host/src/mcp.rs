@@ -849,7 +849,7 @@ impl Host {
         let mut request = request.expect("a request of a path and a body");
         let value = cookie.parse().expect("a cookie is a header's value");
         request.headers_mut().insert(header::COOKIE, value);
-        let res = crate::router(self.clone()).oneshot(request).await;
+        let res = crate::routes(self.clone()).oneshot(request).await;
         let res = res.expect("the router answers every request");
         let status = res.status();
         let bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await;
@@ -874,7 +874,14 @@ impl Host {
         args: Value,
     ) -> Result<Value, String> {
         let planned = group_host_mcp::plan(&tool, &args, &iso(now_millis()));
-        self.carry_out(who, planned?).await
+        let done = match planned {
+            Ok(planned) => self.carry_out(who, planned).await,
+            Err(why) => Err(why),
+        };
+        let ok = done.is_ok();
+        tracing::info!(tool = tool.name, ok, "mcp tool");
+        self.stats.tool(&tool.name, ok);
+        done
     }
 }
 

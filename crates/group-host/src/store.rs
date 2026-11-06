@@ -422,6 +422,11 @@ pub const MIGRATIONS: &[&str] = &[
     DROP INDEX IF EXISTS assistant_grant_member;
     CREATE INDEX IF NOT EXISTS mcp_grant_member ON mcp_grant (grp, member);
 ",
+    // An account is made at a time in seconds, as a space is: those moved
+    // here were kept in milliseconds.
+    "
+    UPDATE account SET created_at = created_at / 1000 WHERE created_at > 100000000000;
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";

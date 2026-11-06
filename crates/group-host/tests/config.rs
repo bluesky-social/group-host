@@ -134,3 +134,19 @@ fn someone_signs_up_at_bluesky_unless_told() {
     let refused = config(&[("SIGNUP_PDS", "not a url")]).unwrap_err();
     assert!(refused.to_string().contains("SIGNUP_PDS"), "{refused}");
 }
+
+#[test]
+fn its_admins_and_how_many_lines_it_keeps() {
+    let c = config(&[]).unwrap();
+    assert!(c.host_admins.is_empty());
+    assert_eq!(c.logs_keep, 500_000);
+    let c = config(&[
+        ("HOST_ADMINS", "did:plc:a, did:plc:b,"),
+        ("LOGS_KEEP", "10"),
+    ])
+    .unwrap();
+    assert_eq!(c.host_admins, ["did:plc:a", "did:plc:b"]);
+    assert_eq!(c.logs_keep, 10);
+    let refused = config(&[("LOGS_KEEP", "many")]).unwrap_err();
+    assert_eq!(refused.to_string(), "LOGS_KEEP is no number of lines: many");
+}

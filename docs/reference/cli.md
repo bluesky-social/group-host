@@ -21,8 +21,8 @@ Every command is `opensocial <group> <action>`, then the group it acts
 in, a handle or a DID resolved by the host's `resolveHandle` as you,
 then the arguments the command takes in order, then its flags. The
 groups are singular nouns for what they act on: `group`, `profile`,
-`rule`, `role`, `member`, `join`, `invite`, `space`, `mod` and
-`account`. An action with an opposite takes `--undo` (`invite send
+`rule`, `role`, `member`, `join`, `invite`, `space`, `mod`,
+`account` and `admin`, which acts on the host rather than a group. An action with an opposite takes `--undo` (`invite send
 --undo`). `help`, `--help`, `-h` or nothing prints the usage, by group.
 
 Each command that acts in a group is the twin of an MCP tool,
@@ -41,7 +41,9 @@ grant`, which adds to a role's grant or with `--undo` takes from it.
 The commands with no tool make, move or delete a group or an account:
 `group create`, `group seed`, `group move`, `group delete` and `account
 import`. A client connected to a group can switch it off, which its
-stewards undo, but never delete it.
+stewards undo, but never delete it. Nor have `admin logs` and `admin
+stats`, which read the whole host, every group's requests in it, while
+an MCP client acts in one group.
 
 ### group
 
@@ -129,6 +131,16 @@ where a version is asked for, as a label on a record asks.
 | --- | --- |
 | `account import <account> [--address <label>]` | moves an account from its server here, its spaces with it, to become a group run by you; its server emails a code ([moving](../design/moving.md#bringing-an-account-here-as-a-group)) |
 | `account import <account> --code <code>` | with that code, has its server sign its identity over, and finishes, whatever `--address` the start was given |
+
+### admin
+
+For the host's operators, the accounts its `HOST_ADMINS` names
+([config](config.md)); anyone else is refused `Forbidden`.
+
+| Command | What it does |
+| --- | --- |
+| `admin logs [--trace <id>] [--message <message>] [--level <level>] [--min-ms <n>] [--limit <n>]` | the lines the host logged, oldest first, each as JSON on a line of its own, as it wrote them: every line of one request, by the `x-trace-id` it was answered with (500 at most), or the last 100 (or `--limit`, up to 500) of a message (`request`, `mcp tool`), at a level or above (`error`, `warn`, `info`, `debug`, `trace`), or that took `--min-ms` or longer (`getLogs`) |
+| `admin stats [--days <n>]` | how the host is used, over the last week or `--days` (up to 400), today the last, in UTC: what it holds (groups, those switched off, spaces, bytes of files); a row for each day (requests, refused with a 4xx, failed with a 5xx, slow at a second or more, MCP tool calls, groups and spaces made); then each route asked, the most asked first, and each tool called (`getStats`) |
 
 An unknown command or flag fails with its usage; any failure exits 1.
 

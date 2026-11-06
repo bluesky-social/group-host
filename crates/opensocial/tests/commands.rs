@@ -55,6 +55,11 @@ async fn favicons() -> String {
 }
 
 async fn host() -> Running {
+    host_with(&[]).await
+}
+
+/// A host at a free port, with `vars` besides.
+async fn host_with(vars: &[(&str, String)]) -> Running {
     let n = net();
     // By name, as the reference PDS takes a did:web of one, not of an
     // address; on every address, IPv6 and IPv4, whichever localhost is.
@@ -62,13 +67,14 @@ async fn host() -> Running {
     let port = listener.local_addr().unwrap().port();
     let url = format!("http://localhost:{port}");
     let data = tempfile::tempdir().unwrap();
-    let env: HashMap<&str, String> = HashMap::from([
+    let mut env: HashMap<&str, String> = HashMap::from([
         ("DATA_DIR", data.path().to_str().unwrap().to_string()),
         ("PLC_URL", n.plc.clone()),
         ("HANDLE_DOMAIN", ".groups.test".into()),
         ("HANDLE_RESOLVERS", n.pds.clone()),
         ("PUBLIC_URL", url.clone()),
     ]);
+    env.extend(vars.iter().cloned());
     let host = Arc::new(Host::open(Config::from(|k| env.get(k).cloned()).unwrap()).unwrap());
     let router = group_host::router(host.clone());
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
@@ -895,4 +901,63 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
             .unwrap()
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn reads_the_hosts_logs_and_stats_as_its_operator() {
+    let h = host_with(&[("HOST_ADMINS", net().accounts[0].did.clone())]).await;
+    let (alice, bob) = (env(&h, 0), env(&h, 1));
+    ok(
+        &alice,
+        &[
+            "group",
+            "create",
+            "riders.groups.test",
+            "--display-name",
+            "Riders",
+        ],
+    )
+    .await;
+    let line = json!({"level": "INFO", "fields": {"message": "request"},
+        "spans": [{"name": "request", "trace": "abcd"}]});
+    h.host.logs.keep(format!("{line}\n").as_bytes());
+
+    let printed = ok(
+        &alice,
+        &["admin", "logs", "--trace", "abcd", "--min-ms", "0"],
+    )
+    .await;
+    assert_eq!(printed, "");
+    let printed = ok(&alice, &["admin", "logs", "--trace", "abcd"]).await;
+    assert_eq!(said(&printed), line);
+    let printed = ok(&alice, &["admin", "stats", "--days", "2"]).await;
+    let mut printed = printed.lines();
+    assert_eq!(
+        printed.next(),
+        Some("host\t1 groups, 0 switched off, 2 spaces, 0 bytes of files")
+    );
+    assert!(printed.next().unwrap().starts_with("day\trequests"));
+    printed.next();
+    let today = printed.next().unwrap();
+    assert!(today.ends_with("\t0\t1\t2"), "{today}");
+    let rest: Vec<&str> = printed.collect();
+    let made = "route\tPOST /xrpc/fyi.opensocial.createGroup\t1 requests, 0 refused, 0 failed";
+    assert!(rest.iter().any(|l| l.starts_with(made)), "{rest:?}");
+
+    // Only the host's operators may read them.
+    let refused = fails(&bob, &["admin", "stats"]).await;
+    assert!(refused.contains("Forbidden"), "{refused}");
+    let refused = fails(&alice, &["admin", "logs", "--since", "now"]).await;
+    assert!(refused.starts_with("no option --since"), "{refused}");
+    let refused = fails(&alice, &["admin", "stats", "today"]).await;
+    assert!(refused.starts_with("usage:"), "{refused}");
+}
+
+#[tokio::test]
+async fn prints_the_tools_the_host_counted() {
+    let h = host_with(&[("HOST_ADMINS", net().accounts[0].did.clone())]).await;
+    h.host.stats.tool("member_list", false);
+    let printed = ok(&env(&h, 0), &["admin", "stats", "--days", "1"]).await;
+    let last = printed.lines().last().unwrap();
+    assert_eq!(last, "tool\tmember_list\t1 calls, 1 failed");
 }

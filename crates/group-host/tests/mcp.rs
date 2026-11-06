@@ -590,6 +590,16 @@ async fn does_only_what_the_members_roles_allow() {
     )
     .await;
     assert_eq!(got["isError"], true, "{got}");
+    // Each call is counted for the host's operators, by its tool and
+    // whether it worked: one not even planned, one the host refused.
+    h.host.stats.flush().unwrap();
+    let now = group_host::time::now_millis();
+    let report = h.host.stats.report(&h.host.store, 1, now).unwrap();
+    let tools = report["tools"].as_array().unwrap();
+    for name in ["rule_set", "member_assign"] {
+        let counted = json!({"tool": name, "calls": 1, "failed": 1});
+        assert!(tools.contains(&counted), "{tools:?}");
+    }
     // Put out, his MCP client acts as him there no more.
     let runs = common::members::Session::runs(&h, &alice, &group).await;
     let said = runs.delete(&h, "membership", &bob.did).await;

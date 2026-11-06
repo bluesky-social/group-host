@@ -203,6 +203,23 @@ its tools are in [MCP tools](mcp.md).
 | `POST fyi.opensocial.applyLabel` | labels a subject |
 | `POST fyi.opensocial.negateLabel` | takes a label back, with a record of its own |
 
+## Operating the host
+
+For its operators, the accounts `HOST_ADMINS` names ([config](config.md)),
+by service auth or the console's cookie; anyone else is refused
+`Forbidden`.
+
+| Method | What it does |
+| --- | --- |
+| `GET fyi.opensocial.getLogs` | the lines the host logged, oldest first, each as it wrote it: one request's by its `trace`, or the last of a `message`, a `level` and above, or those that took `minMs` or longer; 100 unless `limit` asks for up to 500, or for a trace, 500. The read is itself logged, `logs read`, with who asked and for what |
+| `GET fyi.opensocial.getStats` | how the host was used over the last `days` (7 unless asked, 400 at most), day by day in UTC, and what it holds: requests by route and by the class of their status, slow ones, MCP tools called by name, and groups and spaces made. Nothing in it names who asked |
+
+Every request is answered with `x-trace-id`, the trace each line logged
+while answering it carries: one of its own, or the one a W3C
+`traceparent` header names. The caller names that, so a trace read may
+hold the lines of another request that named it too. A method other
+than HTTP's own seven is counted as `OTHER`.
+
 ## Recovery
 
 | Method | What it does |

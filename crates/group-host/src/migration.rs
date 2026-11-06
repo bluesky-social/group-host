@@ -409,7 +409,7 @@ pub(crate) async fn take_in(
     let empty = host.sign(&account, &Tree::build(&BTreeMap::new()));
     let made = host
         .store
-        .create_account(&account, &empty, now_millis(), &[]);
+        .create_account(&account, &empty, now_millis() / 1000, &[]);
     if !made.map_err(XrpcError::internal)? {
         return Err(refused(
             "HandleNotAvailable",

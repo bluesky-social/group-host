@@ -4,7 +4,8 @@ The host reads its environment as it starts (`crates/group-host/src/config.rs`).
 It refuses to start, saying which, on a `PORT` that is no port, a
 `PUBLIC_URL` that is no `http` or `https` origin, a `HANDLE_DOMAIN` with
 no leading dot, a `DID_WEB_SCHEME` other than `https` or `http`, a
-`BLOB_UPLOAD_LIMIT` that is no number, or a `CONSOLE_URL` that is no URL.
+`BLOB_UPLOAD_LIMIT` or `LOGS_KEEP` that is no number, or a `CONSOLE_URL`
+that is no URL.
 The others are taken as given. In a comma-separated list, each item is
 trimmed of spaces and a trailing `/`.
 
@@ -14,7 +15,7 @@ trimmed of spaces and a trailing `/`.
 | `PUBLIC_URL` | its origin, an `http` or `https` address with no path | `http://localhost:<PORT>` |
 | `SERVICE_DID` | its own DID | `did:web:` of `PUBLIC_URL`'s host, a port as `%3A` |
 | `HANDLE_DOMAIN` | the domain groups' handles are made under, with its leading dot | `.test` |
-| `DATA_DIR` | where its database (`host.sqlite`), blobs and keys (`host-secrets.json`) are kept | `data` |
+| `DATA_DIR` | where its database (`host.sqlite`), blobs and keys (`host-secrets.json`) are kept, and the lines it logged (`logs.sqlite`) and its usage counts (`stats.sqlite`) | `data` |
 | `PLC_URL` | the PLC directory groups' `did:plc`s are published to | `https://plc.directory` |
 | `DID_WEB_SCHEME` | how a `did:web`'s document is read (`https`, or `http` for test servers) | `https` |
 | `HANDLE_RESOLVERS` | how a handle is resolved, tried in turn: `well-known:<scheme>` for its own `/.well-known/atproto-did`, or a service answering `com.atproto.identity.resolveHandle` (which reads its DNS record); a trailing `/` is dropped | `well-known:https,https://public.api.bsky.app` |
@@ -26,7 +27,9 @@ trimmed of spaces and a trailing `/`.
 | `ACTOR_SEARCH` | where `searchActors` looks for a handle being typed: `plc`, the handles in `PLC_URL`'s own export, read a page at a time and kept a minute; or the URL of a service answering `tech.waow.typeahead.searchActors` | typeahead.waow.tech's, when `PLC_URL` is `https://plc.directory`; else `plc` |
 | `SIGNUP_PDS` | the PDS where someone with no account makes one, from the console's "Create one": its authorization server's sign-up (`prompt=create`); a trailing `/` dropped | `https://bsky.social` |
 | `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated, a trailing `/` dropped: at most every 20 minutes, and the first time after a start | none |
-| `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON | `info` |
+| `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON, written to stdout and kept in `logs.sqlite` for its operators | `info` |
+| `HOST_ADMINS` | its operators, comma-separated DIDs: the accounts that may read its logs (`getLogs`) and how it is used (`getStats`) | none |
+| `LOGS_KEEP` | how many of the lines it logged at info and below it keeps to read back; a warning or an error is kept the full 30 days, as any line is at most | 500000 |
 
 It stops on SIGTERM or ctrl-c, answering the requests under way first.
 

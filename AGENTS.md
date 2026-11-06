@@ -88,10 +88,11 @@ its words by the tool's schema, and both carry out the same `Plan`, so a
 new one is an entry there, its line in the usage, and its row in
 `docs/reference/cli.md` and `docs/reference/mcp.md`, each laid out by
 group. One action is one tool: a tool that would fold several commands
-is split. Only the commands that make, move or delete a group or an
+is split. The commands that make, move or delete a group or an
 account (`group create`, `group seed`, `group move`, `group delete`,
 `account import`) have no tool, as an MCP client acts in the one group
-it was connected to, and should never end it. The
+it was connected to, and should never end it; nor have the `admin`
+commands, which read the whole host for its operators. The
 host's own command, `group-host move-host`, stands alone.
 
 ## The console
