@@ -362,8 +362,11 @@ async fn answers_what_is_not_here() {
     }
     let (_, body) = h.get("com.atproto.repo.getRecord", "").await;
     assert_eq!(body["message"], "repo is required");
-    let (_, body) = h.get("com.atproto.sync.listRepos", "limit=0").await;
-    assert_eq!(body["message"], "limit is 1 to 100");
+    // Its pages are atproto's: up to 1000, as a relay asks.
+    let (_, body) = h.get("com.atproto.sync.listRepos", "limit=1001").await;
+    assert_eq!(body["message"], "limit is 1 to 1000");
+    let (status, _) = h.get("com.atproto.sync.listRepos", "limit=1000").await;
+    assert_eq!(status, 200);
     let res = h
         .http
         .get(format!("{}/.well-known/atproto-did", h.url))

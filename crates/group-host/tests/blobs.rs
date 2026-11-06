@@ -145,6 +145,21 @@ async fn lists_blobs_a_page_at_a_time_and_since_a_rev() {
         )
         .await;
     assert_eq!(page["cids"], json!([both[1]]));
+    // A page is up to 1000, as atproto's lexicon has it.
+    let (_, page) = h
+        .get(
+            "com.atproto.sync.listBlobs",
+            &format!("did={did}&limit=1000"),
+        )
+        .await;
+    assert_eq!(page["cids"].as_array().unwrap().len(), 2);
+    let (_, refused) = h
+        .get(
+            "com.atproto.sync.listBlobs",
+            &format!("did={did}&limit=1001"),
+        )
+        .await;
+    assert_eq!(refused["message"], "limit is 1 to 1000");
     let (_, since) = h
         .get(
             "com.atproto.sync.listBlobs",

@@ -1,6 +1,6 @@
 //! What the host logs and counts of each request: a line, `request`,
 //! with its method, route, path (never its query), status and duration,
-//! in a trace of its own or the one its `traceparent` names, which every
+//! and for an XRPC failure, its `error` and `error_message`, in a trace of its own or the one its `traceparent` names, which every
 //! line logged while answering it carries and the answer gives back as
 //! `x-trace-id`; and a count in [`crate::stats`]. A trace is the
 //! caller's to name, so one may name another's and have its lines read
@@ -80,12 +80,34 @@ pub async fn observe(State(host): State<Arc<Host>>, req: Request, next: Next) ->
     let id = HeaderValue::try_from(trace.as_str()).expect("hex is a header's value");
     res.headers_mut().insert("x-trace-id", id);
     let duration_ms = u64::try_from(took.as_millis()).unwrap_or(u64::MAX);
+    // Why it was refused or failed, as its answer said.
+    let failure = res.extensions().get::<crate::xrpc::XrpcError>();
+    let error = failure.map(|f| f.error);
+    let error_message = failure.map(|f| f.message.as_str());
     span.in_scope(|| {
         if route == HEALTH {
-            tracing::debug!(method, route, path, status, duration_ms, "request");
+            tracing::debug!(
+                method,
+                route,
+                path,
+                status,
+                duration_ms,
+                error,
+                error_message,
+                "request"
+            );
             return;
         }
-        tracing::info!(method, route, path, status, duration_ms, "request");
+        tracing::info!(
+            method,
+            route,
+            path,
+            status,
+            duration_ms,
+            error,
+            error_message,
+            "request"
+        );
         let streams = STREAMS.contains(&route.as_str());
         host.stats.served(&route, &method, status, took, streams);
     });

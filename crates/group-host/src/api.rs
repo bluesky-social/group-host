@@ -183,8 +183,15 @@ pub async fn get_latest_commit(State(host): State<Arc<Host>>, Query(p): Query<Pa
     Ok(Json(json!({"cid": head.cid.to_string(), "rev": head.rev})))
 }
 
+/// The page size of the sync methods that list a host's repos or a repo's
+/// blobs, as atproto's lexicons have it: 1 to 1000, 500 unless asked; a
+/// relay crawling the host asks for 1000.
+fn sync_limit(params: &Params) -> Result<u32, XrpcError> {
+    page(params, 500, 1000)
+}
+
 pub async fn list_repos(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
-    let limit = limit(&p)?;
+    let limit = sync_limit(&p)?;
     let repos = host
         .store
         .accounts(p.get("cursor").map(String::as_str), limit)
@@ -277,7 +284,7 @@ pub async fn get_blob(
 
 pub async fn list_blobs(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let did = did_of(&host, param(&p, "did")?)?;
-    let limit = limit(&p)?;
+    let limit = sync_limit(&p)?;
     let (since, cursor) = (
         p.get("since").map(String::as_str),
         p.get("cursor").map(String::as_str),

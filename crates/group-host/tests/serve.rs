@@ -106,6 +106,10 @@ async fn keeps_the_lines_it_logs_and_counts_its_requests() {
     assert_eq!(fields["route"], "/xrpc/{nsid}");
     assert_eq!(fields["path"], "/xrpc/fyi.opensocial.noSuchQuery");
     assert_eq!(fields["status"], 501);
+    // A failure says why, as its answer did.
+    assert_eq!(fields["error"], "MethodNotImplemented");
+    let said = "fyi.opensocial.noSuchQuery is not a method this host answers";
+    assert_eq!(fields["error_message"], said);
     // The health checks are logged at debug, below what it was told.
     assert!(read(Some(&health), None).is_empty());
     for said in ["serving", "stopped"] {

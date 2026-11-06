@@ -214,7 +214,10 @@ by service auth or the console's cookie; anyone else is refused
 | `GET fyi.opensocial.getLogs` | the lines the host logged, oldest first, each as it wrote it: one request's by its `trace`, or the last of a `message`, a `level` and above, or those that took `minMs` or longer; 100 unless `limit` asks for up to 500, or for a trace, 500. The read is itself logged, `logs read`, with who asked and for what |
 | `GET fyi.opensocial.getStats` | how the host was used over the last `days` (7 unless asked, 400 at most), day by day in UTC, and what it holds: requests by route and by the class of their status, slow ones, MCP tools called by name, and groups and spaces made. Nothing in it names who asked |
 
-Every request is answered with `x-trace-id`, the trace each line logged
+Every request is logged as a `request` line, with its method, route,
+path (never its query), status and `duration_ms`, and, when it is
+refused or fails, its `error` and `error_message` as it answered them.
+It is answered with `x-trace-id`, the trace each line logged
 while answering it carries: one of its own, or the one a W3C
 `traceparent` header names. The caller names that, so a trace read may
 hold the lines of another request that named it too. A method other
@@ -266,7 +269,7 @@ repos as any PDS does:
 | --- | --- |
 | `GET com.atproto.server.describeServer` | the host as a PDS: its DID, the domain it gives its groups names under, `BLOB_UPLOAD_LIMIT`, and that no one signs up |
 | `GET com.atproto.repo.describeRepo`, `GET com.atproto.repo.getRecord`, `GET com.atproto.repo.listRecords` | a group's public repo |
-| `GET com.atproto.sync.getRepo`, `GET com.atproto.sync.getLatestCommit`, `GET com.atproto.sync.listRepos`, `GET com.atproto.sync.getBlob`, `GET com.atproto.sync.listBlobs` | syncing them; a blob only a space holds is not served or listed |
+| `GET com.atproto.sync.getRepo`, `GET com.atproto.sync.getLatestCommit`, `GET com.atproto.sync.listRepos`, `GET com.atproto.sync.getBlob`, `GET com.atproto.sync.listBlobs` | syncing them; a blob only a space holds is not served or listed. `listRepos` and `listBlobs` answer pages of up to 1000, 500 unless asked, as atproto's lexicons have them |
 | `GET com.atproto.sync.subscribeRepos` | the firehose, over a WebSocket |
 | `GET com.atproto.identity.resolveHandle` | a handle here, to its DID; for a caller signed in, any handle, through `HANDLE_RESOLVERS` |
 | `GET /.well-known/did.json` | the host's own DID document, when `SERVICE_DID` is a `did:web`: its `#atproto_pds` and `#opensocial` services at `PUBLIC_URL` |

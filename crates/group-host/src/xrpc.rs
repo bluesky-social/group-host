@@ -45,9 +45,13 @@ impl XrpcError {
 }
 
 impl IntoResponse for XrpcError {
+    /// The failure as JSON, and kept with the answer, for the line logged
+    /// of the request to say why.
     fn into_response(self) -> Response {
         let body = json!({ "error": self.error, "message": self.message });
-        (self.status, Json(body)).into_response()
+        let mut res = (self.status, Json(body)).into_response();
+        res.extensions_mut().insert(self);
+        res
     }
 }
 
