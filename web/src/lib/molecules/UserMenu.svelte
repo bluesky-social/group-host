@@ -56,8 +56,9 @@
         <input type="hidden" name="did" value={account.did} />
         <input type="hidden" name="back" value={here} />
         <button class="account" type="submit" aria-label={`Switch to ${named(account)}`}
-          ><Avatar name={account.handle ?? account.did} size="sm" /><span class="handle mono"
-            >{named(account)}</span
+          ><Avatar name={account.handle ?? account.did} size="sm" /><span
+            class="handle mono"
+            title={named(account)}>{named(account)}</span
           ></button
         >
       </form>

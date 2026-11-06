@@ -393,7 +393,7 @@ test('connecting an AI app is shown to those who run the group', async () => {
     'It acts for you in Hikers, with what your roles let you do.'
   );
   await expect(connect.locator('code')).toHaveText(`${world.base}/mcp`);
-  await expect(connect).toContainText('It will ask you to sign in here and approve it.');
+  await expect(connect).toContainText('When it asks, sign in here and approve it');
   await expect(connect.locator('.asks li')).toHaveCount(3);
   // Not to a plain member.
   await bob.goto(url('/g/hikers.groups.test'));

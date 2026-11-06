@@ -1,9 +1,9 @@
 <script lang="ts">
   import Copy from '#lib/atoms/Copy.svelte';
   /**
-   * How to have an AI app act for the person in the group: the address
-   * to add it at (`mcp`), what it then asks, and what to ask of it, each
-   * a thing the host's tools do.
+   * How to have an AI app act for the person in the group, in three
+   * numbered steps: add the address (`mcp`) to it, sign in here and
+   * approve it, then ask it things, each a thing the host's tools do.
    */
   let { name, mcp }: { name: string; mcp: string } = $props();
   const asks = [
@@ -13,17 +13,28 @@
   ];
 </script>
 
-<div class="connect stack">
-  <p class="mute">It acts for you in {name}, with what your roles let you do.</p>
-  <div class="well stack">
-    <strong>In your AI app, add a connector with this address</strong>
-    <div class="address"><code>{mcp}</code><Copy text={mcp} /></div>
-    <small class="mute">It will ask you to sign in here and approve it.</small>
-  </div>
-  <div class="stack">
-    <strong>Then ask it things like</strong>
-    <ul class="asks">
-      {#each asks as ask (ask)}<li>{ask}</li>{/each}
-    </ul>
-  </div>
-</div>
+<ol class="connect">
+  <li>
+    <span class="ordinal">1</span>
+    <div class="step">
+      <strong>Add this address to your AI app as a connector</strong>
+      <div class="address"><code>{mcp}</code><Copy text={mcp} /></div>
+    </div>
+  </li>
+  <li>
+    <span class="ordinal">2</span>
+    <div class="step">
+      <strong>When it asks, sign in here and approve it</strong>
+      <span class="what">It acts for you in {name}, with what your roles let you do.</span>
+    </div>
+  </li>
+  <li>
+    <span class="ordinal">3</span>
+    <div class="step">
+      <strong>Ask it things like</strong>
+      <ul class="asks">
+        {#each asks as ask (ask)}<li>{ask}</li>{/each}
+      </ul>
+    </div>
+  </li>
+</ol>
