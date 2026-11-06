@@ -98,7 +98,7 @@
   <label class="field">
     How people join
     <select name="joinPolicy" value={policy}>
-      <option value="approval">People ask to join, and an admin approves them</option>
+      <option value="approval">An admin approves who joins</option>
       <option value="open">Anyone can join right away</option>
       <option value="invite">Only people who are invited</option>
     </select>

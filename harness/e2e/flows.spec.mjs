@@ -314,7 +314,9 @@ test('a member with nothing to change sees no settings', async () => {
 test('giving roles, and putting someone out', async () => {
   const row = () => page.locator('.member', { hasText: 'bob.test' });
   // His roles in a dialog, those she may give to tick.
-  await row().getByRole('button', { name: "Change bob.test's roles" }).click();
+  // From the "⋯" at the end of his row.
+  await row().getByLabel('More for bob.test').click();
+  await row().getByRole('button', { name: 'Change roles' }).click();
   const roles = page.getByRole('dialog', { name: 'Change roles' }).filter({ visible: true });
   await expect(roles.getByRole('checkbox', { name: 'member' })).toBeChecked();
   // Saved in place: the dialog closes, and the page stays where it was.
@@ -325,7 +327,8 @@ test('giving roles, and putting someone out', async () => {
   await expect(row()).toContainText('member');
   expect(await page.evaluate(() => scrollY)).toBe(at);
   // Removed, once she is sure.
-  await row().getByRole('button', { name: 'Remove bob.test' }).click();
+  await row().getByLabel('More for bob.test').click();
+  await row().getByRole('button', { name: 'Remove from the group' }).click();
   const sure = page.getByRole('dialog', { name: 'Remove this member?' }).filter({ visible: true });
   await expect(sure).toContainText('bob.test');
   await expect(sure.getByText('They can ask to join again.')).toBeVisible();

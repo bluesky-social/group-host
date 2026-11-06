@@ -3,6 +3,7 @@
   import { inPlace } from '#lib/forms.ts';
   import Empty from '#lib/molecules/Empty.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
+  import Address from '#lib/atoms/Address.svelte';
   import LinkIcon from '#lib/atoms/LinkIcon.svelte';
   /**
    * Where else a group is, as its profile lists them, each by its site's
@@ -21,7 +22,9 @@
       <li>
         <LinkIcon src={l.icon} />
         <span class="row-main"
-          ><strong>{l.title ?? shown(l.url)}</strong><span class="what">{l.url}</span></span
+          ><strong
+            >{#if l.title}{l.title}{:else}<Address address={shown(l.url)} />{/if}</strong
+          ><span class="what"><Address address={l.url} /></span></span
         >
         <form class="row-actions" method="post" action="?/unlink" use:enhance={inPlace}>
           <input type="hidden" name="index" value={i} />

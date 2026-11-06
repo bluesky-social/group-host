@@ -5,8 +5,9 @@
   /**
    * Someone in a list of a group's people: their picture; their handle (or
    * DID, when no handle is known), and under it the roles they hold beyond
-   * being a member, which all do, and `note`, what they said; then
-   * `children`, what may be done about them, at the row's end.
+   * being a member, which all do; `children`, what may be done about
+   * them, at the row's end; and under it all, `note`, what they said, as
+   * wide as the row, lined up with their handle.
    */
   let {
     actor,
@@ -28,6 +29,6 @@
   {#if held.length}<span class="tags"
       >{#each held as role (role)}<Tag text={role} />{/each}</span
     >{/if}
-  {#if note}<span class="what">{note}</span>{/if}
 </span>
 {#if children}<span class="row-actions">{@render children()}</span>{/if}
+{#if note}<p class="what note">{note}</p>{/if}

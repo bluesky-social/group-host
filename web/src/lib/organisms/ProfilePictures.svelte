@@ -6,7 +6,9 @@
   /**
    * A group's pictures, to change: its avatar, round beside its name, and
    * its banner, across the top of its page, each as it is now; a new one
-   * uploaded from a dialog, or the one there removed. `avatar` and
+   * uploaded from a dialog, or the one there removed, each button named by
+   * its verb alone beside the row's name, and in full for a screen reader.
+   * `avatar` and
    * `banner` are where they are served, if set; `name`, the group's.
    */
   let { name, avatar, banner }: { name: string; avatar: string | null; banner: string | null } =
@@ -16,13 +18,15 @@
       slot: 'avatar',
       name: 'Avatar',
       src: avatar,
-      act: avatar ? 'Change the avatar' : 'Add the avatar'
+      act: avatar ? 'Change the avatar' : 'Add the avatar',
+      verb: avatar ? 'Change' : 'Add'
     },
     {
       slot: 'banner',
       name: 'Banner',
       src: banner,
-      act: banner ? 'Change the banner' : 'Add the banner'
+      act: banner ? 'Change the banner' : 'Add the banner',
+      verb: banner ? 'Change' : 'Add'
     }
   ]);
 </script>
@@ -38,21 +42,23 @@
         <span class="banner-thumb" aria-hidden="true"></span>
       {/if}
       <span class="row-main"
-        ><strong>{s.name}</strong><span class="what"
-          >{s.src ? 'Shown on its page' : 'None yet'}</span
-        ></span
+        ><strong>{s.name}</strong>{#if !s.src}<span class="what">None yet</span>{/if}</span
       >
       <span class="row-actions">
         {#if s.src}
           <form method="post" action="?/unpicture" use:enhance={inPlace}>
             <input type="hidden" name="slot" value={s.slot} /><button
               class="quiet small"
-              type="submit">Remove the {s.name.toLowerCase()}</button
+              type="submit"
+              aria-label={`Remove the ${s.slot}`}>Remove</button
             >
           </form>
         {/if}
-        <button class="quiet small" type="button" popovertarget={`picture-${s.slot}`}
-          >{s.act}</button
+        <button
+          class="quiet small"
+          type="button"
+          popovertarget={`picture-${s.slot}`}
+          aria-label={s.act}>{s.verb}</button
         >
       </span>
       <FormDialog

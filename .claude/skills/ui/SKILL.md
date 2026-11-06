@@ -81,7 +81,7 @@ harness/layers.mjs` holds each to its layer:
 - `atoms`: one element (`Avatar`, `Tag`, `Copy`).
 - `molecules`: a few atoms that mean something together (`Section`,
   `Empty`, `Dialog`, `FormDialog`, `ConfirmDialog`, `Tabs`, `UserMenu`,
-  `MemberRow`, `Person`, `GroupRow`, `HandleInput`).
+  `MemberRow`, `Person`, `GroupRow`, `HandleInput`, `ActionMenu`).
 - `organisms`: a part of a page (`MemberList`, `GroupCard`,
   `SiteHeader`, `RulesEditor`).
 - `templates`: a page's layout, without its data (`Page`, `GroupPage`,
@@ -203,7 +203,13 @@ controls.
   card: its `Avatar`, `ordinal` or picture first; its name, and under it
   what is said about it (`.row-main` with `.what`); its acts at the
   row's end in `.row-actions`, `small`, quiet ones before the one that
-  acts. A person is `MemberRow`, a group `GroupRow`. Times by
+  acts. A list whose every row carries the same acts (a group's
+  members: change roles, remove) puts them in an `ActionMenu`, the "⋯"
+  at the row's end, rather than the same buttons down every row; a row
+  waiting on one act (approving a request) keeps it as a button. A
+  button beside a row's name says its verb alone ("Change", "Remove"),
+  the row saying what of, its `aria-label` in full. A person is
+  `MemberRow`, a group `GroupRow`. Times by
   `#lib/dates.ts`, never as a record holds them. The empty state in the
   rows' place; a quiet "Show more" under the last row while there are
   more, a page at a time, never every row at once.

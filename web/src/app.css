@@ -55,6 +55,7 @@ h2 {
 }
 p {
   margin: 0;
+  text-wrap: pretty;
 }
 code,
 .mono {
@@ -574,11 +575,15 @@ ol > li::marker {
   margin-top: var(--space-3);
 }
 
-/* A dialog over the dimmed page. */
+/* A dialog over the dimmed page; one taller than the screen scrolls within
+   it, rather than running past the screen's foot. */
 .dialog {
   position: fixed;
   width: min(var(--dialog), calc(100vw - 2 * var(--space-4)));
-  margin: 12vh auto auto;
+  max-height: calc(100dvh - var(--dialog-top) - var(--space-4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: var(--dialog-top) auto auto;
   padding: var(--space-6);
   border: var(--border);
   border-radius: var(--radius-lg);
@@ -599,7 +604,9 @@ ol > li::marker {
 }
 .dialog .close {
   position: absolute;
-  top: var(--space-4);
+  margin: 0;
+  /* Centred on the title's first line, as large as the title is. */
+  top: calc(var(--space-6) + (var(--text-xl) * var(--leading-tight) - var(--control)) / 2);
   right: var(--space-4);
   width: var(--control);
   padding: 0;
@@ -1063,13 +1070,16 @@ span.av::before {
   gap: var(--space-2);
   margin-left: auto;
 }
-/* A row's name and what is said of it, one under the other. */
+/* A row's name and what is said of it, one under the other: its acts
+   beside it while its longest word fits, and under it before a handle
+   would break beside them. */
 .row-main {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  min-width: 0;
-  flex: 1 1 8rem;
+  flex: 1 1 0;
+  min-width: min(min-content, 100%);
+  overflow-wrap: break-word;
 }
 .tags {
   display: flex;
@@ -1103,6 +1113,40 @@ code.key,
   font: var(--weight-bold) var(--text-xs) var(--font-round);
   align-self: flex-start;
 }
+/* A "⋯" menu at a row's end, of the acts every row of its list has: a
+   small round button, opening a menu under it, to its right edge. */
+.action-menu {
+  position: relative;
+  flex: none;
+}
+.action-menu > summary {
+  display: grid;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  list-style: none;
+}
+.action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.action-menu > summary .icon {
+  stroke: var(--mute);
+}
+.action-menu > summary:hover,
+.action-menu[open] > summary {
+  background: var(--soft);
+}
+.action-menu > .menu {
+  top: calc(100% + var(--space-1));
+}
+/* What someone said, under their row, lined up with their name. */
+:is(ul, ol)[class] > li > .note {
+  flex: 0 0 100%;
+  padding-left: calc(var(--avatar) + var(--space-3));
+  overflow-wrap: anywhere;
+}
 .row-main .what {
   overflow-wrap: anywhere;
 }
@@ -1116,6 +1160,12 @@ code.key,
   border: var(--border);
   border-radius: var(--radius-sm);
   background: var(--soft);
+}
+/* On a phone, narrower, so its row's acts stay beside it. */
+@media (max-width: 640px) {
+  .banner-thumb {
+    width: calc(var(--avatar-md) * 1.5);
+  }
 }
 .pair {
   display: grid;
@@ -1131,6 +1181,16 @@ code.key,
 @media (max-width: 640px) {
   .pair {
     grid-template-columns: 1fr;
+  }
+  /* A row whose words run to lines: its picture and its acts by its first
+     line, not floating at its middle. */
+  :is(ul, ol)[class] > li,
+  .identity {
+    align-items: flex-start;
+  }
+  main.wrap {
+    padding-top: var(--space-6);
+    gap: var(--space-8);
   }
 }
 /* Choosing a few of many: what is chosen, each a button that takes it off,
@@ -1243,6 +1303,12 @@ ul.chosen[class] > li {
   overflow-wrap: anywhere;
 }
 .back {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
   font-size: var(--text-sm);
   color: var(--mute);
   text-decoration: none;
@@ -1253,13 +1319,35 @@ ul.chosen[class] > li {
 .back::before {
   content: '← ';
 }
-/* A page's parts, each its own page: a row of tabs, scrolled on a phone. */
+/* A page's parts, each its own page: one row of tabs, scrolled sideways
+   where it is wider than the screen, faded at an edge with more past it
+   (`scrollRow`, #lib/rows.ts). */
 .tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 0 var(--space-1);
   border-bottom: var(--border);
   margin-bottom: calc(var(--space-2) * -1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.more-end {
+  mask-image: linear-gradient(to right, var(--opaque) calc(100% - var(--row-fade)), transparent);
+}
+.more-start {
+  mask-image: linear-gradient(to left, var(--opaque) calc(100% - var(--row-fade)), transparent);
+}
+.more-start.more-end {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    var(--opaque) var(--row-fade),
+    var(--opaque) calc(100% - var(--row-fade)),
+    transparent
+  );
 }
 .tabs a {
   flex: none;

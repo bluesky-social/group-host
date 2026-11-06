@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import ActionMenu from '#lib/molecules/ActionMenu.svelte';
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
@@ -11,7 +12,8 @@
    * (`q`), with more to show while there are (`more`); and their roles:
    * for one who may give roles, the ones they may give, to give or take,
    * in a dialog; for one who may remove people, the way to, asked to be
-   * sure of. Their own row they leave from, not here.
+   * sure of; both from a "⋯" menu at the row's end, as every row has them.
+   * Their own row they leave from, not here.
    */
   let {
     members,
@@ -55,22 +57,13 @@
     {#each members as m, i (m.actor.did)}
       <li class="member">
         <MemberRow actor={m.actor} roles={m.roles.map((r) => r.role)}>
-          {#if m.actor.did !== me && assignable.length}
-            <button
-              class="quiet small"
-              type="button"
-              popovertarget={`roles-${i}`}
-              aria-label={`Change ${named(m)}'s roles`}>Roles</button
-            >
-          {/if}
-          {#if m.actor.did !== me && canEject}
-            <button
-              class="quiet small"
-              type="button"
-              popovertarget={`eject-${i}`}
-              aria-label={`Remove ${named(m)}`}>Remove</button
-            >
-          {/if}
+          {#if m.actor.did !== me}<ActionMenu
+              label={`More for ${named(m)}`}
+              actions={[
+                ...(assignable.length ? [{ text: 'Change roles', opens: `roles-${i}` }] : []),
+                ...(canEject ? [{ text: 'Remove from the group', opens: `eject-${i}` }] : [])
+              ]}
+            />{/if}
         </MemberRow>
         {#if m.actor.did !== me && assignable.length}
           <FormDialog id={`roles-${i}`} title="Change roles" action="?/roles" submit="Save">
