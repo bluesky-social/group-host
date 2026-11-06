@@ -1,7 +1,8 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { inPlace } from '#lib/forms.ts';
   import PickMany from '#lib/molecules/PickMany.svelte';
+  import SaveBar from '#lib/molecules/SaveBar.svelte';
+  import { Saving } from '#lib/saving.svelte.ts';
   import { ADDRESS, COUNTRIES, LANGUAGES, languageName, type Place } from '#lib/places.ts';
   /**
    * A group's profile, to change: its name, its words, where it meets
@@ -28,6 +29,7 @@
     topics?: { topic: string }[];
     languages?: { language: string }[];
   } = $props();
+  const saving = new Saving();
   const policy = $derived(joinPolicy ?? 'approval');
   // A place other than an address (a point on a map) is kept as it is
   // until a town or country is given in its place.
@@ -51,7 +53,7 @@
   ]);
 </script>
 
-<form class="stack" method="post" action="?/profile" use:enhance={inPlace}>
+<form class="stack" method="post" action="?/profile" use:enhance={saving.submit} use:saving.track>
   <label class="field"
     >Name <input name="displayName" required maxlength="64" value={displayName ?? ''} /></label
   >
@@ -104,5 +106,5 @@
     </select>
   </label>
   <label class="field">Its own site <input name="url" type="url" value={url ?? ''} /></label>
-  <button type="submit">Save</button>
+  <SaveBar {saving} what="the profile" />
 </form>

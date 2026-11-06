@@ -9,6 +9,20 @@ import { tick } from 'svelte';
 /** What `use:enhance` is given: what a form does as it is sent. */
 type SubmitFunction = NonNullable<Parameters<typeof enhance>[1]>;
 
+/**
+ * The button that sent a form, held down while it is on its way: it
+ * cannot be pressed twice, and says it is busy. Returns what lets it go.
+ */
+export function hold(submitter: HTMLElement | null) {
+  if (!(submitter instanceof HTMLButtonElement)) return () => {};
+  submitter.disabled = true;
+  submitter.setAttribute('aria-busy', 'true');
+  return () => {
+    submitter.disabled = false;
+    submitter.removeAttribute('aria-busy');
+  };
+}
+
 /** Scrolls to `el`, gently unless the reader asks for less motion. */
 function show(el: Element | null) {
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -43,9 +57,11 @@ export function empty(form: HTMLFormElement) {
  * reader is, what they typed kept. Refused, the page's notice says why,
  * scrolled to; sent elsewhere (a group just made), the page goes there.
  */
-export const inPlace: SubmitFunction = () => {
+export const inPlace: SubmitFunction = ({ submitter }) => {
+  const done = hold(submitter);
   return async ({ result, update }) => {
     await update({ reset: false });
+    done();
     if (result.type !== 'failure') return;
     await tick();
     show(document.querySelector('main p.danger'));
@@ -59,9 +75,11 @@ export const inPlace: SubmitFunction = () => {
  * to say in the dialog.
  */
 export function inDialog(id: string, failed: (why: string | null) => void): SubmitFunction {
-  return () => {
+  return ({ submitter }) => {
     failed(null);
+    const done = hold(submitter);
     return async ({ result, update }) => {
+      done();
       if (result.type === 'failure') {
         const why = (result.data as { failed?: string } | undefined)?.failed;
         failed(why ?? 'That didn’t work. Check what you entered.');

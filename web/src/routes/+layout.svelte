@@ -2,6 +2,7 @@
   import '../app.css';
   import SiteHeader from '#lib/organisms/SiteHeader.svelte';
   import SiteFooter from '#lib/organisms/SiteFooter.svelte';
+  import LeaveGuard from '#lib/molecules/LeaveGuard.svelte';
   import { page } from '$app/state';
   let { data, children } = $props();
 </script>
@@ -14,3 +15,4 @@
 />
 <main class="wrap">{@render children()}</main>
 <SiteFooter host={page.url.hostname} />
+<LeaveGuard />

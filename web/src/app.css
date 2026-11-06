@@ -389,6 +389,10 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* A button whose form is on its way: held, and saying so. */
+button[aria-busy='true'] {
+  cursor: progress;
+}
 /* What undoes, removes or turns down: there, but never the thing to press. */
 button.quiet {
   background: transparent;
@@ -399,6 +403,17 @@ button.quiet {
 button.quiet:hover {
   background: var(--soft);
   border-color: var(--line-strong);
+}
+/* A form that edits what is there in place ends in its Save button,
+   and beside it where the form stands (SaveBar), on every page. */
+.save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.save-said.success {
+  color: var(--success);
 }
 form.stack > button,
 form.stack > .field + button {

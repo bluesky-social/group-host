@@ -352,11 +352,9 @@ test('joining a group anyone can join', async () => {
   const settings = url('/g/hikers.groups.test/settings');
   await page.goto(settings);
   await page.getByRole('combobox', { name: 'How people join' }).selectOption('open');
-  const saved = page.waitForResponse(
-    (r) => r.request().method() === 'POST' && r.url().includes('/profile')
-  );
-  await page.locator('form[action="?/profile"]').getByRole('button', { name: 'Save' }).click();
-  await saved;
+  const profile = page.locator('form[action="?/profile"]');
+  await profile.getByRole('button', { name: 'Save' }).click();
+  await expect(profile.getByRole('status')).toHaveText('Saved');
   // Bob, removed, joins it at once.
   await bob.goto(url('/g/hikers.groups.test'));
   await expect(bob.getByRole('heading', { name: 'Join Hikers' })).toBeVisible();
@@ -428,11 +426,16 @@ test("changing a group's profile", async () => {
   // Focus comes back to the field, but its list stays shut, off the form below.
   await expect(languages).toBeFocused();
   await expect(page.getByRole('listbox', { name: 'Languages it uses' })).toHaveCount(0);
-  const saved = page.waitForResponse(
-    (r) => r.request().method() === 'POST' && r.url().includes('/profile')
-  );
-  await page.locator('form[action="?/profile"]').getByRole('button', { name: 'Save' }).click();
-  await saved;
+  // Changed, it says so beside Save, and Save is the thing to press.
+  const profile = page.locator('form[action="?/profile"]');
+  const said = profile.getByRole('status');
+  const save = profile.getByRole('button', { name: 'Save' });
+  await expect(said).toHaveText('Unsaved changes');
+  await expect(save).not.toHaveClass(/quiet/);
+  await save.click();
+  // Saved, it says that, until something is changed again.
+  await expect(said).toHaveText('Saved');
+  await expect(save).toHaveClass(/quiet/);
   // Drawn again as saved: each topic once, none blank.
   await expect(page.getByRole('textbox', { name: 'Topics' })).toHaveValue('hiking, ridge walks');
   await expect(page.getByRole('combobox', { name: 'Country' })).toHaveValue('PL');
@@ -492,6 +495,28 @@ const PIXEL = Buffer.from(
   'base64'
 );
 
+test('being asked before leaving changes unsaved', async () => {
+  const settings = url('/g/hikers.groups.test/settings');
+  await page.goto(settings);
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  const was = await name.inputValue();
+  await name.fill('Not saved');
+  // Going to another page asks first, and staying keeps what was typed.
+  await page.getByRole('link', { name: 'Rules' }).click();
+  const ask = page.getByRole('dialog', { name: 'Leave without saving?' });
+  await ask.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(name).toHaveValue('Not saved');
+  // Put back as it was, there is nothing to ask about.
+  await name.fill(was);
+  await expect(page.locator('form[action="?/profile"]').getByRole('status')).toHaveText('');
+  await name.fill('Not saved');
+  await page.getByRole('link', { name: 'Rules' }).click();
+  await ask.getByRole('button', { name: 'Leave' }).click();
+  await expect(page).toHaveURL(/\/settings\/rules$/);
+  await page.goto(settings);
+  await expect(name).toHaveValue(was);
+});
+
 test('giving a group a picture, and taking it away', async () => {
   await page.goto(url('/g/hikers.groups.test/settings'));
   await page.getByRole('button', { name: 'Add the avatar' }).click();
@@ -536,11 +561,9 @@ test("hiding a group's profile, and showing it again", async () => {
   const save = async (label) => {
     await page.goto(settings);
     await page.getByLabel(label).check();
-    const saved = page.waitForResponse(
-      (r) => r.request().method() === 'POST' && r.url().includes('/visibility')
-    );
-    await page.locator('form[action="?/visibility"]').getByRole('button', { name: 'Save' }).click();
-    await saved;
+    const seen = page.locator('form[action="?/visibility"]');
+    await seen.getByRole('button', { name: 'Save' }).click();
+    await expect(seen.getByRole('status')).toHaveText('Saved');
     await page.goto(settings);
     await expect(page.getByLabel(label)).toBeChecked();
   };

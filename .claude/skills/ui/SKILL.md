@@ -182,7 +182,22 @@ controls.
   inside it; elsewhere the page's notice says why, scrolled to. Never
   a plain post that reloads the page at its top. Only a form that goes
   somewhere else (signing out, starting a group, approving an app) may
-  post plainly.
+  post plainly. While it is on its way, the button that sent it is held
+  (disabled, `aria-busy`), so it is never sent twice.
+- _Saving._ A form that edits what is there in place (a group's profile,
+  who sees it) is a `Saving` (`#lib/saving.svelte.ts`), sent by
+  `saving.submit` and watched by `use:saving.track`, and ends in
+  `SaveBar`: Save, and beside it what has happened, in words a screen
+  reader is told ("Unsaved changes", "Saving…", "Saved", or why not).
+  Save is quiet until something has changed, then the one that acts:
+  the one place a view may hold two primary buttons is two such forms
+  both changed. It is never disabled, so it can always be reached. A refusal stays beside
+  Save until it saves. Leaving the page with changes unsaved asks first
+  (`LeaveGuard`): "Leave without saving?", its quiet button "Keep
+  editing", as Cancel there could mean throwing the changes away. An act whose result shows on the page (a link added, a
+  request approved) says nothing more: the page drawn again is the
+  answer. No toasts. They show far from what was pressed, and go before
+  they are read.
 - _Confirming._ An act that cannot be undone (leaving, removing
   someone, deleting a rule or role, removing a key, revoking,
   disconnecting) opens a `ConfirmDialog`: its title the question
