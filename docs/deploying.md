@@ -60,6 +60,8 @@ Compose reads these and passes each to the host under the name the host knows:
 | `GROUP_HOST_SIGNUP_PDS` | `SIGNUP_PDS` | `https://bsky.social` |
 | `GROUP_HOST_BLOB_UPLOAD_LIMIT` | host `BLOB_UPLOAD_LIMIT` and console `BODY_SIZE_LIMIT` | `52428800` |
 | `GROUP_HOST_LOG` | `RUST_LOG` | `info` |
+| `GROUP_HOST_ADMINS` | `HOST_ADMINS`, the operators who read its logs and stats | none |
+| `GROUP_HOST_LOGS_KEEP` | `LOGS_KEEP` | `500000` |
 | `GROUP_HOST_DATA` | the directory mounted at `/data` | `/var/lib/group-host` |
 | `GROUP_HOST_PROXY_NETWORK` | the proxy's docker network | `group-host` |
 
@@ -126,7 +128,7 @@ docker compose logs -f host
 journalctl CONTAINER_NAME=group-host-host-1 --since today
 ```
 
-The host keeps its lines in `logs.sqlite`, in its data directory, as well: the last 500,000 at info and below (`LOGS_KEEP`), and none longer than 30 days. Beside them, in `stats.sqlite`, it counts its requests by day and route, and the MCP tools called. Name the accounts that run it in `HOST_ADMINS`, and they read both from anywhere with `opensocial admin logs` and `opensocial admin stats`, signed in as themselves. Each answer carries `x-trace-id`, which `admin logs --trace` takes to show every line of that request:
+The host keeps its lines in `logs.sqlite`, in its data directory, as well: the last 500,000 at info and below (`LOGS_KEEP`), and none longer than 30 days. Beside them, in `stats.sqlite`, it counts its requests by day and route, and the MCP tools called. Name the accounts that run it in `GROUP_HOST_ADMINS`, and they read both from anywhere with `opensocial admin logs` and `opensocial admin stats`, signed in as themselves. Each answer carries `x-trace-id`, which `admin logs --trace` takes to show every line of that request:
 
 ```sh
 opensocial admin logs --level warn

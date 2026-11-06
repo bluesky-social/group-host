@@ -40,6 +40,8 @@ services:
       SIGNUP_PDS: ${GROUP_HOST_SIGNUP_PDS:-https://bsky.social}
       BLOB_UPLOAD_LIMIT: ${GROUP_HOST_BLOB_UPLOAD_LIMIT:-52428800}
       RUST_LOG: ${GROUP_HOST_LOG:-info}
+      HOST_ADMINS: ${GROUP_HOST_ADMINS:-}
+      LOGS_KEEP: ${GROUP_HOST_LOGS_KEEP:-500000}
     volumes:
       # The database, blobs and keys: back it up (docs/deploying.md).
       # Owned by uid 1000, the node user the image runs as.
