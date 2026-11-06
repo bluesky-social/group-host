@@ -1108,13 +1108,39 @@ code.key,
   overflow-wrap: anywhere;
   min-width: 0;
 }
-.queue .events {
-  flex-basis: 100%;
+/* What happened to a subject in the queue, folded under its row, lined
+   up with its name: each event, who did it and when, then what was said. */
+.queue .history {
+  flex: 0 0 100%;
+  padding-left: calc(var(--avatar) + var(--space-3));
   font-size: var(--text-sm);
 }
+.queue .history summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--mute);
+  font-weight: var(--weight-medium);
+}
+ul.queue > li {
+  align-items: flex-start;
+}
+.queue .events {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
+  gap: var(--space-3);
+}
 .queue .events > li {
-  padding: var(--space-1) 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  padding: 0;
   border: 0;
+}
+.queue .events .said {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
 }
 /* A rule's place in the order, round, before it. */
 .ordinal {

@@ -51,6 +51,9 @@ the rest, once per kept world:
 - `waiting`: bob asking to join Riders; carol invited to it.
 - `apps`: an app signed in to Riders with alice's app password
   "Phone", having posted as it, and taken a post down.
+- `reports`, after `full`: Lantern Hikers' moderation queue, with dan
+  reported twice (once citing a rule), a post of frank's reported, erin
+  escalated and bob resolved with a note.
 
 A state none of them makes is a seed of your own: a module that writes
 it, `--seed path/to/it.mjs` (the top of `harness/look/look.mjs` says

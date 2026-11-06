@@ -9,12 +9,12 @@
   - heading "Subjects2" [level=2]
   - list:
     - listitem:
-      - text: did:plc:<id> Reported once
-      - button "Resolve"
-      - list:
-        - listitem: "<date> Reported: reasonSpam: Posts the same seed shop link in every thread."
+      - text: maximilianaquinces.test Account · Reported on <date> Spam
+      - button "Review maximilianaquinces.test": Review
+      - paragraph: Posts the same seed shop link in every thread.
+      - group: History
     - listitem:
-      - text: at://did:plc:<id>/space/com.example.board/swaps/did:plc:<id>/com.example.post/<rkey> Reported once
-      - button "Resolve"
-      - list:
-        - listitem: "<date> Reported: reasonRude: Calls people names under every swap."
+      - text: frank.test Post · Reported on <date> Rude
+      - button "Review frank.test": Review
+      - paragraph: Calls people names under every swap.
+      - group: History

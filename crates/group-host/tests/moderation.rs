@@ -124,6 +124,8 @@ async fn takes_a_report_from_one_who_reads_it() {
     assert_eq!(queue["subjects"][0]["subject"], record(uri));
     assert_eq!(queue["subjects"][0]["status"], "open");
     assert_eq!(queue["subjects"][0]["reportCount"], 2);
+    // Whose record it is, as a view names them.
+    assert_eq!(queue["subjects"][0]["actor"]["did"], bob.did.as_str());
 
     // A rule the group's, cited.
     let rule = format!("{}/{did}/{NS}.rule/3mzjdd6rnfise", meta_space(&did));
@@ -140,6 +142,7 @@ async fn takes_a_report_from_one_who_reads_it() {
     let event = &history["events"][0];
     assert_eq!(event["id"], said["id"]);
     assert_eq!(event["createdBy"], bob.did.as_str());
+    assert_eq!(event["creator"]["did"], bob.did.as_str());
     assert_eq!(event["event"]["$type"], "fyi.opensocial.defs#reportEvent");
     assert_eq!(
         event["event"]["reasonType"],
@@ -149,6 +152,7 @@ async fn takes_a_report_from_one_who_reads_it() {
     // The account in the queue, as the union it was sent as.
     let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
     assert_eq!(queue["subjects"][0]["subject"], account(&alice.did));
+    assert_eq!(queue["subjects"][0]["actor"]["did"], alice.did.as_str());
 
     let other = start_group(
         &h,
@@ -484,6 +488,7 @@ async fn resolves_and_escalates_with_a_note() {
     assert_eq!(view["status"], "escalated");
     assert_eq!(view["subject"], record(uri));
     assert_eq!(view["reportCount"], 1);
+    assert!(view["actor"]["did"].is_string());
     // Setting the status it has keeps a note.
     let (_, view) = call(
         &h,

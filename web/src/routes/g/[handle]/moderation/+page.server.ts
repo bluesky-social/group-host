@@ -46,10 +46,18 @@ export const load: PageServerLoad = async (event) => {
         'fyi.opensocial.getSubjectHistory',
         { group, subject: key }
       );
-      return { key, status: s.status, reportCount: s.reportCount, events };
+      return {
+        key,
+        actor: s.actor ?? { did: key },
+        status: s.status,
+        reportCount: s.reportCount,
+        events
+      };
     })
   );
-  return { group: view, actions, status, subjects: withEvents };
+  // The rules a report may cite, by their record key.
+  const rules = Object.fromEntries((view.rules ?? []).map((r) => [r.rkey, r.title]));
+  return { group: view, actions, status, subjects: withEvents, rules };
 };
 
 export const actions: Actions = {

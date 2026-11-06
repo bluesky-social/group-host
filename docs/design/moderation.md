@@ -99,8 +99,13 @@ A subject is an account, sent and answered as
 the version a report or label names stays on that event. A subject has a
 status: `open`, `escalated` or `resolved`.
 
+Each subject in the queue comes with `actor`: the account it is, or whose
+record it is, by its DID and handle, so a moderator reads who it is about
+rather than a DID.
+
 Its history is a list of events, each with an `id`, `createdAt`, who did
-it as `createdBy`, and one of four kinds as `event`:
+it as `createdBy` and, by their DID and handle, as `creator`, and one of
+four kinds as `event`:
 
 - `reportEvent`: someone reported it, with a `reasonType`, an optional
   `reason` and the `rule` it cites, if any.

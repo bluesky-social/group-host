@@ -28,6 +28,7 @@ use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use rusqlite::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
@@ -396,9 +397,19 @@ fn present(mut value: Value) -> Value {
     value
 }
 
-fn subject_view(s: &Subject) -> Value {
+/// The account a subject is, or whose record it is: a record's repo, as
+/// the queue keeps it, in a space.
+fn account_of<'a>(key: &'a str) -> &'a str {
+    let repo = |path: &'a str| path.split('/').nth(4).expect("a record in a space");
+    key.strip_prefix("at://").map_or(key, repo)
+}
+
+/// A subject as the queue answers it, with `actors`, the people it names
+/// as a view names them.
+fn subject_view(s: &Subject, actors: &HashMap<String, Value>) -> Value {
     json!({
         "subject": subject_ref(&s.subject),
+        "actor": actors[account_of(&s.subject)],
         "status": s.status,
         "reportCount": s.reports,
         "createdAt": iso(s.created_at),
@@ -407,8 +418,9 @@ fn subject_view(s: &Subject) -> Value {
 }
 
 /// An event as the history answers it: one of the four kinds the union
-/// holds. A negation is the label taken back.
-fn event_view(e: &Event) -> Value {
+/// holds, with who did it as `actors` names them. A negation is the label
+/// taken back.
+fn event_view(e: &Event, actors: &HashMap<String, Value>) -> Value {
     let event = match e.kind.as_str() {
         "report" => json!({
             "$type": "fyi.opensocial.defs#reportEvent",
@@ -433,6 +445,7 @@ fn event_view(e: &Event) -> Value {
         "id": e.seq.to_string(),
         "createdAt": iso(e.created_at),
         "createdBy": e.actor,
+        "creator": e.actor.as_ref().map(|did| &actors[did]),
         "event": present(event),
     }))
 }
@@ -464,7 +477,10 @@ pub async fn list_subjects(
         .store
         .subjects(group, status, before, limit)
         .map_err(XrpcError::internal)?;
-    let mut out = json!({"subjects": subjects.iter().map(subject_view).collect::<Vec<_>>()});
+    let actors = host.actor_views(subjects.iter().map(|s| account_of(&s.subject)));
+    let actors = actors.await;
+    let views: Vec<Value> = subjects.iter().map(|s| subject_view(s, &actors)).collect();
+    let mut out = json!({ "subjects": views });
     if subjects.len() == limit as usize
         && let Some(last) = subjects.last()
     {
@@ -499,7 +515,10 @@ pub async fn get_subject_history(
         .store
         .events(group, subject, cid, after, limit)
         .map_err(XrpcError::internal)?;
-    let mut out = json!({"events": events.iter().map(event_view).collect::<Vec<_>>()});
+    let actors = host.actor_views(events.iter().filter_map(|e| e.actor.as_deref()));
+    let actors = actors.await;
+    let views: Vec<Value> = events.iter().map(|e| event_view(e, &actors)).collect();
+    let mut out = json!({ "events": views });
     if events.len() == limit as usize
         && let Some(last) = events.last()
     {
@@ -539,7 +558,9 @@ pub async fn resolve_subject(
         .map_err(XrpcError::internal)?;
     let now = host.store.subject(group, &subject);
     let now = now.map_err(XrpcError::internal)?;
-    Ok(Json(subject_view(&now.expect("just kept"))))
+    let now = now.expect("just kept");
+    let actors = host.actor_views([account_of(&now.subject)]).await;
+    Ok(Json(subject_view(&now, &actors)))
 }
 
 /// Whether the group's labeler takes reports where it lists `key`: it

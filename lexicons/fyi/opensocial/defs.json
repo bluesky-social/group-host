@@ -865,6 +865,11 @@
             "fyi.opensocial.defs#recordSubject"
           ]
         },
+        "actor": {
+          "type": "ref",
+          "ref": "#actorView",
+          "description": "The account the subject is, or whose record it is, as a view names them."
+        },
         "status": {
           "type": "ref",
           "ref": "fyi.opensocial.defs#subjectStatus"
@@ -905,6 +910,11 @@
           "type": "string",
           "format": "did",
           "description": "Hosts may withhold this to protect reporters and moderators."
+        },
+        "creator": {
+          "type": "ref",
+          "ref": "#actorView",
+          "description": "Who did it, as a view names them, when createdBy is given."
         },
         "event": {
           "type": "union",

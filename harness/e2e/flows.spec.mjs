@@ -698,39 +698,39 @@ test('moderating: a label, and the queue', async () => {
   await page.goto(url('/g/hikers.groups.test'));
   await page.getByRole('link', { name: 'Moderation' }).click();
   // Putting him out is already in the queue, on him.
-  const ejected = page.locator('.subject', { hasText: who.bob.did });
+  const ejected = page.locator('.subject', { hasText: who.bob.handle });
   await expect(ejected.locator('.events')).toContainText('Removed');
   await page.getByRole('button', { name: 'Label someone' }).click();
   await page.getByRole('combobox', { name: 'Their handle' }).fill('bob.test');
   await page.getByRole('textbox', { name: 'Label' }).fill('troll');
   await page.getByRole('button', { name: 'Label them' }).click();
-  const subject = page.locator('.subject', { hasText: who.bob.did });
-  await expect(subject.locator('.events')).toContainText('Labelled: troll');
+  const subject = page.locator('.subject', { hasText: who.bob.handle });
+  await expect(subject.locator('.events')).toContainText('troll');
   // Escalated with a note, it leaves the open queue for the escalated.
-  await subject.getByRole('button', { name: 'Resolve' }).click();
+  await subject.getByRole('button', { name: 'Review' }).click();
   const resolving = page
     .getByRole('dialog', { name: 'Resolve or escalate' })
     .filter({ visible: true });
   await resolving.getByRole('textbox', { name: 'A note, if you like' }).fill('Asked him to stop');
   await resolving.getByRole('button', { name: 'Escalate' }).click();
-  await expect(page.locator('.subject', { hasText: who.bob.did })).toHaveCount(0);
+  await expect(page.locator('.subject', { hasText: who.bob.handle })).toHaveCount(0);
   await page
     .getByRole('navigation', { name: 'The queue' })
     .getByRole('link', { name: 'Escalated' })
     .click();
-  await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.events')).toContainText(
-    'Escalated: Asked him to stop'
-  );
+  await expect(
+    page.locator('.subject', { hasText: who.bob.handle }).locator('.events')
+  ).toContainText(/Escalated by[\s\S]*Asked him to stop/);
   await page
-    .locator('.subject', { hasText: who.bob.did })
-    .getByRole('button', { name: 'Resolve' })
+    .locator('.subject', { hasText: who.bob.handle })
+    .getByRole('button', { name: 'Review' })
     .click();
   await resolving.getByRole('button', { name: 'Resolve' }).click();
   await expect(resolving).toHaveCount(0);
   await page.goto(url('/g/hikers.groups.test/moderation?status=resolved'));
-  await expect(page.locator('.subject', { hasText: who.bob.did }).locator('.events')).toContainText(
-    'Resolved'
-  );
+  await expect(
+    page.locator('.subject', { hasText: who.bob.handle }).locator('.events')
+  ).toContainText('Resolved');
 });
 
 test('signing an app in as her group', async () => {

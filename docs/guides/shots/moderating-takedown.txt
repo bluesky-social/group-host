@@ -1,17 +1,16 @@
-- main:
-  - link "← Garden share":
-  - heading "Moderation" [level=1]
-  - button "Label someone"
-  - navigation "The queue":
-    - link "Open":
-    - link "Escalated":
-    - link "Resolved":
-  - heading "Subjects1" [level=2]
-  - list:
-    - listitem:
-      - text: did:plc:<id> Reported once
-      - button "Resolve"
-      - list:
-        - listitem: "<date> Reported: reasonSpam: Posts the same seed shop link in every thread."
-        - listitem: "<date> Labelled: spam"
-        - listitem: "<date> Labelled: !takedown"
+- listitem:
+  - text: maximilianaquinces.test Account · Reported on <date> Spam
+  - button "Review maximilianaquinces.test": Review
+  - paragraph: Posts the same seed shop link in every thread.
+  - group:
+    - text: History
+    - list:
+      - listitem:
+        - strong: Reported
+        - text: by frank.test <date> Spam. Posts the same seed shop link in every thread.
+      - listitem:
+        - strong: Labelled
+        - text: by dan.test <date> spam
+      - listitem:
+        - strong: Labelled
+        - text: by dan.test <date> !takedown

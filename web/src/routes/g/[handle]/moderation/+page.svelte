@@ -38,6 +38,7 @@
         subjects={data.subjects}
         status={data.status}
         canResolve={data.actions.includes('mod.resolve')}
+        rules={data.rules}
       />
     </Section>
   {:else}

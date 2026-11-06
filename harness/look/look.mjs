@@ -21,9 +21,9 @@
 //                           between (alice,bob), adds each in turn, the
 //                           last the one in use, the others to switch to
 //   --seed <name|file>      runs a seed first: one of harness/look/seeds
-//                           by name (full, long, waiting, apps, and the
-//                           guides' own), or a file of your own. On a
-//                           kept world each runs once
+//                           by name (full, long, waiting, apps, reports,
+//                           and the guides' own), or a file of your own.
+//                           On a kept world each runs once
 //   --click <selector>      click it first (a button that opens a dialog
 //                           or a menu), in turn; then only the screen is
 //                           shot, not the whole page

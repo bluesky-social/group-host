@@ -40,16 +40,18 @@ is in the group, and a post only in a part of the group they can read.
 
 ## What is on the Moderation page?
 
-1. Look at the **Open** tab. Each row is one subject: an account or a
-   post that was reported. Under it, how often it was reported, then its
-   history, one line per thing that happened, oldest first.
+1. Look at the **Open** tab. Each row is one subject: an account, or a
+   post that was reported, under the handle of the account that posted
+   it. Under the handle, whether it is an account or a post and when it
+   was reported, then the reasons members chose, then what the latest
+   report said.
 
    <!-- look /g/gardens.groups.test/moderation --as dan --element main -->
-   ![The Moderation page on its Open tab, Subjects 2: an account Reported: reasonSpam and a post Reported: reasonRude, each with Resolve](shots/moderating-queue.png)
+   ![The Moderation page on its Open tab, Subjects 2: maximilianaquinces.test's account reported for Spam and frank.test's post reported as Rude, each with Review](shots/moderating-queue.png)
 
-The page names each account by its DID, the account's lasting ID, and
-each post by its full address. It shows the reason the member chose as
-one word, such as reasonSpam or reasonRude, then what they wrote.
+2. Press **History** under a row to see everything that happened to it,
+   oldest first: each report, label, escalation or resolution, who did
+   it, when, and what they wrote.
 
 The tabs sort subjects by where they are:
 
@@ -65,7 +67,7 @@ the tabs.
 
 When a report is not yours to decide, escalate it.
 
-1. Press **Resolve** on the post's row. The dialog **Resolve or escalate**
+1. Press **Review** on the post's row. The dialog **Resolve or escalate**
    opens.
 2. Under **A note, if you like**, type why, such as "Third time this
    month; over to the admins."
@@ -75,7 +77,7 @@ When a report is not yours to decide, escalate it.
    <!-- look /g/gardens.groups.test/moderation --as frank --click 'button[popovertarget=resolve-1]' --type '#resolve-1 [name=note]=Third time this month; over to the admins.' --click '#resolve-1 button[value=escalated]' --element main -->
    ![The Open tab after escalating, Subjects 1: only the account reported for spam is left](shots/moderating-escalate-sent.png)
 
-The post now waits on the **Escalated** tab, your note under its report.
+The post now waits on the **Escalated** tab, your note in its history.
 
 ## How do I label an account?
 
@@ -87,9 +89,7 @@ word is yours to choose.
 The console cannot take a label back. Only a terminal can, so check the
 label before you send it.
 
-The queue shows accounts by their DID, but the dialog asks for a handle.
-Find the handle in the app the report came from, or in the group's
-members list.
+The dialog asks for the account's handle, as the queue shows it.
 
 1. Press **Label someone**.
 2. Under **Their handle**, type the account's handle, such as
@@ -99,11 +99,11 @@ members list.
    <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=spam' --element ':popover-open' -->
    ![The Label someone dialog, maximilianaquinces.test under Their handle and spam under Label, with Cancel and Label them](shots/moderating-label-dialog.png)
 
-4. Press **Label them**. The dialog closes, and the account's row gains
-   a line saying it was labelled.
+4. Press **Label them**. The dialog closes, and the account's history
+   gains a line saying it was labelled.
 
-   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=spam' --click ':popover-open button[type=submit]' --element main -->
-   ![The Open tab, the account's history ending in Labelled: spam](shots/moderating-labelled.png)
+   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=spam' --click ':popover-open button[type=submit]' --click 'li.subject:has-text("maximilianaquinces.test") summary' --element 'li.subject:has-text("maximilianaquinces.test")' -->
+   ![The account's row, its history open and ending in Labelled by dan.test, spam](shots/moderating-labelled.png)
 
 If the handle is not found, the dialog stays open and says so. The
 dialog labels accounts only.
@@ -121,10 +121,11 @@ dialog, and it needs a role with `takedown`.
 1. Press **Label someone**.
 2. Under **Their handle**, type "maximilianaquinces.test".
 3. Under **Label**, type "!takedown".
-4. Press **Label them**. The account's row gains a line for the takedown.
+4. Press **Label them**. The account's history gains a line for the
+   takedown.
 
-   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=!takedown' --click ':popover-open button[type=submit]' --element main -->
-   ![The Open tab, the account's history ending in Labelled: spam and Labelled: !takedown](shots/moderating-takedown.png)
+   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=!takedown' --click ':popover-open button[type=submit]' --click 'li.subject:has-text("maximilianaquinces.test") summary' --element 'li.subject:has-text("maximilianaquinces.test")' -->
+   ![The account's row, its history ending in labels spam and !takedown, both by dan.test](shots/moderating-takedown.png)
 
 The label `!hide` works the same way and needs the same permission. A
 moderator without it is refused, and the dialog stays open with the
@@ -149,23 +150,23 @@ a takedown does that.
    <!-- look /g/gardens.groups.test --as dan --click 'li.member:has-text("maximilianaquinces.test") .action-menu summary' --click 'li.member:has-text("maximilianaquinces.test") .menu button:has-text("Remove from the group")' --click ':popover-open button[type=submit]' --element 'section:has(.member) .section-head' -->
    ![The Members card's heading, Members 2, with Invite someone](shots/moderating-removed.png)
 
-They lose access to what only members see, and their row on the
+They lose access to what only members see, and their history on the
 Moderation page notes that they were removed. Removing does not block them:
 they can ask to join again.
 
 ## How do I resolve a report?
 
-1. On the Moderation page, press **Resolve** on the account's row.
+1. On the Moderation page, press **Review** on the account's row.
 2. Under **A note, if you like**, type what was done, such as "Taken down
    and removed from the group."
 
    <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=resolve-0]' --type '#resolve-0 [name=note]=Taken down and removed from the group.' --element ':popover-open' -->
-   ![The Resolve or escalate dialog for the account's DID, the note Taken down and removed from the group. typed, with Escalate and Resolve](shots/moderating-resolve-dialog.png)
+   ![The Resolve or escalate dialog for maximilianaquinces.test's account, the note Taken down and removed from the group. typed, with Cancel, Escalate and Resolve](shots/moderating-resolve-dialog.png)
 
 3. Press **Resolve**. The subject moves to the **Resolved** tab, with
-   all that was done and your note.
+   all that was done and your note in its history.
 
-From **Resolved**, the row's button can still escalate a subject.
+From **Resolved**, the row's **Review** can still escalate a subject.
 
 ## From a terminal
 
