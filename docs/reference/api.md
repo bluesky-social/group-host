@@ -248,7 +248,7 @@ repos as any PDS does:
 | --- | --- |
 | `GET com.atproto.server.describeServer` | the host as a PDS: its DID, the domain it gives its groups names under, `BLOB_UPLOAD_LIMIT`, and that no one signs up |
 | `GET com.atproto.repo.describeRepo`, `GET com.atproto.repo.getRecord`, `GET com.atproto.repo.listRecords` | a group's public repo |
-| `GET com.atproto.sync.getRepo`, `GET com.atproto.sync.getLatestCommit`, `GET com.atproto.sync.listRepos`, `GET com.atproto.sync.getBlob`, `GET com.atproto.sync.listBlobs` | syncing them |
+| `GET com.atproto.sync.getRepo`, `GET com.atproto.sync.getLatestCommit`, `GET com.atproto.sync.listRepos`, `GET com.atproto.sync.getBlob`, `GET com.atproto.sync.listBlobs` | syncing them; a blob only a space holds is not served or listed |
 | `GET com.atproto.sync.subscribeRepos` | the firehose, over a WebSocket |
 | `GET com.atproto.identity.resolveHandle` | a handle here, to its DID; for a caller signed in, any handle, through `HANDLE_RESOLVERS` |
 | `GET /.well-known/did.json` | the host's own DID document, when `SERVICE_DID` is a `did:web`: its `#atproto_pds` and `#opensocial` services at `PUBLIC_URL` |

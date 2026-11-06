@@ -462,10 +462,27 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     assert_eq!(image(&h, &did, &cid(&avatar), Some(&carol)).await.0, 404);
     assert_eq!(image(&h, &did, &cid(&avatar), Some(&bob)).await.0, 200);
 
-    // In its public repo: anyone's.
+    // Held only in a space, it is no blob of the public repo's: neither
+    // fetched nor listed by its sync, which asks no one who they are.
+    let synced = async |cid: String| {
+        let query = format!("did={did}&cid={cid}");
+        h.get("com.atproto.sync.getBlob", &query).await
+    };
+    let (status, said) = synced(cid(&avatar)).await;
+    assert_eq!(
+        (status, said["error"].as_str()),
+        (400, Some("BlobNotFound"))
+    );
+    let (_, listed) = h
+        .get("com.atproto.sync.listBlobs", &format!("did={did}"))
+        .await;
+    assert_eq!(listed["cids"], json!([]));
+
+    // In its public repo: anyone's, there too.
     let photo = uploaded(&h, &app, &token, b"ride".to_vec(), "image/jpeg").await;
     h.host.write(&did, &[holding("ride", &photo)]).unwrap();
     assert_eq!(image(&h, &did, &cid(&photo), None).await.0, 200);
+    assert_eq!(synced(cid(&photo)).await.0, 200);
 
     // A file that is no image is not served as one, wherever it is held.
     let text = h.host.upload_blob(&did, b"words", "text/plain").unwrap();

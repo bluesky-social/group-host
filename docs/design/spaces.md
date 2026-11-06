@@ -67,6 +67,9 @@ Details:
   whose head moved under it fails rather than overwrite.
 - A blob belongs to the group and goes once no record in any of its repos
   references it. An upload no record takes within a day is swept.
+- A blob is read where a record holding it is: `com.atproto.sync.getBlob`
+  and `listBlobs` answer only blobs the public repo holds, and a blob held
+  only in a space is read through the space, by those who may read it.
 
 ## Deciding who reads and writes
 

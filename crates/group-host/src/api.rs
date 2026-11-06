@@ -241,8 +241,9 @@ pub async fn resolve_handle(
     Ok(Json(json!({ "did": did.ok_or_else(not_found)? })))
 }
 
-/// A blob a record of the account references, served as a download: a
-/// browser neither sniffs nor runs it.
+/// A blob a record in the account's public repo references, served as a
+/// download: a browser neither sniffs nor runs it. A blob only records in
+/// spaces hold is not the public repo's, and is fetched from its space.
 pub async fn get_blob(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
@@ -250,7 +251,11 @@ pub async fn get_blob(
     let did = did_of(&host, param(&p, "did")?)?;
     let cid = param(&p, "cid")?;
     let cid = atproto::Cid::parse(cid).map_err(|e| invalid(format!("cid: {e}")))?;
-    let found = host.read_blob(&did, &cid).map_err(XrpcError::internal)?;
+    let public = host.store.held_publicly(&did, &cid);
+    let found = match public.map_err(XrpcError::internal)? {
+        true => host.read_blob(&did, &cid).map_err(XrpcError::internal)?,
+        false => None,
+    };
     let not_found = || {
         XrpcError::new(
             StatusCode::BAD_REQUEST,
