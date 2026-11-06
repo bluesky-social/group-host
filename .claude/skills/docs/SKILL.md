@@ -18,6 +18,9 @@ Then check it against the facts.
   look up.
 - `docs/development.md`: building, testing and the checks.
 
+A guide (`docs/guides/`), how to do something in the console, is the
+`guides` skill's: its facts come from the console as drawn, not the code.
+
 The map from code to pages is in AGENTS.md, under Docs. The pages are
 also a site (`docs-site/`); a new page goes in its sidebar.
 

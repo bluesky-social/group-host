@@ -1,0 +1,42 @@
+- banner:
+  - link "opensocial":
+  - group: "@erin.test"
+- main:
+  - heading "Choir" [level=1]
+  - paragraph: choir.groups.test
+  - navigation "The group":
+    - link "Moderation":
+    - link "Settings":
+  - text: You're a member with the admin role.
+  - button "Leave the group"
+  - heading "Asking to join0" [level=2]
+  - paragraph: Nobody is asking to join
+  - paragraph: Requests to join show up here.
+  - heading "Members1" [level=2]
+  - button "Invite someone"
+  - search:
+    - text: Find a member
+    - searchbox "Find a member"
+  - list:
+    - listitem: erin.test admin
+  - heading "Connect an AI app" [level=2]
+  - list:
+    - listitem:
+      - text: "1"
+      - strong: Add this address to your AI app as a connector
+      - code: http://console.group-host.internal:<port>/mcp
+      - button "Copy"
+    - listitem:
+      - text: "2"
+      - strong: When it asks, sign in here and approve it
+      - text: It acts for you in Choir, with what your roles let you do.
+    - listitem:
+      - text: "3"
+      - strong: Ask it things like
+      - list:
+        - listitem: Who is asking to join, and what did they say?
+        - listitem: Invite dana.bsky.social
+        - listitem: What is waiting in the moderation queue?
+  - paragraph: No AI app connected yet
+  - paragraph: Add the address above to an AI app, and it shows up here.
+- contentinfo: console.group-host.internal runs opensocial

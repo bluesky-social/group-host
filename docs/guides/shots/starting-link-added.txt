@@ -1,0 +1,7 @@
+- heading "Links1" [level=2]
+- button "Add a link"
+- list:
+  - listitem:
+    - strong: Our chat
+    - text: https://chat.bookclub.example
+    - button "Remove Our chat": Remove

@@ -1,0 +1,26 @@
+- banner:
+  - link "opensocial":
+  - group: "@alice.test"
+- main:
+  - heading "Start a group" [level=1]
+  - text: Name
+  - textbox "Name": Book club
+  - text: Its address
+  - textbox "Its address .groups.test": riders
+  - text: .groups.test
+  - paragraph:
+    - text: riders.groups.test is taken.
+    - button "Use riders-2.groups.test"
+  - text: What it is for
+  - textbox "What it is for"
+  - text: How people join
+  - combobox "How people join":
+    - option "An admin approves who joins" [selected]
+    - option "Anyone can join right away"
+    - option "Only people who are invited"
+  - button "Start the group"
+  - paragraph:
+    - text: Or
+    - link "move an account you already have":
+    - text: here, to become a group.
+- contentinfo: console.group-host.internal runs opensocial

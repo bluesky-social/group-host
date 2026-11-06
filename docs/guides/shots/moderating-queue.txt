@@ -1,0 +1,20 @@
+- main:
+  - link "← Garden share":
+  - heading "Moderation" [level=1]
+  - button "Label someone"
+  - navigation "The queue":
+    - link "Open":
+    - link "Escalated":
+    - link "Resolved":
+  - heading "Subjects2" [level=2]
+  - list:
+    - listitem:
+      - text: did:plc:<id> Reported once
+      - button "Resolve"
+      - list:
+        - listitem: "<date> Reported: reasonSpam: Posts the same seed shop link in every thread."
+    - listitem:
+      - text: at://did:plc:<id>/space/com.example.board/swaps/did:plc:<id>/com.example.post/<rkey> Reported once
+      - button "Resolve"
+      - list:
+        - listitem: "<date> Reported: reasonRude: Calls people names under every swap."

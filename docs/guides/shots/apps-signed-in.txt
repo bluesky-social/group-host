@@ -1,0 +1,6 @@
+- heading "Apps acting as the group1" [level=2]
+- list:
+  - listitem:
+    - strong: Phone
+    - text: With an app password, for bob.test ; last used <date>
+    - button "Revoke app-password:Phone's access": Revoke

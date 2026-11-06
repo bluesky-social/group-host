@@ -1,0 +1,11 @@
+- dialog "Add a recovery key":
+  - heading "Add a recovery key" [level=2]
+  - button "Close": ×
+  - paragraph: A key you hold. With it you can recover the group, or move it, without this host.
+  - text: A key of yours, as a did:key
+  - textbox "A key of yours, as a did:key":
+    - /placeholder: did:key:z…
+    - text: did:key:<key>
+  - paragraph: not a did:key the directory takes (secp256k1 or P-256)
+  - button "Cancel"
+  - button "Add"

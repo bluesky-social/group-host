@@ -1,0 +1,8 @@
+- dialog "Resolve or escalate":
+  - heading "Resolve or escalate" [level=2]
+  - button "Close": ×
+  - paragraph: did:plc:<id>
+  - text: A note, if you like
+  - textbox "A note, if you like": Taken down and removed from the group.
+  - button "Escalate"
+  - button "Resolve"

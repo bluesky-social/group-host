@@ -4,6 +4,12 @@ The group host: the PDS, space authority and OAuth server for groups on
 atproto. It implements the opensocial proposal
 (https://tangled.org/opensocial.group/proposal).
 
+- [Guides](guides/README.md): how to do each thing in the console,
+  step by step, with a picture of each screen:
+  [starting a group](guides/starting-a-group.md), [rules and
+  roles](guides/rules-and-roles.md), [moderating](guides/moderating.md),
+  [signing in as a group](guides/signing-in-as-a-group.md) and [recovery
+  keys](guides/recovery-keys.md).
 - [Design](design/README.md): what the host is to a group, and why each
   part works as it does: [spaces](design/spaces.md),
   [groups](design/groups.md), [membership](design/membership.md),

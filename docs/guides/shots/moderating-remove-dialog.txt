@@ -1,0 +1,6 @@
+- dialog "Remove this member?":
+  - heading "Remove this member?" [level=2]
+  - button "Close": ×
+  - paragraph: maximilianaquinces.test loses access to what only members see. They can ask to join again.
+  - button "Cancel"
+  - button "Remove"

@@ -1,16 +1,26 @@
 // The docs, as Starlight reads them: each page under docs/ copied into
 // src/content/docs, its first heading made its `title`, a README its
-// directory's index. docs/ stays plain Markdown that reads on its own.
+// directory's index; and the guides' pictures into public/, to be served
+// as they are. docs/ stays plain Markdown that reads on its own.
 //
 //   node content.mjs
 
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const docs = join(here, '../docs');
 const out = join(here, 'src/content/docs');
+const shots = join(here, 'public/guides/shots');
 
 const files = (d) =>
   readdirSync(d, { withFileTypes: true }).flatMap((e) =>
@@ -18,6 +28,9 @@ const files = (d) =>
   );
 
 rmSync(out, { recursive: true, force: true });
+rmSync(shots, { recursive: true, force: true });
+if (existsSync(join(docs, 'guides/shots')))
+  cpSync(join(docs, 'guides/shots'), shots, { recursive: true });
 for (const file of files(docs)) {
   const page = relative(docs, file);
   const text = readFileSync(file, 'utf8');

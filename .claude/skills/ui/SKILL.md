@@ -311,3 +311,7 @@ not.
 Give the pull the pictures of the states it changes, before and after,
 each as an `--image` to `knotless pull` (or `knotless edit`): the
 reviewer cannot see a dialog open or a list emptied otherwise.
+
+A change to a flow a guide shows (`docs/guides/`) draws that guide's
+pictures again, `just shots docs/guides/<guide>.md`, and fixes the words
+around any that changed: the `guides` skill says how.

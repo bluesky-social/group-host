@@ -1,0 +1,11 @@
+- dialog "Create an app password":
+  - heading "Create an app password" [level=2]
+  - button "Close": ×
+  - paragraph: You'll see it once, right after it's created.
+  - text: Where it is used
+  - textbox "Where it is used":
+    - /placeholder: My phone
+  - checkbox "It may use chat"
+  - text: It may use chat
+  - button "Cancel"
+  - button "Create"

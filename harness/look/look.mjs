@@ -21,8 +21,9 @@
 //                           between (alice,bob), adds each in turn, the
 //                           last the one in use, the others to switch to
 //   --seed <name|file>      runs a seed first: one of harness/look/seeds
-//                           by name (full, long, waiting, apps), or a file of
-//                           your own. On a kept world each runs once
+//                           by name (full, long, waiting, apps, and the
+//                           guides' own), or a file of your own. On a
+//                           kept world each runs once
 //   --click <selector>      click it first (a button that opens a dialog
 //                           or a menu), in turn; then only the screen is
 //                           shot, not the whole page
@@ -35,6 +36,9 @@
 //   --out <dir>             where the pictures go; target/look
 //   --name <name>           what the pictures are called, in place of
 //                           the path's
+//   --text                  beside each size's pictures, what they show
+//                           as text: the accessibility tree of the page,
+//                           or of --element, as <name>-<size>.txt
 //
 // A seed is a module whose default export is given `tools` below and
 // writes what a page should show: `opensocial(name, ...args)` runs the
@@ -95,6 +99,7 @@ let element;
 let up = false;
 let out = join(root, 'target/look');
 let name;
+let text = false;
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -114,6 +119,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--element') element = next();
   else if (a === '--out') out = resolve(next());
   else if (a === '--name') name = next();
+  else if (a === '--text') text = true;
   else if (a === '--all') for (const s of ['desktop', 'phone', 'light', 'dark']) sides.add(s);
   else if (/^--(desktop|phone|light|dark)$/.test(a)) sides.add(a.slice(2));
   else if (a.startsWith('--')) fail(`${a}: no such option`);
@@ -318,12 +324,15 @@ const named = (t) => name ?? (t.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '
 mkdirSync(out, { recursive: true });
 let shot = 0;
 try {
-  for (const [size, scheme] of projects) {
-    const project = `${size}-${scheme}`;
+  // Each size's clicks and typing done once, and each of its schemes shot
+  // from the one page: a form a step sends is sent once, not per scheme.
+  const sizes = Map.groupBy(projects, ([size]) => size);
+  for (const [size, these] of sizes) {
+    const schemes = these.map(([, scheme]) => scheme);
     const use = PROJECTS[size];
     const context = await browser.newContext({
       ...use,
-      colorScheme: scheme,
+      colorScheme: schemes[0],
       locale: 'en-US',
       ignoreHTTPSErrors: true,
       storageState
@@ -372,19 +381,31 @@ try {
       });
       if (wide)
         say(
-          `${named(target)}-${project}: ${wide.by}px wider than the screen, at ${wide.at.join(', ')}`
+          `${named(target)}-${size}: ${wide.by}px wider than the screen, at ${wide.at.join(', ')}`
         );
-      const file = join(
-        out,
-        `${named(target)}${as.length ? `-${as.join('-')}` : ''}-${project}.png`
-      );
-      const opts = { path: file, animations: 'disabled', caret: 'hide' };
-      if (element) await page.locator(element).first().screenshot(opts);
-      else await page.screenshot({ ...opts, fullPage: !steps.length });
-      if (use.deviceScaleFactor > 1)
-        writeFileSync(file, dense(readFileSync(file), use.deviceScaleFactor));
-      console.log(file);
-      shot++;
+      if (text) {
+        const file = join(
+          out,
+          `${named(target)}${as.length ? `-${as.join('-')}` : ''}-${size}.txt`
+        );
+        const it = element ? page.locator(element).first() : page.locator('body');
+        writeFileSync(file, `${await it.ariaSnapshot()}\n`);
+        console.log(file);
+      }
+      for (const scheme of schemes) {
+        await page.emulateMedia({ colorScheme: scheme });
+        const file = join(
+          out,
+          `${named(target)}${as.length ? `-${as.join('-')}` : ''}-${size}-${scheme}.png`
+        );
+        const opts = { path: file, animations: 'disabled', caret: 'hide' };
+        if (element) await page.locator(element).first().screenshot(opts);
+        else await page.screenshot({ ...opts, fullPage: !steps.length });
+        if (use.deviceScaleFactor > 1)
+          writeFileSync(file, dense(readFileSync(file), use.deviceScaleFactor));
+        console.log(file);
+        shot++;
+      }
       await page.close();
     }
     await context.close();

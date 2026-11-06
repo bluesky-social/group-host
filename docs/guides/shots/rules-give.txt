@@ -1,0 +1,14 @@
+- dialog "Change roles":
+  - heading "Change roles" [level=2]
+  - button "Close": ×
+  - paragraph: Choose the roles bob.test holds. Everyone keeps the member role.
+  - group "Roles you can give":
+    - text: Roles you can give
+    - checkbox "admin"
+    - text: admin
+    - checkbox "member" [checked]
+    - text: member
+    - checkbox "ride-leader" [checked]
+    - text: ride-leader
+  - button "Cancel"
+  - button "Save"

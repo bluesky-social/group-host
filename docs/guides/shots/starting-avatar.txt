@@ -1,0 +1,8 @@
+- dialog "Add the avatar":
+  - heading "Add the avatar" [level=2]
+  - button "Close": ×
+  - paragraph: A square picture, drawn round beside its name.
+  - text: Avatar
+  - button "Avatar"
+  - button "Cancel"
+  - button "Add the avatar"

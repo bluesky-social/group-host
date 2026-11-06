@@ -156,6 +156,7 @@ An unknown command or flag fails with its usage; any failure exits 1.
 | `web`, `web-dev` | the console built, or served as its source changes |
 | `look <path>… [options]` | draws the console's pages as pictures in `target/look`, in any state: `--as <account>`, `--seed <name\|file>`, `--click`, `--type`, `--element`, `--phone`, `--desktop`, `--light`, `--dark`, `--all` ([development](../development.md#looking-at-the-console)) |
 | `look-up` | a world for `look` to draw over, kept until ctrl-c |
+| `shots [--check] [guide]…` | draws the guides' pictures and their text again into `docs/guides/shots`, from the look line above each, each guide over a fresh world; with `--check`, writes nothing and fails if a picture's text has changed, as the `e2e` check does ([development](../development.md#the-guides-pictures)) |
 | `e2e <args>` | builds the console and the host, then runs the console's flows in Chromium over the reference PDS, as the `e2e` check does |
 | `opensocial <args>` | the command |
 | `docs` | the docs' links and anchors, as the `docs` check runs it |

@@ -1,0 +1,13 @@
+- heading "Riders" [level=1]
+- paragraph: riders.groups.test
+- group:
+  - text: Rules2
+  - list:
+    - listitem:
+      - strong: Ride with lights after dark
+      - text: Front and back lights on from sunset, every ride.
+    - listitem:
+      - strong: Wait at the top
+      - text: Nobody rides on until the last rider is up.
+- text: You're a member.
+- button "Leave the group"

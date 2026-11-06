@@ -1,0 +1,6 @@
+- dialog "Delete this rule?":
+  - heading "Delete this rule?" [level=2]
+  - button "Close": ×
+  - paragraph: “No headphones” will no longer be one of the group's rules, here or in other apps.
+  - button "Cancel"
+  - button "Delete"

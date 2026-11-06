@@ -1,0 +1,12 @@
+- dialog "Sign in with your Atmosphere account":
+  - heading "Sign in with your Atmosphere account" [level=2]
+  - button "Close": ×
+  - paragraph:
+    - link "What is an Atmosphere account?":
+  - text: Handle
+  - combobox "Handle"
+  - button "Cancel"
+  - button "Sign in"
+  - paragraph:
+    - text: Don't have an account?
+    - link "Create one":

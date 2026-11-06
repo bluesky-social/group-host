@@ -1,0 +1,12 @@
+- dialog "Label someone":
+  - heading "Label someone" [level=2]
+  - button "Close": ×
+  - paragraph: The group puts the label on their account. Apps that follow the group's labels can act on it.
+  - text: Their handle
+  - combobox "Their handle": maximilianaquinces.test
+  - text: Label
+  - textbox "Label":
+    - /placeholder: spam
+    - text: spam
+  - button "Cancel"
+  - button "Label them"

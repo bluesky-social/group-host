@@ -14,7 +14,7 @@ on:
   push: {refs: [refs/heads/main]}
   pull:
     base: [refs/heads/main, refs/heads/feature/*]
-    paths: [docs/**, README.md, AGENTS.md, harness/docs.mjs, docs-site/**, lexicons/**, web/src/tokens.css, .knotless/workflows/docs.yml, .knotless/uses.lock]
+    paths: [docs/**, README.md, AGENTS.md, harness/docs.mjs, harness/shots.mjs, docs-site/**, lexicons/**, web/src/tokens.css, .knotless/workflows/docs.yml, .knotless/uses.lock]
 cache: [docs-site/node_modules]
 steps:
   - uses: chadtmiller.com/steps/npm-ci@1

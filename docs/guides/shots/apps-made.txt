@@ -1,0 +1,11 @@
+- heading "App passwords1" [level=2]
+- button "Create an app password"
+- paragraph:
+  - text: The app password “Phone” is
+  - code: <password>
+  - text: . Copy it now. You won't see it again.
+- list:
+  - listitem:
+    - strong: Phone
+    - text: By bob.test
+    - button "Revoke “Phone”": Revoke

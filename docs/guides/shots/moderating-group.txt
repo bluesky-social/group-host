@@ -1,0 +1,8 @@
+- heading "Garden share" [level=1]
+- paragraph: gardens.groups.test
+- navigation "The group":
+  - link "Moderation":
+  - link "Settings":
+- paragraph: Seeds, cuttings and spare tools, swapped between neighbours.
+- text: You're a member with the admin role.
+- button "Leave the group"

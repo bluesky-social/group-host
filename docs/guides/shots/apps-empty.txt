@@ -1,0 +1,24 @@
+- banner:
+  - link "opensocial":
+  - group: "@bob.test"
+- main:
+  - link "← Night shift":
+  - heading "Settings" [level=1]
+  - navigation "Settings":
+    - link "Profile":
+    - link "Rules":
+    - link "Roles":
+    - link "Apps":
+    - link "Recovery keys":
+  - heading "Apps acting as the group0" [level=2]
+  - paragraph: No apps are signed in as this group
+  - paragraph: When a member signs an app in as the group, it shows up here.
+  - heading "App passwords0" [level=2]
+  - button "Create an app password"
+  - paragraph: No app passwords
+  - paragraph: Create one for an app that signs in with a handle and password, like the Bluesky app.
+  - heading "What apps did as the group" [level=2]
+  - paragraph: Each write an app made while signed in as the group, newest first.
+  - paragraph: No app has written anything yet
+  - paragraph: When an app signed in as the group writes something, it shows up here.
+- contentinfo: console.group-host.internal runs opensocial

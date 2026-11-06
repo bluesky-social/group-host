@@ -1,0 +1,10 @@
+- heading "Pictures" [level=2]
+- list:
+  - listitem:
+    - strong: Avatar
+    - button "Remove the avatar": Remove
+    - button "Change the avatar": Change
+  - listitem:
+    - strong: Banner
+    - button "Remove the banner": Remove
+    - button "Change the banner": Change

@@ -1,0 +1,6 @@
+- heading "What apps did as the group" [level=2]
+- paragraph: Each write an app made while signed in as the group, newest first.
+- list:
+  - listitem: Phone deleted a post For bob.test , <date>
+  - listitem: Phone posted For bob.test , <date>
+  - listitem: Phone posted For bob.test , <date>

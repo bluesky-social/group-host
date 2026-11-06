@@ -1,0 +1,6 @@
+- dialog "Revoke this app's access?":
+  - heading "Revoke this app's access?" [level=2]
+  - button "Close": ×
+  - paragraph: Phone can no longer act as the group. It can sign in again later.
+  - button "Cancel"
+  - button "Revoke"

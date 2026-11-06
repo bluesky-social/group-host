@@ -208,3 +208,11 @@ h6 {
 .social-icons a:hover {
   color: var(--fg);
 }
+
+/* A guide's picture of the console: framed as a card is, so the page it
+   shows stands apart from the page it is on. */
+.sl-markdown-content picture.shot img {
+  display: block;
+  border: var(--border);
+  border-radius: var(--radius-md);
+}

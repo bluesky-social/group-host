@@ -1,0 +1,48 @@
+- dialog "Create a role":
+  - heading "Create a role" [level=2]
+  - button "Close": ×
+  - paragraph: Choose what people with this role can do, and which roles they can give. You give roles to members from the group's page.
+  - text: Its key
+  - textbox "Its key":
+    - /placeholder: moderator
+    - text: ride-leader
+  - text: Its name
+  - textbox "Its name":
+    - /placeholder: Moderator
+    - text: Ride leader
+  - group "It may":
+    - text: It may
+    - checkbox "mod.read" [checked]
+    - text: mod.read
+    - checkbox "mod.resolve"
+    - text: mod.resolve
+    - checkbox "label"
+    - text: label
+    - checkbox "takedown"
+    - text: takedown
+    - checkbox "invite" [checked]
+    - text: invite
+    - checkbox "admit" [checked]
+    - text: admit
+    - checkbox "eject"
+    - text: eject
+    - checkbox "role.assign"
+    - text: role.assign
+    - checkbox "space.create"
+    - text: space.create
+    - checkbox "space.configure"
+    - text: space.configure
+    - checkbox "space.delete"
+    - text: space.delete
+    - checkbox "group.configure"
+    - text: group.configure
+  - group "People with it can give":
+    - text: People with it can give
+    - checkbox "Admin"
+    - text: Admin
+    - checkbox "Member" [checked]
+    - text: Member
+  - checkbox "Every new member gets it"
+  - text: Every new member gets it
+  - button "Cancel"
+  - button "Create"

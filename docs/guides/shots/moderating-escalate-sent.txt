@@ -1,0 +1,15 @@
+- main:
+  - link "← Garden share":
+  - heading "Moderation" [level=1]
+  - button "Label someone"
+  - navigation "The queue":
+    - link "Open":
+    - link "Escalated":
+    - link "Resolved":
+  - heading "Subjects1" [level=2]
+  - list:
+    - listitem:
+      - text: did:plc:<id> Reported once
+      - button "Resolve"
+      - list:
+        - listitem: "<date> Reported: reasonSpam: Posts the same seed shop link in every thread."

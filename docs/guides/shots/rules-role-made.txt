@@ -1,0 +1,15 @@
+- heading "Roles3" [level=2]
+- button "Create a role"
+- paragraph: What people with each role can do. You give roles to members from the group's page.
+- list:
+  - listitem:
+    - strong: Admin
+    - text: admin Can admit eject group.configure invite label mod.read mod.resolve role.assign space.configure space.create space.delete takedown
+    - button "Delete Admin": Delete
+  - listitem:
+    - strong: Member
+    - text: member Nothing more than a member
+  - listitem:
+    - strong: Ride leader
+    - text: ride-leader Can admit invite mod.read
+    - button "Delete Ride leader": Delete

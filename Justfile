@@ -94,6 +94,15 @@ e2e *args: web
     {{cargo}} build -p group-host
     cd harness && npx playwright test -c e2e/playwright.config.mjs {{args}}
 
+# The guides' pictures, drawn again from the look line above each
+# (harness/shots.mjs), each guide over a fresh world of its own: the
+# guides named, or all of them. No `look-up` may be running.
+[positional-arguments]
+shots *guides:
+    {{cargo}} build -p group-host -p opensocial
+    cd web && npm run lex
+    node harness/shots.mjs "$@"
+
 # The console's pages as pictures in target/look, to open: any path, in
 # any state, signed in as anyone, on a phone or a desktop, light or dark,
 # a dialog open (harness/look/look.mjs, whose top says every option):

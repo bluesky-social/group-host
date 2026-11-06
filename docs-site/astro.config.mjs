@@ -1,13 +1,13 @@
 import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
-import { REPO, remarkLinks } from './plugins.mjs';
+import { REPO, remarkLinks, remarkShots } from './plugins.mjs';
 import { remarkReference } from './reference.mjs';
 
 /** Where the site is served: a private repository's site is at its own host's root. */
 const base = '/';
 
-// The sidebar follows docs/README.md: design, then reference, then deploying and development.
+// The sidebar follows docs/README.md: guides, design, then reference, then deploying and development.
 const page = (label, slug) => ({ label, slug });
 
 export default defineConfig({
@@ -16,6 +16,7 @@ export default defineConfig({
     processor: unified({
       remarkPlugins: [
         [remarkLinks, { base }],
+        [remarkShots, { base }],
         [remarkReference, { base }]
       ]
     })
@@ -45,6 +46,17 @@ export default defineConfig({
       pagination: true,
       sidebar: [
         page('Overview', ''),
+        {
+          label: 'Guides',
+          items: [
+            page('Overview', 'guides'),
+            page('Starting a group', 'guides/starting-a-group'),
+            page('Rules and roles', 'guides/rules-and-roles'),
+            page('Moderating', 'guides/moderating'),
+            page('Signing in as a group', 'guides/signing-in-as-a-group'),
+            page('Recovery keys', 'guides/recovery-keys')
+          ]
+        },
         {
           label: 'Design',
           items: [

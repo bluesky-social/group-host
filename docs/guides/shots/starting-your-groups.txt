@@ -1,0 +1,15 @@
+- banner:
+  - link "opensocial":
+  - group: "@alice.test"
+- main:
+  - heading "Your groups" [level=1]
+  - link "Start a group":
+  - heading "Invites waiting0" [level=2]
+  - paragraph: No invites waiting
+  - paragraph: Invites from groups show up here.
+  - heading "Groups you are in1" [level=2]
+  - list:
+    - listitem:
+      - link "Riders":
+      - text: "@riders.groups.test"
+- contentinfo: console.group-host.internal runs opensocial

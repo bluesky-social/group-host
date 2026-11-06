@@ -1,0 +1,20 @@
+- banner:
+  - link "opensocial":
+  - group: "@erin.test"
+- main:
+  - link "← Choir":
+  - heading "Settings" [level=1]
+  - navigation "Settings":
+    - link "Profile":
+    - link "Rules":
+    - link "Roles":
+    - link "Apps":
+    - link "Recovery keys":
+  - heading "Recovery keys" [level=2]
+  - button "Add a recovery key"
+  - paragraph: Keys that can change the group's identity, highest ranked first. A key you hold can undo what this host does, or move the group elsewhere without it.
+  - list:
+    - listitem:
+      - code: did:key:<key>
+      - text: This host
+- contentinfo: console.group-host.internal runs opensocial

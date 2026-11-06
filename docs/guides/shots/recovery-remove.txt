@@ -1,0 +1,6 @@
+- dialog "Remove this key?":
+  - heading "Remove this key?" [level=2]
+  - button "Close": ×
+  - paragraph: The person who holds it can no longer use it to recover the group.
+  - button "Cancel"
+  - button "Remove"

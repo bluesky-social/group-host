@@ -1,0 +1,2 @@
+- button "Change roles"
+- button "Remove from the group"

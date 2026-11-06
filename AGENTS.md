@@ -167,11 +167,16 @@ that page in the same pull:
 - a new page: the sidebar in `docs-site/astro.config.mjs`
 - a command of `opensocial`, or a `just` recipe: `docs/reference/cli.md`
 - building, testing, the checks: `docs/development.md`
+- a flow in the console a guide shows: that guide, its pictures drawn
+  again with `just shots` (the `e2e` check fails until they are)
 
 A design page arrives with its part, written from the code here, and
 says what this host does, never what another does or where an idea came
 from. The `docs` skill (`.claude/skills/docs`) is how a page is written
-or checked: facts from the code first, then the page fresh.
+or checked: facts from the code first, then the page fresh. A guide is
+written by the `guides` skill (`.claude/skills/guides`) the same way,
+its facts from walking the console with `just look`, its pictures drawn
+by `just shots` from the line above each.
 
 ## What CI checks
 
@@ -183,7 +188,9 @@ pulls into it or into a `feature/` branch:
 - `web`: oxfmt's format, the component layers, dialogs' titles,
   svelte-check (failing on any warning), and the build.
 - `lexicons`: `just lex`.
-- `e2e`: `just e2e`, the console in Chromium over the reference PDS.
+- `e2e`: `just e2e`, the console in Chromium over the reference PDS,
+  then `just shots --check`: each guide's pictures drawn again, failing
+  when what one shows has changed.
 - `docs`: `just docs`, every link and anchor landing, and the docs site's
   build.
 

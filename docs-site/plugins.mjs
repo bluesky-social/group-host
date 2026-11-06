@@ -43,3 +43,29 @@ export function remarkLinks({ base }) {
     });
   };
 }
+
+/** A guide's picture, `![…](shots/<name>.png)`, drawn in the scheme the
+ * reader's system asks for: its light picture, or `<name>-dark.png`. The
+ * look line above it, which says how it was drawn, is not shown. */
+export function remarkShots({ base }) {
+  const escape = (s) =>
+    s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+  return (tree) => {
+    walk(tree, (node) => {
+      if (!node.children) return;
+      node.children = node.children.filter(
+        (c) => !(c.type === 'html' && /^<!-- look /.test(c.value))
+      );
+      node.children = node.children.map((c) => {
+        const m = c.type === 'image' && c.url.match(/^shots\/([a-z0-9-]+)\.png$/);
+        if (!m) return c;
+        const at = `${base}guides/shots/${m[1]}`;
+        const alt = escape(c.alt ?? '');
+        return {
+          type: 'html',
+          value: `<picture class="shot"><source srcset="${at}-dark.png" media="(prefers-color-scheme: dark)"><img src="${at}.png" alt="${alt}" loading="lazy"></picture>`
+        };
+      });
+    });
+  };
+}

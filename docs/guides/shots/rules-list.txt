@@ -1,0 +1,14 @@
+- heading "Rules2" [level=2]
+- button "Add a rule"
+- paragraph: Rules everyone in the group agrees to. They show on the group's page in this order.
+- list:
+  - listitem:
+    - text: "1"
+    - strong: Ride with lights after dark
+    - text: Front and back lights on from sunset, every ride.
+    - button "Delete “Ride with lights after dark”": Delete
+  - listitem:
+    - text: "2"
+    - strong: Wait at the top
+    - text: Nobody rides on until the last rider is up.
+    - button "Delete “Wait at the top”": Delete

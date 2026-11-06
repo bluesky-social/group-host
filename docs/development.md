@@ -92,11 +92,48 @@ otherwise, and it says when a page is wider than the screen, naming the
 element that runs past its edge. Its options are at the top of
 `harness/look/look.mjs`.
 
+## The guides' pictures
+
+A guide (`docs/guides/`) shows the console with pictures, and each is
+drawn by `just look`, never taken by hand. The line above a picture says
+how:
+
+```md
+<!-- look /g/lanterns.groups.test --as alice --seed full --click 'button[popovertarget=invite]' -->
+![The invite dialog](shots/invite-dialog.png)
+```
+
+`just shots` draws them again (`harness/shots.mjs`), after a change to
+the console a guide shows, or only those of the guides it is given. Each
+guide is drawn over a fresh world of its own, its pictures in page
+order, so what an earlier one did (a seed, a form sent) is there for the
+ones after; a world `just look-up` keeps would bring its own, so none
+may be up. Each picture is drawn at desktop size in both schemes,
+`shots/<name>.png` and `shots/<name>-dark.png`, and the site shows the
+one the reader's scheme asks for. Beside each is `shots/<name>.txt`,
+what the picture shows as text: the page's accessibility tree, its
+headings, buttons, labels and words, with what differs from one world
+to the next (times, DIDs, keys, ports, a new password) as placeholders.
+
+Pixels differ between any two runs, but the text does not unless the
+console does, so the text is what is checked. `just shots --check`
+draws every guide again and compares only the text, writing nothing,
+and fails naming each picture whose page has changed; the `e2e` check
+runs it. A guide whose console has moved on is drawn again with `just
+shots`, and its words read against the new pictures. `just docs` fails
+a picture with no look line, a name two pictures share, one with no
+dark picture or no text, a picture in `shots/` no guide shows, and a
+word a guide puts in bold, as on screen, that is in no guide's picture.
+A picture's page is drawn from a list in no set order only where the
+list does not show. The `guides` skill (`.claude/skills/guides`) is how
+a guide is written.
+
 ## The docs site
 
 `docs/` reads on its own, in the repository's pages; `docs-site/` makes
 a site of it with Starlight, changing nothing in it (`content.mjs`
-copies each page in, its first heading its title). A link between pages
+copies each page in, its first heading its title, and the guides'
+pictures beside them). A link between pages
 goes to the page on the site, and one out of `docs/` to the file in the
 repository (`plugins.mjs`). On a reference page, a table of routes or
 methods is drawn as a list, each with its HTTP method, and each
