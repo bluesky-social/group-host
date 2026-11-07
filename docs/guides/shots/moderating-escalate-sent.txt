@@ -1,12 +1,15 @@
 - main:
   - link "← Garden share":
   - heading "Moderation" [level=1]
-  - button "Label someone"
   - navigation "The queue":
     - link "Open":
     - link "Escalated":
     - link "Resolved":
   - heading "Subjects1" [level=2]
+  - search:
+    - text: Find an account
+    - combobox "Find an account"
+    - button "Review"
   - list:
     - listitem:
       - text: maximilianaquinces.test Account · Reported on <date> Spam

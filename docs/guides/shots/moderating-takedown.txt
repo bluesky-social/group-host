@@ -1,16 +1,13 @@
-- listitem:
-  - text: maximilianaquinces.test Account · Reported on <date> Spam
-  - button "Review maximilianaquinces.test": Review
-  - paragraph: Posts the same seed shop link in every thread.
-  - group:
-    - text: History
-    - list:
-      - listitem:
-        - strong: Reported
-        - text: by frank.test <date> Spam. Posts the same seed shop link in every thread.
-      - listitem:
-        - strong: Labelled
-        - text: by dan.test <date> spam
-      - listitem:
-        - strong: Labelled
-        - text: by dan.test <date> !takedown
+- heading "Labels" [level=3]
+- list:
+  - listitem:
+    - text: spam
+    - button "Remove the label spam": ×
+  - listitem:
+    - text: "!takedown"
+    - button "Remove the label !takedown": ×
+- text: Add a label
+- textbox "Add a label":
+  - /placeholder: off-topic
+- button "Add"
+- paragraph: Apps that follow the group's labels decide what each one does.

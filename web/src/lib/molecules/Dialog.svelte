@@ -7,20 +7,28 @@
    * button to close it, then `children`. Light dismiss closes it too, as a
    * popover does, with no script. `wide` for one with much in it. Closed,
    * however it closes, what was typed into it goes, and `onclose` is told.
+   * `opened` opens it whenever it turns true, as the page is drawn or
+   * drawn again, for a page that is asked for with it open.
    */
   let {
     id,
     title,
     wide = false,
+    opened = false,
     onclose,
     children
   }: {
     id: string;
     title: string;
     wide?: boolean;
+    opened?: boolean;
     onclose?: () => void;
     children: Snippet;
   } = $props();
+  $effect(() => {
+    const el = document.getElementById(id);
+    if (opened && !el?.matches(':popover-open')) el?.showPopover();
+  });
   // Opened, the first thing to fill in is the one being typed into.
   function toggled(e: ToggleEvent) {
     if (e.newState !== 'open') {

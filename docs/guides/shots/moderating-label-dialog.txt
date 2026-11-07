@@ -1,12 +1,26 @@
-- dialog "Label someone":
-  - heading "Label someone" [level=2]
+- dialog "Review":
+  - heading "Review" [level=2]
   - button "Close": ×
-  - paragraph: The group puts the label on their account. Apps that follow the group's labels can act on it.
-  - text: Their handle
-  - combobox "Their handle": maximilianaquinces.test
-  - text: Label
-  - textbox "Label":
-    - /placeholder: spam
+  - paragraph: maximilianaquinces.test · Account · Reported on <date>
+  - heading "Labels" [level=3]
+  - paragraph: No labels yet.
+  - text: Add a label
+  - textbox "Add a label":
+    - /placeholder: off-topic
     - text: spam
+  - button "Add"
+  - paragraph: Apps that follow the group's labels decide what each one does.
+  - paragraph: Asks apps that follow the group's labels to hide everything this account posted. They stay in the group.
+  - button "Take down"
+  - heading "Decision" [level=3]
+  - text: A note, if you like
+  - textbox "A note, if you like"
   - button "Cancel"
-  - button "Label them"
+  - button "Escalate"
+  - button "Resolve"
+  - group:
+    - text: History
+    - list:
+      - listitem:
+        - strong: Reported
+        - text: by frank.test <date> Spam. Posts the same seed shop link in every thread.

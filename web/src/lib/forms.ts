@@ -95,3 +95,28 @@ export function inDialog(id: string, failed: (why: string | null) => void): Subm
     };
   };
 }
+
+/**
+ * A form in a dialog that stays open once it is done (a label added to
+ * what the dialog is about): the page drawn again behind it and in it.
+ * Refused, `failed` is told why, to say in the dialog.
+ */
+export function inOpenDialog(failed: (why: string | null) => void): SubmitFunction {
+  return ({ submitter }) => {
+    failed(null);
+    const done = hold(submitter);
+    return async ({ result, update }) => {
+      done();
+      if (result.type === 'failure') {
+        const why = (result.data as { failed?: string } | undefined)?.failed;
+        failed(why ?? 'That didn’t work. Check what you entered.');
+        return;
+      }
+      if (result.type === 'error') {
+        failed(result.error?.message ?? 'Something went wrong on the host.');
+        return;
+      }
+      await update({ reset: true });
+    };
+  };
+}

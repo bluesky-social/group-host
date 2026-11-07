@@ -1,0 +1,18 @@
+- dialog "Review":
+  - heading "Review" [level=2]
+  - button "Close": ×
+  - paragraph: frank.test · Account · Not in the queue
+  - heading "Labels" [level=3]
+  - paragraph: No labels yet.
+  - paragraph: "Labels the group has used, to add with a press:"
+  - button "spam"
+  - text: Add a label
+  - textbox "Add a label":
+    - /placeholder: off-topic
+  - button "Add"
+  - paragraph: Apps that follow the group's labels decide what each one does.
+  - paragraph: Asks apps that follow the group's labels to hide everything this account posted. They stay in the group.
+  - button "Take down"
+  - heading "Decision" [level=3]
+  - paragraph: Nobody has reported them. Report them to put them in the queue, for you or another moderator to decide.
+  - button "Report this account"

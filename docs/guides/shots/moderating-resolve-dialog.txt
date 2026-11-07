@@ -1,10 +1,6 @@
-- dialog "Resolve or escalate":
-  - heading "Resolve or escalate" [level=2]
-  - button "Close": ×
-  - paragraph: maximilianaquinces.test · Account
-  - paragraph: Resolve it once it's dealt with, or escalate it for someone else to look at.
-  - text: A note, if you like
-  - textbox "A note, if you like": Taken down and removed from the group.
-  - button "Cancel"
-  - button "Escalate"
-  - button "Resolve"
+- heading "Decision" [level=3]
+- text: A note, if you like
+- textbox "A note, if you like": Taken down and removed from the group.
+- button "Cancel"
+- button "Escalate"
+- button "Resolve"

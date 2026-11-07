@@ -697,40 +697,59 @@ test('adding a recovery key, and removing it', async () => {
 test('moderating: a label, and the queue', async () => {
   await page.goto(url('/g/hikers.groups.test'));
   await page.getByRole('link', { name: 'Moderation' }).click();
+  // A subject's row, by its handle, not those whose history names it.
+  const row = (handle) =>
+    page
+      .locator('li.subject')
+      .filter({ has: page.locator(':scope > .row-main .who', { hasText: handle }) });
+  const review = page.getByRole('dialog', { name: 'Review' }).filter({ visible: true });
   // Putting him out is already in the queue, on him.
-  const ejected = page.locator('.subject', { hasText: who.bob.handle });
-  await expect(ejected.locator('.events')).toContainText('Removed');
-  await page.getByRole('button', { name: 'Label someone' }).click();
-  await page.getByRole('combobox', { name: 'Their handle' }).fill('bob.test');
-  await page.getByRole('textbox', { name: 'Label' }).fill('troll');
-  await page.getByRole('button', { name: 'Label them' }).click();
-  const subject = page.locator('.subject', { hasText: who.bob.handle });
-  await expect(subject.locator('.events')).toContainText('troll');
+  await expect(row(who.bob.handle).locator(':scope > .history .events')).toContainText('Removed');
+  // Found by his handle, he is reviewed where his row is.
+  await page.getByRole('combobox', { name: 'Find an account' }).fill(who.bob.handle);
+  await page.getByRole('search').getByRole('button', { name: 'Review' }).click();
+  await review.getByRole('textbox', { name: 'Add a label' }).fill('troll');
+  await review.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(review.locator('.labels')).toContainText('troll');
+  // Taken off, it is a label the group has used, to put back with a press.
+  await review.getByRole('button', { name: 'Remove the label troll' }).click();
+  await expect(review.locator('.labels')).toHaveCount(0);
+  await review.locator('.label-choices').getByRole('button', { name: 'troll' }).click();
+  await expect(review.locator('.labels')).toContainText('troll');
+  // Taking him down asks first.
+  await review.getByRole('button', { name: 'Take down' }).click();
+  await page
+    .getByRole('dialog', { name: 'Take this account down?' })
+    .getByRole('button', { name: 'Take down' })
+    .click();
+  await expect(review.locator('.labels')).toContainText('!takedown');
   // Escalated with a note, it leaves the open queue for the escalated.
-  await subject.getByRole('button', { name: 'Review' }).click();
-  const resolving = page
-    .getByRole('dialog', { name: 'Resolve or escalate' })
-    .filter({ visible: true });
-  await resolving.getByRole('textbox', { name: 'A note, if you like' }).fill('Asked him to stop');
-  await resolving.getByRole('button', { name: 'Escalate' }).click();
-  await expect(page.locator('.subject', { hasText: who.bob.handle })).toHaveCount(0);
+  await review.getByRole('textbox', { name: 'A note, if you like' }).fill('Asked him to stop');
+  await review.getByRole('button', { name: 'Escalate' }).click();
+  await expect(row(who.bob.handle)).toHaveCount(0);
   await page
     .getByRole('navigation', { name: 'The queue' })
     .getByRole('link', { name: 'Escalated' })
     .click();
-  await expect(
-    page.locator('.subject', { hasText: who.bob.handle }).locator('.events')
-  ).toContainText(/Escalated by[\s\S]*Asked him to stop/);
-  await page
-    .locator('.subject', { hasText: who.bob.handle })
-    .getByRole('button', { name: 'Review' })
-    .click();
-  await resolving.getByRole('button', { name: 'Resolve' }).click();
-  await expect(resolving).toHaveCount(0);
+  await expect(row(who.bob.handle).locator(':scope > .history .events')).toContainText(
+    /Escalated by[\s\S]*Asked him to stop/
+  );
+  await row(who.bob.handle).getByRole('button', { name: 'Review' }).click();
+  await review.getByRole('button', { name: 'Resolve' }).click();
+  await expect(review).toHaveCount(0);
   await page.goto(url('/g/hikers.groups.test/moderation?status=resolved'));
-  await expect(
-    page.locator('.subject', { hasText: who.bob.handle }).locator('.events')
-  ).toContainText('Resolved');
+  await expect(row(who.bob.handle).locator(':scope > .history .events')).toContainText('Resolved');
+  // Someone nobody reported is reported from their review, into the open queue.
+  await page.goto(url('/g/hikers.groups.test/moderation'));
+  await page.getByRole('combobox', { name: 'Find an account' }).fill(who.dan.handle);
+  await page.getByRole('search').getByRole('button', { name: 'Review' }).click();
+  await expect(review).toContainText('Not in the queue');
+  await review.getByRole('button', { name: 'Report this account' }).click();
+  const reporting = page.getByRole('dialog', { name: 'Report an account' });
+  await reporting.getByRole('radio', { name: 'Rude' }).check();
+  await reporting.getByRole('textbox', { name: 'What happened' }).fill('Shouted at a newcomer.');
+  await reporting.getByRole('button', { name: 'Report', exact: true }).click();
+  await expect(row(who.dan.handle)).toContainText('Shouted at a newcomer.');
 });
 
 test('signing an app in as her group', async () => {

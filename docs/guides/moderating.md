@@ -67,14 +67,14 @@ the tabs.
 
 When a report is not yours to decide, escalate it.
 
-1. Press **Review** on the post's row. The dialog **Resolve or escalate**
-   opens.
-2. Under **A note, if you like**, type why, such as "Third time this
-   month; over to the admins."
+1. Press **Review** on the post's row. The dialog **Review** opens, with
+   everything you can do about the post and its history.
+2. Under **Decision**, in **A note, if you like**, type why, such as
+   "Third time this month; over to the admins."
 3. Press **Escalate**. The dialog closes, and the subject leaves the
    **Open** tab.
 
-   <!-- look /g/gardens.groups.test/moderation --as frank --click 'button[popovertarget=resolve-1]' --type '#resolve-1 [name=note]=Third time this month; over to the admins.' --click '#resolve-1 button[value=escalated]' --element main -->
+   <!-- look /g/gardens.groups.test/moderation --as frank --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --type ':popover-open [name=note]=Third time this month; over to the admins.' --click ':popover-open button[value=escalated]' --element main -->
    ![The Open tab after escalating, Subjects 1: only the account reported for spam is left](shots/moderating-escalate-sent.png)
 
 The post now waits on the **Escalated** tab, your note in its history.
@@ -82,54 +82,63 @@ The post now waits on the **Escalated** tab, your note in its history.
 ## How do I label an account?
 
 A label is a tag the group puts on an account, such as "spam". Apps that
-follow the group's labels decide what to do with it. Two labels mean
-more: `!takedown` and `!hide`, which the next part shows. Any other
-word is yours to choose.
+follow the group's labels decide what to do with it. Any word is yours to
+choose, but two mean more: `!takedown` and `!hide`, which the next part
+shows.
 
-The console cannot take a label back. Only a terminal can, so check the
-label before you send it.
+1. Press **Review** on the account's row.
+2. Under **Add a label**, type the label, such as "spam".
 
-The dialog asks for the account's handle, as the queue shows it.
+   <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --type ':popover-open input[name=val]:not([type=hidden])=spam' --element ':popover-open' -->
+   ![The Review dialog for maximilianaquinces.test, No labels yet, and spam typed under Add a label, with Add](shots/moderating-label-dialog.png)
 
-1. Press **Label someone**.
-2. Under **Their handle**, type the account's handle, such as
-   "maximilianaquinces.test".
-3. Under **Label**, type the label, such as "spam".
+3. Press **Add**. The dialog stays open, and the label shows under
+   **Labels**, with a × beside it.
 
-   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=spam' --element ':popover-open' -->
-   ![The Label someone dialog, maximilianaquinces.test under Their handle and spam under Label, with Cancel and Label them](shots/moderating-label-dialog.png)
+   <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --type ':popover-open input[name=val]:not([type=hidden])=spam' --click ':popover-open .row-form button[type=submit]' --element ':popover-open .review-part' -->
+   ![The Labels part of the dialog, the label spam with a × beside it](shots/moderating-labelled.png)
 
-4. Press **Label them**. The dialog closes, and the account's history
-   gains a line saying it was labelled.
+Press the × to take a label back. Once the group has used a label, the
+dialog offers it to add with one press, under the field.
 
-   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=spam' --click ':popover-open button[type=submit]' --click 'li.subject:has-text("maximilianaquinces.test") summary' --element 'li.subject:has-text("maximilianaquinces.test")' -->
-   ![The account's row, its history open and ending in Labelled by dan.test, spam](shots/moderating-labelled.png)
-
-If the handle is not found, the dialog stays open and says so. The
-dialog labels accounts only.
+Posts are labelled from a terminal only, as the last part shows.
 
 ## How do I take an account down?
 
 A takedown asks apps to hide what an account posted. The host writes
-the label but hides nothing itself. Apps that follow the group's labels
-do the hiding. The account stays in the group until you remove it, as
-the next part shows.
+the label `!takedown` but hides nothing itself. Apps that follow the
+group's labels do the hiding. The account stays in the group until you
+remove it, as the next part shows.
 
-There is no takedown button. You type the label `!takedown` in the same
-dialog, and it needs a role with `takedown`.
+The dialog shows **Take down** only to a role with `takedown`.
 
-1. Press **Label someone**.
-2. Under **Their handle**, type "maximilianaquinces.test".
-3. Under **Label**, type "!takedown".
-4. Press **Label them**. The account's history gains a line for the
-   takedown.
+1. In the account's Review, press **Take down**, beside the line on
+   what a takedown does.
+2. Press **Take down** again in the dialog that asks you to be sure.
 
-   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=label]' --type '#label-handle=maximilianaquinces.test' --type '[name=val]=!takedown' --click ':popover-open button[type=submit]' --click 'li.subject:has-text("maximilianaquinces.test") summary' --element 'li.subject:has-text("maximilianaquinces.test")' -->
-   ![The account's row, its history ending in labels spam and !takedown, both by dan.test](shots/moderating-takedown.png)
+   <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --click ':popover-open button[popovertarget$=takedown]' --click '[id$=-takedown]:popover-open button[type=submit]' --element ':popover-open .review-part' -->
+   ![The Labels part of the dialog, the labels spam and !takedown, each with a ×](shots/moderating-takedown.png)
 
-The label `!hide` works the same way and needs the same permission. A
-moderator without it is refused, and the dialog stays open with the
-words "missing takedown".
+The label `!takedown` shows under **Labels**. Press its × to undo the
+takedown. The label `!hide` works the same way: type it under **Add a
+label**. Both need the same permission.
+
+## How do I act on someone nobody reported?
+
+You can label, take down or report anyone in the group, reported or not.
+
+1. Under **Find an account**, at the top of the queue, type their
+   handle, such as "frank.test".
+2. Press **Review** beside it. Their Review opens. If nobody has reported them, it
+   says **Not in the queue**, and in place of a decision it offers
+   **Report this account**.
+
+   <!-- look /g/gardens.groups.test/moderation --as dan --type '#find-handle=frank.test' --click 'form.find button[type=submit]' --element ':popover-open' -->
+   ![The Review dialog for frank.test, Account, Not in the queue, with Labels, Take down and Report this account](shots/moderating-found.png)
+
+To put them in the queue for you or another moderator to decide, press
+**Report this account**, choose why, and send the report. They go into the **Open**
+tab with your report, as a member's report would.
 
 ## How do I remove someone from the group?
 
@@ -157,11 +166,11 @@ they can ask to join again.
 ## How do I resolve a report?
 
 1. On the Moderation page, press **Review** on the account's row.
-2. Under **A note, if you like**, type what was done, such as "Taken down
-   and removed from the group."
+2. Under **Decision**, in **A note, if you like**, type what was done,
+   such as "Taken down and removed from the group."
 
-   <!-- look /g/gardens.groups.test/moderation --as dan --click 'button[popovertarget=resolve-0]' --type '#resolve-0 [name=note]=Taken down and removed from the group.' --element ':popover-open' -->
-   ![The Resolve or escalate dialog for maximilianaquinces.test's account, the note Taken down and removed from the group. typed, with Cancel, Escalate and Resolve](shots/moderating-resolve-dialog.png)
+   <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --type ':popover-open [name=note]=Taken down and removed from the group.' --element ':popover-open .review-part:has([name=note])' -->
+   ![The Decision part of the Review dialog, the note Taken down and removed from the group. typed, with Cancel, Escalate and Resolve](shots/moderating-resolve-dialog.png)
 
 3. Press **Resolve**. The subject moves to the **Resolved** tab, with
    all that was done and your note in its history.
@@ -182,8 +191,7 @@ Each act here has a command in [the `opensocial` command](../reference/cli.md):
   A takedown is the same with `!takedown`.
 - Label a post: `opensocial mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.
   Only the terminal labels posts.
-- Take a label back: the same command with `--undo`. Only the terminal
-  does this.
+- Take a label back: the same command with `--undo`.
 - Remove a member: `opensocial member eject gardens.groups.test maximilianaquinces.test`.
 
 No command makes a report. An AI app connected to the group has the same
