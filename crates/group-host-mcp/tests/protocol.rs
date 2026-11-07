@@ -35,6 +35,8 @@ fn names_each_tool_for_its_command() {
             "profile_set",
             "rule_set",
             "rule_delete",
+            "label_define",
+            "label_delete",
             "role_set",
             "role_delete",
             "role_grant",
@@ -206,6 +208,20 @@ fn plans_a_method_asked_with_its_arguments() {
         panic!()
     };
     assert_eq!(input, json!({"limit": 5}));
+    // A label defined, its flags in snake case asked in the method's own names.
+    let args = json!({"label": "troll", "name": "Troll", "description": "Picks fights.", "default_setting": "hide", "adult_only": true});
+    let Ok(Plan::Call { nsid, input, .. }) = planned("label_define", args) else {
+        panic!()
+    };
+    assert_eq!(nsid, "fyi.opensocial.putLabelDefinition");
+    assert_eq!(
+        input,
+        json!({"label": "troll", "name": "Troll", "description": "Picks fights.", "defaultSetting": "hide", "adultOnly": true})
+    );
+    let Ok(Plan::Call { nsid, .. }) = planned("label_delete", json!({"label": "troll"})) else {
+        panic!()
+    };
+    assert_eq!(nsid, "fyi.opensocial.deleteLabelDefinition");
     // An account, or a record at a version; the opposite asked instead.
     let call = |args: Value| match planned("mod_label", args).unwrap() {
         Plan::Call { nsid, input, .. } => (nsid, input),

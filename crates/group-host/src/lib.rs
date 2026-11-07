@@ -372,6 +372,14 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(moderation::negate_label),
         )
         .route(
+            "/xrpc/fyi.opensocial.putLabelDefinition",
+            post(moderation::put_label_definition),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.deleteLabelDefinition",
+            post(moderation::delete_label_definition),
+        )
+        .route(
             "/xrpc/fyi.opensocial.listSubjects",
             get(moderation::list_subjects),
         )

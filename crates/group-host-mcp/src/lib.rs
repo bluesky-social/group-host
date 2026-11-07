@@ -51,6 +51,8 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("getSubjectHistory"),
     lexicon!("applyLabel"),
     lexicon!("negateLabel"),
+    lexicon!("putLabelDefinition"),
+    lexicon!("deleteLabelDefinition"),
     lexicon!("resolveSubject"),
     lexicon!("putSite"),
     lexicon!("deleteSite"),
@@ -339,6 +341,19 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         &["rule"],
         "Deletes a rule as the group.",
         Made::Delete("rule", META, At::Named("rule")),
+    ),
+    (
+        "label_define",
+        &["label"],
+        "Defines one of the group's own labels, or changes one it defines: what it is called and \
+         means, and how apps should show what wears it.",
+        Made::Method("putLabelDefinition", None),
+    ),
+    (
+        "label_delete",
+        &["label"],
+        "Stops defining one of the group's own labels. Labels already applied stay.",
+        Made::Method("deleteLabelDefinition", None),
     ),
     (
         "role_set",

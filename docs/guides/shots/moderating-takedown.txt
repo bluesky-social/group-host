@@ -6,6 +6,8 @@
   - listitem:
     - text: "!takedown"
     - button "Remove the label !takedown": ×
+- paragraph: Press one of the group's labels to add it.
+- button "Add the label off-topic": Off-topic
 - text: Add a label
 - textbox "Add a label":
   - /placeholder: off-topic

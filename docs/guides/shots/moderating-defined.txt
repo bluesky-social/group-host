@@ -1,0 +1,8 @@
+- heading "Labels1" [level=2]
+- button "Create a label"
+- paragraph: The labels moderators put on accounts and posts. Apps that follow the group's labels read what each means and how to show it.
+- list:
+  - listitem:
+    - strong: Off-topic
+    - text: off-topic Not about gardens, seeds or swaps. Apps show it with a warning.
+    - button "Delete the label off-topic": Delete

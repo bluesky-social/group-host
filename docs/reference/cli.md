@@ -69,6 +69,13 @@ an MCP client acts in one group.
 | `rule set <group> --title <title> --text <words> [--order <n>] [--rule <key>]` | writes a rule as the group: the one `--rule` names, or a new one |
 | `rule delete <group> <rule>` | deletes a rule, by its key |
 
+### label
+
+| Command | What it does |
+| --- | --- |
+| `label define <group> <label> --name <name> --description <words> [--lang <lang>] [--severity inform\|alert\|none] [--blurs content\|media\|none] [--default-setting ignore\|warn\|hide] [--adult-only]` | defines one of the group's own labels, lowercase letters and hyphens, or changes one it defines: what it is called and means, and how apps should show what wears it |
+| `label delete <group> <label>` | stops defining one of the group's own labels; labels already applied stay |
+
 ### role
 
 | Command | What it does |

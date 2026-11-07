@@ -13,6 +13,7 @@
       ? [
           { href: at, text: 'Profile' },
           { href: `${at}/rules`, text: 'Rules' },
+          { href: `${at}/labels`, text: 'Labels' },
           { href: `${at}/roles`, text: 'Roles' }
         ]
       : []),

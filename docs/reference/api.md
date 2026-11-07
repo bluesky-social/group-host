@@ -202,6 +202,8 @@ its tools are in [MCP tools](mcp.md).
 | `POST fyi.opensocial.resolveSubject` | sets a subject `resolved` or `escalated`, with an optional note; answers the subject |
 | `POST fyi.opensocial.applyLabel` | labels a subject |
 | `POST fyi.opensocial.negateLabel` | takes a label back, with a record of its own |
+| `POST fyi.opensocial.putLabelDefinition` | defines one of the group's own labels, lowercase letters and hyphens, or changes it, in its labeler, for one with `group.configure`; answers the definition. `getGroup` answers them as `labels` |
+| `POST fyi.opensocial.deleteLabelDefinition` | stops defining one; labels already applied stay |
 
 ## Operating the host
 

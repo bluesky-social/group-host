@@ -786,3 +786,87 @@ fn keeps_what_was_resolved_escalated_and_noted_as_a_status_set() {
     );
     assert_eq!(said("did:plc:c"), [status("open", Some("first"))]);
 }
+
+#[tokio::test]
+async fn defines_the_groups_own_labels_for_one_who_configures_it() {
+    let h = start(&[], false).await;
+    let (did, _, _, [alice, bob, _]) = group(&h).await;
+    let labels = async || {
+        let (_, view) = query(&h, &alice, "getGroup", &format!("group={did}")).await;
+        view["group"]["labels"].clone()
+    };
+    // A new group defines none of its own.
+    assert_eq!(labels().await, json!([]));
+    let troll = json!({"group": did, "label": "troll", "name": "Troll", "description": "Picks fights on purpose."});
+    let (status, defined) = call(&h, &alice, "putLabelDefinition", troll.clone()).await;
+    assert_eq!(status, 200, "{defined}");
+    assert_eq!(defined["identifier"], "troll");
+    assert_eq!(defined["severity"], "inform");
+    assert_eq!(defined["blurs"], "none");
+    assert_eq!(defined["defaultSetting"], "warn");
+    assert_eq!(
+        defined["locales"][0],
+        json!({"lang": "en", "name": "Troll", "description": "Picks fights on purpose."})
+    );
+    assert!(defined.get("adultOnly").is_none());
+    assert_eq!(labels().await, json!([defined]));
+    // Defined again, it is changed in place, not listed twice; and it is
+    // among the values the labeler applies, beside atproto's.
+    let again = json!({"group": did, "label": "troll", "name": "Troll", "description": "Baits people.", "lang": "sl", "severity": "alert", "blurs": "content", "defaultSetting": "hide", "adultOnly": true});
+    let (_, changed) = call(&h, &alice, "putLabelDefinition", again).await;
+    assert_eq!(changed["adultOnly"], true);
+    assert_eq!(changed["locales"][0]["lang"], "sl");
+    assert_eq!(labels().await, json!([changed]));
+    let meta = meta_space(&did);
+    let labeler = h
+        .host
+        .group_record(&did, &meta, "fyi.opensocial.labeler", "self");
+    let labeler = labeler.unwrap().unwrap();
+    assert_eq!(
+        labeler["policies"]["labelValues"],
+        json!(["!hide", "!takedown", "troll"])
+    );
+    assert_eq!(labeler["subjectTypes"], json!(["account", "record"]));
+    // atproto's own values, and anything else, are not the group's to define.
+    for label in ["!hide", "Troll", "spam bot", ""] {
+        let body = json!({"group": did, "label": label, "name": "x", "description": "x"});
+        let (status, said) = call(&h, &alice, "putLabelDefinition", body).await;
+        assert_eq!(status, 400, "{label}: {said}");
+        let (status, _) = call(
+            &h,
+            &alice,
+            "deleteLabelDefinition",
+            json!({"group": did, "label": label}),
+        )
+        .await;
+        assert_eq!(status, 400, "{label}");
+    }
+    // Bob, a member, does not configure it.
+    let (status, said) = call(&h, &bob, "putLabelDefinition", troll).await;
+    assert_eq!((status, said["error"].as_str()), (403, Some("Forbidden")));
+    let (status, _) = call(
+        &h,
+        &bob,
+        "deleteLabelDefinition",
+        json!({"group": did, "label": "troll"}),
+    )
+    .await;
+    assert_eq!(status, 403);
+    // Taken away, it is neither defined nor applied, and atproto's stay.
+    let (status, said) = call(
+        &h,
+        &alice,
+        "deleteLabelDefinition",
+        json!({"group": did, "label": "troll"}),
+    )
+    .await;
+    assert_eq!((status, said), (200, json!({})));
+    assert_eq!(labels().await, json!([]));
+    let labeler = h
+        .host
+        .group_record(&did, &meta, "fyi.opensocial.labeler", "self");
+    assert_eq!(
+        labeler.unwrap().unwrap()["policies"]["labelValues"],
+        json!(["!hide", "!takedown"])
+    );
+}

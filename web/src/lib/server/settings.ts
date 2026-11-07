@@ -456,6 +456,26 @@ const all = {
     const { group } = await asked(event);
     return act(event, 'fyi.opensocial.activateGroup', { group });
   },
+  define: async (event) => {
+    const { group, form } = await asked(event);
+    const label = text(form, 'label').toLowerCase().replace(/\s+/g, '-');
+    return act(event, 'fyi.opensocial.putLabelDefinition', {
+      group,
+      label,
+      name: text(form, 'name'),
+      description: text(form, 'description'),
+      severity: text(form, 'severity') || 'inform',
+      blurs: text(form, 'blurs') || 'none',
+      defaultSetting: text(form, 'defaultSetting') || 'warn'
+    });
+  },
+  undefine: async (event) => {
+    const { group, form } = await asked(event);
+    return act(event, 'fyi.opensocial.deleteLabelDefinition', {
+      group,
+      label: text(form, 'label')
+    });
+  },
   delete: async (event) => {
     const { group } = await asked(event);
     // Gone, there is no page of it to come back to.
@@ -480,6 +500,7 @@ export const profileActions = pick(
 /** What a group switched off is: switched back on, or deleted, from its own page. */
 export const switchedOffActions = pick('activate', 'delete');
 export const ruleActions = pick('rule', 'unrule');
+export const labelActions = pick('define', 'undefine');
 export const roleActions = pick('role', 'unrole');
 export const appActions = pick('revoke', 'password', 'unpassword');
 export const recoveryActions = pick('key', 'unkey');

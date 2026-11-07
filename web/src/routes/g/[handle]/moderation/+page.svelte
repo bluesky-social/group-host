@@ -46,6 +46,7 @@
         reasons={data.reasons}
         found={data.found}
         reviewing={data.reviewing}
+        defined={g.labels ?? []}
       />
     </Section>
   {:else}

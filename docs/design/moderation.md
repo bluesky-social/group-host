@@ -169,6 +169,25 @@ of its lists, when present, limits them: `reasonTypes` the reasons,
 group's labeler takes reports of accounts and records, for the common
 reasons, of any collection.
 
+## The group's own labels
+
+A label anyone can put on anything says nothing to an app that does not
+know what it means. So the group's labeler also lists the labels it
+applies, in `policies.labelValues`, and defines its own in
+`policies.labelValueDefinitions`, each as atproto defines one: its
+`identifier`, its name and what it means in `locales`, and how apps
+should show what wears it (`severity`, `blurs`, `defaultSetting`,
+`adultOnly`). A new group applies `!hide` and `!takedown`, which atproto
+defines, and none of its own.
+
+`putLabelDefinition` defines one, or changes the one with that value, and
+adds it to the values the labeler applies. `deleteLabelDefinition` takes
+both away; labels already applied stay. Each asks `group.configure`, and
+writes the labeler as the group, as any change to its meta space is. A
+group's own label is lowercase letters and hyphens, as atproto has a
+labeler's own values, so atproto's are never redefined. `getGroup`
+answers the definitions as `labels`, to whoever may read the meta space.
+
 Details:
 
 - A group not hosted here is `GroupNotFound`. A subject the reporter

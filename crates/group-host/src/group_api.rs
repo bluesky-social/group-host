@@ -241,6 +241,13 @@ pub async fn get_group(
             merge(&mut view, profile_view(&profile));
         }
         view["rules"] = json!(rules(&host, group)?);
+        let labeler = record(&meta, "labeler", "self")?.unwrap_or_default();
+        let labels = &labeler["policies"]["labelValueDefinitions"];
+        view["labels"] = if labels.is_array() {
+            labels.clone()
+        } else {
+            json!([])
+        };
     }
     let member = !roles.is_empty();
     let mut viewer = json!({

@@ -1,6 +1,7 @@
 // Lantern Hikers' moderation queue, after --seed full: dan reported twice,
 // once citing a rule; a post of frank's in its talk space reported; erin
-// reported and escalated; bob reported and resolved, with a note.
+// reported and escalated; bob reported and resolved, with a note; and two
+// labels of the group's own defined.
 
 import { serviceAuth } from '../../world.mjs';
 
@@ -37,6 +38,24 @@ export default async ({ world, who, opensocial }) => {
     '--access',
     JSON.stringify({ grants: [{ role: 'member', scopes: ['space:*?action=read'] }] })
   );
+  // Two labels of the group's own, for moderators to choose.
+  for (const [label, name, description, shown] of [
+    ['off-topic', 'Off-topic', 'Not about walking, lanterns or the ridge.', 'warn'],
+    ['selling', 'Selling', 'Selling something, outside the swap thread.', 'hide']
+  ])
+    opensocial(
+      'alice',
+      'label',
+      'define',
+      g,
+      label,
+      '--name',
+      name,
+      '--description',
+      description,
+      '--default-setting',
+      shown
+    );
   const reason = (r) => `com.atproto.moderation.defs#${r}`;
   const report = (name, subject, why, words, cites) =>
     call(name, 'fyi.opensocial.createReport', {

@@ -83,6 +83,13 @@ its icon.
 | `rule_set` | `rule set` | `fyi.opensocial.rule` | writes a rule in the meta space, as the group: the one `rule` names, by its key, or without one a new one, keyed by the host's clock |
 | `rule_delete` | `rule delete` | `fyi.opensocial.rule` | deletes the rule `rule` names |
 
+## label
+
+| Tool | Command | Lexicon | What it does |
+| --- | --- | --- | --- |
+| `label_define` | `label define` | `fyi.opensocial.putLabelDefinition` | defines the group's own label `label`, or changes it: its `name` and `description`, and how apps should show it (`severity`, `blurs`, `default_setting`, `adult_only`) |
+| `label_delete` | `label delete` | `fyi.opensocial.deleteLabelDefinition` | stops defining the label `label` |
+
 ## role
 
 | Tool | Command | Lexicon | What it does |

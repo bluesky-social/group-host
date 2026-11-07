@@ -23,7 +23,8 @@
    * someone looked up who is not in this list, and `reviewing`, the
    * subject whose Review opens as the page is drawn. `rules`, the group's
    * rules' titles by record key; `ruleList`, each rule's URI and title;
-   * `reasons`, the report reasons the group takes.
+   * `reasons`, the report reasons the group takes; `defined`, the labels
+   * the group defines.
    */
   let {
     subjects,
@@ -33,7 +34,8 @@
     ruleList = [],
     reasons = [],
     found = null,
-    reviewing = null
+    reviewing = null,
+    defined = []
   }: {
     subjects: Subject[];
     status: string;
@@ -43,6 +45,7 @@
     reasons?: string[];
     found?: Subject | null;
     reviewing?: string | null;
+    defined?: { identifier: string; locales: { name: string }[] }[];
   } = $props();
   // What fills each status's list, said where it is empty.
   const EMPTY: Record<string, string> = {
@@ -51,7 +54,14 @@
     resolved: 'What you resolve shows up here.'
   };
   const acts = $derived(can.label || can.takedown || can.resolve);
-  const choices = $derived(labelsUsed(found ? [...subjects, found] : subjects));
+  // The labels the group defines, by what they are called, then any other
+  // it has used here, by their value.
+  const choices = $derived([
+    ...defined.map((d) => ({ val: d.identifier, name: d.locales[0]?.name ?? d.identifier })),
+    ...labelsUsed(found ? [...subjects, found] : subjects)
+      .filter((v) => !defined.some((d) => d.identifier === v))
+      .map((v) => ({ val: v, name: v }))
+  ]);
   /** The page without the subject it was asked for open, once that closes. */
   function closed(key: string) {
     if (key !== reviewing) return;

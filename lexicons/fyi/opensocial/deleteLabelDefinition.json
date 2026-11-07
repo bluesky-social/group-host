@@ -1,0 +1,34 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.deleteLabelDefinition",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Stop defining one of the group's own labels: its definition, and the value among those its labeler applies. Labels already applied stay. Requires group.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "label"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 100,
+              "maxGraphemes": 100,
+              "description": "The label's value."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": { "type": "object", "properties": {} }
+      }
+    }
+  }
+}

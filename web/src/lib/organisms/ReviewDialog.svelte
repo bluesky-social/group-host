@@ -11,7 +11,8 @@
    * Everything a moderator does about one subject, in a dialog opened by a
    * button whose `popovertarget` is `id`: for an account, or a record
    * whose version the queue knows, the labels it
-   * wears, each removable, those the group uses (`choices`) to add and
+   * wears, each removable, those the group defines or has used
+   * (`choices`, each its value and what it is called) to add and
    * another; taking it down; then resolving or escalating it, or, for one
    * the queue has never had, reporting it; and what happened to it. Each
    * part only for one whose roles let them (`can`). `rules`, the group's
@@ -32,7 +33,7 @@
   }: {
     id: string;
     subject: Subject;
-    choices: string[];
+    choices: { val: string; name: string }[];
     can: { label: boolean; takedown: boolean; resolve: boolean };
     rules: Record<string, string>;
     ruleList: { uri: string; title: string }[];
@@ -54,7 +55,7 @@
   );
   const wearing = $derived(labelsOf(s.events));
   const takenDown = $derived(wearing.some((v) => TAKEDOWN.includes(v)));
-  const toAdd = $derived(choices.filter((v) => !wearing.includes(v)));
+  const toAdd = $derived(choices.filter((c) => !wearing.includes(c.val)));
   /** Whether the viewer may take `val` off: a takedown's only with takedown. */
   const removable = (val: string) => (TAKEDOWN.includes(val) ? can.takedown : can.label);
 </script>
@@ -107,7 +108,7 @@
         <p class="mute">No labels yet.</p>
       {/if}
       {#if can.label}
-        {#if toAdd.length}<p class="mute">Labels the group has used, to add with a press:</p>{/if}
+        {#if toAdd.length}<p class="mute">Press one of the group's labels to add it.</p>{/if}
         <form
           class="label-choices"
           method="post"
@@ -115,11 +116,13 @@
           use:enhance={inOpenDialog((w) => (failed = w))}
         >
           {@render which()}
-          {#each toAdd as val (val)}<button
-              class="quiet small mono"
+          {#each toAdd as c (c.val)}<button
+              class="quiet small"
+              class:mono={c.name === c.val}
               type="submit"
               name="val"
-              value={val}>{val}</button
+              value={c.val}
+              aria-label={`Add the label ${c.val}`}>{c.name}</button
             >{/each}
         </form>
         <form

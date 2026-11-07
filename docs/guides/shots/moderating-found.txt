@@ -4,8 +4,9 @@
   - paragraph: frank.test · Account · Not in the queue
   - heading "Labels" [level=3]
   - paragraph: No labels yet.
-  - paragraph: "Labels the group has used, to add with a press:"
-  - button "spam"
+  - paragraph: Press one of the group's labels to add it.
+  - button "Add the label off-topic": Off-topic
+  - button "Add the label spam": spam
   - text: Add a label
   - textbox "Add a label":
     - /placeholder: off-topic

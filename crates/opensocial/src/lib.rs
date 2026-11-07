@@ -42,6 +42,11 @@ rule
                          write a rule: the one --rule names, or a new one
   rule delete <group> <rule>
                          delete a rule
+label
+  label define <group> <label> --name <name> --description <words> [--severity <s>] …
+                         define one of the group's own labels, or change one it defines
+  label delete <group> <label>
+                         stop defining one of the group's own labels
 role
   role set <group> <role> --display-name <name> [--description <words>] [--default] [--bot]
                          write a role

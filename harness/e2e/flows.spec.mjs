@@ -695,6 +695,18 @@ test('adding a recovery key, and removing it', async () => {
 });
 
 test('moderating: a label, and the queue', async () => {
+  // A label of the group's own, defined in its settings.
+  await page.goto(url('/g/hikers.groups.test/settings/labels'));
+  await expect(page.getByText('No labels yet')).toBeVisible();
+  await page.getByRole('button', { name: 'Create a label' }).click();
+  const defining = page.getByRole('dialog', { name: 'Create a label' });
+  await defining.getByRole('textbox', { name: 'Name' }).fill('Off-topic');
+  await defining.getByRole('textbox', { name: 'Value' }).fill('off-topic');
+  await defining.getByRole('textbox', { name: 'What it means' }).fill('Not about hiking.');
+  await defining.getByRole('combobox', { name: 'How apps show it' }).selectOption('hide');
+  await defining.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.locator('.label-rows')).toContainText('Not about hiking.');
+  await expect(page.locator('.label-rows')).toContainText('Apps hide it until someone chooses');
   await page.goto(url('/g/hikers.groups.test'));
   await page.getByRole('link', { name: 'Moderation' }).click();
   // A subject's row, by its handle, not those whose history names it.
@@ -708,13 +720,17 @@ test('moderating: a label, and the queue', async () => {
   // Found by his handle, he is reviewed where his row is.
   await page.getByRole('combobox', { name: 'Find an account' }).fill(who.bob.handle);
   await page.getByRole('search').getByRole('button', { name: 'Review' }).click();
+  // The group's own label is offered by its name.
+  await expect(review.getByRole('button', { name: 'Add the label off-topic' })).toHaveText(
+    'Off-topic'
+  );
   await review.getByRole('textbox', { name: 'Add a label' }).fill('troll');
   await review.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(review.locator('.labels')).toContainText('troll');
   // Taken off, it is a label the group has used, to put back with a press.
   await review.getByRole('button', { name: 'Remove the label troll' }).click();
   await expect(review.locator('.labels')).toHaveCount(0);
-  await review.locator('.label-choices').getByRole('button', { name: 'troll' }).click();
+  await review.getByRole('button', { name: 'Add the label troll' }).click();
   await expect(review.locator('.labels')).toContainText('troll');
   // Taking him down asks first.
   await review.getByRole('button', { name: 'Take down' }).click();
@@ -750,6 +766,14 @@ test('moderating: a label, and the queue', async () => {
   await reporting.getByRole('textbox', { name: 'What happened' }).fill('Shouted at a newcomer.');
   await reporting.getByRole('button', { name: 'Report', exact: true }).click();
   await expect(row(who.dan.handle)).toContainText('Shouted at a newcomer.');
+  // The group's own label, no longer defined, is no longer offered.
+  await page.goto(url('/g/hikers.groups.test/settings/labels'));
+  await page.getByRole('button', { name: 'Delete the label off-topic' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete this label?' })
+    .getByRole('button', { name: 'Delete', exact: true })
+    .click();
+  await expect(page.getByText('No labels yet')).toBeVisible();
 });
 
 test('signing an app in as her group', async () => {

@@ -4,6 +4,8 @@
   - paragraph: maximilianaquinces.test · Account · Reported on <date>
   - heading "Labels" [level=3]
   - paragraph: No labels yet.
+  - paragraph: Press one of the group's labels to add it.
+  - button "Add the label off-topic": Off-topic
   - text: Add a label
   - textbox "Add a label":
     - /placeholder: off-topic

@@ -79,6 +79,31 @@ When a report is not yours to decide, escalate it.
 
 The post now waits on the **Escalated** tab, your note in its history.
 
+## How do I give the group labels of its own?
+
+A label says what a moderator found, such as "off-topic". Apps that
+follow the group's labels show what wears one only as the group defines
+it: with a warning, hidden until chosen, or as is. So create each label the
+group will use before you put it on anyone. You need a role that
+configures the group, as an admin's does.
+
+1. Open the group's settings, and press **Labels**.
+2. Press **Create a label**.
+3. Fill in its **Name**, such as "Off-topic", its **Value**, such as
+   "off-topic", and **What it means**. Under **How apps show it** and
+   **What apps cover**, choose how apps treat what wears it.
+
+   <!-- look /g/gardens.groups.test/settings/labels --as dan --click 'button[popovertarget=create-label]' --type '#create-label [name=name]=Off-topic' --type '#create-label [name=label]=off-topic' --type '#create-label [name=description]=Not about gardens, seeds or swaps.' --element ':popover-open' -->
+   ![The Create a label dialog, Off-topic under Name, off-topic under Value and its meaning typed, with Cancel and Create](shots/moderating-define-dialog.png)
+
+4. Press **Create**. The label shows in the list, with how apps show it.
+
+   <!-- look /g/gardens.groups.test/settings/labels --as dan --click 'button[popovertarget=create-label]' --type '#create-label [name=name]=Off-topic' --type '#create-label [name=label]=off-topic' --type '#create-label [name=description]=Not about gardens, seeds or swaps.' --click '#create-label button[type=submit]' --element 'section:has(.label-rows)' -->
+   ![The Labels card, Labels 1: Off-topic, off-topic, Not about gardens, seeds or swaps. Apps show it with a warning., with Delete](shots/moderating-defined.png)
+
+Creating one with a value already in use changes that label. Deleting a label stops moderators
+choosing it; what already wears it keeps it.
+
 ## How do I label an account?
 
 A label is a tag the group puts on an account, such as "spam". Apps that
@@ -86,8 +111,9 @@ follow the group's labels decide what to do with it. Any word is yours to
 choose, but two mean more: `!takedown` and `!hide`, which the next part
 shows.
 
-1. Press **Review** on the account's row.
-2. Under **Add a label**, type the label, such as "spam".
+1. Press **Review** on the account's row. The group's own labels are
+   offered by name, to add with a press.
+2. Or, under **Add a label**, type another, such as "spam".
 
    <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --type ':popover-open input[name=val]:not([type=hidden])=spam' --element ':popover-open' -->
    ![The Review dialog for maximilianaquinces.test, No labels yet, and spam typed under Add a label, with Add](shots/moderating-label-dialog.png)
@@ -193,6 +219,8 @@ Each act here has a command in [the `opensocial` command](../reference/cli.md):
   A takedown is the same with `!takedown`.
 - Label a post: `opensocial mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.
 - Take a label back: the same command with `--undo`.
+- Define one of the group's labels: `opensocial label define gardens.groups.test off-topic --name Off-topic --description "Not about gardens."`,
+  or stop defining it with `opensocial label delete gardens.groups.test off-topic`.
 - Remove a member: `opensocial member eject gardens.groups.test maximilianaquinces.test`.
 
 No command makes a report. An AI app connected to the group has the same

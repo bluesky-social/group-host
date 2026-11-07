@@ -318,6 +318,14 @@
             "ref": "#groupRule"
           }
         },
+        "labels": {
+          "type": "array",
+          "description": "The labels it defines, each with what it means and how apps should show it. Absent when the meta space is closed to the viewer.",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValueDefinition"
+          }
+        },
         "memberCount": {
           "type": "integer",
           "minimum": 0,

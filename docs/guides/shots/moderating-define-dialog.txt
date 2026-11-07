@@ -1,0 +1,27 @@
+- dialog "Create a label":
+  - heading "Create a label" [level=2]
+  - button "Close": ×
+  - paragraph: Moderators pick it when they review an account or post. Creating one with a value already in use changes that label.
+  - text: Name
+  - textbox "Name":
+    - /placeholder: Off-topic
+    - text: Off-topic
+  - text: Value
+  - textbox "Value":
+    - /placeholder: off-topic
+    - text: off-topic
+  - paragraph: Lowercase letters and hyphens.
+  - text: What it means
+  - textbox "What it means": Not about gardens, seeds or swaps.
+  - text: How apps show it
+  - combobox "How apps show it":
+    - option "With a warning" [selected]
+    - option "Hidden until someone chooses to see it"
+    - option "As is"
+  - text: What apps cover
+  - combobox "What apps cover":
+    - option "Nothing" [selected]
+    - option "Its pictures"
+    - option "All of it"
+  - button "Cancel"
+  - button "Create"

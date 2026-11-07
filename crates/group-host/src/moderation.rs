@@ -645,3 +645,114 @@ pub async fn create_report(
     let id = id.map_err(XrpcError::internal)?;
     Ok(Json(json!({"id": id.to_string(), "createdAt": iso(now)})))
 }
+
+/// A label a group defines for itself: lowercase letters and hyphens, as
+/// atproto has a labeler's own values; never one of the values atproto
+/// defines, which start with `!`.
+fn is_own_label(label: &str) -> bool {
+    !label.is_empty() && label.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
+}
+
+impl Host {
+    /// The group's labeler, as its meta space keeps it, and its policies'
+    /// values and definitions, made lists where it had none.
+    fn labeler_of(&self, group: &str) -> Result<Value, XrpcError> {
+        let meta = meta_space(group);
+        let kept = self.group_record(group, &meta, &format!("{NS}.labeler"), "self");
+        let mut labeler = kept.map_err(XrpcError::internal)?.unwrap_or_default();
+        for key in ["labelValues", "labelValueDefinitions"] {
+            if !labeler["policies"][key].is_array() {
+                labeler["policies"][key] = json!([]);
+            }
+        }
+        Ok(labeler)
+    }
+
+    /// `labeler` put back whole, as the group, after `change` to its
+    /// policies' values and definitions.
+    async fn relabel(
+        &self,
+        group: &str,
+        mut labeler: Value,
+        change: impl FnOnce(&mut Vec<Value>, &mut Vec<Value>),
+    ) -> Result<(), XrpcError> {
+        let policies = labeler["policies"].as_object_mut().expect("made an object");
+        let mut values = policies["labelValues"].take();
+        let mut definitions = policies["labelValueDefinitions"].take();
+        change(
+            values.as_array_mut().expect("made a list"),
+            definitions.as_array_mut().expect("made a list"),
+        );
+        policies.insert("labelValues".into(), values);
+        policies.insert("labelValueDefinitions".into(), definitions);
+        let write = Write::Update {
+            collection: format!("{NS}.labeler"),
+            rkey: "self".into(),
+            value: labeler,
+        };
+        self.space_write(group, &meta_space(group), &[write])
+            .await?;
+        Ok(())
+    }
+}
+
+/// Defines one of the group's own labels, or changes one it defines, in
+/// its labeler, the label among the values it applies.
+pub async fn put_label_definition(
+    State(host): State<Arc<Host>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Answer {
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    host.moderator(&headers, "putLabelDefinition", group, "group.configure")
+        .await?;
+    let label = body["label"].as_str().expect("its lexicon requires it");
+    if !is_own_label(label) {
+        return Err(invalid("label is lowercase letters and hyphens"));
+    }
+    let or = |key: &str, unless: &str| body[key].as_str().unwrap_or(unless).to_string();
+    let mut definition = json!({
+        "identifier": label,
+        "severity": or("severity", "inform"),
+        "blurs": or("blurs", "none"),
+        "defaultSetting": or("defaultSetting", "warn"),
+        "locales": [{"lang": or("lang", "en"), "name": body["name"], "description": body["description"]}],
+    });
+    if body["adultOnly"] == true {
+        definition["adultOnly"] = json!(true);
+    }
+    let labeler = host.labeler_of(group)?;
+    let defined = definition.clone();
+    let change = |values: &mut Vec<Value>, definitions: &mut Vec<Value>| {
+        if !values.contains(&json!(label)) {
+            values.push(json!(label));
+        }
+        definitions.retain(|d| d["identifier"] != label);
+        definitions.push(defined);
+    };
+    host.relabel(group, labeler, change).await?;
+    Ok(Json(definition))
+}
+
+/// Stops defining one of the group's own labels: its definition, and the
+/// value among those it applies. Labels already applied stay.
+pub async fn delete_label_definition(
+    State(host): State<Arc<Host>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Answer {
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    host.moderator(&headers, "deleteLabelDefinition", group, "group.configure")
+        .await?;
+    let label = body["label"].as_str().expect("its lexicon requires it");
+    if !is_own_label(label) {
+        return Err(invalid("label is lowercase letters and hyphens"));
+    }
+    let labeler = host.labeler_of(group)?;
+    let change = |values: &mut Vec<Value>, definitions: &mut Vec<Value>| {
+        values.retain(|v| v != label);
+        definitions.retain(|d| d["identifier"] != label);
+    };
+    host.relabel(group, labeler, change).await?;
+    Ok(Json(json!({})))
+}
