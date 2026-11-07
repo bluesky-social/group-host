@@ -446,6 +446,7 @@ fn event_view(e: &Event, actors: &HashMap<String, Value>) -> Value {
         "createdAt": iso(e.created_at),
         "createdBy": e.actor,
         "creator": e.actor.as_ref().map(|did| &actors[did]),
+        "cid": e.cid,
         "event": present(event),
     }))
 }

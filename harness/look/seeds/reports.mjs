@@ -61,7 +61,9 @@ export default async ({ world, who, opensocial }) => {
     'carol',
     {
       $type: 'fyi.opensocial.defs#recordSubject',
-      uri: `${space}/${who.frank.did}/com.example.forum.post/3mzoijrblxc2j`
+      uri: `${space}/${who.frank.did}/com.example.forum.post/3mzoijrblxc2j`,
+      // The version reported, as an app names it.
+      cid: 'bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm'
     },
     'reasonMisleading',
     'Says the north ridge trail is open. It has been closed since the rockfall in September.'

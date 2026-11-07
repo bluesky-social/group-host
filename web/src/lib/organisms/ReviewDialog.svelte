@@ -6,10 +6,11 @@
   import SubjectHistory from '#lib/molecules/SubjectHistory.svelte';
   import ReportDialog from '#lib/organisms/ReportDialog.svelte';
   import { inDialog, inOpenDialog } from '#lib/forms.ts';
-  import { type Subject, TAKEDOWN, labelsOf, reported, what } from '#lib/moderation.ts';
+  import { type Subject, TAKEDOWN, labelsOf, latestCid, reported, what } from '#lib/moderation.ts';
   /**
    * Everything a moderator does about one subject, in a dialog opened by a
-   * button whose `popovertarget` is `id`: for an account, the labels it
+   * button whose `popovertarget` is `id`: for an account, or a record
+   * whose version the queue knows, the labels it
    * wears, each removable, those the group uses (`choices`) to add and
    * another; taking it down; then resolving or escalating it, or, for one
    * the queue has never had, reporting it; and what happened to it. Each
@@ -42,12 +43,29 @@
   // Why something in the dialog was refused, said in it.
   let failed = $state<string | null>(null);
   const account = $derived(s.key.startsWith('did:'));
+  // What a label is put on: the account, or the record at the version
+  // last reported or labelled; none for a record of no known version.
+  const target = $derived<Record<string, string> | null>(
+    account
+      ? { did: s.key }
+      : latestCid(s.events)
+        ? { uri: s.key, cid: latestCid(s.events)! }
+        : null
+  );
   const wearing = $derived(labelsOf(s.events));
   const takenDown = $derived(wearing.some((v) => TAKEDOWN.includes(v)));
   const toAdd = $derived(choices.filter((v) => !wearing.includes(v)));
   /** Whether the viewer may take `val` off: a takedown's only with takedown. */
   const removable = (val: string) => (TAKEDOWN.includes(val) ? can.takedown : can.label);
 </script>
+
+{#snippet which()}
+  {#each Object.entries(target ?? {}) as [name, value] (name)}<input
+      type="hidden"
+      {name}
+      {value}
+    />{/each}
+{/snippet}
 
 <Dialog
   {id}
@@ -61,7 +79,7 @@
   <p><Person actor={s.actor} /> <span class="mute">· {what(s.key)} · {reported(s)}</span></p>
   {#if failed}<p class="danger">{failed}</p>{/if}
 
-  {#if account && (can.label || can.takedown)}
+  {#if target && (can.label || can.takedown)}
     <div class="review-part">
       <h3>Labels</h3>
       {#if wearing.length}
@@ -75,7 +93,7 @@
                   action="?/unlabel"
                   use:enhance={inOpenDialog((w) => (failed = w))}
                 >
-                  <input type="hidden" name="did" value={s.key} />
+                  {@render which()}
                   <input type="hidden" name="val" value={val} />
                   <button class="quiet small" type="submit" aria-label={`Remove the label ${val}`}
                     >×</button
@@ -96,7 +114,7 @@
           action="?/label"
           use:enhance={inOpenDialog((w) => (failed = w))}
         >
-          <input type="hidden" name="did" value={s.key} />
+          {@render which()}
           {#each toAdd as val (val)}<button
               class="quiet small mono"
               type="submit"
@@ -110,7 +128,7 @@
           action="?/label"
           use:enhance={inOpenDialog((w) => (failed = w))}
         >
-          <input type="hidden" name="did" value={s.key} />
+          {@render which()}
           <label class="field"
             >Add a label
             <input name="val" required maxlength="128" placeholder="off-topic" /></label
@@ -123,28 +141,48 @@
     {#if can.takedown && !takenDown}
       <div class="review-part">
         <div class="row-form">
-          <p class="mute">
-            Asks apps that follow the group's labels to hide everything this account posted. They
-            stay in the group.
-          </p>
+          {#if account}<p class="mute">
+              Asks apps that follow the group's labels to hide everything this account posted. They
+              stay in the group.
+            </p>{:else}<p class="mute">
+              Asks apps that follow the group's labels to hide this. The rest of what they posted
+              stays.
+            </p>{/if}
           <button class="quiet small" type="button" popovertarget={`${id}-takedown`}
             >Take down</button
           >
         </div>
-        <ConfirmDialog
-          id={`${id}-takedown`}
-          title="Take this account down?"
-          action="?/label"
-          confirm="Take down"
-          danger={false}
-          fields={{ did: s.key, val: '!takedown' }}
-          >Apps that follow the group's labels hide what <Person actor={s.actor} /> posted. Removing the
-          label undoes it.</ConfirmDialog
-        >
+        {#if account}
+          <ConfirmDialog
+            id={`${id}-takedown`}
+            title="Take this account down?"
+            action="?/label"
+            confirm="Take down"
+            danger={false}
+            fields={{ ...target, val: '!takedown' }}
+            >Apps that follow the group's labels hide what <Person actor={s.actor} /> posted. Removing
+            the label undoes it.</ConfirmDialog
+          >
+        {:else}
+          <ConfirmDialog
+            id={`${id}-takedown`}
+            title="Take this down?"
+            action="?/label"
+            confirm="Take down"
+            danger={false}
+            fields={{ ...target, val: '!takedown' }}
+            >Apps that follow the group's labels hide this {what(s.key).toLowerCase()} by <Person
+              actor={s.actor}
+            />. Removing the label undoes it.</ConfirmDialog
+          >
+        {/if}
       </div>
     {/if}
-  {:else if !account}
-    <p class="mute">Posts are labelled from a terminal, with opensocial mod label.</p>
+  {:else if !target}
+    <p class="mute">
+      The queue doesn't know which version of this to label. Label it from a terminal, with
+      opensocial mod label and its CID.
+    </p>
   {/if}
 
   {#if s.status && can.resolve}

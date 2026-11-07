@@ -916,6 +916,11 @@
           "ref": "#actorView",
           "description": "Who did it, as a view names them, when createdBy is given."
         },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "The version of a record subject it is about, when it names one."
+        },
         "event": {
           "type": "union",
           "refs": [

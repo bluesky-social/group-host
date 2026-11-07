@@ -553,6 +553,9 @@ async fn resolves_and_escalates_with_a_note() {
     // Narrowed to one version of the record: what was said of it.
     let (_, version) = history(&format!("&cid={CID}")).await;
     assert_eq!(kinds(&version), ["labelEvent", "reportEvent"]);
+    // Each names the version it is about, for a moderator to act on it.
+    assert_eq!(version["events"][0]["cid"], CID);
+    assert!(all["events"][2].get("cid").is_none());
     // A page at a time, oldest first.
     let mut seen = Vec::new();
     let mut cursor = String::new();

@@ -101,7 +101,9 @@ shows.
 Press the × to take a label back. Once the group has used a label, the
 dialog offers it to add with one press, under the field.
 
-Posts are labelled from a terminal only, as the last part shows.
+A post is labelled the same way, from its own Review, when the report
+named the version of the post it was about. If it didn't, its Review says
+so, and you label it from a terminal, as the last part shows.
 
 ## How do I take an account down?
 
@@ -190,7 +192,6 @@ Each act here has a command in [the `opensocial` command](../reference/cli.md):
 - Label an account: `opensocial mod label gardens.groups.test <did> spam`.
   A takedown is the same with `!takedown`.
 - Label a post: `opensocial mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.
-  Only the terminal labels posts.
 - Take a label back: the same command with `--undo`.
 - Remove a member: `opensocial member eject gardens.groups.test maximilianaquinces.test`.
 

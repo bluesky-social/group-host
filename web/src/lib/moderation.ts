@@ -15,7 +15,7 @@ export type Said = {
   val?: string;
   deleted?: boolean;
 };
-export type Event = { id: string; createdAt: string; creator?: Actor; event: Said };
+export type Event = { id: string; createdAt: string; creator?: Actor; cid?: string; event: Said };
 /** A subject: `status` none for one the queue has never had. */
 export type Subject = {
   key: string;
@@ -52,6 +52,9 @@ export function labelsUsed(subjects: Subject[]): string[] {
   );
   return [...new Set(used)].filter((v): v is string => !!v && !TAKEDOWN.includes(v)).sort();
 }
+
+/** The version of a record subject its latest event names, if any. */
+export const latestCid = (events: Event[]) => events.findLast((e) => e.cid)?.cid;
 
 /** A subject's reports, oldest first. */
 export const reports = (s: Subject) => s.events.filter((e) => kindOf(e) === 'reportEvent');

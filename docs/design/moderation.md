@@ -104,7 +104,8 @@ record it is, by its DID and handle, so a moderator reads who it is about
 rather than a DID.
 
 Its history is a list of events, each with an `id`, `createdAt`, who did
-it as `createdBy` and, by their DID and handle, as `creator`, and one of
+it as `createdBy` and, by their DID and handle, as `creator`, the
+version of a record it is about as `cid` when it names one, and one of
 four kinds as `event`:
 
 - `reportEvent`: someone reported it, with a `reasonType`, an optional

@@ -110,11 +110,15 @@ export const load: PageServerLoad = async (event) => {
   };
 };
 
-/** The account a form names, as a label's subject. */
-const account = (form: FormData) => ({
-  $type: 'com.atproto.admin.defs#repoRef',
-  did: String(form.get('did'))
-});
+/** What a form names, as a label's subject: an account, or a record at one version. */
+const account = (form: FormData) =>
+  form.has('uri')
+    ? {
+        $type: 'com.atproto.repo.strongRef',
+        uri: String(form.get('uri')),
+        cid: String(form.get('cid'))
+      }
+    : { $type: 'com.atproto.admin.defs#repoRef', did: String(form.get('did')) };
 
 export const actions: Actions = {
   resolve: async (event) => {
