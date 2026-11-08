@@ -318,6 +318,33 @@ for (const seed of seeds) {
   save();
 }
 
+/// A wait for the page to settle after a step: until none of its requests
+/// is under way, and none has been for half a second. A form a click sends,
+/// and the page's data read again after it, are seen through, however long
+/// the host takes. `waitForLoadState('networkidle')` cannot do this: once
+/// the page has loaded, it returns at once.
+function quiet(page) {
+  let open = 0;
+  let last = Date.now();
+  page.on('request', () => {
+    open += 1;
+    last = Date.now();
+  });
+  const done = () => {
+    open = Math.max(0, open - 1);
+    last = Date.now();
+  };
+  page.on('requestfinished', done);
+  page.on('requestfailed', done);
+  return async () => {
+    // A click's request starts in the click's own task, or soon after it.
+    await page.waitForTimeout(300);
+    const until = Date.now() + 30_000;
+    while (Date.now() < until && (open > 0 || Date.now() - last < 500))
+      await page.waitForTimeout(50);
+  };
+}
+
 const storageState = as.length ? await signedIn(as) : undefined;
 const named = (t) => name ?? (t.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'home');
 
@@ -339,6 +366,7 @@ try {
     });
     for (const target of targets) {
       const page = await context.newPage();
+      const settled = quiet(page);
       await page.goto(world.base + target, { waitUntil: 'networkidle' });
       // Each in the middle of the screen, so what it opens is in the picture.
       for (const s of steps) {
@@ -351,8 +379,7 @@ try {
             await it.pressSequentially(s.text);
           } else await it.click();
         }
-        await page.waitForTimeout(300);
-        await page.waitForLoadState('networkidle');
+        await settled();
       }
       // A page wider than the screen scrolls sideways, which a picture of
       // the whole page hides: said, with the innermost elements whose box or

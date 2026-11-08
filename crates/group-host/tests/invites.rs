@@ -370,14 +370,15 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     );
 
     // Lapsed, it is no invite, and is taken back once found so. A past
-    // expiry is refused, so these lapse a second after they are made.
-    let lapse = group_host::time::iso(now_millis() + 1000);
+    // expiry is refused, so these lapse three seconds after they are made:
+    // time enough for both to be sent, on a runner under load.
+    let lapse = group_host::time::iso(now_millis() + 3000);
     let lapsed = json!({ "expiresAt": lapse });
     let made = send(&h, &alice, &did, &carol.did, lapsed.clone()).await;
     assert_eq!(made.status, 200, "{}", made.body);
     let bobs = send(&h, &alice, &did, &bob.did, lapsed).await;
     assert_eq!(bobs.status, 200, "{}", bobs.body);
-    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(3100)).await;
     assert_eq!(
         ask(&h, &alice, "listInvites", &format!("group={did}"))
             .await

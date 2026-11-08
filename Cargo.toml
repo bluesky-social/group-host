@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/atproto", "crates/group-host", "crates/group-host-mcp", "crates/opensocial"]
+members = ["crates/group-host", "crates/group-host-mcp", "crates/opensocial"]
 resolver = "3"
 
 [workspace.package]
@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.89"
 
 [workspace.dependencies]
-atproto = { path = "crates/atproto" }
+atproto = { version = "0.1", registry = "atproto" }
 group-host = { path = "crates/group-host" }
 group-host-mcp = { path = "crates/group-host-mcp" }
 opensocial = { path = "crates/opensocial" }

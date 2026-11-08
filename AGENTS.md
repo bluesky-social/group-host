@@ -41,16 +41,17 @@ its tests, and its page in `docs/`. The tests say what the part must get
 right, and come before the code they test.
 
 - The atproto primitives (DRISL, CIDs, keys, the MST, CAR, PLC, service
-  auth) are this repo's own, in `crates/atproto`: few dependencies, every
-  line under the gate. Check each against atproto's interop test vectors
-  (github.com/bluesky-social/atproto-interop-tests) and the reference
-  implementation, not only against itself.
+  auth) are the `atproto` crate, in its own repository
+  (knotless.dev/chadtmiller.com/atproto), published to that repository's
+  Cargo registry, which `.cargo/config.toml` names. A primitive the host
+  needs goes there, as a pull of that repository and a new version, checked
+  against atproto's interop test vectors and the reference implementation;
+  then this workspace moves to that version.
 - What a PDS, the OAuth provider and the space alpha do is written here
   as far as the host uses it, and no further.
 
 ## Layout
 
-- `crates/atproto`: the primitives above.
 - `crates/group-host`: the server (axum, SQLite through rusqlite). It is
   the PDS for its groups, the authority for their spaces, their OAuth
   server, and answers the `fyi.opensocial.*` methods. It serves the
