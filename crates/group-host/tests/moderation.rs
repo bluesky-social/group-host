@@ -4,15 +4,17 @@
 mod common;
 
 use common::groups::*;
+use common::oauth::{App, group_token};
 use common::spaces::*;
 use common::{Running, start};
 use group_host::group::{members_space, meta_space};
 use group_host::moderation::{Event, space_of};
-use group_host::repo::{Write, record_cid};
+use group_host::repo::Write;
 use group_host::store::Store;
 use serde_json::{Value as Json, json};
 
 const CALENDAR: &str = "com.example.calendar";
+const LABEL: &str = "com.atproto.label.label";
 const ACCOUNT: &str = "fyi.opensocial.defs#accountSubject";
 const RECORD: &str = "fyi.opensocial.defs#recordSubject";
 const CID: &str = "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm";
@@ -264,216 +266,157 @@ async fn takes_only_the_reports_its_labeler_does() {
     }
 }
 
+/// A label on `subject` of `val`, as the group writes it.
+fn label(subject: &str, val: &str) -> Json {
+    json!({"$type": LABEL, "uri": subject, "val": val, "cts": "2026-11-06T00:00:00Z"})
+}
+
+/// Asks `nsid`, a write of `com.atproto.space.*`, as the group in `space`
+/// with a group token `who` got for it, `body` with the group's repo, the
+/// space and the label collection added.
+async fn as_group(
+    h: &Running,
+    who: &Authority,
+    group: &str,
+    space: &str,
+    nsid: &str,
+    mut body: Json,
+) -> (u16, Json) {
+    let app = App::new("console");
+    let token = app.token_for(h, who, group, space).await;
+    body["repo"] = json!(group);
+    body["space"] = json!(space);
+    body["collection"] = json!(LABEL);
+    let said = app.call(h, nsid, &token, Some(&body)).await;
+    (said.status, said.body)
+}
+
+/// Writes `record`, a label, as the group in `space`, as `who`.
+async fn labelled(
+    h: &Running,
+    who: &Authority,
+    group: &str,
+    space: &str,
+    record: Json,
+) -> (u16, Json) {
+    let nsid = "com.atproto.space.createRecord";
+    as_group(h, who, group, space, nsid, json!({ "record": record })).await
+}
+
 #[tokio::test]
 async fn writes_a_label_beside_what_it_labels() {
     let h = start(&[], false).await;
     let (did, space, post, [alice, bob, carol]) = group(&h).await;
-    let rule = format!("{}/{did}/{NS}.rule/3mzjdd6rnfise", meta_space(&did));
-    let (status, made) = call(
-        &h,
-        &alice,
-        "applyLabel",
-        json!({"group": did, "subject": post, "val": "spam", "rule": rule}),
-    )
-    .await;
+    let uri = post["uri"].as_str().unwrap();
+    let mut spam = label(uri, "spam");
+    spam["cid"] = post["cid"].clone();
+    let (status, made) = labelled(&h, &alice, &did, &space, spam.clone()).await;
     assert_eq!(status, 200, "{made}");
-    let uri = made["uri"].as_str().unwrap();
-    assert!(
-        uri.starts_with(&format!("{space}/{did}/{NS}.label/")),
-        "{uri}"
-    );
-    let rkey = uri.rsplit('/').next().unwrap();
-    let label = h
-        .host
-        .group_record(&did, &space, &format!("{NS}.label"), rkey)
-        .unwrap()
-        .unwrap();
-    assert_eq!(label["subject"]["uri"], post["uri"]);
-    assert_eq!(label["subject"]["$type"], "com.atproto.repo.strongRef");
-    assert_eq!(label["val"], "spam");
-    assert_eq!(label["rule"], rule);
+    assert_eq!(made["validationStatus"], "valid");
+    let at = made["uri"].as_str().unwrap();
+    assert!(at.starts_with(&format!("{space}/{did}/{LABEL}/")), "{at}");
+    let rkey = at.rsplit('/').next().unwrap().to_string();
+    let kept = h.host.group_record(&did, &space, LABEL, &rkey).unwrap();
+    assert_eq!(kept, Some(spam));
     // A label opens a subject, though nobody reported it.
     let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
+    assert_eq!(queue["subjects"][0]["subject"], record(uri));
     assert_eq!(queue["subjects"][0]["reportCount"], 0);
 
-    // Taken back with a second record, not by deleting the first.
-    let (status, negated) = call(
-        &h,
-        &alice,
-        "negateLabel",
-        json!({"group": did, "subject": post, "val": "spam"}),
-    )
-    .await;
-    assert_eq!(status, 200, "{negated}");
-    // Answered as a label is: the negation is a record of its own.
-    let uri = negated["uri"].as_str().unwrap();
-    assert!(
-        uri.starts_with(&format!("{space}/{did}/{NS}.label/")),
-        "{uri}"
+    // Taken back by deleting it.
+    let nsid = "com.atproto.space.deleteRecord";
+    let (status, said) = as_group(&h, &alice, &did, &space, nsid, json!({"rkey": rkey})).await;
+    assert_eq!(status, 200, "{said}");
+    assert_eq!(
+        h.host.group_record(&did, &space, LABEL, &rkey).unwrap(),
+        None
     );
-    assert_ne!(negated["uri"], made["uri"]);
-    let rkey = uri.rsplit('/').next().unwrap();
-    let negation = h
-        .host
-        .group_record(&did, &space, &format!("{NS}.label"), rkey)
-        .unwrap()
-        .unwrap();
-    assert_eq!(negation["neg"], true);
-    let cid = record_cid(&format!("{NS}.label"), &negation).unwrap();
-    assert_eq!(negated["cid"], cid.to_string());
-    let labels = h
-        .host
-        .group_records(&did, &space, &format!("{NS}.label"))
-        .unwrap();
-    assert_eq!(labels.len(), 2);
-    assert!(labels.iter().any(|(_, l)| l["neg"] == true));
-    // Each a label event, the negation the label taken back.
-    let (_, history) = query(
-        &h,
-        &alice,
-        "getSubjectHistory",
-        &format!("group={did}&subject={}", post["uri"].as_str().unwrap()),
-    )
-    .await;
+    // A label nobody wrote is no label taken back.
+    let none = json!({"rkey": "3zzzzzzzzzzzz"});
+    assert_eq!(as_group(&h, &alice, &did, &space, nsid, none).await.0, 200);
+    // Each a label event, the deletion the label taken back.
+    let q = format!("group={did}&subject={uri}");
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
     assert_eq!(kinds(&history), ["labelEvent", "labelEvent"]);
-    assert_eq!(history["events"][0]["event"]["uri"], made["uri"]);
-    assert_eq!(history["events"][0]["event"]["deleted"], false);
-    assert_eq!(history["events"][1]["event"]["uri"], negated["uri"]);
-    assert_eq!(history["events"][1]["event"]["deleted"], true);
+    let events = &history["events"];
+    assert_eq!(events[0]["event"]["uri"], made["uri"]);
+    assert_eq!(events[0]["event"]["val"], "spam");
+    assert_eq!(events[0]["event"]["deleted"], false);
+    assert_eq!(events[1]["event"]["uri"], made["uri"]);
+    assert_eq!(events[1]["event"]["deleted"], true);
+    assert_eq!(events[1]["createdBy"], alice.did.as_str());
+    // About the version it named.
+    let q = format!("group={did}&subject={uri}&cid={CID}");
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(kinds(&history), ["labelEvent", "labelEvent"]);
 
     // An account's label goes in the members space, whoever they are.
-    let (status, made) = call(
-        &h,
-        &alice,
-        "applyLabel",
-        json!({"group": did, "subject": {"$type": "com.atproto.admin.defs#repoRef", "did": carol.did}, "val": "troll"}),
-    )
-    .await;
+    let members = members_space(&did);
+    let (status, made) = labelled(&h, &alice, &did, &members, label(&carol.did, "troll")).await;
     assert_eq!(status, 200, "{made}");
-    assert!(
-        made["uri"]
-            .as_str()
-            .unwrap()
-            .starts_with(&members_space(&did))
-    );
-    let (_, history) = query(
-        &h,
-        &alice,
-        "getSubjectHistory",
-        &format!("group={did}&subject={}", carol.did),
-    )
-    .await;
+    let q = format!("group={did}&subject={}", carol.did);
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
     assert_eq!(history["events"][0]["event"]["val"], "troll");
+    assert_eq!(history["events"][0]["event"]["uri"], made["uri"]);
     assert_eq!(history["events"][0]["createdBy"], alice.did.as_str());
 
-    let other = start_group(
-        &h,
-        &alice,
-        json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
-    )
-    .await;
-    let cid = post["cid"].clone();
-    let theirs = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("at://{other}/space/{CALENDAR}/x/{}/c.d.e/f", bob.did), "cid": cid});
-    for (body, refused) in [
-        (
-            json!({"group": did, "subject": {"$type": "com.atproto.admin.defs#repoRef", "did": "not a did"}, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": post["uri"]}, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": format!("at://{did}/a.b.c/x"), "cid": cid}, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        // A CID that is none.
-        (
-            json!({"group": did, "subject": {"$type": "com.atproto.repo.strongRef", "uri": post["uri"], "cid": "bafynotacid"}, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        // A subject of a kind the open union does not list.
-        (
-            json!({"group": did, "subject": {"$type": "com.example.thing", "did": "not a did"}, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"group": did, "subject": {"$type": "com.example.thing"}, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        // A value longer than the lexicon has it, in characters or bytes.
-        (
-            json!({"group": did, "subject": post, "val": "x".repeat(129)}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"group": did, "subject": post, "val": "\u{e9}".repeat(100)}),
-            (400, "InvalidRequest"),
-        ),
-        // A rule that is no record's URI.
-        (
-            json!({"group": did, "subject": post, "val": "x", "rule": "at://did:plc:x/fyi.opensocial.rule/z"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"group": did, "subject": theirs, "val": "x"}),
-            (403, "Forbidden"),
-        ),
-        (
-            json!({"group": did, "subject": post, "val": ""}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"subject": post, "val": "x"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            json!({"group": "did:plc:nothing", "subject": post, "val": "x"}),
-            (400, "GroupNotFound"),
-        ),
+    // Beside its subject, and a label as its lexicon has it.
+    let elsewhere = format!("{members}/{}/com.example.note/n", bob.did);
+    let no_cts = json!({"$type": LABEL, "uri": uri, "val": "x"});
+    for (at, record) in [
+        (&space, label("not a did", "x")),
+        (&space, label(&elsewhere, "x")),
+        (&members, label(uri, "x")),
+        (&space, label(uri, &"x".repeat(129))),
+        (&space, no_cts),
     ] {
-        assert_eq!(
-            error(&call(&h, &alice, "applyLabel", body.clone()).await),
-            refused,
-            "{body}"
-        );
+        let said = labelled(&h, &alice, &did, at, record.clone()).await;
+        assert_eq!(error(&said), (400, "InvalidRequest"), "{record}");
     }
 }
 
 #[tokio::test]
 async fn holds_each_label_to_the_action_it_needs() {
     let h = start(&[], false).await;
-    let (did, _, post, [alice, bob, _]) = group(&h).await;
-    let label = |val: &str| json!({"group": did, "subject": post, "val": val});
-    assert_eq!(
-        error(&call(&h, &bob, "applyLabel", label("spam")).await),
-        (403, "Forbidden")
-    );
+    let (did, space, post, [alice, bob, _]) = group(&h).await;
+    let uri = post["uri"].as_str().unwrap();
+    // A member who reads the space writes nothing in it as the group.
+    let app = App::new("console");
+    let said = group_token(&h, &app, &bob, &did, &space).await;
+    assert_eq!(said.status, 403, "{}", said.body);
     use common::members::{granting, keep, role};
     let labels = group_host::rbac::scope_of("label").unwrap();
+    assert_eq!(labels, format!("space:*?collection={LABEL}"));
     keep(&h, &did, "role", "labeler", role("Labeler")).await;
     let permissions = granting(&h, &did, "labeler", &[&labels], &[]);
     keep(&h, &did, "permissions", "self", permissions).await;
     membership(&h, &did, &bob.did, &["member", "labeler"]).await;
-    assert_eq!(call(&h, &bob, "applyLabel", label("spam")).await.0, 200);
-    // `!hide` and `!takedown` remove content: those take `takedown`.
-    for val in ["!hide", "!takedown"] {
-        assert_eq!(
-            error(&call(&h, &bob, "applyLabel", label(val)).await),
-            (403, "Forbidden"),
-            "{val}"
-        );
+    // Labels alone, of any value, in any of the group's spaces.
+    let token = app.token_for(&h, &bob, &did, &space).await;
+    let write = |val: &str| json!({"repo": did, "space": space, "collection": LABEL, "record": label(uri, val)});
+    let nsid = "com.atproto.space.createRecord";
+    for val in ["spam", "!hide", "!takedown"] {
+        let said = app.call(&h, nsid, &token, Some(&write(val))).await;
+        assert_eq!(said.status, 200, "{val}: {}", said.body);
     }
-    assert_eq!(
-        call(&h, &alice, "applyLabel", label("!takedown")).await.0,
-        200
-    );
+    let mut other = write("x");
+    other["collection"] = json!("com.example.event");
+    let said = app.call(&h, nsid, &token, Some(&other)).await;
+    assert_eq!(said.status, 403, "{}", said.body);
+    let members = members_space(&did);
+    let (status, said) = labelled(&h, &bob, &did, &members, label(&alice.did, "x")).await;
+    assert_eq!(status, 200, "{said}");
+    // No longer theirs to write, once the role is gone.
+    membership(&h, &did, &bob.did, &["member"]).await;
+    let said = app.call(&h, nsid, &token, Some(&write("spam"))).await;
+    assert_eq!(said.status, 403, "{}", said.body);
+    assert_eq!(said.body["error"], "Forbidden");
 }
 
 #[tokio::test]
 async fn resolves_and_escalates_with_a_note() {
     let h = start(&[], false).await;
-    let (did, _, post, [alice, bob, _]) = group(&h).await;
+    let (did, space, post, [alice, bob, _]) = group(&h).await;
     let uri = post["uri"].as_str().unwrap();
     report(&h, &bob, &did, record(uri)).await;
     let resolve = |status: &str, note: Option<&str>| {
@@ -501,13 +444,9 @@ async fn resolves_and_escalates_with_a_note() {
     let (_, view) = call(&h, &alice, "resolveSubject", resolve("resolved", None)).await;
     assert_eq!(view["status"], "resolved");
     // A label leaves it resolved; a new report opens it again.
-    call(
-        &h,
-        &alice,
-        "applyLabel",
-        json!({"group": did, "subject": post, "val": "spam"}),
-    )
-    .await;
+    let mut spam = label(uri, "spam");
+    spam["cid"] = json!(CID);
+    labelled(&h, &alice, &did, &space, spam).await;
     let listed = async |status: &str| {
         let q = format!("group={did}&status={status}");
         query(&h, &alice, "listSubjects", &q).await.1["subjects"]

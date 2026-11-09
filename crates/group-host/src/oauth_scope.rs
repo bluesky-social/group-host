@@ -12,7 +12,7 @@
 use crate::Host;
 use crate::group::members_space;
 use crate::lexicons::lexicons;
-use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
+use crate::rbac::{self, Access, LABEL, NS, actions_for, grants, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -122,6 +122,21 @@ pub fn writes_in(
     }
 }
 
+/// Whether a holder of `roles`, `member`, labelling (`labels`), writes
+/// labels as the group in a space of `access`: in any of the group's
+/// spaces, but one for chosen people only as one of them.
+pub fn labels_in(access: &Access, roles: &[String], member: &str, labels: bool) -> bool {
+    labels && (access.people.is_none() || access.can_read(roles, member))
+}
+
+/// `writable` with labels, if `labels` and it does not hold every write
+/// of them already.
+pub fn with_labels(writable: &mut BTreeMap<String, BTreeSet<String>>, labels: bool) {
+    if labels && !WRITES.iter().all(|w| may_write(writable, LABEL, w)) {
+        writable.insert(LABEL.into(), WRITES.map(String::from).into());
+    }
+}
+
 /// Whether those writes include `action` on `collection`.
 pub(crate) fn may_write(
     writes: &BTreeMap<String, BTreeSet<String>>,
@@ -157,6 +172,7 @@ impl Host {
         roles: &[String],
         member: &str,
         everything: bool,
+        labels: bool,
     ) -> Result<Vec<Room>, XrpcError> {
         let entries = self
             .group_records(group, &members_space(group), &format!("{NS}.space"))
@@ -177,6 +193,7 @@ impl Host {
             if uri == members_space(group) {
                 writable.extend(self.members_writes_of(group, roles)?);
             }
+            with_labels(&mut writable, labels_in(&access, roles, member, labels));
             rooms.push(Room {
                 kind: space.kind,
                 skey: space.skey,
@@ -200,7 +217,8 @@ impl Host {
         if !repo.is_empty() || actions_for(grants, roles).contains("group.configure") {
             return Ok(true);
         }
-        let rooms = self.rooms(group, roles, member, false)?;
+        let labels = actions_for(grants, roles).contains("label");
+        let rooms = self.rooms(group, roles, member, false, labels)?;
         Ok(rooms.iter().any(|r| !r.writable.is_empty()))
     }
 
@@ -243,7 +261,7 @@ impl Host {
         let repo = repo_collections_for(&grants, roles);
         let everything = repo.contains("*");
         let held = actions_for(&grants, roles);
-        let rooms = self.rooms(group, roles, member, everything)?;
+        let rooms = self.rooms(group, roles, member, everything, held.contains("label"))?;
         let invite = format!("{NS}.invite");
         let (mut kept, mut made) = (Vec::new(), Vec::new());
         for s in requested {

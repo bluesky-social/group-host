@@ -18,9 +18,10 @@ use crate::group_api::{group_of, signed_in};
 use crate::group_invites::{inviting_scope, is_inbox};
 use crate::member_writes::own_scopes;
 use crate::oauth_resource::Refusal;
-use crate::oauth_scope::writes_in;
+use crate::oauth_scope::WRITES;
+use crate::oauth_scope::{labels_in, may_write, with_labels, writes_in};
 use crate::oauth_store::{Grant, Tokens};
-use crate::rbac::{Access, NS};
+use crate::rbac::{Access, LABEL, NS};
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
@@ -152,11 +153,22 @@ impl Host {
         let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
         let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
         let everything = self.may_issue(group, member)?;
-        let writes = writes_in(&Access::of(&access, uri), &roles, member, everything);
-        let own = match uri == members_space(group) {
+        let access = Access::of(&access, uri);
+        let writes = writes_in(&access, &roles, member, everything);
+        let mut own = match uri == members_space(group) {
             true => self.members_writes_of(group, &roles)?,
             false => BTreeMap::new(),
         };
+        // Labels, unless what the space grants holds them already.
+        let labels = labels_in(
+            &access,
+            &roles,
+            member,
+            self.may_do(group, member, "label")?,
+        );
+        if !WRITES.iter().all(|w| may_write(&writes, LABEL, w)) {
+            with_labels(&mut own, labels);
+        }
         if writes.is_empty() && own.is_empty() {
             let none = "no role of yours may act as the group in this space";
             return Err(forbidden(none));

@@ -144,4 +144,4 @@ where the method asks for a version, as a label on a record does.
 | `mod_list` | `mod list` | `fyi.opensocial.listSubjects` | the moderation queue |
 | `mod_history` | `mod history` | `fyi.opensocial.getSubjectHistory` | what was done about a subject |
 | `mod_resolve` | `mod resolve` | `fyi.opensocial.resolveSubject` | resolves or escalates a subject |
-| `mod_label` | `mod label` | `fyi.opensocial.applyLabel` | labels a subject `val`; with `undo`, takes the label back (`fyi.opensocial.negateLabel`) |
+| `mod_label` | `mod label` | `com.atproto.space.createRecord` | labels a subject `val` as the group, with a `com.atproto.label.label` record beside it; with `undo`, deletes it (`com.atproto.space.deleteRecord`) |

@@ -63,7 +63,7 @@ const SAID: Record<string, (op: string, who: string) => string> = {
     op === 'delete' ? 'removed the profile' : 'changed the profile',
   'fyi.opensocial.permissions': () => 'changed what roles can do',
   'fyi.opensocial.access': () => 'changed who sees a space',
-  'fyi.opensocial.label': (op) => (op === 'delete' ? 'removed a label' : 'added a label'),
+  'com.atproto.label.label': (op) => (op === 'delete' ? 'removed a label' : 'added a label'),
   'app.bsky.feed.post': (op) =>
     ({ create: 'posted', update: 'edited a post', delete: 'deleted a post' })[op] ?? ''
 };

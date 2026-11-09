@@ -39,7 +39,7 @@
   }: {
     subjects: Subject[];
     status: string;
-    can: { label: boolean; takedown: boolean; resolve: boolean };
+    can: { label: boolean; resolve: boolean };
     rules?: Record<string, string>;
     ruleList?: { uri: string; title: string }[];
     reasons?: string[];
@@ -53,7 +53,7 @@
     escalated: 'What you escalate shows up here.',
     resolved: 'What you resolve shows up here.'
   };
-  const acts = $derived(can.label || can.takedown || can.resolve);
+  const acts = $derived(can.label || can.resolve);
   // The labels the group defines, by what they are called, then any other
   // it has used here, by their value.
   const choices = $derived([

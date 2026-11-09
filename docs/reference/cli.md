@@ -130,7 +130,7 @@ where a version is asked for, as a label on a record asks.
 | `mod list <group> [--status open\|escalated\|resolved] [--limit] [--cursor]` | the moderation queue |
 | `mod history <group> <subject> [--cid] [--limit] [--cursor]` | what was done about a subject |
 | `mod resolve <group> <subject> --status resolved\|escalated [--note] [--cid]` | resolves or escalates a subject |
-| `mod label <group> <subject> <val> [--cid] [--rule <uri>] [--undo]` | labels a subject; with `--undo`, takes the label back |
+| `mod label <group> <subject> <val> [--cid] [--undo]` | labels a subject as the group, with a label record beside it; with `--undo`, deletes it |
 
 ### account
 

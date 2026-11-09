@@ -14,15 +14,16 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const NS: &str = "fyi.opensocial";
+/// A label, as a record the group writes beside its subject.
+pub const LABEL: &str = "com.atproto.label.label";
 /// Anyone signed in, as an audience.
 pub const PUBLIC: &str = "public";
 
 /// The actions the host's methods ask about.
-pub const ACTIONS: [&str; 12] = [
+pub const ACTIONS: [&str; 11] = [
     "mod.read",
     "mod.resolve",
     "label",
-    "takedown",
     "invite",
     "admit",
     "eject",
@@ -177,10 +178,9 @@ fn query_of(scope: &str, name: &str) -> Vec<String> {
 }
 
 /// The actions a host method's `rpc:` scope grants, by method.
-const BY_METHOD: [(&str, &str); 3] = [
+const BY_METHOD: [(&str, &str); 2] = [
     ("listSubjects", "mod.read"),
     ("resolveSubject", "mod.resolve"),
-    ("applyLabel", "label"),
 ];
 
 /// The scope that grants each action.
@@ -200,8 +200,7 @@ pub fn scope_of(action: &str) -> Option<String> {
         "invite" => format!("space:{NS}.invites?authority=*&collection={NS}.invite"),
         "mod.read" => rpc("listSubjects"),
         "mod.resolve" => rpc("resolveSubject"),
-        "label" => rpc("applyLabel"),
-        "takedown" => format!("space:*?collection={NS}.label"),
+        "label" => format!("space:*?collection={LABEL}"),
         _ => return None,
     })
 }
@@ -286,9 +285,8 @@ pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
             if every || collections.contains(&format!("{NS}.access").as_str()) {
                 out.insert("space.configure");
             }
-            if every || collections.contains(&format!("{NS}.label").as_str()) {
+            if every || collections.contains(&LABEL) {
                 out.insert("label");
-                out.insert("takedown");
             }
         }
     }

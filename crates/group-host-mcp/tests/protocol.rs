@@ -2,8 +2,8 @@
 //! the server answers each message an MCP client sends.
 
 use group_host_mcp::{
-    Action, FAVICONS, Key, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, edited, iconed, iconless,
-    plan, regrant, snake, tools,
+    Action, FAVICONS, Key, LABEL, PROTOCOL_VERSIONS, Plan, Tool, answer, camel, edited, iconed,
+    iconless, label_record, label_space, labels, plan, regrant, snake, tools,
 };
 use serde_json::{Value, json};
 
@@ -167,11 +167,18 @@ fn makes_each_schema_from_the_lexicons() {
 
     // A subject, an account or a record, as text; and its opposite.
     let label = tool("mod_label");
+    assert_eq!(label.action, Action::Label);
     let fields = &label.input_schema["properties"];
     assert_eq!(fields["subject"]["type"], "string");
     assert_eq!(fields["cid"]["format"], "cid");
+    assert_eq!(fields["val"]["maxLength"], 128);
     assert_eq!(fields["undo"]["type"], "boolean");
+    assert_eq!(label.input_schema["required"], json!(["subject", "val"]));
     assert_eq!(label.args, ["subject", "val"]);
+    assert!(label.description.contains("com.atproto.label.label"));
+    let resolve = &tool("mod_resolve").input_schema["properties"];
+    assert_eq!(resolve["subject"]["type"], "string");
+    assert_eq!(resolve["cid"]["format"], "cid");
     let history = &tool("mod_history").input_schema["properties"]["subject"];
     assert_eq!(history["format"], "uri");
     assert!(
@@ -183,6 +190,58 @@ fn makes_each_schema_from_the_lexicons() {
         tool("space_records").input_schema["required"],
         json!(["space"])
     );
+}
+
+#[test]
+fn plans_a_label_beside_its_subject() {
+    let label = |args: Value| planned("mod_label", args);
+    assert_eq!(
+        label(json!({"subject": "did:plc:a", "val": "spam"})),
+        Ok(Plan::Label {
+            subject: "did:plc:a".into(),
+            cid: None,
+            val: "spam".into(),
+            undo: false,
+        })
+    );
+    let post = "at://did:plc:g/space/x.y/rides/did:plc:a/com.example.post/1";
+    assert_eq!(
+        label(json!({"subject": post, "cid": "bafy", "val": "spam", "undo": true})),
+        Ok(Plan::Label {
+            subject: post.into(),
+            cid: Some("bafy".into()),
+            val: "spam".into(),
+            undo: true,
+        })
+    );
+    assert!(label(json!({"val": "spam"})).is_err());
+    assert!(label(json!({"subject": post})).is_err());
+
+    // Where it goes: an account's in the members space, a record's in its
+    // own, the group's.
+    let members = "at://did:plc:g/space/fyi.opensocial.members/self";
+    assert_eq!(
+        label_space("did:plc:g", "did:plc:a").as_deref(),
+        Some(members)
+    );
+    assert_eq!(
+        label_space("did:plc:g", post).as_deref(),
+        Some("at://did:plc:g/space/x.y/rides")
+    );
+    assert_eq!(label_space("did:plc:other", post), None);
+    assert_eq!(label_space("did:plc:g", "at://did:plc:g/x.y/rides"), None);
+    assert_eq!(label_space("did:plc:g", "https://example.com"), None);
+
+    // The record, at a version if named, and which are the same label.
+    let record = label_record(post, Some("bafy"), "spam", NOW);
+    assert_eq!(
+        record,
+        json!({"$type": LABEL, "uri": post, "cid": "bafy", "val": "spam", "cts": NOW})
+    );
+    assert!(label_record(post, None, "spam", NOW).get("cid").is_none());
+    assert!(labels(&record, post, "spam"));
+    assert!(!labels(&record, post, "!hide"));
+    assert!(!labels(&record, "did:plc:a", "spam"));
 }
 
 #[test]
@@ -222,37 +281,30 @@ fn plans_a_method_asked_with_its_arguments() {
         panic!()
     };
     assert_eq!(nsid, "fyi.opensocial.deleteLabelDefinition");
-    // An account, or a record at a version; the opposite asked instead.
-    let call = |args: Value| match planned("mod_label", args).unwrap() {
-        Plan::Call { nsid, input, .. } => (nsid, input),
+    // An account, or a record at a version, as the union it is sent as.
+    let call = |args: Value| match planned("mod_resolve", args).unwrap() {
+        Plan::Call { input, .. } => input,
         other => panic!("{other:?}"),
     };
-    let (nsid, input) = call(json!({"subject": "did:plc:a", "val": "spam", "undo": false}));
-    assert_eq!(nsid, "fyi.opensocial.applyLabel");
-    assert_eq!(
-        input,
-        json!({"subject": {"$type": "com.atproto.admin.defs#repoRef", "did": "did:plc:a"}, "val": "spam"})
-    );
-    let post = "at://did:plc:g/space/x/self/did:plc:a/com.example.post/1";
-    let (nsid, input) = call(json!({"subject": post, "cid": "bafy", "val": "spam", "undo": true}));
-    assert_eq!(nsid, "fyi.opensocial.negateLabel");
+    let input = call(json!({"subject": "did:plc:a", "status": "resolved"}));
     assert_eq!(
         input["subject"],
-        json!({"$type": "com.atproto.repo.strongRef", "uri": post, "cid": "bafy"})
+        json!({"$type": "fyi.opensocial.defs#accountSubject", "did": "did:plc:a"})
     );
-    let Ok(Plan::Call { input, .. }) = planned(
-        "mod_resolve",
-        json!({"subject": post, "status": "resolved"}),
-    ) else {
-        panic!()
-    };
+    let post = "at://did:plc:g/space/x/self/did:plc:a/com.example.post/1";
+    let input = call(json!({"subject": post, "cid": "bafy", "status": "resolved"}));
+    assert_eq!(
+        input["subject"],
+        json!({"$type": "fyi.opensocial.defs#recordSubject", "uri": post, "cid": "bafy"})
+    );
+    let input = call(json!({"subject": post, "status": "resolved"}));
     assert_eq!(
         input["subject"],
         json!({"$type": "fyi.opensocial.defs#recordSubject", "uri": post})
     );
     // Nothing to make a subject of, nothing made.
-    let (_, input) = call(json!({"val": "spam"}));
-    assert_eq!(input, json!({"val": "spam"}));
+    let input = call(json!({"status": "resolved"}));
+    assert_eq!(input, json!({"status": "resolved"}));
 }
 
 #[test]

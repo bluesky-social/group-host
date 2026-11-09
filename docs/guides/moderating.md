@@ -26,8 +26,8 @@ there only when one of their roles lets them read the moderation queue.
 A member without the role does not see the button, and if they open the
 page anyway it tells them there is nothing there for them. Each part of
 the page needs its own permission in a role. It takes `mod.read` to see
-the queue, `mod.resolve` to resolve or escalate, `label` to label
-someone, and `takedown` to take an account down. You give these to a role as in
+the queue, `mod.resolve` to resolve or escalate, and `label` to label
+someone or take an account down. You give these to a role as in
 [Rules and roles](rules-and-roles.md).
 
 ## How does something come to be reported?
@@ -138,7 +138,8 @@ the label `!takedown` but hides nothing itself. Apps that follow the
 group's labels do the hiding. The account stays in the group until you
 remove it, as the next part shows.
 
-The dialog shows **Take down** only to a role with `takedown`.
+A takedown is a label like any other, so it takes the same `label`
+permission.
 
 1. In the account's Review, press **Take down**, beside the line on
    what a takedown does.
@@ -149,7 +150,7 @@ The dialog shows **Take down** only to a role with `takedown`.
 
 The label `!takedown` shows under **Labels**. Press its × to undo the
 takedown. The label `!hide` works the same way: type it under **Add a
-label**. Both need the same permission.
+label**.
 
 ## How do I act on someone nobody reported?
 

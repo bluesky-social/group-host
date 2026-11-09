@@ -13,6 +13,7 @@ use serde_json::{Value as Json, json};
 
 const CALENDAR: &str = "com.example.calendar";
 const EVENT: &str = "com.example.event";
+const LABEL: &str = "com.atproto.label.label";
 const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
@@ -127,13 +128,18 @@ async fn gives_a_member_a_token_for_what_their_roles_write_in_a_space() {
         .await;
     assert_eq!(said.error(), (403, "ScopeMissing"));
 
-    // An admin's is for anything there, and any file.
+    // An admin's is for anything there, labels too, and any file.
     let said = group_auth(&h, &app, &alice, &json!({"group": did, "space": calendar})).await;
     assert_eq!(
         said.body["collections"],
         json!([{"collection": "*"}, {"collection": EVENT}])
     );
-    assert!(said.body["scope"].as_str().unwrap().ends_with("blob:*/*"));
+    assert_eq!(
+        said.body["repoCollections"],
+        json!([{"collection": "*"}, {"collection": EVENT}])
+    );
+    let scope = said.body["scope"].as_str().unwrap();
+    assert!(scope.split(' ').any(|s| s == "blob:*/*"), "{scope}");
 }
 
 #[tokio::test]
@@ -144,12 +150,14 @@ async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them()
     let app = App::new("console");
     let said = group_auth(&h, &app, &alice, &json!({"group": did, "space": members})).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    // Roles, the permissions record and memberships, kept there alone.
+    // Labels, roles, the permissions record and memberships, kept there
+    // alone.
     let c = |n: &str| format!("{NS}.{n}");
-    let names: Vec<Json> = ["membership", "permissions", "role"]
+    let mut names: Vec<Json> = ["membership", "permissions", "role"]
         .iter()
         .map(|n| json!({"collection": c(n)}))
         .collect();
+    names.insert(0, json!({"collection": LABEL}));
     assert_eq!(said.body["collections"], json!(names));
     assert_eq!(said.body["repoCollections"], json!([]));
     let scope = said.body["scope"].as_str().unwrap();

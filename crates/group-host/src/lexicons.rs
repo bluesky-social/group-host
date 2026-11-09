@@ -34,7 +34,6 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/access"),
     lexicon!("fyi/opensocial/activateGroup"),
     lexicon!("fyi/opensocial/addRecoveryKey"),
-    lexicon!("fyi/opensocial/applyLabel"),
     lexicon!("fyi/opensocial/approveAuthorization"),
     lexicon!("fyi/opensocial/cancelAccountMove"),
     lexicon!("fyi/opensocial/cancelJoinRequest"),
@@ -75,7 +74,6 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/importAccountSpace"),
     lexicon!("fyi/opensocial/invite"),
     lexicon!("fyi/opensocial/invites"),
-    lexicon!("fyi/opensocial/label"),
     lexicon!("fyi/opensocial/labeler"),
     lexicon!("fyi/opensocial/leaveGroup"),
     lexicon!("fyi/opensocial/listAppPasswords"),
@@ -98,7 +96,6 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/migratePrepare"),
     lexicon!("fyi/opensocial/migrateReceive"),
     lexicon!("fyi/opensocial/moderate"),
-    lexicon!("fyi/opensocial/negateLabel"),
     lexicon!("fyi/opensocial/participate"),
     lexicon!("fyi/opensocial/permissions"),
     lexicon!("fyi/opensocial/profile"),
@@ -122,6 +119,7 @@ pub const FILES: &[&str] = &[
     lexicon!("upstream/com/atproto/admin/defs"),
     lexicon!("upstream/com/atproto/identity/resolveHandle"),
     lexicon!("upstream/com/atproto/label/defs"),
+    lexicon!("upstream/com/atproto/label/label"),
     lexicon!("upstream/com/atproto/managedspace/checkUserAccess"),
     lexicon!("upstream/com/atproto/managedspace/policy"),
     lexicon!("upstream/com/atproto/moderation/defs"),
@@ -204,18 +202,19 @@ pub async fn check(State(host): State<Arc<Host>>, request: Request, next: Next) 
 }
 
 /// What `validationStatus` says of a record of `collection`: `valid` for
-/// one of our own collections, which [`check_record`] checks against its
-/// lexicon before it is kept, `unknown` for any other.
+/// one of our own collections, or a label, which [`check_record`] checks
+/// against its lexicon before it is kept, `unknown` for any other.
 pub fn validation(collection: &str) -> &'static str {
-    let ours = collection.starts_with("fyi.opensocial.");
+    let ours = collection.starts_with("fyi.opensocial.") || collection == crate::rbac::LABEL;
     match lexicons().def(collection) {
         Some(def) if ours && def["type"] == "record" => "valid",
         _ => "unknown",
     }
 }
 
-/// Refuses a record of one of our own collections that is not what its
-/// lexicon describes; a record of any other collection passes unread.
+/// Refuses a record of one of our own collections, or a label, that is
+/// not what its lexicon describes; a record of any other collection
+/// passes unread.
 pub fn check_record(collection: &str, record: &Value) -> Result<(), XrpcError> {
     if validation(collection) == "unknown" {
         return Ok(());

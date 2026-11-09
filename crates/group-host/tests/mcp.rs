@@ -554,6 +554,93 @@ async fn switches_the_group_off_and_back_on() {
 }
 
 #[tokio::test]
+async fn labels_as_the_group_beside_what_it_labels() {
+    let h = start(&[], false).await;
+    let [alice, bob, _] = people(&h).await;
+    let body = json!({"handle": RIDERS, "displayName": "Riders"});
+    let group = start_group(&h, &alice, body).await;
+    make_member(&h, &group, &bob.did).await;
+    let (_, tokens) = connect(&h, &alice, &group).await;
+    let access = tokens["access_token"].as_str().unwrap();
+    let label = "com.atproto.label.label";
+    // An account's, in the members space.
+    let got = tool(
+        &h,
+        access,
+        "mod_label",
+        json!({"subject": bob.did, "val": "spam"}),
+    )
+    .await;
+    assert!(got.get("isError").is_none(), "{got}");
+    let uri = got["structuredContent"]["uri"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let members = format!("at://{group}/space/{NS}.members/self");
+    assert!(
+        uri.starts_with(&format!("{members}/{group}/{label}/")),
+        "{uri}"
+    );
+    assert!(got["structuredContent"]["cid"].is_string(), "{got}");
+    let rkey = uri.rsplit('/').next().unwrap();
+    let kept = h
+        .host
+        .group_record(&group, &members, label, rkey)
+        .unwrap()
+        .unwrap();
+    assert_eq!(kept["uri"], bob.did.as_str());
+    assert_eq!(kept["val"], "spam");
+    // Taken back by deleting it, and then there is none.
+    let undo = json!({"subject": bob.did, "val": "spam", "undo": true});
+    let got = tool(&h, access, "mod_label", undo.clone()).await;
+    assert_eq!(got["structuredContent"]["uris"], json!([uri]), "{got}");
+    assert_eq!(
+        h.host.group_records(&group, &members, label).unwrap(),
+        vec![]
+    );
+    let got = tool(&h, access, "mod_label", undo).await;
+    assert_eq!(got["isError"], true, "{got}");
+    // A record's, in the space it is in.
+    let made = json!({"group": group, "type": "com.example.calendar", "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
+    let (status, made) = call(&h, &alice, "createSpace", made).await;
+    assert_eq!(status, 200, "{made}");
+    let space = made["space"].as_str().unwrap();
+    let post = format!("{space}/{}/com.example.event/ride", bob.did);
+    let got = tool(&h, access, "mod_label", json!({"subject": post, "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm", "val": "!hide"})).await;
+    assert!(got.get("isError").is_none(), "{got}");
+    let uri = got["structuredContent"]["uri"].as_str().unwrap();
+    assert!(
+        uri.starts_with(&format!("{space}/{group}/{label}/")),
+        "{uri}"
+    );
+    // Nothing in the group's spaces, or no space at all, is no subject.
+    for subject in [
+        format!("at://did:plc:other/space/x.y/z/{}/a.b.c/d", bob.did),
+        format!("at://{group}/space/NOT A TYPE/z/{}/a.b.c/d", bob.did),
+    ] {
+        let got = tool(
+            &h,
+            access,
+            "mod_label",
+            json!({"subject": subject, "val": "x"}),
+        )
+        .await;
+        assert_eq!(got["isError"], true, "{subject}: {got}");
+    }
+    // A member who does not label, labels nothing.
+    let (_, tokens) = connect(&h, &bob, &group).await;
+    let access = tokens["access_token"].as_str().unwrap();
+    let got = tool(
+        &h,
+        access,
+        "mod_label",
+        json!({"subject": alice.did, "val": "x"}),
+    )
+    .await;
+    assert_eq!(got["isError"], true, "{got}");
+}
+
+#[tokio::test]
 async fn does_only_what_the_members_roles_allow() {
     let h = start(&[], false).await;
     let [alice, bob, _] = people(&h).await;

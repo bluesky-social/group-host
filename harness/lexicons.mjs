@@ -328,16 +328,20 @@ const code = git('ls-files', '--', 'crates', 'web/src', 'harness')
   .map((f) => readFileSync(join(root, f), 'utf8'))
   .join('\n');
 
+/// Whether `text` names `id` whole: not as the start of a longer name, as
+/// `fyi.opensocial.labeler` starts with `fyi.opensocial.label`.
+const names = (text, id, before = '') =>
+  new RegExp(`${before}${id.replace(/[.#]/g, '\\$&')}(?![\\w.])`).test(text);
+
 /// Whether a def (`nsid#name`, or a schema's `nsid`) is referred to: by a
 /// ref in any lexicon, `#name` within its own, or by name in the code.
 const referred = (id) => {
   const [nsid, name] = id.split('#');
   for (const doc of now.values()) {
     const text = JSON.stringify(doc);
-    if (doc.id === nsid ? name && text.includes(`"#${name}"`) : text.includes(`"${id}`))
-      return true;
+    if (doc.id === nsid ? name && text.includes(`"#${name}"`) : names(text, id, '"')) return true;
   }
-  return code.includes(id);
+  return names(code, id);
 };
 
 /// Whether a removal goes unremarked: of one of ours, nothing published,

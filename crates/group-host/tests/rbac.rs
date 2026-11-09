@@ -151,26 +151,24 @@ fn answers_each_action_by_its_scope() {
             "{nothing}"
         );
     }
-    // A space scope over every collection labels, takes down, configures
-    // and writes memberships; one managing makes and deletes spaces.
+    // A space scope over every collection labels, configures and writes
+    // memberships; one managing makes and deletes spaces.
     let every = actions_of(&["space:*".into()]);
     assert_eq!(
         every.into_iter().collect::<Vec<_>>(),
-        [
-            "admit",
-            "eject",
-            "label",
-            "role.assign",
-            "space.configure",
-            "takedown"
-        ]
+        ["admit", "eject", "label", "role.assign", "space.configure",]
     );
     let star = actions_of(&["space:*?collection=*".into()]);
-    assert_eq!(star.len(), 6);
+    assert_eq!(star.len(), 5);
+    // Labels, written in any of the group's spaces, label.
+    assert_eq!(
+        of_scope("space:*?collection=com.atproto.label.label"),
+        ["label"]
+    );
     // Memberships written in the members space admit, give roles and
     // put out, as far as the scope's writes go; the set for running
     // members does all of that, and invites.
-    let of = |scope: &str| actions_of(&[scope.into()]).into_iter().collect::<Vec<_>>();
+    let of = of_scope;
     let members = "space:fyi.opensocial.members?collection=fyi.opensocial.membership";
     assert_eq!(of(members), ["admit", "eject", "role.assign"]);
     assert_eq!(of(&format!("{members}&action=update")), ["role.assign"]);
@@ -194,6 +192,10 @@ fn answers_each_action_by_its_scope() {
     );
     let other = actions_of(&["space:*?collection=xyz.task".into()]);
     assert!(other.is_empty());
+}
+
+fn of_scope(scope: &str) -> Vec<&'static str> {
+    actions_of(&[scope.into()]).into_iter().collect()
 }
 
 #[test]

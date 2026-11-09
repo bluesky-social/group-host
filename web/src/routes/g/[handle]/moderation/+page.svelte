@@ -17,10 +17,9 @@
   );
   const can = $derived({
     label: data.actions.includes('label'),
-    takedown: data.actions.includes('takedown'),
     resolve: data.actions.includes('mod.resolve')
   });
-  const finds = $derived(!!data.subjects && (can.label || can.takedown));
+  const finds = $derived(!!data.subjects && can.label);
 </script>
 
 <svelte:head><title>Moderation · {g.displayName ?? g.handle} · opensocial</title></svelte:head>

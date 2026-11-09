@@ -13,14 +13,12 @@ a members [space](spaces.md). A DID that is not one is refused with
 ## Who moderates
 
 Moderating is a matter of roles, as everything a member does in a group
-is (see [membership](membership.md)). Four of the host's actions are
+is (see [membership](membership.md)). Three of the host's actions are
 about moderation:
 
 - `mod.read`: see the queue and a subject's history.
 - `mod.resolve`: resolve or escalate a subject, with a note.
-- `label`: write a label.
-- `takedown`: write the labels that ask for content to be hidden or
-  taken down.
+- `label`: write a label, of any value, and delete one.
 
 A role holds an action through an OAuth scope in the group's permissions
 record, and a member holds the union of their roles' actions. There is
@@ -38,52 +36,48 @@ the twins of the `opensocial mod` commands (see [MCP](mcp.md)).
 
 Details:
 
-- The scopes behind each action are in [the API
-  reference](../reference/api.md).
-- A `space:*` scope covering the `fyi.opensocial.label` collection
-  grants both `label` and `takedown`; the `applyLabel` method's scope
-  grants `label` only.
+- `mod.read` is granted by `rpc:fyi.opensocial.listSubjects`,
+  `mod.resolve` by `rpc:fyi.opensocial.resolveSubject`, and `label` by
+  `space:*?collection=com.atproto.label.label`, or any `space:*` scope
+  covering that collection.
 - No caller at all is `401 AuthMissing`.
 
 ## Labels
 
-A label is a moderation tag on a record or an account. Here it is an
-`fyi.opensocial.label` record that the group writes with `applyLabel`.
-It holds the `subject`, a value `val`, optionally the
-`fyi.opensocial.rule` it cites as `rule`, and `createdAt`.
+A label is a moderation tag on a record or an account. Here it is a
+`com.atproto.label.label` record that the group writes, as it writes any
+record of its own: with `com.atproto.space.createRecord` and the rest,
+and a token for the group ([signing in](signing-in.md)). It holds the
+subject's `uri` (an account's DID, or a record's URI), optionally the
+`cid` of one version of a record, a value `val`, and `cts`, when it was
+made.
 
 A label has to be readable by the people who see its subject, and only
-by them. So the host writes it where the subject lives. A record's label
-goes into the space the record is in, in the group's own repo there; an
-account's label goes into the group's members space. Whoever may read
-the space may read its labels. A group labels only what is in its own
-spaces; a record in a space with another authority is refused.
+by them. So it goes where the subject lives. A record's label goes into
+the space the record is in, in the group's own repo there; an account's
+label goes into the group's members space. Whoever may read the space
+may read its labels. The host refuses a label whose `uri` is neither a
+DID nor a record in the space it is written in.
 
-A judgement can be withdrawn, but the history of it should stay. So
-`negateLabel` does not delete the label. It writes a second label record
-with the same subject and value and `neg: true`. A reader takes a label
-as standing until a negation follows it.
+A label is taken back by deleting it. The record is gone from the
+space, but the queue keeps that it was written, when, and by whom.
 
-The host writes labels and gives no value an effect of its own: it hides
-and removes nothing. An app that reads a space reads its labels with it,
-and decides what to show. The values `!hide` and `!takedown` ask for
-content to be hidden or taken down, so writing or negating them needs
-`takedown`; every other value needs `label`.
+The host gives no value an effect of its own: it hides and removes
+nothing. An app that reads a space reads its labels with it, and decides
+what to show. The group says what its values mean in its labeler (see
+[reports](#reports)).
 
 Details:
 
-- A subject is an account (`com.atproto.admin.defs#repoRef`, by DID) or
-  a record (`com.atproto.repo.strongRef`, by URI and CID).
-- A record's URI must be a record in a space:
-  `at://<authority>/space/<type>/<skey>/<repo>/<collection>/<rkey>`.
-- The record key is a TID from the host's clock. `applyLabel` answers
-  the label's `uri` and `cid`, and `negateLabel` the negation's.
-- A label's value is 128 bytes at most. A subject's CID must parse as
-  one, and a `rule` cited must be a record's URI in a space, as a rule's
-  is.
-- The host does not check that the subject exists, that a CID matches,
-  or that a negation follows a label.
-- Every label and negation is also an event in the queue.
+- Writing or deleting a label needs `label`. It reaches every space of
+  the group's, but in a space for chosen people only those of them who
+  hold it. The token's scope must cover the write, as for any record.
+- The record is checked against its lexicon: a value is 128 bytes at
+  most, and `uri`, `val` and `cts` are required.
+- The host does not check that the subject exists or that a CID
+  matches.
+- Every label written, and every one deleted, is also an event in the
+  queue.
 
 ## The queue
 
@@ -112,8 +106,7 @@ four kinds as `event`:
   `reason` and the `rule` it cites, if any.
 - `statusEvent`: a moderator set its `status`, with an optional `note`.
 - `labelEvent`: a label was written, by the label record's `uri` and its
-  `val`. A negation is a label taken back, so it is answered with
-  `deleted: true` and the negating record's `uri`.
+  `val`; or, with `deleted: true`, deleted, which takes it back.
 - `ejectEvent`: the member was removed from the group, their membership
   deleted. It says nothing more.
 

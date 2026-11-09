@@ -328,7 +328,8 @@ impl Host {
             roles,
             grants,
         };
-        for w in writes {
+        // A label is held to the rules of every space (`moderation`).
+        for w in writes.iter().filter(|w| kind(w).is_some()) {
             let (_, rkey) = w.path();
             match (kind(w), w) {
                 (Some("role"), Write::Delete { .. }) => {
@@ -358,7 +359,7 @@ impl Host {
                     book.grants = now;
                 }
                 // The rest are memberships: the members space takes no other
-                // record (`guard`).
+                // record of ours (`guard`).
                 (_, Write::Delete { .. }) => {
                     let (_, theirs) = book.members.remove(rkey).unwrap_or_default();
                     writer.may_give(&theirs, "eject")?;

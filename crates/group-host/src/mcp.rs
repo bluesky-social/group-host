@@ -20,7 +20,7 @@
 //! can do nothing there, and its grants end.
 
 use crate::Host;
-use crate::api::{Params, param};
+use crate::api::{Params, invalid, param};
 use crate::group_api::{group_of, signed_in};
 use crate::oauth_resource::Acting;
 use crate::oauth_store::Grant;
@@ -700,21 +700,20 @@ fn query_of(args: &Value) -> Vec<(String, String)> {
 impl Host {
     /// Writes a record of `who`'s group as the group, as `Plan::Write`
     /// says: `record` at `rkey`, or at a new key, or with none deletes the
-    /// one at `rkey`, in its space of the type `space`. What a group
-    /// session `who`'s member approved for that space would write, its
-    /// scope what their roles there grant now, kept to the same rules.
+    /// one at `rkey`, in its space at `uri`. What a group session `who`'s
+    /// member approved for that space would write, its scope what their
+    /// roles there grant now, kept to the same rules.
     async fn record_as(
         &self,
         who: &McpGrant,
-        space: &str,
+        uri: &str,
         collection: String,
         rkey: Option<String>,
         record: Option<Value>,
     ) -> Result<Value, XrpcError> {
         let group = &who.group;
-        let uri = format!("at://{group}/space/{space}/self");
-        let space = SpaceRef::parse(&uri).expect("a group's own space is a space");
-        let (_, _, scope) = self.group_scope(group, &who.member, &uri, &space)?;
+        let space = SpaceRef::parse(uri).map_err(|e| invalid(e.to_string()))?;
+        let (_, _, scope) = self.group_scope(group, &who.member, uri, &space)?;
         let now = now_millis();
         let grant = Grant {
             id: who.id.clone(),
@@ -744,7 +743,7 @@ impl Host {
             },
         };
         let writes = std::slice::from_ref(&write);
-        let written = self.write_as(&acting, &uri, &space, writes, true);
+        let written = self.write_as(&acting, uri, &space, writes, true);
         written.await?;
         let (collection, rkey) = write.path();
         let mut out = json!({"uri": format!("{uri}/{group}/{collection}/{rkey}")});
@@ -752,6 +751,45 @@ impl Host {
             out["cid"] = json!(record_cid(collection, value)?.to_string());
         }
         Ok(out)
+    }
+
+    /// Labels `subject` with `val` as `who`'s group, beside it, as
+    /// `Plan::Label` says; with `undo`, deletes each label of that value
+    /// on it there.
+    async fn label_as(
+        &self,
+        who: &McpGrant,
+        subject: &str,
+        cid: Option<&str>,
+        val: &str,
+        undo: bool,
+    ) -> Result<Value, XrpcError> {
+        let group = &who.group;
+        let space = group_host_mcp::label_space(group, subject);
+        let space = space.ok_or_else(|| {
+            invalid("subject is an account's DID, or a record's URI in one of the group's spaces")
+        })?;
+        let collection = || group_host_mcp::LABEL.to_string();
+        if !undo {
+            let record = group_host_mcp::label_record(subject, cid, val, &iso(now_millis()));
+            return self
+                .record_as(who, &space, collection(), None, Some(record))
+                .await;
+        }
+        let kept = self.group_records(group, &space, group_host_mcp::LABEL);
+        let kept = kept.map_err(XrpcError::internal)?;
+        let mut uris = Vec::new();
+        for (rkey, _) in kept
+            .iter()
+            .filter(|(_, r)| group_host_mcp::labels(r, subject, val))
+        {
+            let gone = self.record_as(who, &space, collection(), Some(rkey.clone()), None);
+            uris.push(gone.await?["uri"].clone());
+        }
+        if uris.is_empty() {
+            return Err(invalid(format!("no {val} label on {subject} to take back")));
+        }
+        Ok(json!({ "uris": uris }))
     }
 
     /// Carries out `plan` as `who`, in their group: a method asked as the
@@ -774,8 +812,18 @@ impl Host {
                 rkey,
                 record,
             } => {
-                let written = self.record_as(who, &space, collection, rkey, record);
+                let uri = format!("at://{}/space/{space}/self", who.group);
+                let written = self.record_as(who, &uri, collection, rkey, record);
                 written.await.map_err(said)
+            }
+            Plan::Label {
+                subject,
+                cid,
+                val,
+                undo,
+            } => {
+                let labelled = self.label_as(who, &subject, cid.as_deref(), &val, undo);
+                labelled.await.map_err(said)
             }
             Plan::Invite { person, record } => {
                 let written = self.invite_as(who, &person, record).await;

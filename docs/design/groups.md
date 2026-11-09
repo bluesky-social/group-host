@@ -86,7 +86,7 @@ there. An access record can also name `people`, the chosen people a
 space is for, by DID; the roles granted `read` there read it too.
 
 The permissions record in `members` grants each role OAuth scopes and the
-roles it may assign. Each of the host's twelve actions, such as `invite`,
+roles it may assign. Each of the host's eleven actions, such as `invite`,
 `eject`, `space.create` or `group.configure`, is answered by one scope.
 Roles compose by union: a person may do whatever any of their roles
 grants, with no deny, precedence or hierarchy. The same scopes bound an

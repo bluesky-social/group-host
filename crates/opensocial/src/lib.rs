@@ -88,7 +88,7 @@ mod
                          what was done about a subject
   mod resolve <group> <subject> --status resolved|escalated [--note <words>] [--cid <cid>]
                          resolve or escalate a subject
-  mod label <group> <subject> <val> [--cid <cid>] [--rule <uri>] [--undo]
+  mod label <group> <subject> <val> [--cid <cid>] [--undo]
                          label a subject, or with --undo take the label back
 admin
   admin logs [--trace <id>] [--message <message>] [--level <level>] [--min-ms <n>] [--limit <n>]
@@ -941,6 +941,12 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
             Box::pin(carry_out(me, host, group, write)).await
         }
+        Plan::Label {
+            subject,
+            cid,
+            val,
+            undo,
+        } => label(me, host, group, &subject, cid.as_deref(), &val, undo).await,
         Plan::Grant {
             role,
             scopes,
@@ -953,6 +959,57 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             Box::pin(carry_out(me, host, group, write)).await
         }
     }
+}
+
+/// Labels `subject` with `val` as `group`, beside it, with a group token
+/// for that space; with `undo`, deletes each label of that value on it
+/// there, as the space's records list them.
+async fn label(
+    me: &Client,
+    host: &Host,
+    group: &str,
+    subject: &str,
+    cid: Option<&str>,
+    val: &str,
+    undo: bool,
+) -> Result<Value> {
+    let Some(space) = group_host_mcp::label_space(group, subject) else {
+        bail!("{subject} is not an account's DID, or a record's URI in one of the group's spaces");
+    };
+    let session = GroupSession::start(me, host, group, &space).await?;
+    let collection = group_host_mcp::LABEL;
+    if !undo {
+        let record = group_host_mcp::label_record(subject, cid, val, &now_iso());
+        let body =
+            json!({"repo": group, "space": space, "collection": collection, "record": record});
+        return session.call("com.atproto.space.createRecord", &body).await;
+    }
+    let asked = [
+        ("group", group),
+        ("space", space.as_str()),
+        ("collection", collection),
+        ("field", "uri"),
+        ("equals", subject),
+        ("limit", "100"),
+    ];
+    let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
+    let records = listed["records"].as_array().into_iter().flatten();
+    let ours =
+        records.filter(|r| r["repo"] == group && group_host_mcp::labels(&r["value"], subject, val));
+    let mut uris = Vec::new();
+    for r in ours {
+        let uri = text(&r["uri"]);
+        let rkey = uri.rsplit('/').next().unwrap_or_default();
+        let body = json!({"repo": group, "space": space, "collection": collection, "rkey": rkey});
+        session
+            .call("com.atproto.space.deleteRecord", &body)
+            .await?;
+        uris.push(json!(uri));
+    }
+    if uris.is_empty() {
+        bail!("no {val} label on {subject} to take back");
+    }
+    Ok(json!({ "uris": uris }))
 }
 
 const NS: &str = "fyi.opensocial";
@@ -1255,8 +1312,12 @@ const RULES: [(&str, &str); 2] = [
 ];
 
 /// What a seeded group's moderator may do: read the moderation queue,
-/// resolve what is in it, and label.
-const MODERATES: [&str; 3] = ["listSubjects", "resolveSubject", "applyLabel"];
+/// resolve what is in it, and label, in any of the group's spaces.
+const MODERATES: [&str; 3] = [
+    "rpc:fyi.opensocial.listSubjects?aud=*",
+    "rpc:fyi.opensocial.resolveSubject?aud=*",
+    "space:*?collection=com.atproto.label.label",
+];
 
 /// Makes `group` a moderator role, as the group: the role, its grant, and
 /// the roles that run the group able to give it.
@@ -1277,11 +1338,7 @@ async fn moderator(me: &Client, host: &Host, group: &str) -> Result<()> {
             json!({"role": b["role"], "scopes": listed(&b["scopes"], "scope"), "assignable": assignable})
         })
         .collect();
-    let scopes: Vec<String> = MODERATES
-        .iter()
-        .map(|lxm| format!("rpc:{}?aud=*", m(lxm)))
-        .collect();
-    grants.push(json!({"role": "moderator", "scopes": scopes, "assignable": []}));
+    grants.push(json!({"role": "moderator", "scopes": MODERATES, "assignable": []}));
     let now = now_iso();
     let role = json!({
         "$type": m("role"),

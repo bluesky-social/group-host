@@ -4,7 +4,7 @@
 - list:
   - listitem:
     - strong: Admin
-    - text: admin Can admit eject group.configure invite label mod.read mod.resolve role.assign space.configure space.create space.delete takedown
+    - text: admin Can admit eject group.configure invite label mod.read mod.resolve role.assign space.configure space.create space.delete
     - button "Delete Admin": Delete
   - listitem:
     - strong: Member

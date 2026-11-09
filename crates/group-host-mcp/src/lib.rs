@@ -49,8 +49,6 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("listSpaceRecords"),
     lexicon!("listSubjects"),
     lexicon!("getSubjectHistory"),
-    lexicon!("applyLabel"),
-    lexicon!("negateLabel"),
     lexicon!("putLabelDefinition"),
     lexicon!("deleteLabelDefinition"),
     lexicon!("resolveSubject"),
@@ -131,6 +129,9 @@ pub enum Action {
     /// Adds to a role's grant in the permissions record; with `undo`,
     /// takes away from it.
     Grant,
+    /// Writes a label as the group beside its subject; with `undo`,
+    /// deletes the labels of that value there.
+    Label,
 }
 
 /// A tool, asked in the group the MCP client was connected to; and a
@@ -305,6 +306,7 @@ enum Made {
     Delete(&'static str, &'static str, At),
     Invite,
     Grant,
+    Label,
 }
 
 /// The tools, by group: each its name, the arguments its command takes in
@@ -468,8 +470,10 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "mod_label",
         &["subject", "val"],
-        "Labels a subject; with undo, takes the label back.",
-        Made::Method("applyLabel", Some("negateLabel")),
+        "Labels a subject as the group, with a label record (com.atproto.label.label) beside \
+         it: a record's in its space, an account's in the members space. With undo, takes the \
+         label back by deleting it.",
+        Made::Label,
     ),
 ];
 
@@ -571,7 +575,7 @@ impl Docs {
                     let said = "An account's DID, or a record's at:// URI.";
                     let text = json!({"type": "string", "description": said});
                     add(&mut input, "subject", text, true);
-                    let said = "The record's version, its CID: one a label is about needs it.";
+                    let said = "The record's version, its CID, if about that one.";
                     let cid = json!({"type": "string", "format": "cid", "description": said});
                     add(&mut input, "cid", cid, false);
                 }
@@ -651,6 +655,20 @@ impl Docs {
                 add(&mut input, "person", person, true);
                 (Action::Invite, input, main["description"].as_str())
             }
+            Made::Label => {
+                let said =
+                    "An account's DID, or a record's at:// URI in one of the group's spaces.";
+                let subject = json!({"type": "string", "description": said});
+                let said = "The record's version, its CID, if the label is about that one.";
+                let cid = json!({"type": "string", "format": "cid", "description": said});
+                let said = "The label's value: !hide, or one of the group's own.";
+                let val = json!({"type": "string", "maxLength": 128, "description": said});
+                let mut input = json!({"type": "object", "properties": {}, "required": []});
+                add(&mut input, "subject", subject, true);
+                add(&mut input, "val", val, true);
+                add(&mut input, "cid", cid, false);
+                (Action::Label, input, None)
+            }
             Made::Grant => {
                 let defs = format!("{NS}.defs");
                 let grant = &self.0[&defs]["defs"]["groupGrant"];
@@ -662,7 +680,7 @@ impl Docs {
         };
         let undoes = matches!(
             action,
-            Action::Invite | Action::Grant | Action::Method { undo: Some(_), .. }
+            Action::Invite | Action::Grant | Action::Label | Action::Method { undo: Some(_), .. }
         );
         if undoes {
             let said = "Do the opposite, as the tool's description says.";
@@ -678,7 +696,7 @@ impl Docs {
             name: name.to_string(),
             args: args.iter().map(|a| a.to_string()).collect(),
             action,
-            description: format!("{what} {}", about.unwrap_or_default()),
+            description: about.map_or(what.to_string(), |a| format!("{what} {a}")),
             input_schema: input,
         }
     }
@@ -724,6 +742,15 @@ pub enum Plan {
         collection: String,
         rkey: String,
         fields: Map<String, Value>,
+    },
+    /// Label `subject` (an account's DID, or a record's URI, at the
+    /// version `cid` if named) with `val`, as the group, beside it; with
+    /// `undo`, delete the labels of that value on it there.
+    Label {
+        subject: String,
+        cid: Option<String>,
+        val: String,
+        undo: bool,
     },
     /// Add `scopes` and `assignable` to `role`'s grant in the permissions
     /// record; with `undo`, take them away, or with none drop its grant.
@@ -837,6 +864,12 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             let record = (!undo).then(|| stamped(input, &format!("{NS}.invite")));
             Plan::Invite { person, record }
         }
+        Action::Label => Plan::Label {
+            subject: given(&mut input, "subject")?,
+            cid: given(&mut input, "cid").ok(),
+            val: given(&mut input, "val")?,
+            undo,
+        },
         Action::Grant => {
             let role = given(&mut input, "role")?;
             let list = |name: &str| -> Vec<String> {
@@ -852,6 +885,38 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             }
         }
     })
+}
+
+/// The label record's collection.
+pub const LABEL: &str = "com.atproto.label.label";
+
+/// The space of `group`'s a label on `subject` goes in: a record's own,
+/// an account's the members space. None for a record in no space of the
+/// group's.
+pub fn label_space(group: &str, subject: &str) -> Option<String> {
+    if subject.starts_with("did:") {
+        return Some(format!("at://{group}/space/{MEMBERS}/self"));
+    }
+    let parts: Vec<&str> = subject.strip_prefix("at://")?.split('/').collect();
+    let [authority, "space", kind, skey, _, _, _] = parts[..] else {
+        return None;
+    };
+    (authority == group).then(|| format!("at://{authority}/space/{kind}/{skey}"))
+}
+
+/// A label record on `subject`, at the version `cid` if named, of `val`,
+/// made `now`.
+pub fn label_record(subject: &str, cid: Option<&str>, val: &str, now: &str) -> Value {
+    let mut record = json!({"$type": LABEL, "uri": subject, "val": val, "cts": now});
+    if let Some(cid) = cid {
+        record["cid"] = json!(cid);
+    }
+    record
+}
+
+/// Whether `record` is a label on `subject` of `val`.
+pub fn labels(record: &Value, subject: &str, val: &str) -> bool {
+    record["uri"] == subject && record["val"] == val
 }
 
 /// The write that adds `scopes` and `assignable` to `role`'s grant, or

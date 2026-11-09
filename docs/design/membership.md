@@ -48,7 +48,7 @@ reports it to them as `viewer.accepted`.
 
 ## Roles and what they grant
 
-The host's methods ask about twelve actions, such as `invite`, `admit`,
+The host's methods ask about eleven actions, such as `invite`, `admit`,
 `eject`, `role.assign` and `group.configure`. Each is answered by exactly
 one scope, in atproto's permission syntax
 (`space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite`,

@@ -1,10 +1,10 @@
 //! Moderation, a group's own: reports in, labels out, a queue between.
 //!
-//! - **Labels** are records the group writes into the space its subject
-//!   lives in, so whoever reads the content reads its labels. An account
-//!   has no content to sit beside: its labels go in the members space. A
-//!   label is taken back by a second record that negates it, not by
-//!   deleting the first: that it was applied is part of the record.
+//! - **Labels** are `com.atproto.label.label` records the group writes,
+//!   as any record of its own, beside their subject: a record's in the
+//!   space it is in, an account's in the members space by custom. Whoever
+//!   reads the content reads its labels. Deleting a label takes it back;
+//!   the queue keeps that it was written, and by whom.
 //! - **The queue** (subjects, their status, what happened to each) is the
 //!   host's to keep, not the group's to publish.
 //! - **Reports** come through `fyi.opensocial.createReport`, from whoever
@@ -16,13 +16,13 @@ use crate::api::{Params, invalid, page, param};
 use crate::authority::Access;
 use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
-use crate::rbac::NS;
-use crate::repo::{Write, record_cid};
+use crate::rbac::{LABEL, NS};
+use crate::repo::Write;
 use crate::store::Store;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
-use atproto::{Cid, syntax};
+use atproto::syntax;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -32,9 +32,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
-
-/// The values that remove content, for a role holding `takedown`.
-const TAKEDOWN_VALS: [&str; 2] = ["!hide", "!takedown"];
 
 /// An account, as a subject is sent and answered.
 const ACCOUNT: &str = "fyi.opensocial.defs#accountSubject";
@@ -52,7 +49,7 @@ pub struct Subject {
 }
 
 /// Something that happened to a subject: a `report`, a `status` set, a
-/// `label` or its negation (`negate`), or an `eject`ion.
+/// `label` written or taken back (`negate`), or an `eject`ion.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Event {
     /// Its place in the host's history, once kept.
@@ -264,30 +261,24 @@ fn subject_ref(key: &str) -> Value {
     }
 }
 
-/// A label's subject, as the label record holds it, and as the queue keys
-/// it: an account's DID, or a record's URI.
-fn subject_of(asked: &Value) -> Result<(Value, String), XrpcError> {
-    if let Some(did) = asked["did"].as_str() {
-        if !syntax::is_did(did) {
-            return Err(invalid("subject.did is not a DID"));
+/// Refuses a label among `writes` in `space` whose subject is neither an
+/// account nor a record in that same space: a label sits beside what it
+/// is about, so exactly those who read the one read the other.
+pub(crate) fn beside(space: &str, writes: &[Write]) -> Result<(), XrpcError> {
+    for write in writes {
+        let (collection, _) = write.path();
+        let Some(value) = write.value().filter(|_| collection == LABEL) else {
+            continue;
+        };
+        let subject = value["uri"].as_str().unwrap_or_default();
+        let here = space_of(subject).is_some_and(|(s, _)| s == space);
+        if !here && !syntax::is_did(subject) {
+            return Err(invalid(
+                "a label's uri is an account's DID, or a record's in the space it is written in",
+            ));
         }
-        return Ok((
-            json!({"$type": "com.atproto.admin.defs#repoRef", "did": did}),
-            did.to_string(),
-        ));
     }
-    let (Some(uri), Some(cid)) = (asked["uri"].as_str(), asked["cid"].as_str()) else {
-        return Err(invalid(
-            "a subject is an account's did, or a record's uri and cid",
-        ));
-    };
-    if Cid::parse(cid).is_err() {
-        return Err(invalid("subject.cid is not a CID"));
-    }
-    Ok((
-        json!({"$type": "com.atproto.repo.strongRef", "uri": uri, "cid": cid}),
-        uri.to_string(),
-    ))
+    Ok(())
 }
 
 impl Host {
@@ -307,87 +298,67 @@ impl Host {
         Ok(me)
     }
 
-    /// Writes a label (or its negation) on `subject` as `group`, in the
-    /// space it lives in, and notes it in the queue.
-    async fn label(&self, headers: &HeaderMap, lxm: &str, body: &Value, neg: bool) -> Answer {
-        let group = body["group"].as_str().expect("its lexicon requires it");
-        let val = body["val"].as_str().filter(|v| !v.is_empty());
-        let val = val.ok_or_else(|| invalid("val is required"))?;
-        // A rule is cited by its URI, a record's in the group's meta.
-        let rule = body["rule"].as_str();
-        if rule.is_some_and(|r| space_of(r).is_none()) {
-            return Err(invalid("rule is the URI of a rule"));
-        }
-        let action = if TAKEDOWN_VALS.contains(&val) {
-            "takedown"
-        } else {
-            "label"
-        };
-        let me = self.moderator(headers, lxm, group, action).await?;
-        let (subject, key) = subject_of(&body["subject"])?;
-        let space = match subject["uri"].as_str() {
-            None => members_space(group),
-            Some(uri) => {
-                let space = space_of(uri);
-                let space = space.ok_or_else(|| {
-                    invalid("a record subject is one in a space, for its label to sit beside it")
-                })?;
-                // Another group's content is that group's to moderate.
-                if space.1 != group {
-                    return Err(forbidden("subject is not in this group's spaces"));
-                }
-                space.0
+    /// The labels among `writes` that delete one, as they are before the
+    /// writes are made in `space`, by key: what a deletion takes back.
+    pub(crate) fn labels_going(
+        &self,
+        group: &str,
+        space: &str,
+        writes: &[Write],
+    ) -> Result<Vec<(String, Value)>, XrpcError> {
+        let mut out = Vec::new();
+        for write in writes {
+            let (collection, rkey) = write.path();
+            if collection != LABEL || !matches!(write, Write::Delete { .. }) {
+                continue;
             }
-        };
-        let collection = format!("{NS}.label");
-        let mut value = json!({"$type": collection, "subject": subject, "val": val, "createdAt": iso(now_millis())});
-        if neg {
-            value["neg"] = json!(true);
+            let found = self.group_record(group, space, LABEL, rkey);
+            if let Some(label) = found.map_err(XrpcError::internal)? {
+                out.push((rkey.to_string(), label));
+            }
         }
-        if let Some(rule) = rule {
-            value["rule"] = json!(rule);
-        }
-        let rkey = self.clock.next();
-        let cid = record_cid(&collection, &value)?;
-        let write = Write::Create {
-            collection: collection.clone(),
-            rkey: rkey.clone(),
-            value,
-        };
-        self.space_write(group, &space, &[write]).await?;
-        let uri = format!("{space}/{group}/{collection}/{rkey}");
-        let event = Event {
-            kind: if neg { "negate" } else { "label" }.into(),
-            actor: Some(me),
-            cid: subject["cid"].as_str().map(String::from),
-            val: Some(val.into()),
-            uri: Some(uri.clone()),
-            created_at: now_millis(),
-            ..Event::default()
-        };
-        self.store
-            .moderate(group, &key, &event)
-            .map_err(XrpcError::internal)?;
-        Ok(Json(json!({"uri": uri, "cid": cid.to_string()})))
+        Ok(out)
     }
-}
 
-/// Labels a subject in one of the group's spaces, or an account.
-pub async fn apply_label(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    host.label(&headers, "applyLabel", &body, false).await
-}
-
-/// Negates a label, with a second record.
-pub async fn negate_label(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    host.label(&headers, "negateLabel", &body, true).await
+    /// Notes each label among `made` in `group`'s queue, as `member` wrote
+    /// it in `space`: a label written, or one taken back by deleting it,
+    /// as `going` had it.
+    pub(crate) fn labelled(
+        &self,
+        group: &str,
+        space: &str,
+        member: &str,
+        made: &[Write],
+        going: &[(String, Value)],
+    ) -> Result<(), XrpcError> {
+        // A deletion is of a label there: one where there is none is left
+        // out of what is made.
+        let labels = made.iter().filter(|w| w.path().0 == LABEL).filter_map(|w| {
+            let gone = going.iter().find(|(k, _)| k == w.path().1);
+            Some((w, w.value().or(gone.map(|(_, l)| l))?))
+        });
+        for (write, label) in labels {
+            let kind = match write {
+                Write::Delete { .. } => "negate",
+                _ => "label",
+            };
+            let rkey = write.path().1;
+            let text = |key: &str| label[key].as_str().map(String::from);
+            let event = Event {
+                kind: kind.into(),
+                actor: Some(member.into()),
+                cid: text("cid"),
+                val: text("val"),
+                uri: Some(format!("{space}/{group}/{LABEL}/{rkey}")),
+                created_at: now_millis(),
+                ..Event::default()
+            };
+            let subject = text("uri").unwrap_or_default();
+            let kept = self.store.moderate(group, &subject, &event);
+            kept.map_err(XrpcError::internal)?;
+        }
+        Ok(())
+    }
 }
 
 /// `value`, an object, without the fields it has no value for.

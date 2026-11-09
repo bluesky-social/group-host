@@ -18,8 +18,6 @@
     - text: mod.resolve
     - checkbox "label"
     - text: label
-    - checkbox "takedown"
-    - text: takedown
     - checkbox "invite" [checked]
     - text: invite
     - checkbox "admit" [checked]

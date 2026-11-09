@@ -576,7 +576,6 @@
         "mod.read",
         "mod.resolve",
         "label",
-        "takedown",
         "invite",
         "admit",
         "eject",
@@ -983,7 +982,7 @@
     },
     "labelEvent": {
       "type": "object",
-      "description": "A label record was written or deleted.",
+      "description": "A label record (com.atproto.label.label) was written as the group, or deleted, which takes it back.",
       "required": [
         "uri",
         "val"
@@ -992,7 +991,7 @@
         "uri": {
           "type": "string",
           "format": "at-uri",
-          "description": "The label record."
+          "description": "The label record, as it was written."
         },
         "val": {
           "type": "string",

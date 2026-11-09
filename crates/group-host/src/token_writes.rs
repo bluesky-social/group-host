@@ -21,9 +21,10 @@ use crate::group::{members_space, meta_space};
 use crate::group_invites::is_inbox;
 use crate::lexicons::{check_record, validation};
 use crate::member_writes::members_writes;
+use crate::moderation;
 use crate::oauth_resource::{Acting, Refusal};
-use crate::oauth_scope::{may_write, writes_in};
-use crate::rbac::{self, Access, NS, actions_for, grants, repo_collections_for};
+use crate::oauth_scope::{labels_in, may_write, writes_in};
+use crate::rbac::{self, Access, LABEL, NS, actions_for, grants, repo_collections_for};
 use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -89,10 +90,11 @@ impl Host {
     /// host would not make itself, and to any space's access record.
     fn guard(&self, group: &str, space: &str, writes: &[Write]) -> Result<(), XrpcError> {
         let c = |name: &str| format!("{NS}.{name}");
+        let label = LABEL.to_string();
         let allowed = if space == meta_space(group) {
-            Some([c("profile"), c("rule"), c("labeler")].to_vec())
+            Some([c("profile"), c("rule"), c("labeler"), label].to_vec())
         } else if space == members_space(group) {
-            Some([c("role"), c("permissions"), c("membership")].to_vec())
+            Some([c("role"), c("permissions"), c("membership"), label].to_vec())
         } else {
             None
         };
@@ -118,7 +120,7 @@ impl Host {
                 self.face(group, write)?;
             }
         }
-        Ok(())
+        moderation::beside(space, writes)
     }
 }
 
@@ -458,12 +460,15 @@ impl Host {
         let group = &acting.grant.group;
         let (roles, grants) = self.standing(acting)?;
         let own = uri == meta_space(group) || uri == members_space(group);
-        let configures = actions_for(&grants, &roles).contains("group.configure");
+        let held = actions_for(&grants, &roles);
+        let configures = held.contains("group.configure");
         let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
         let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
         let everything = repo_collections_for(&grants, &roles).contains("*");
         let access = Access::of(&access, uri);
         let writable = writes_in(&access, &roles, &acting.grant.member, everything);
+        let labelling = held.contains("label");
+        let labels = labels_in(&access, &roles, &acting.grant.member, labelling);
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.space(space, Some(collection), action(w)) {
@@ -474,6 +479,7 @@ impl Host {
                 )));
             }
             let still = match own {
+                _ if collection == LABEL => labels,
                 _ if uri == members_space(group) => {
                     may_write(&members_writes(&grants, &roles), collection, action(w))
                 }
@@ -515,6 +521,7 @@ impl Host {
             true => self.leaving(acting, uri, space, writes).await?,
             false => Default::default(),
         };
+        let going = self.labels_going(group, uri, writes)?;
         let allow = |w: &[Write]| self.may_space(acting, uri, space, w);
         let asked = Asked {
             put,
@@ -526,6 +533,7 @@ impl Host {
             return Ok(false);
         };
         self.wrote(acting, Some(uri), &made)?;
+        self.labelled(group, uri, &acting.grant.member, &made, &going)?;
         // In the members space, what a write means is done too.
         if members {
             self.members_written(acting, &made, &leaving).await?;

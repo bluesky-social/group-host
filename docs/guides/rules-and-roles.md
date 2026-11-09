@@ -81,8 +81,7 @@ each. They show by their short names:
 | --- | --- |
 | `mod.read` | See what is waiting for moderation. They get **Moderation** on the group's page. |
 | `mod.resolve` | Settle what is waiting for moderation. |
-| `label` | Put a label on a post or an account. |
-| `takedown` | Take something down, anywhere in the group. |
+| `label` | Put a label on a post or an account, a takedown too, anywhere in the group. |
 | `invite` | Invite people. They get **Invite someone**. |
 | `admit` | Let in people who ask to join. They get **Asking to join**. |
 | `eject` | Remove members, with **Remove from the group** in the ⋯ menu on a member's row. |

@@ -2,9 +2,11 @@ import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveH
 import type * as getActor from '#lib/lexicons/fyi/opensocial/getActor.ts';
 import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
 import type * as getSubjectHistory from '#lib/lexicons/fyi/opensocial/getSubjectHistory.ts';
+import type * as listSpaceRecords from '#lib/lexicons/fyi/opensocial/listSpaceRecords.ts';
 import type * as listSubjects from '#lib/lexicons/fyi/opensocial/listSubjects.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
+import { applyAsGroup, asGroup, membersOf } from '#lib/asGroup.ts';
 import { act, xrpc } from '#lib/data.ts';
 import type { Event as Happened, Subject } from '#lib/moderation.ts';
 
@@ -110,15 +112,23 @@ export const load: PageServerLoad = async (event) => {
   };
 };
 
-/** What a form names, as a label's subject: an account, or a record at one version. */
-const account = (form: FormData) =>
+const LABEL = 'com.atproto.label.label';
+
+/** What a form names a label's subject by: an account's DID, or a record's URI and version. */
+const subjectOf = (form: FormData) =>
   form.has('uri')
-    ? {
-        $type: 'com.atproto.repo.strongRef',
-        uri: String(form.get('uri')),
-        cid: String(form.get('cid'))
-      }
-    : { $type: 'com.atproto.admin.defs#repoRef', did: String(form.get('did')) };
+    ? { uri: String(form.get('uri')), cid: String(form.get('cid')) }
+    : { uri: String(form.get('did')) };
+
+/**
+ * The space of `group`'s a label on `uri` goes in, beside its subject: a
+ * record's own, an account's the members space.
+ */
+function besideOf(group: string, uri: string) {
+  if (uri.startsWith('did:')) return membersOf(group);
+  const [authority, , kind, key] = uri.slice('at://'.length).split('/');
+  return `at://${authority}/space/${kind}/${key}`;
+}
 
 export const actions: Actions = {
   resolve: async (event) => {
@@ -141,13 +151,30 @@ export const actions: Actions = {
     const form = await event.request.formData();
     const val = String(form.get('val') ?? '').trim();
     if (!val) return fail(400, { failed: 'Choose or type a label.' });
-    return act(event, 'fyi.opensocial.applyLabel', { group, subject: account(form), val });
+    const subject = subjectOf(form);
+    return asGroup(event, group, besideOf(group, subject.uri), 'com.atproto.space.createRecord', {
+      collection: LABEL,
+      record: { $type: LABEL, ...subject, val, cts: new Date().toISOString() }
+    });
   },
   unlabel: async (event) => {
     const group = await groupOf(event);
     const form = await event.request.formData();
     const val = String(form.get('val') ?? '');
-    return act(event, 'fyi.opensocial.negateLabel', { group, subject: account(form), val });
+    const { uri } = subjectOf(form);
+    const space = besideOf(group, uri);
+    // A label is taken back by deleting the group's records of it on the subject.
+    const { records } = await xrpc<typeof listSpaceRecords.main>(
+      event,
+      'fyi.opensocial.listSpaceRecords',
+      { group, space, collection: LABEL, field: 'uri', equals: uri, limit: 100 }
+    );
+    const rkeys = records
+      .filter((r) => r.repo === group && (r.value as { val?: string }).val === val)
+      .map((r) => r.uri.split('/').pop() ?? '');
+    if (!rkeys.length) return fail(400, { failed: `It no longer wears ${val}.` });
+    const writes = rkeys.map((rkey) => ({ action: 'delete' as const, collection: LABEL, rkey }));
+    return applyAsGroup(event, group, space, writes);
   },
   report: async (event) => {
     const group = await groupOf(event);

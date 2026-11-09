@@ -170,7 +170,7 @@ An app signed in so, or with an app password, uses these as the group:
 | `GET com.atproto.server.getSession` | the group a token acts as: its DID, handle, and whether it is switched on |
 | `POST com.atproto.server.createSession`, `POST com.atproto.server.refreshSession`, `POST com.atproto.server.deleteSession` | an app password's sessions |
 | `POST com.atproto.repo.createRecord`, `POST com.atproto.repo.putRecord`, `POST com.atproto.repo.deleteRecord`, `POST com.atproto.repo.applyWrites`, `POST com.atproto.repo.uploadBlob` | writes to the group's public repo |
-| `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space: one of its own, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`) |
+| `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space: one of its own, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`). A label (`com.atproto.label.label`) is written, and deleted, in any of the group's spaces, beside its subject ([moderation](../design/moderation.md#labels)) |
 
 A group's profile and rules, in `meta`, change only this way: an app
 writes the records as the group, and the host keeps each only as its
@@ -200,8 +200,6 @@ its tools are in [MCP tools](mcp.md).
 | `GET fyi.opensocial.listSubjects` | the moderation queue of one status, `open` unless asked |
 | `GET fyi.opensocial.getSubjectHistory` | a subject's events, oldest first, a page at a time; with a `cid`, those about that version |
 | `POST fyi.opensocial.resolveSubject` | sets a subject `resolved` or `escalated`, with an optional note; answers the subject |
-| `POST fyi.opensocial.applyLabel` | labels a subject |
-| `POST fyi.opensocial.negateLabel` | takes a label back, with a record of its own |
 | `POST fyi.opensocial.putLabelDefinition` | defines one of the group's own labels, lowercase letters and hyphens, or changes it, in its labeler, for one with `group.configure`; answers the definition. `getGroup` answers them as `labels` |
 | `POST fyi.opensocial.deleteLabelDefinition` | stops defining one; labels already applied stay |
 

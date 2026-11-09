@@ -25,7 +25,7 @@ export type Subject = {
   events: Event[];
 };
 
-/** The labels that hide what an account posted, for a role with `takedown`. */
+/** The labels that hide what was posted, which the dialog offers as a takedown. */
 export const TAKEDOWN = ['!takedown', '!hide'];
 
 /** What an event is: `reportEvent`, `statusEvent`, `labelEvent`, `ejectEvent`. */

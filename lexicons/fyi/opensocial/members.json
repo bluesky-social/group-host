@@ -13,6 +13,7 @@
         "fyi.opensocial.role",
         "fyi.opensocial.membership",
         "fyi.opensocial.acceptance",
+        "com.atproto.label.label",
         "fyi.opensocial.access"
       ]
     }

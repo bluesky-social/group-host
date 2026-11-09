@@ -364,14 +364,6 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             get(actors::get_actor_groups),
         )
         .route(
-            "/xrpc/fyi.opensocial.applyLabel",
-            post(moderation::apply_label),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.negateLabel",
-            post(moderation::negate_label),
-        )
-        .route(
             "/xrpc/fyi.opensocial.putLabelDefinition",
             post(moderation::put_label_definition),
         )

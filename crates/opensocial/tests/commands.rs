@@ -391,10 +391,21 @@ async fn writes_the_groups_rules_roles_and_profile() {
         label["uri"]
             .as_str()
             .unwrap()
-            .contains("/fyi.opensocial.label/"),
+            .contains("/fyi.opensocial.members/self/"),
         "{label}"
     );
+    assert!(
+        label["uri"]
+            .as_str()
+            .unwrap()
+            .contains("/com.atproto.label.label/")
+    );
     ok(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
+    let said_so = fails(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
+    assert!(said_so.contains("no spam label"), "{said_so}");
+    let elsewhere = format!("at://did:plc:other/space/x.y/z/{bob}/a.b.c/d");
+    let said_so = fails(&alice, &["mod", "label", group, &elsewhere, "spam"]).await;
+    assert!(said_so.contains("not an account's DID"), "{said_so}");
     let history = said(&ok(&alice, &["mod", "history", group, bob]).await);
     let deleted: Vec<&Value> = history["events"]
         .as_array()

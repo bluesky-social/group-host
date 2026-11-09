@@ -34,7 +34,7 @@
     id: string;
     subject: Subject;
     choices: { val: string; name: string }[];
-    can: { label: boolean; takedown: boolean; resolve: boolean };
+    can: { label: boolean; resolve: boolean };
     rules: Record<string, string>;
     ruleList: { uri: string; title: string }[];
     reasons: string[];
@@ -56,8 +56,6 @@
   const wearing = $derived(labelsOf(s.events));
   const takenDown = $derived(wearing.some((v) => TAKEDOWN.includes(v)));
   const toAdd = $derived(choices.filter((c) => !wearing.includes(c.val)));
-  /** Whether the viewer may take `val` off: a takedown's only with takedown. */
-  const removable = (val: string) => (TAKEDOWN.includes(val) ? can.takedown : can.label);
 </script>
 
 {#snippet which()}
@@ -80,7 +78,7 @@
   <p><Person actor={s.actor} /> <span class="mute">· {what(s.key)} · {reported(s)}</span></p>
   {#if failed}<p class="danger">{failed}</p>{/if}
 
-  {#if target && (can.label || can.takedown)}
+  {#if target && can.label}
     <div class="review-part">
       <h3>Labels</h3>
       {#if wearing.length}
@@ -88,60 +86,56 @@
           {#each wearing as val (val)}
             <li class="label">
               <span class="mono">{val}</span>
-              {#if removable(val)}
-                <form
-                  method="post"
-                  action="?/unlabel"
-                  use:enhance={inOpenDialog((w) => (failed = w))}
+              <form
+                method="post"
+                action="?/unlabel"
+                use:enhance={inOpenDialog((w) => (failed = w))}
+              >
+                {@render which()}
+                <input type="hidden" name="val" value={val} />
+                <button class="quiet small" type="submit" aria-label={`Remove the label ${val}`}
+                  >×</button
                 >
-                  {@render which()}
-                  <input type="hidden" name="val" value={val} />
-                  <button class="quiet small" type="submit" aria-label={`Remove the label ${val}`}
-                    >×</button
-                  >
-                </form>
-              {/if}
+              </form>
             </li>
           {/each}
         </ul>
       {:else}
         <p class="mute">No labels yet.</p>
       {/if}
-      {#if can.label}
-        {#if toAdd.length}<p class="mute">Press one of the group's labels to add it.</p>{/if}
-        <form
-          class="label-choices"
-          method="post"
-          action="?/label"
-          use:enhance={inOpenDialog((w) => (failed = w))}
+      {#if toAdd.length}<p class="mute">Press one of the group's labels to add it.</p>{/if}
+      <form
+        class="label-choices"
+        method="post"
+        action="?/label"
+        use:enhance={inOpenDialog((w) => (failed = w))}
+      >
+        {@render which()}
+        {#each toAdd as c (c.val)}<button
+            class="quiet small"
+            class:mono={c.name === c.val}
+            type="submit"
+            name="val"
+            value={c.val}
+            aria-label={`Add the label ${c.val}`}>{c.name}</button
+          >{/each}
+      </form>
+      <form
+        class="row-form"
+        method="post"
+        action="?/label"
+        use:enhance={inOpenDialog((w) => (failed = w))}
+      >
+        {@render which()}
+        <label class="field"
+          >Add a label
+          <input name="val" required maxlength="128" placeholder="off-topic" /></label
         >
-          {@render which()}
-          {#each toAdd as c (c.val)}<button
-              class="quiet small"
-              class:mono={c.name === c.val}
-              type="submit"
-              name="val"
-              value={c.val}
-              aria-label={`Add the label ${c.val}`}>{c.name}</button
-            >{/each}
-        </form>
-        <form
-          class="row-form"
-          method="post"
-          action="?/label"
-          use:enhance={inOpenDialog((w) => (failed = w))}
-        >
-          {@render which()}
-          <label class="field"
-            >Add a label
-            <input name="val" required maxlength="128" placeholder="off-topic" /></label
-          >
-          <button class="quiet" type="submit">Add</button>
-        </form>
-        <p class="mute">Apps that follow the group's labels decide what each one does.</p>
-      {/if}
+        <button class="quiet" type="submit">Add</button>
+      </form>
+      <p class="mute">Apps that follow the group's labels decide what each one does.</p>
     </div>
-    {#if can.takedown && !takenDown}
+    {#if !takenDown}
       <div class="review-part">
         <div class="row-form">
           {#if account}<p class="mute">
