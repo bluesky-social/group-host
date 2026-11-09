@@ -2,14 +2,15 @@
 //!
 //! - **Labels** are `com.atproto.label.label` records the group writes,
 //!   as any record of its own, beside their subject: a record's in the
-//!   space it is in, an account's in the members space by custom. Whoever
-//!   reads the content reads its labels. Deleting a label takes it back;
-//!   the queue keeps that it was written, and by whom.
+//!   space it is in, an account's, or a member's public record's, in the
+//!   members space by custom. Whoever reads the content reads its labels.
+//!   Deleting a label takes it back; the queue keeps that it was written,
+//!   and by whom.
 //! - **The queue** (subjects, their status, what happened to each) is the
 //!   host's to keep, not the group's to publish.
 //! - **Reports** come through `fyi.opensocial.createReport`, from whoever
-//!   can read what they report: an account in the group, or a record in
-//!   one of its spaces here.
+//!   can read what they report: an account in the group, a record in one
+//!   of its spaces here, or a member's record in their public repo.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
@@ -229,23 +230,39 @@ pub fn space_of(uri: &str) -> Option<(String, String)> {
 /// another as long.
 const REASON_TYPE_MAX: usize = 256;
 
-/// The space a record subject's URI is in, one of `group`'s.
-fn in_group(group: &str, uri: &str) -> Result<String, XrpcError> {
-    let space = space_of(uri).filter(|(_, authority)| authority == group);
-    let space = space.ok_or_else(|| invalid_subject("not a record in one of this group's spaces"));
-    Ok(space?.0)
+/// The account a public record's URI is in, `at://<did>/<collection>/<rkey>`,
+/// a record in no space, each of its parts what it says.
+fn public_of(uri: &str) -> Option<&str> {
+    let parts: Vec<&str> = uri.strip_prefix("at://")?.split('/').collect();
+    let [did, collection, rkey] = parts[..] else {
+        return None;
+    };
+    let valid = syntax::is_did(did) && syntax::is_nsid(collection) && syntax::is_record_key(rkey);
+    valid.then_some(did)
+}
+
+/// Refuses a record subject's URI that is neither in one of `group`'s
+/// spaces nor in a public repo.
+fn record_in(group: &str, uri: &str) -> Result<(), XrpcError> {
+    let ours = space_of(uri).is_some_and(|(_, authority)| authority == group);
+    if !ours && public_of(uri).is_none() {
+        return Err(invalid_subject(
+            "not a record in one of this group's spaces, nor in a public repo",
+        ));
+    }
+    Ok(())
 }
 
 /// A subject as the queue keys it (an account's DID, or a record's URI in
-/// one of `group`'s spaces) and the version of a record it names, from
-/// the union a caller sends.
+/// one of `group`'s spaces or in a public repo) and the version of a
+/// record it names, from the union a caller sends.
 fn subject_in(group: &str, asked: &Value) -> Result<(String, Option<String>), XrpcError> {
     let field = |key: &str| asked[key].as_str().map(String::from);
     match asked["$type"].as_str() {
         Some(ACCOUNT) => Ok((field("did").expect("its lexicon requires it"), None)),
         Some(RECORD) => {
             let uri = field("uri").expect("its lexicon requires it");
-            in_group(group, &uri)?;
+            record_in(group, &uri)?;
             Ok((uri, field("cid")))
         }
         _ => Err(invalid_subject("a subject is an account or a record")),
@@ -261,24 +278,42 @@ fn subject_ref(key: &str) -> Value {
     }
 }
 
-/// Refuses a label among `writes` in `space` whose subject is neither an
-/// account nor a record in that same space: a label sits beside what it
-/// is about, so exactly those who read the one read the other.
-pub(crate) fn beside(space: &str, writes: &[Write]) -> Result<(), XrpcError> {
-    for write in writes {
-        let (collection, _) = write.path();
-        let Some(value) = write.value().filter(|_| collection == LABEL) else {
-            continue;
-        };
-        let subject = value["uri"].as_str().unwrap_or_default();
-        let here = space_of(subject).is_some_and(|(s, _)| s == space);
-        if !here && !syntax::is_did(subject) {
-            return Err(invalid(
-                "a label's uri is an account's DID, or a record's in the space it is written in",
-            ));
+impl Host {
+    /// Refuses a label among `writes` in `group`'s `space` whose subject is
+    /// neither an account nor a record in that same space, nor, in the
+    /// members space, a member's public record: a label sits beside what
+    /// it is about, so exactly those who read the one read the other.
+    pub(crate) fn beside(
+        &self,
+        group: &str,
+        space: &str,
+        writes: &[Write],
+    ) -> Result<(), XrpcError> {
+        let members = space == members_space(group);
+        for write in writes {
+            let (collection, _) = write.path();
+            let Some(value) = write.value().filter(|_| collection == LABEL) else {
+                continue;
+            };
+            let subject = value["uri"].as_str().unwrap_or_default();
+            let here = space_of(subject).is_some_and(|(s, _)| s == space);
+            if here || syntax::is_did(subject) {
+                continue;
+            }
+            // A public record's author's roles, in the members space alone.
+            let roles = match public_of(subject).filter(|_| members) {
+                Some(did) => self.roles(group, did).map_err(XrpcError::internal)?,
+                None => Vec::new(),
+            };
+            if roles.is_empty() {
+                return Err(invalid(
+                    "a label's uri is an account's DID, a record's in the space it is written in, \
+                     or in the members space a member's public record",
+                ));
+            }
         }
+        Ok(())
     }
-    Ok(())
 }
 
 impl Host {
@@ -369,10 +404,14 @@ fn present(mut value: Value) -> Value {
 }
 
 /// The account a subject is, or whose record it is: a record's repo, as
-/// the queue keeps it, in a space.
-fn account_of<'a>(key: &'a str) -> &'a str {
-    let repo = |path: &'a str| path.split('/').nth(4).expect("a record in a space");
-    key.strip_prefix("at://").map_or(key, repo)
+/// the queue keeps it, in a space or a public repo.
+fn account_of(key: &str) -> &str {
+    let Some(path) = key.strip_prefix("at://") else {
+        return key;
+    };
+    let parts: Vec<&str> = path.split('/').collect();
+    // A public record's repo comes first; one in a space's, after the space.
+    if parts.len() == 3 { parts[0] } else { parts[4] }
 }
 
 /// A subject as the queue answers it, with `actors`, the people it names
@@ -473,7 +512,7 @@ pub async fn get_subject_history(
         .await?;
     let subject = param(&p, "subject")?;
     if !syntax::is_did(subject) {
-        in_group(group, subject)?;
+        record_in(group, subject)?;
     }
     let limit = page(&p, 50, 100)?;
     let after = match p.get("cursor") {
@@ -544,7 +583,8 @@ fn accepts(labeler: &Value, key: &str, value: &str) -> bool {
 }
 
 /// A report, from one who can read its subject: an account in a group
-/// here, or a record in one of its spaces, into that group's queue.
+/// here, a record in one of its spaces, or a member's public record, into
+/// that group's queue.
 pub async fn create_report(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -575,23 +615,29 @@ pub async fn create_report(
             "the group takes no reports of {reason_type}"
         )));
     }
-    // An account is reported in the members space, where its labels go;
-    // a record, in its own.
-    let (space, kind, collection) = match space_of(&subject) {
+    // A record in a space is reported in its own; an account, or a
+    // member's public record, in the members space, where its labels go.
+    let collection = subject
+        .strip_prefix("at://")
+        .map(|_| subject.rsplit('/').nth(1).expect("a record's URI"));
+    let kind = if collection.is_some() {
+        "record"
+    } else {
+        "account"
+    };
+    let space = match space_of(&subject) {
+        Some((space, _)) => space,
         None => {
-            let roles = host.roles(group, &subject).map_err(XrpcError::internal)?;
+            let account = public_of(&subject).unwrap_or(&subject);
+            let roles = host.roles(group, account).map_err(XrpcError::internal)?;
             if roles.is_empty() {
                 return Err(invalid_subject("not a member of this group"));
             }
-            (members_space(group), "account", None)
-        }
-        Some((space, _)) => {
-            let collection = subject.rsplit('/').nth(1).map(String::from);
-            (space, "record", collection)
+            members_space(group)
         }
     };
     let taken = accepts(&labeler, "subjectTypes", kind)
-        && collection.is_none_or(|c| accepts(&labeler, "subjectCollections", &c));
+        && collection.is_none_or(|c| accepts(&labeler, "subjectCollections", c));
     if !taken {
         return Err(invalid_subject("the group takes no reports of this kind"));
     }

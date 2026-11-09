@@ -52,7 +52,7 @@
       "errors": [
         {
           "name": "InvalidSubject",
-          "description": "The subject isn't an account or record in this group."
+          "description": "The subject isn't an account, a record in this group, or a record in a public repo."
         },
         {
           "name": "SubjectNotFound",

@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Report an account or record in a group, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space.",
+      "description": "Report an account or record in a group, or a member's record in their public repo, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space: a record's own, or the members space for an account or a public record.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -72,7 +72,7 @@
         },
         {
           "name": "InvalidSubject",
-          "description": "The subject isn't an account or record in this group."
+          "description": "The subject isn't an account or record in this group, nor a member's public record."
         }
       ]
     }

@@ -413,6 +413,130 @@ async fn holds_each_label_to_the_action_it_needs() {
     assert_eq!(said.body["error"], "Forbidden");
 }
 
+/// Sets the group's labeler to take reports of `types` of subject, of
+/// records in `collections`.
+async fn takes(h: &Running, did: &str, types: &[&str], collections: &[&str]) {
+    let labeler = json!({
+        "$type": format!("{NS}.labeler"),
+        "policies": {"labelValues": ["!hide"]},
+        "subjectTypes": types,
+        "subjectCollections": collections,
+        "createdAt": "2026-11-04T00:00:00Z",
+    });
+    let write = Write::Update {
+        collection: format!("{NS}.labeler"),
+        rkey: "self".into(),
+        value: labeler,
+    };
+    h.host
+        .space_write(did, &meta_space(did), &[write])
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn moderates_a_members_public_post_as_its_own_subject() {
+    let h = start(&[], false).await;
+    let (did, space, _, [alice, bob, carol]) = group(&h).await;
+    // Bob's post in his own public repo, in no space of the group's.
+    let uri = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", bob.did);
+    let subject = json!({"$type": RECORD, "uri": uri, "cid": CID});
+    let (status, said) = report(&h, &alice, &did, subject.clone()).await;
+    assert_eq!(status, 200, "{said}");
+    let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
+    assert_eq!(queue["subjects"].as_array().unwrap().len(), 1);
+    assert_eq!(queue["subjects"][0]["subject"], record(&uri));
+    assert_eq!(queue["subjects"][0]["reportCount"], 1);
+    assert_eq!(queue["subjects"][0]["actor"]["did"], bob.did.as_str());
+    // Its own subject, not its author's.
+    let q = format!("group={did}&subject={}", bob.did);
+    let (_, theirs) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(theirs["events"], json!([]));
+    let q = format!("group={did}&subject={uri}&cid={CID}");
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(kinds(&history), ["reportEvent"]);
+    assert_eq!(history["events"][0]["cid"], CID);
+    let resolve = json!({"group": did, "subject": record(&uri), "status": "resolved"});
+    let (status, view) = call(&h, &alice, "resolveSubject", resolve).await;
+    assert_eq!(status, 200, "{view}");
+    assert_eq!(view["status"], "resolved");
+    assert_eq!(view["actor"]["did"], bob.did.as_str());
+
+    let carols = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", carol.did);
+    for (who, subject) in [
+        // Carol cannot read the members space.
+        (&carol, record(&uri)),
+        // Carol is not a member, nor is the group.
+        (&bob, record(&carols)),
+        (&bob, record(&format!("at://{did}/app.bsky.feed.post/x"))),
+        // A public record, by its DID, collection and key.
+        (
+            &bob,
+            record(&format!("at://{}/app.bsky.feed.post", bob.did)),
+        ),
+        (&bob, record("at://bob.test/app.bsky.feed.post/x")),
+    ] {
+        assert_eq!(
+            error(&report(&h, who, &did, subject.clone()).await),
+            (400, "InvalidSubject"),
+            "{subject}"
+        );
+    }
+
+    // The labeler's kinds and collections, as for any record.
+    takes(&h, &did, &["record"], &["app.bsky.feed.post"]).await;
+    assert_eq!(report(&h, &bob, &did, record(&uri)).await.0, 200);
+    for (types, collections) in [
+        (["account"], ["app.bsky.feed.post"]),
+        (["record"], ["com.example.event"]),
+    ] {
+        takes(&h, &did, &types, &collections).await;
+        assert_eq!(
+            error(&report(&h, &bob, &did, record(&uri)).await),
+            (400, "InvalidSubject"),
+            "{types:?} {collections:?}"
+        );
+    }
+
+    // Labelled in the members space, where its author's labels go.
+    let members = members_space(&did);
+    let (status, made) = labelled(&h, &alice, &did, &members, label(&uri, "spam")).await;
+    assert_eq!(status, 200, "{made}");
+    let rkey = made["uri"].as_str().unwrap().rsplit('/').next().unwrap();
+    let nsid = "com.atproto.space.deleteRecord";
+    let (status, said) = as_group(&h, &alice, &did, &members, nsid, json!({"rkey": rkey})).await;
+    assert_eq!(status, 200, "{said}");
+    let q = format!("group={did}&subject={uri}");
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(
+        kinds(&history),
+        [
+            "reportEvent",
+            "statusEvent",
+            "reportEvent",
+            "labelEvent",
+            "labelEvent"
+        ]
+    );
+    let events = &history["events"];
+    assert_eq!(events[3]["event"]["uri"], made["uri"]);
+    assert_eq!(events[3]["event"]["val"], "spam");
+    assert_eq!(events[3]["event"]["deleted"], false);
+    assert_eq!(events[3]["createdBy"], alice.did.as_str());
+    assert_eq!(events[4]["event"]["uri"], made["uri"]);
+    assert_eq!(events[4]["event"]["deleted"], true);
+    assert_eq!(events[4]["createdBy"], alice.did.as_str());
+    // A non-member's public record, or one labelled in any other space.
+    for (at, subject) in [
+        (&members, &carols),
+        (&space, &uri),
+        (&meta_space(&did), &uri),
+    ] {
+        let said = labelled(&h, &alice, &did, at, label(subject, "x")).await;
+        assert_eq!(error(&said), (400, "InvalidRequest"), "{at} {subject}");
+    }
+}
+
 #[tokio::test]
 async fn resolves_and_escalates_with_a_note() {
     let h = start(&[], false).await;
@@ -535,7 +659,7 @@ async fn resolves_and_escalates_with_a_note() {
         ),
         (
             &alice,
-            json!({"group": did, "subject": record(&format!("at://{did}/app.bsky.feed.post/x")), "status": "resolved"}),
+            json!({"group": did, "subject": record(&format!("at://did:plc:other/space/{CALENDAR}/rides/{}/c.d.e/f", bob.did)), "status": "resolved"}),
             (400, "InvalidSubject"),
         ),
         (

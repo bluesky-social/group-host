@@ -837,7 +837,7 @@
         "uri": {
           "type": "string",
           "format": "at-uri",
-          "description": "A record in one of the group's spaces."
+          "description": "A record in one of the group's spaces, or in a public repo."
         },
         "cid": {
           "type": "string",

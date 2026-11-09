@@ -21,7 +21,6 @@ use crate::group::{members_space, meta_space};
 use crate::group_invites::is_inbox;
 use crate::lexicons::{check_record, validation};
 use crate::member_writes::members_writes;
-use crate::moderation;
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{labels_in, may_write, writes_in};
 use crate::rbac::{self, Access, LABEL, NS, actions_for, grants, repo_collections_for};
@@ -120,7 +119,7 @@ impl Host {
                 self.face(group, write)?;
             }
         }
-        moderation::beside(space, writes)
+        self.beside(group, space, writes)
     }
 }
 

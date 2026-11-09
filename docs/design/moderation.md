@@ -56,8 +56,16 @@ A label has to be readable by the people who see its subject, and only
 by them. So it goes where the subject lives. A record's label goes into
 the space the record is in, in the group's own repo there; an account's
 label goes into the group's members space. Whoever may read the space
-may read its labels. The host refuses a label whose `uri` is neither a
-DID nor a record in the space it is written in.
+may read its labels.
+
+A member also writes in their own public repo, outside the group's
+spaces: a post an app such as a forum shows to the group's public
+community. Such a record is labelled where its author's labels go, in
+the members space, so a moderator can label one post rather than the
+member who wrote it. The host refuses a label whose `uri` is neither a
+DID nor a record in the space it is written in, nor, in the members
+space, a record in the public repo of someone who holds a role in the
+group.
 
 A label is taken back by deleting it. The record is gone from the
 space, but the queue keeps that it was written, when, and by whom.
@@ -89,7 +97,9 @@ those with `mod.read` see it.
 A subject is an account, sent and answered as
 `fyi.opensocial.defs#accountSubject` with its `did`, or a record, as
 `fyi.opensocial.defs#recordSubject` with its `uri` and, optionally, the
-`cid` of one version. The queue keeps a record as a whole, by its URI;
+`cid` of one version. A record is one in a space, or one in a public
+repo, `at://<did>/<collection>/<rkey>`, its own subject apart from its
+author's account. The queue keeps a record as a whole, by its URI;
 the version a report or label names stays on that event. A subject has a
 status: `open`, `escalated` or `resolved`.
 
@@ -134,9 +144,9 @@ Deleting a group deletes its queue.
 
 Details:
 
-- A subject that is neither a DID nor a record in one of the group's
-  spaces is `InvalidSubject`. Resolving one never in the queue is
-  `SubjectNotFound`.
+- A subject that is neither a DID, a record in one of the group's
+  spaces, nor a record in a public repo is `InvalidSubject`. Resolving
+  one never in the queue is `SubjectNotFound`.
 - A page is 50 events or subjects unless `limit` says, 100 at most; the
   `cursor` an answer gives asks for the next.
 
@@ -148,9 +158,10 @@ report arrives at `fyi.opensocial.createReport`, by service auth or the
 console's session. It names the `group`, the subject, a `reasonType`,
 and optionally a `reason` and the `rule` it cites. It needs no role.
 
-The subject is an account that is a member of the group, or a record in
-one of the group's spaces hosted here. The reporter must be able to read
-the space the subject is in: a record's own space, or for an account the
+The subject is an account that is a member of the group, a record in
+one of the group's spaces hosted here, or a record in the public repo of
+a member. The reporter must be able to read the space the subject is in:
+a record's own space, or for an account or a member's public record the
 members space, where its labels go. The report goes into the group's
 queue as a `reportEvent`, and is answered with its `id` and `createdAt`.
 Nobody is notified: the report waits in the queue for a moderator.
@@ -184,9 +195,10 @@ answers the definitions as `labels`, to whoever may read the meta space.
 Details:
 
 - A group not hosted here is `GroupNotFound`. A subject the reporter
-  cannot read, that is not in the group, or of a kind or collection the
-  labeler does not take, is `InvalidSubject`; a reason it does not take
-  is `InvalidRequest`.
+  cannot read, that is not in the group, a public record of someone not
+  a member, or of a kind or collection the labeler does not take, is
+  `InvalidSubject`; a reason it does not take is `InvalidRequest`. A
+  member's public record is a `record`, of its collection.
 - A `rule` must be a record's URI in the group's meta space.
 - The host does not check that the reported record exists or that its
   CID matches.

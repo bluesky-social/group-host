@@ -170,7 +170,7 @@ An app signed in so, or with an app password, uses these as the group:
 | `GET com.atproto.server.getSession` | the group a token acts as: its DID, handle, and whether it is switched on |
 | `POST com.atproto.server.createSession`, `POST com.atproto.server.refreshSession`, `POST com.atproto.server.deleteSession` | an app password's sessions |
 | `POST com.atproto.repo.createRecord`, `POST com.atproto.repo.putRecord`, `POST com.atproto.repo.deleteRecord`, `POST com.atproto.repo.applyWrites`, `POST com.atproto.repo.uploadBlob` | writes to the group's public repo |
-| `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space: one of its own, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`). A label (`com.atproto.label.label`) is written, and deleted, in any of the group's spaces, beside its subject ([moderation](../design/moderation.md#labels)) |
+| `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites` | writes to its repo in a space: one of its own, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`). A label (`com.atproto.label.label`) is written, and deleted, in any of the group's spaces, beside its subject; a member's record in their public repo is labelled in the members space ([moderation](../design/moderation.md#labels)) |
 
 A group's profile and rules, in `meta`, change only this way: an app
 writes the records as the group, and the host keeps each only as its
@@ -196,7 +196,7 @@ its tools are in [MCP tools](mcp.md).
 
 | Method | What it does |
 | --- | --- |
-| `POST fyi.opensocial.createReport` | reports a member or a record in one of the group's spaces here, from one who can read its space and as the group's labeler takes reports; answers the report's `id` and `createdAt`. A reason or note is 2,000 characters (20,000 bytes) at most |
+| `POST fyi.opensocial.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo, from one who can read its space (the members space for a member or their public record) and as the group's labeler takes reports; answers the report's `id` and `createdAt`. A reason or note is 2,000 characters (20,000 bytes) at most |
 | `GET fyi.opensocial.listSubjects` | the moderation queue of one status, `open` unless asked |
 | `GET fyi.opensocial.getSubjectHistory` | a subject's events, oldest first, a page at a time; with a `cid`, those about that version |
 | `POST fyi.opensocial.resolveSubject` | sets a subject `resolved` or `escalated`, with an optional note; answers the subject |
