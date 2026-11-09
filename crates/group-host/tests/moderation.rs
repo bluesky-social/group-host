@@ -61,6 +61,14 @@ async fn report(h: &Running, who: &Authority, group: &str, subject: Json) -> (u1
     call(h, who, "createReport", body).await
 }
 
+const APPEAL: &str = "com.atproto.moderation.defs#reasonAppeal";
+
+/// `who` appeals what the group did to `subject`, as a report of it.
+async fn appeal(h: &Running, who: &Authority, group: &str, subject: Json) -> (u16, Json) {
+    let body = json!({"group": group, "reasonType": APPEAL, "reason": "it was a joke", "subject": subject});
+    call(h, who, "createReport", body).await
+}
+
 fn error(said: &(u16, Json)) -> (u16, &str) {
     (said.0, said.1["error"].as_str().unwrap_or_default())
 }
@@ -263,6 +271,99 @@ async fn takes_only_the_reports_its_labeler_does() {
             (400, "InvalidSubject"),
             "{subject}"
         );
+    }
+    // An appeal is a reason like any other, and this labeler takes none.
+    assert_eq!(
+        error(&appeal(&h, &bob, &did, record(uri)).await),
+        (400, "InvalidRequest")
+    );
+}
+
+#[tokio::test]
+async fn takes_an_appeal_only_from_its_subject() {
+    let h = start(&[], false).await;
+    let (did, _, post, [alice, bob, carol]) = group(&h).await;
+    // A new group's labeler takes appeals.
+    let labeler = h
+        .host
+        .group_record(&did, &meta_space(&did), &format!("{NS}.labeler"), "self")
+        .unwrap()
+        .unwrap();
+    let reasons = labeler["reasonTypes"].as_array().unwrap();
+    assert!(reasons.contains(&json!(APPEAL)), "{labeler}");
+
+    // Bob appeals his post in the calendar, and his public one: each a
+    // report in the queue, its reason an appeal.
+    let in_space = post["uri"].as_str().unwrap().to_string();
+    let public = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", bob.did);
+    for uri in [&in_space, &public] {
+        let (status, said) = appeal(&h, &bob, &did, record(uri)).await;
+        assert_eq!(status, 200, "{said}");
+        let q = format!("group={did}&subject={uri}");
+        let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
+        assert_eq!(kinds(&history), ["reportEvent"]);
+        assert_eq!(history["events"][0]["event"]["reasonType"], APPEAL);
+        assert_eq!(history["events"][0]["createdBy"], bob.did.as_str());
+        // Alice reads it, but it is not hers to appeal.
+        let said = appeal(&h, &alice, &did, record(uri)).await;
+        assert_eq!(error(&said), (400, "InvalidRequest"), "{uri}");
+        let message = said.1["message"].as_str().unwrap();
+        assert!(message.contains("only its subject may appeal"), "{message}");
+    }
+    let resolve = json!({"group": did, "subject": record(&public), "status": "resolved"});
+    assert_eq!(call(&h, &alice, "resolveSubject", resolve).await.0, 200);
+
+    // Bob appeals for his own account; no one else may for him.
+    let (status, said) = appeal(&h, &bob, &did, account(&bob.did)).await;
+    assert_eq!(status, 200, "{said}");
+    let said = appeal(&h, &alice, &did, account(&bob.did)).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+    // Carol was never in the group, and the queue has nothing of hers.
+    let said = appeal(&h, &carol, &did, account(&carol.did)).await;
+    assert_eq!(error(&said), (400, "InvalidSubject"));
+
+    // Put out, Bob still appeals what the queue has of his.
+    let app = App::new("console");
+    let members = members_space(&did);
+    let token = app.token_for(&h, &alice, &did, &members).await;
+    let body = json!({"repo": did, "space": members, "collection": format!("{NS}.membership"), "rkey": bob.did});
+    let said = app
+        .call(&h, "com.atproto.space.deleteRecord", &token, Some(&body))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    for subject in [account(&bob.did), record(&in_space), record(&public)] {
+        let (status, said) = appeal(&h, &bob, &did, subject.clone()).await;
+        assert_eq!(status, 200, "{subject} {said}");
+    }
+    let q = format!("group={did}&subject={}", bob.did);
+    let (_, history) = query(&h, &alice, "getSubjectHistory", &q).await;
+    assert_eq!(
+        kinds(&history),
+        ["reportEvent", "ejectEvent", "reportEvent"]
+    );
+    // The appeal reopened what was resolved.
+    let (_, queue) = query(&h, &alice, "listSubjects", &format!("group={did}")).await;
+    let open = queue["subjects"].as_array().unwrap();
+    assert!(
+        open.iter().any(|s| s["subject"] == record(&public)),
+        "{queue}"
+    );
+    // But not a post of his the queue never had, nor in a group where it
+    // has nothing of his.
+    let other = start_group(
+        &h,
+        &alice,
+        json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
+    )
+    .await;
+    let unseen = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfisf", bob.did);
+    for (group, subject) in [
+        (&did, record(&unseen)),
+        (&other, account(&bob.did)),
+        (&other, record(&public)),
+    ] {
+        let said = appeal(&h, &bob, group, subject.clone()).await;
+        assert_eq!(error(&said), (400, "InvalidSubject"), "{group} {subject}");
     }
 }
 

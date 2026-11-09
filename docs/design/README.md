@@ -60,7 +60,7 @@ accounts on their own PDSes, anywhere on the network.
 - [Membership](membership.md): roles, joining, invites, and leaving.
 - [Signing in](signing-in.md): people, apps and MCP clients, and what a
   token may do.
-- [Moderation](moderation.md): labels, the queue, and reports.
+- [Moderation](moderation.md): labels, the queue, reports and appeals.
 - [Sites](sites.md): a group's website, published whole and served
   sandboxed at its address or on its own domain, and the live data a
   visitor sees once signed in on it.

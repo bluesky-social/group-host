@@ -949,7 +949,7 @@
     },
     "reportEvent": {
       "type": "object",
-      "description": "Someone reported the subject.",
+      "description": "Someone reported the subject; with reasonType com.atproto.moderation.defs#reasonAppeal, the subject appealed.",
       "required": [
         "reasonType"
       ],

@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Report an account or record in a group, or a member's record in their public repo, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space: a record's own, or the members space for an account or a public record.",
+      "description": "Report an account or record in a group, or a member's record in their public repo, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space: a record's own, or the members space for an account or a public record. A report whose reasonType is com.atproto.moderation.defs#reasonAppeal is an appeal, which only its subject may file: the account itself, or the record's author; one the queue already has is taken though its author is no longer in the group.",
       "input": {
         "encoding": "application/json",
         "schema": {

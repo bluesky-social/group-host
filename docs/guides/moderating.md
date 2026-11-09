@@ -38,6 +38,11 @@ the console. Each report lands on this page, with the reason the member
 chose and what they wrote. A member can report an account only while it
 is in the group, and a post only in a part of the group they can read.
 
+Someone can also appeal what you did to them: their account, or a post
+of theirs. An appeal is a report whose reason is Appeal, and only the
+one it is about can send it. Someone you removed from the group can
+still appeal anything of theirs already on this page.
+
 ## What is on the Moderation page?
 
 1. Look at the **Open** tab. Each row is one subject: an account, or a

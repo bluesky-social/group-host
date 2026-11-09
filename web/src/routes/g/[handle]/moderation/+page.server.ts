@@ -15,7 +15,7 @@ type Did = `did:${string}:${string}`;
 type Event = { fetch: typeof fetch; params: { handle?: string } };
 type Status = 'open' | 'escalated' | 'resolved';
 const STATUSES: string[] = ['open', 'escalated', 'resolved'];
-/** The reasons a report gives, as a new group's labeler takes them. */
+/** The reasons a moderator's report gives: a new group's labeler's, but an appeal, only its subject's. */
 const REASONS = ['Spam', 'Misleading', 'Rude', 'Sexual', 'Violation', 'Other'].map(
   (r) => `com.atproto.moderation.defs#reason${r}`
 );

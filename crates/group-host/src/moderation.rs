@@ -230,6 +230,9 @@ pub fn space_of(uri: &str) -> Option<(String, String)> {
 /// another as long.
 const REASON_TYPE_MAX: usize = 256;
 
+/// The reason of a report that appeals what the group did to its subject.
+const APPEAL: &str = "com.atproto.moderation.defs#reasonAppeal";
+
 /// The account a public record's URI is in, `at://<did>/<collection>/<rkey>`,
 /// a record in no space, each of its parts what it says.
 fn public_of(uri: &str) -> Option<&str> {
@@ -584,7 +587,8 @@ fn accepts(labeler: &Value, key: &str, value: &str) -> bool {
 
 /// A report, from one who can read its subject: an account in a group
 /// here, a record in one of its spaces, or a member's public record, into
-/// that group's queue.
+/// that group's queue. An appeal is a report only its subject files: the
+/// account, or the record's author, who may have been put out since.
 pub async fn create_report(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -615,6 +619,14 @@ pub async fn create_report(
             "the group takes no reports of {reason_type}"
         )));
     }
+    let appeal = reason_type == APPEAL;
+    if appeal && account_of(&subject) != me {
+        return Err(invalid("only its subject may appeal"));
+    }
+    // What the queue already has of someone is theirs to appeal, though
+    // they no longer hold a role, nor read where it is.
+    let queued = host.store.subject(group, &subject);
+    let appealed = appeal && queued.map_err(XrpcError::internal)?.is_some();
     // A record in a space is reported in its own; an account, or a
     // member's public record, in the members space, where its labels go.
     let collection = subject
@@ -630,7 +642,7 @@ pub async fn create_report(
         None => {
             let account = public_of(&subject).unwrap_or(&subject);
             let roles = host.roles(group, account).map_err(XrpcError::internal)?;
-            if roles.is_empty() {
+            if roles.is_empty() && !appealed {
                 return Err(invalid_subject("not a member of this group"));
             }
             members_space(group)
@@ -644,7 +656,7 @@ pub async fn create_report(
     let hosted = host.store.space(&space).map_err(XrpcError::internal)?;
     let hosted = hosted.ok_or_else(|| invalid_subject("not in a space hosted here"))?;
     let reads = host.may(&space, &hosted, Some(me.as_str()), Access::Read);
-    if !reads.map_err(XrpcError::internal)? {
+    if !appealed && !reads.map_err(XrpcError::internal)? {
         return Err(invalid_subject("not in a space you can read"));
     }
     let now = now_millis();

@@ -206,7 +206,7 @@ its tools are in [MCP tools](mcp.md).
 
 | Method | What it does |
 | --- | --- |
-| `POST fyi.opensocial.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo, from one who can read its space (the members space for a member or their public record) and as the group's labeler takes reports; answers the report's `id` and `createdAt`. A reason or note is 2,000 characters (20,000 bytes) at most |
+| `POST fyi.opensocial.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo, from one who can read its space (the members space for a member or their public record) and as the group's labeler takes reports; answers the report's `id` and `createdAt`. With `reasonType` `com.atproto.moderation.defs#reasonAppeal` it is an appeal, which only its subject files (the account itself, or the record's author; anyone else is `InvalidRequest`), taken though they were put out when the queue already has the subject. A reason or note is 2,000 characters (20,000 bytes) at most |
 | `GET fyi.opensocial.listSubjects` | the moderation queue of one status, `open` unless asked |
 | `GET fyi.opensocial.getSubjectHistory` | a subject's events, oldest first, a page at a time; with a `cid`, those about that version |
 | `POST fyi.opensocial.resolveSubject` | sets a subject `resolved` or `escalated`, with an optional note; answers the subject |

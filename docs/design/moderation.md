@@ -113,7 +113,8 @@ version of a record it is about as `cid` when it names one, and one of
 four kinds as `event`:
 
 - `reportEvent`: someone reported it, with a `reasonType`, an optional
-  `reason` and the `rule` it cites, if any.
+  `reason` and the `rule` it cites, if any. An appeal is one, its
+  `reasonType` `com.atproto.moderation.defs#reasonAppeal`.
 - `statusEvent`: a moderator set its `status`, with an optional `note`.
 - `labelEvent`: a label was written, by the label record's `uri` and its
   `val`; or, with `deleted: true`, deleted, which takes it back.
@@ -171,7 +172,26 @@ of its lists, when present, limits them: `reasonTypes` the reasons,
 `subjectTypes` the kinds of subject (`account`, `record`), and
 `subjectCollections` the collections a reported record may be in. A new
 group's labeler takes reports of accounts and records, for the common
-reasons, of any collection.
+reasons and appeals, of any collection.
+
+## Appeals
+
+Someone a group moderated should be able to answer it, and the
+moderators should hear it where they hear everything else. So an appeal
+is a report, its `reasonType` `com.atproto.moderation.defs#reasonAppeal`,
+filed by its subject: an account for itself, or a record's author for
+the record, the DID its URI is in. Anyone else appealing is refused
+`InvalidRequest`, saying only its subject may appeal. It goes into the
+queue as a `reportEvent` like any report, reopening a resolved subject,
+and keeps its reason, so a moderator reads it as an appeal.
+
+Whoever was put out of the group no longer holds a role, nor reads the
+members space, yet what was done to them is theirs to answer. So an
+appeal of a subject the queue already has, by any event (a report, a
+label, an ejection), is taken though its author is no longer a member
+and cannot read the space it is in. Any other appeal is held to the
+rules of any report. The labeler still decides: a group whose
+`reasonTypes` leave appeals out takes none.
 
 ## The group's own labels
 
@@ -197,8 +217,10 @@ Details:
 - A group not hosted here is `GroupNotFound`. A subject the reporter
   cannot read, that is not in the group, a public record of someone not
   a member, or of a kind or collection the labeler does not take, is
-  `InvalidSubject`; a reason it does not take is `InvalidRequest`. A
-  member's public record is a `record`, of its collection.
+  `InvalidSubject`; a reason it does not take, or an appeal by anyone but
+  its subject, is `InvalidRequest`. An appeal of a subject already in the
+  queue is taken though it is no longer in the group or readable by its
+  author. A member's public record is a `record`, of its collection.
 - A `rule` must be a record's URI in the group's meta space.
 - The host does not check that the reported record exists or that its
   CID matches.
