@@ -93,6 +93,36 @@ pub struct Asked<'a> {
     pub copied: bool,
 }
 
+/// How many locks the groups' commits are spread over.
+const WRITING_LOCKS: usize = 64;
+
+/// The locks commits are made under, a group's always the same one. A
+/// group's commits, to its public repo and its repos in spaces, are made
+/// one at a time, so each builds on the one before, and what a write asks
+/// of the group as it is (its roles) holds until it is made; other
+/// groups' are made beside them. The groups share a fixed number of locks,
+/// rather than one each, so the locks never grow: two groups on one only
+/// wait for each other.
+pub(crate) struct Writing([std::sync::Mutex<()>; WRITING_LOCKS]);
+
+impl Default for Writing {
+    fn default() -> Writing {
+        Writing(std::array::from_fn(|_| Default::default()))
+    }
+}
+
+impl Writing {
+    /// Held while a commit of `did`'s is made: its DID, never its handle,
+    /// so that one group is always the one lock.
+    pub(crate) fn of(&self, did: &str) -> std::sync::MutexGuard<'_, ()> {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        did.hash(&mut hasher);
+        let lock = &self.0[hasher.finish() as usize % WRITING_LOCKS];
+        lock.lock().expect("not poisoned")
+    }
+}
+
 fn invalid_swap(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, "InvalidSwap", message)
 }
@@ -305,7 +335,6 @@ impl Host {
         writes: &[Write],
         asked: &Asked,
     ) -> Result<Option<(Committed, Vec<Write>)>, XrpcError> {
-        let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
             XrpcError::new(
@@ -314,6 +343,7 @@ impl Host {
                 format!("no repo {did} here"),
             )
         })?;
+        let _one_at_a_time = self.writing.of(&account.did);
         if !asked.off {
             self.active(&account.did)?;
         }

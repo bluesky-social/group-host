@@ -85,7 +85,6 @@ impl Host {
         writes: &[Write],
         asked: &Asked,
     ) -> Result<Option<(Commit, Vec<Write>)>, XrpcError> {
-        let _one_at_a_time = self.writing.lock().expect("not poisoned");
         let account = self.store.account(did).map_err(XrpcError::internal)?;
         let account = account.ok_or_else(|| {
             XrpcError::new(
@@ -94,6 +93,7 @@ impl Host {
                 format!("no repo {did} here"),
             )
         })?;
+        let _one_at_a_time = self.writing.of(&account.did);
         if !asked.off {
             self.active(&account.did)?;
         }

@@ -81,8 +81,8 @@ pub struct Host {
     pub identity: identity::Resolver,
     /// Each commit's revision, later than the last.
     pub clock: atproto::tid::TidClock,
-    /// Held while a commit is made, so each builds on the one before.
-    writing: std::sync::Mutex<()>,
+    /// Held while a commit is made, one lock for each group's commits.
+    writing: repo::Writing,
     /// Told of each new event, which wakes the firehose's streams.
     pub events: tokio::sync::broadcast::Sender<()>,
     /// When the relays were last told of news.

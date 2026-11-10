@@ -272,6 +272,32 @@ async fn writes_records_as_signed_commits() {
 }
 
 #[tokio::test]
+async fn makes_a_groups_writes_one_at_a_time_and_others_beside_them() {
+    let h = start(&[], false).await;
+    let riders = h.host.create_account(RIDERS).await.unwrap();
+    let walkers = h.host.create_account("walkers.groups.test").await.unwrap();
+    // Each group written from many threads at once, riders by its DID and
+    // by its handle alike: every write is made, none refused for a head
+    // another moved under it.
+    let names = [riders.as_str(), RIDERS, walkers.as_str()];
+    std::thread::scope(|s| {
+        for (n, name) in names.iter().enumerate() {
+            for t in 0..8 {
+                let host = &h.host;
+                s.spawn(move || {
+                    for i in 0..5 {
+                        let rkey = format!("n{n}t{t}i{i}");
+                        host.write(name, &[create(&rkey, "Ride safe")]).unwrap();
+                    }
+                });
+            }
+        }
+    });
+    assert_eq!(h.host.store.paths(&riders).unwrap().len(), 80);
+    assert_eq!(h.host.store.paths(&walkers).unwrap().len(), 40);
+}
+
+#[tokio::test]
 async fn refuses_writes_it_cannot_make() {
     let h = start(&[], false).await;
     let did = h.host.create_account(RIDERS).await.unwrap();

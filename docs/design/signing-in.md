@@ -250,9 +250,11 @@ and then what the records' rules ask ([membership](membership.md)); in
 someone's inbox,
 `invite` ([membership](membership.md)); in a space for chosen people, to
 be one of them and hold `repo:*`; and otherwise what the space's access
-record grants. Both are asked under the lock the commit is made under,
-so no change of roles slips in between, but for an invite, whose checks
-are made just before its write. An upload is
+record grants. Both are asked under the group's write lock, which its
+commits to its public repo and its repos in spaces are all made under,
+one at a time, so no change of roles slips in between, but for an
+invite, whose checks are made just before its write. Other groups'
+commits are made beside them. An upload is
 asked the same way: the scope must take the file's type, and the roles
 must still let the member write something as the group.
 
