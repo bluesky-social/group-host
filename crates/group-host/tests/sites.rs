@@ -1,5 +1,5 @@
 //! A group's website: published whole by those who configure the group,
-//! and served as it is, sandboxed, at the group's handle.
+//! and served as it is, sandboxed, at the group's address.
 
 mod common;
 
@@ -267,6 +267,28 @@ async fn a_site_is_taken_down() {
     // Taking down a site that is not there changes nothing.
     let again = call(&h, &alice, "deleteSite", json!({"group": did})).await;
     assert_eq!(again.0, 200, "{}", again.1);
+}
+
+#[tokio::test]
+async fn a_site_stays_at_the_address_when_the_handle_moves_to_a_domain_of_its_own() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let body = json!({"group": did, "files": [{"path": "index.html", "text": "hi"}]});
+    let made = call(&h, &alice, "putSite", body.clone()).await;
+    assert_eq!(made.0, 200, "{}", made.1);
+    // The handle updateGroupHandle would give it.
+    h.host.store.set_handle(&did, "riders.test", &[]).unwrap();
+
+    let front = page(&h, "/").await;
+    assert_eq!((front.status, front.body.as_str()), (200, "hi"));
+    assert_eq!(front.header("content-security-policy"), SANDBOX);
+    // The domain is the group's name, not where its site is.
+    let there = ask(&h, "GET", "riders.test", "/", &[]).await;
+    assert_ne!(there.body, "hi");
+    assert_eq!(there.header("content-security-policy"), "");
+    // And putSite says the site is at the address.
+    let again = call(&h, &alice, "putSite", body).await;
+    assert_eq!(again.1["url"], format!("https://{RIDERS}/"));
 }
 
 #[tokio::test]

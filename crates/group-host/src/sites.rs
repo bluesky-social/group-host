@@ -1,8 +1,10 @@
 //! A group's website: the static files its `fyi.opensocial.site` record,
-//! in its public repo, names, served as they are at its handle,
-//! `https://<handle>/`. The host keeps `/.well-known/` there for itself.
+//! in its public repo, names, served as they are at its address,
+//! `https://<address>/`: the name under the host's domain it was made at,
+//! which stays its site's when it takes a handle on a domain of its own.
+//! The host keeps `/.well-known/` there for itself.
 //!
-//! A group's handle is a name under the host's own domain, so a browser
+//! A group's address is a name under the host's own domain, so a browser
 //! takes its pages for the same site as the console. Every answer here is
 //! sandboxed (`Content-Security-Policy: sandbox`), which gives each page an
 //! origin of its own that no other shares: it can neither read nor set a
@@ -207,8 +209,8 @@ fn moved(to: &str, status: StatusCode) -> Response {
 }
 
 impl Host {
-    /// The group whose handle a request to `name` names, unless `name` is
-    /// the host's own.
+    /// The group whose address a request to `name` names, and its handle,
+    /// unless `name` is the host's own.
     fn site_of(&self, name: &str) -> Option<(String, String)> {
         let name = name
             .split(':')
@@ -224,8 +226,9 @@ impl Host {
         if name.is_empty() || name == own.split(':').next().unwrap_or_default() {
             return None;
         }
-        let account = self.store.account(&name).ok().flatten()?;
-        (account.handle == name).then_some((account.did, account.handle))
+        let did = self.store.addressed(&name).ok().flatten()?;
+        let account = self.store.account(&did).ok().flatten()?;
+        Some((account.did, account.handle))
     }
 
     /// The file of `did`'s site at `path`: its type and bytes, and its ETag.
@@ -442,7 +445,8 @@ pub async fn put_site(
         ..Asked::default()
     };
     host.write_asked(&group, std::slice::from_ref(&write), &asked)?;
-    let handle = group_of(&host, &group)?;
+    let address = host.store.address(&group).map_err(XrpcError::internal)?;
+    let address = address.expect("a group has an address");
     let scheme = host
         .config
         .public_url
@@ -452,7 +456,7 @@ pub async fn put_site(
     Ok(Json(json!({
         "uri": format!("at://{group}/{SITE}/self"),
         "cid": record_cid(SITE, &site)?.to_string(),
-        "url": format!("{scheme}://{handle}/"),
+        "url": format!("{scheme}://{address}/"),
         "uploaded": uploaded,
     })))
 }

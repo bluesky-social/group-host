@@ -127,7 +127,7 @@ A group's website ([sites](../design/sites.md)).
 | --- | --- |
 | `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there; takes a body as large as `BLOB_UPLOAD_LIMIT` |
 | `POST fyi.opensocial.deleteSite` | takes a group's site down |
-| `GET`, `HEAD` `https://<handle>/<path>` | a file of the site of the group whose handle the request's `Host` names, sandboxed; the host keeps `/.well-known/` there for itself |
+| `GET`, `HEAD` `https://<address>/<path>` | a file of the site of the group whose address the request's `Host` names, sandboxed; the host keeps `/.well-known/` there for itself |
 
 As the spaces' authority and the PDS of the group's own repo in each, the
 host answers the space alpha's methods:

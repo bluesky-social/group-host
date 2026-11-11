@@ -380,7 +380,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "site_publish",
         &[],
-        "Publishes the group's website, whole, at its handle (`https://<handle>/`): every file \
+        "Publishes the group's website, whole, at its address (`https://<address>/`): every file \
          of it, each as text or as bytes, in place of the site there; a file the group holds \
          already is used again. Its pages run sandboxed, each in an origin of its own, with no \
          cookies or storage; a page reads live data from the host's public methods.",

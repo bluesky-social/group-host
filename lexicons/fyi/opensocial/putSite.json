@@ -52,7 +52,7 @@
           "properties": {
             "uri": { "type": "string", "format": "at-uri", "description": "The site record." },
             "cid": { "type": "string", "format": "cid", "description": "The site record's CID." },
-            "url": { "type": "string", "format": "uri", "description": "Where the site is served: the group's handle, over https." },
+            "url": { "type": "string", "format": "uri", "description": "Where the site is served: the group's address, over https." },
             "uploaded": { "type": "integer", "minimum": 0, "description": "How many of the files given were new to the group; the rest it held already." }
           }
         }

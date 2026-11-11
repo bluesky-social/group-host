@@ -5,7 +5,7 @@
     "main": {
       "type": "record",
       "key": "literal:self",
-      "description": "The group's website: static files its host serves as they are at the group's handle, `https://<handle>/`, each page sandboxed to an origin of its own. Kept in the group's public repo and written by those whose roles carry group.configure; each publish replaces it, and deleting it takes the site down.",
+      "description": "The group's website: static files its host serves as they are at the group's address there, `https://<address>/`, each page sandboxed to an origin of its own. Kept in the group's public repo and written by those whose roles carry group.configure; each publish replaces it, and deleting it takes the site down.",
       "record": {
         "type": "object",
         "required": ["files", "createdAt"],

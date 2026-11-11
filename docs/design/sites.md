@@ -1,8 +1,8 @@
 # Sites
 
 A group can have a website: a front page that says who it is, or as many
-pages as it likes. The host serves it at the group's handle,
-`https://<handle>/`, as static files, the way they were published. It has
+pages as it likes. The host serves it at the group's address,
+`https://<address>/`, as static files, the way they were published. It has
 no templates, no build step and no rendering on the server. A page that
 wants live data, such as the group's events or members, asks the host's
 public methods from the browser.
@@ -59,10 +59,13 @@ segment, backslash or control character.
 
 ## Serving
 
-A request whose `Host` is a group's handle here is answered from its site,
-except under `/.well-known/`, which the host keeps for itself there: the
-handle's `atproto-did` is how anyone checks that the handle names the
-group. A request to the host's own name, `PUBLIC_URL`, is never a site's.
+A request whose `Host` is a group's address here is answered from its site,
+except under `/.well-known/`, which the host keeps for itself there: while
+the address is the group's handle, its `atproto-did` is how anyone checks
+that the handle names the group. The address is where the group was made
+([groups](groups.md#its-address)), and stays its site's when the group takes
+a handle on a domain of its own; that domain is the group's name, not its
+site's. A request to the host's own name, `PUBLIC_URL`, is never a site's.
 
 Only `GET` and `HEAD` are answered; anything else is 405. A path is read
 with its `%XX` escapes decoded, then answered in this order:
@@ -85,7 +88,7 @@ max-age=60`. A browser that holds that ETag already is answered 304.
 
 ## The sandbox
 
-A group's handle is a name under the host's domain, so a browser takes
+A group's address is a name under the host's domain, so a browser takes
 every group's pages for the same site as the console, at the host's own
 name. Left alone, a page's scripts could set a cookie for the whole
 domain, which the console would then receive. They could also send a

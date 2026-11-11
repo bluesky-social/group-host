@@ -552,7 +552,7 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "description": "The group's own site, if not at its handle."
+          "description": "The group's own site, if not at its address."
         },
         "memberCount": {
           "type": "integer",

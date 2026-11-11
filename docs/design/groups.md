@@ -60,9 +60,10 @@ Details:
 
 A group needs a name before it has a domain of its own. The host gives it
 a handle of one label under `HANDLE_DOMAIN`, the domain of this host's
-handles, and keeps that handle as the group's address. The address never
-changes. When the group takes a handle on its own domain, the address
-stays reserved for it, until the group is deleted.
+handles, and keeps that handle as the group's address, where its site is
+served ([sites](sites.md)). The address never changes. When the group
+takes a handle on its own domain, the address stays reserved for it, and
+its site stays there, until the group is deleted.
 
 `checkAddress` says, without signing in, whether an address is free: not
 an account's handle here and not kept as a group's address.

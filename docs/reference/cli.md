@@ -88,7 +88,7 @@ an MCP client acts in one group.
 
 | Command | What it does |
 | --- | --- |
-| `site publish <group> <dir> [--fallback <path>] [--not-found <path>]` | publishes the files under `<dir>`, but those whose names start with a dot, as the group's website at its handle, in place of the one there: each as text if it is UTF-8, else as bytes |
+| `site publish <group> <dir> [--fallback <path>] [--not-found <path>]` | publishes the files under `<dir>`, but those whose names start with a dot, as the group's website at its address, in place of the one there: each as text if it is UTF-8, else as bytes |
 | `site delete <group>` | takes the group's website down |
 
 ### member
