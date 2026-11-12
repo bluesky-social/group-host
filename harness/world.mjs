@@ -68,24 +68,38 @@ const up = async (url) => {
   throw new Error(`${url} never answered`);
 };
 
-/// The console's front for a browser the harness drives:
-/// harness/tls-proxy.mjs, with the certificate the PDS trusts, for the
-/// name only it resolves (harness/pds.mjs), which the browser is told
-/// (`resolving`).
-export const tlsFront = async (consolePort, net, children) => {
-  const proxy = spawn(
-    'node',
-    [join(root, 'harness/tls-proxy.mjs'), net.console.cert, net.console.key, String(consolePort)],
-    {
-      stdio: ['pipe', 'pipe', 'inherit']
-    }
-  );
-  children.push(proxy);
-  return `https://${net.console.host}:${(await line(proxy, (l) => /^\d+$/.test(l.trim()))).trim()}`;
+/// An https front, harness/tls-proxy.mjs with the certificate the PDS
+/// trusts, for what listens on `port`, asked as `host` if given: the
+/// process, and the port it listens on.
+const proxied = async (net, port, host) => {
+  const args = [join(root, 'harness/tls-proxy.mjs'), net.console.cert, net.console.key];
+  const proxy = spawn('node', [...args, String(port), ...(host ? [host] : [])], {
+    stdio: ['pipe', 'pipe', 'inherit']
+  });
+  return { proxy, port: (await line(proxy, (l) => /^\d+$/.test(l.trim()))).trim() };
 };
 
-/// Chromium's argument that sends the console's name to this machine.
-export const resolving = '--host-resolver-rules=MAP console.group-host.internal 127.0.0.1';
+/// The console's front for a browser the harness drives, for the name
+/// only it resolves (harness/pds.mjs), which the browser is told
+/// (`resolving`).
+export const tlsFront = async (consolePort, net, children) => {
+  const { proxy, port } = await proxied(net, consolePort);
+  children.push(proxy);
+  return `https://${net.console.host}:${port}`;
+};
+
+/// A group's site, at its `address` on the host at `hostPort`, behind a
+/// front at `name`, a name beside the console's: the browser takes its
+/// pages for the same site as the console, as it does a deployment's
+/// group addresses beside the host's own name. Its URL, and the front.
+export const siteFront = async (net, hostPort, name, address) => {
+  const { proxy, port } = await proxied(net, hostPort, address);
+  return { url: `https://${name}:${port}`, proxy };
+};
+
+/// Chromium's argument that sends the console's name, and every name
+/// beside it, to this machine.
+export const resolving = '--host-resolver-rules=MAP *.group-host.internal 127.0.0.1';
 
 /// `account`'s service auth for `aud` and `lxm`, from their own PDS.
 export const serviceAuth = async (pds, account, aud, lxm) => {

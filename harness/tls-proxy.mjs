@@ -1,7 +1,9 @@
 // An https front for the console under test, at the harness's console
-// hostname, passing every request on to it over plain http.
+// hostname, passing every request on to it over plain http; or, given a
+// name, for what the target serves at that name (a group's site, at its
+// address), each request passed on as if to it.
 //
-//   node harness/tls-proxy.mjs <cert> <key> <target port>
+//   node harness/tls-proxy.mjs <cert> <key> <target port> [<host>]
 //
 // Prints the port it listens on, and exits when stdin closes.
 
@@ -10,11 +12,12 @@ import { createServer } from 'node:https';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 
-const [cert, key, target] = process.argv.slice(2);
+const [cert, key, target, host] = process.argv.slice(2);
 
 const server = createServer({ cert: readFileSync(cert), key: readFileSync(key) }, (req, res) => {
+  const headers = host ? { ...req.headers, host } : req.headers;
   const upstream = request(
-    { host: '127.0.0.1', port: target, path: req.url, method: req.method, headers: req.headers },
+    { host: '127.0.0.1', port: target, path: req.url, method: req.method, headers },
     (answer) => {
       res.writeHead(answer.statusCode, answer.headers);
       answer.pipe(res);

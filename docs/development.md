@@ -61,14 +61,19 @@ as it should and writes the coverage it counted.
 `just e2e` uses the console as people use it, in Chromium, with
 Playwright (`harness/e2e/flows.spec.mjs`): it signs in through the
 reference PDS's own approval page, signs an app in as a group and has it
-write as the group, declines one, and signs out. Its setup
-(`harness/e2e/setup.mjs`) runs the reference PDS, the host over it, and
-the built console behind an https front at `console.group-host.internal`
-(`harness/tls-proxy.mjs`), as the PDS reaches an OAuth client only over
-https at a hostname; `harness/pds.mjs` makes that name's certificate and
-resolves it. Chromium comes with `cd harness && npx playwright install
-chromium`. A failed flow leaves its trace and a picture under
-`target/e2e/results`.
+write as the group, publishes a site and checks that a page of it reaches
+the console without the session of whoever opens it, declines an app,
+and signs out. Its setup (`harness/e2e/setup.mjs`) runs the reference
+PDS, the host over it, and the built console behind an https front at
+`console.group-host.internal` (`harness/tls-proxy.mjs`), as the PDS
+reaches an OAuth client only over https at a hostname; `harness/pds.mjs`
+makes that name's certificate and resolves it. Hikers' site has a front
+of its own at `hikers.group-host.internal`, a name beside the console's,
+so the browser takes its pages for the same site as the console, as it
+does a deployment's group addresses. Chromium comes with `cd harness &&
+npx playwright install chromium`, and is told that every name under
+`group-host.internal` is this machine. A failed flow leaves its trace and
+a picture under `target/e2e/results`.
 
 ## Looking at the console
 

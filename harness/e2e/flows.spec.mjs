@@ -600,6 +600,68 @@ test('publishing a site from a folder, and deleting it', async () => {
   await expect(page.getByRole('link', { name: 'Website' })).toHaveCount(0);
 });
 
+test("a site's page reaches the console without the session of whoever opens it", async () => {
+  // A page anyone with group.configure could publish: it asks the host as
+  // whoever is looking, then posts a form signing them out. The site is
+  // at a name beside the console's, as a deployment's group addresses
+  // are beside its own name, so only its sandbox keeps the session back.
+  const consoleOrigin = new URL(world.base).origin;
+  const dir = mkdtempSync(join(tmpdir(), 'e2e-site-'));
+  writeFileSync(
+    join(dir, 'index.html'),
+    `<form id="out" method="post" action="${consoleOrigin}/console/logout"></form>
+<script>
+  fetch('${consoleOrigin}/xrpc/fyi.opensocial.getViewer', { credentials: 'include' })
+    .catch(() => {})
+    .finally(() => document.getElementById('out').submit());
+</script>`
+  );
+  await page.goto(url('/g/hikers.groups.test/settings/site'));
+  await page.getByRole('button', { name: 'Publish a site' }).click();
+  const publishing = page.getByRole('dialog', { name: 'Publish a site' });
+  await publishing.getByLabel('Folder').setInputFiles(dir);
+  await publishing.getByRole('button', { name: 'Publish' }).click();
+  await expect(publishing).toBeHidden();
+
+  // Each request the browser sends the console, with its cookies, until
+  // the one signing out.
+  const sent = [];
+  let out = false;
+  const watch = (req) => {
+    const at = new URL(req.url());
+    if (out || at.origin !== consoleOrigin) return;
+    out = at.pathname === '/console/logout';
+    sent.push(req.allHeaders().then((h) => ({ path: at.pathname, cookie: h.cookie ?? '' })));
+  };
+  const session = /group_host_session=/;
+  page.on('request', watch);
+  // From the console's own page, its session goes with it.
+  await page.evaluate(() => fetch('/xrpc/fyi.opensocial.getViewer'));
+  // From the site's, nothing of it does.
+  await page.goto(world.hikersSite);
+  await page.waitForURL((u) => u.origin === consoleOrigin);
+  page.off('request', watch);
+  const [own, ...fromSite] = await Promise.all(sent);
+  expect(own.path).toBe('/xrpc/fyi.opensocial.getViewer');
+  expect(own.cookie).toMatch(session);
+  expect(fromSite.map((r) => r.path)).toEqual([
+    '/xrpc/fyi.opensocial.getViewer',
+    '/console/logout'
+  ]);
+  for (const r of fromSite) expect(r.cookie, r.path).not.toMatch(session);
+  // So she is signed in still.
+  await page.goto(url('/'));
+  await expect.poll(() => signedInAs(page)).toBe('@alice.test');
+
+  await page.goto(url('/g/hikers.groups.test/settings/site'));
+  await page.getByRole('button', { name: 'Delete the site' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete this site?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(page.getByText('Nothing published yet')).toBeVisible();
+});
+
 test("hiding a group's profile, and showing it again", async () => {
   // Found on the network while its declaration is in its public repo,
   // which anyone may read.
