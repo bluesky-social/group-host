@@ -695,6 +695,30 @@ test("hiding a group's profile, and showing it again", async () => {
   await expect.poll(listed).toBe(true);
 });
 
+test("asking for a handle on a domain that doesn't point to the group yet", async () => {
+  await page.goto(url('/g/hikers.groups.test/settings'));
+  const handles = page.locator('.handles');
+  await expect(handles.getByText('hikers.groups.test', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Use your own domain' }).click();
+  const using = page.getByRole('dialog', { name: 'Use your own domain' });
+  // The record to add points to the group, at the domain as it is typed.
+  const { did } = await fetch(
+    `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=hikers.groups.test`
+  ).then((r) => r.json());
+  await expect(using.getByText(`did=${did}`, { exact: true })).toBeVisible();
+  await using.getByLabel('Domain').fill('Hikers.test');
+  const name = using.getByText('_atproto.hikers.test', { exact: true });
+  await expect(name).toBeVisible();
+  // Refused in the reader's words, the dialog open with what was typed,
+  // and the record's name with it.
+  await using.getByRole('button', { name: 'Use', exact: true }).click();
+  await expect(
+    using.getByText("hikers.test doesn't point to this group yet.", { exact: false })
+  ).toBeVisible();
+  await expect(using.getByLabel('Domain')).toHaveValue('Hikers.test');
+  await expect(name).toBeVisible();
+});
+
 test('adding a rule, and taking it away', async () => {
   // Settings has a page for each part, reached by its tabs.
   await page.goto(url('/g/hikers.groups.test/settings'));

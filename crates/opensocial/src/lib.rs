@@ -33,6 +33,9 @@ group
   group deactivate <group> [--undo]
                          switch a group off, so nothing reads or writes it, or with
                          --undo switch it back on
+  group handle <group> <handle>
+                         give a group a handle on a domain of its own, once the domain
+                         names it, or its own address back
   group delete <group>   delete a group, its spaces and its identity, for good
 profile
   profile set <group> [--display-name <name>] [--join-policy <policy>] [--description <words>] …

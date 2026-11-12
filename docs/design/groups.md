@@ -249,6 +249,14 @@ host's own record, updates the group's DID document with the host's
 rotation key, and tells relays. If the directory refuses the update, the
 host puts the group's previous handle back. It fails when the domain does not name the group, or when
 the host's key no longer controls the DID. Both are for `group.configure`.
+The group's site stays at its address whatever its handle ([sites](sites.md)).
+
+In the console, the profile page of a group's settings shows its handle,
+and, while it is a domain of its own, whether the domain still names it.
+"Use your own domain" takes the domain, showing the `_atproto` TXT record
+to add there, `did=` and the group's DID; "Go back" gives it its address
+back, asked to be sure of. The command is `group
+handle`; an MCP client's tool is `group_handle`.
 
 ## Switching off, on and deleting
 

@@ -430,6 +430,27 @@ async fn writes_the_groups_rules_roles_and_profile() {
 }
 
 #[tokio::test]
+async fn gives_a_group_a_handle_only_on_a_domain_that_names_it() {
+    let h = host().await;
+    let (alice, bob) = (env(&h, 0), env(&h, 1));
+    let made = ok(&alice, &["group", "create", "riders.groups.test"]).await;
+    let did = made.split_whitespace().nth(2).unwrap().to_string();
+    // Only one who runs it; a domain that doesn't name the group, refused
+    // with what its record should say.
+    let said_so = fails(&bob, &["group", "handle", &did, "riders.test"]).await;
+    assert!(said_so.contains("403"), "{said_so}");
+    let said_so = fails(&alice, &["group", "handle", &did, "riders.test"]).await;
+    assert!(said_so.contains("NotPointing"), "{said_so}");
+    assert!(said_so.contains(&format!("did={did}")), "{said_so}");
+    // Its own address is always its own.
+    let kept = ok(&alice, &["group", "handle", &did, "riders.groups.test"]).await;
+    assert!(
+        kept.contains("\"handle\": \"riders.groups.test\""),
+        "{kept}"
+    );
+}
+
+#[tokio::test]
 async fn switches_a_group_off_and_on_and_deletes_it() {
     let h = host().await;
     let (alice, bob) = (env(&h, 0), env(&h, 1));

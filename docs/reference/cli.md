@@ -54,6 +54,7 @@ an MCP client acts in one group.
 | `group seed <handle>` | a group to try things on, joined by approval: two rules, a moderator role (`mod.read`, `mod.resolve`, `label`) that the founder may give, written as the group, and an invite for each of `OPENSOCIAL_SEED_INVITE` |
 | `group move <group> --to <address> [--to-did <did>]` | moves a group, whole, from this host to another, making the four calls in turn; run again after a run that handed it over but could not switch it on, it switches it on; `--to-did` is the did:web of `--to` if not given ([moving](../design/moving.md)) |
 | `group deactivate <group> [--undo]` | switches the group off, so nothing reads its spaces or writes as it; with `--undo`, switches it back on, for one who held `group.configure` when it went off ([switching off](../design/groups.md#switching-off-on-and-deleting)) |
+| `group handle <group> <handle>` | gives the group a handle on a domain of its own, once the domain names it, or its own address back; refused with `NotPointing`, saying what the domain's `_atproto` record should be, until it does ([a handle on its own domain](../design/groups.md#a-handle-on-its-own-domain)) |
 | `group delete <group>` | deletes the group, its spaces and its account here, for good, and prints whether its DID was ended or left to the holders of its recovery keys |
 
 ### profile

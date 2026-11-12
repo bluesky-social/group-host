@@ -41,6 +41,7 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("getGroup"),
     lexicon!("deactivateGroup"),
     lexicon!("activateGroup"),
+    lexicon!("updateGroupHandle"),
     lexicon!("listMembers"),
     lexicon!("listJoinRequests"),
     lexicon!("denyJoinRequest"),
@@ -324,6 +325,15 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "Switches the group off: nobody can read its spaces or write as it until one who \
          could switch it off switches it back on. With undo, switches it back on.",
         Made::Method("deactivateGroup", Some("activateGroup")),
+    ),
+    (
+        "group_handle",
+        &["handle"],
+        "Gives the group a handle on a domain of its own, once the domain names the group: an \
+         _atproto TXT record there saying did=<the group's DID>, or the DID at the domain's \
+         /.well-known/atproto-did. Given the group's own address, gives it that back. The \
+         group's site stays at its address either way.",
+        Made::Method("updateGroupHandle", None),
     ),
     (
         "profile_set",

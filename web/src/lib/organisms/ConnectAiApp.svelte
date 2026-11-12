@@ -18,7 +18,7 @@
     <span class="ordinal">1</span>
     <div class="step">
       <strong>Add this address to your AI app as a connector</strong>
-      <div class="address"><code>{mcp}</code><Copy text={mcp} /></div>
+      <div class="copyable"><code>{mcp}</code><Copy text={mcp} /></div>
     </div>
   </li>
   <li>

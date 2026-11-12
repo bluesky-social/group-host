@@ -310,6 +310,13 @@
   - paragraph: Hiding it stops new people finding it. It can't undo what people have already seen.
   - button "Save who sees it": Save
   - status
+  - heading "Handle" [level=2]
+  - button "Use your own domain"
+  - paragraph: The name the group goes by in Bluesky and other apps. Its address here, bookclub.groups.test, and its site keep working whichever you use.
+  - list:
+    - listitem:
+      - strong: bookclub.groups.test
+      - text: The address this host gave it.
   - heading "Switch off or delete the group" [level=2]
   - paragraph: Switching the group off hides it from everyone until an admin switches it back on. Deleting it can't be undone.
   - button "Switch off"

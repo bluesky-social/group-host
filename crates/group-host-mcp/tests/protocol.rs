@@ -32,6 +32,7 @@ fn names_each_tool_for_its_command() {
         [
             "group_show",
             "group_deactivate",
+            "group_handle",
             "profile_set",
             "rule_set",
             "rule_delete",

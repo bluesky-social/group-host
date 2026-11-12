@@ -444,6 +444,15 @@ const all = {
     const { group, form } = await asked(event);
     return act(event, 'fyi.opensocial.revokeAppPassword', { group, name: text(form, 'name') });
   },
+  handle: async (event) => {
+    const { group, form } = await asked(event);
+    const handle = text(form, 'domain').replace(/^@/, '').toLowerCase();
+    return newHandle(event, group, handle);
+  },
+  unhandle: async (event) => {
+    const { group, form } = await asked(event);
+    return newHandle(event, group, text(form, 'address'));
+  },
   deactivate: async (event) => {
     const { group } = await asked(event);
     // Off, its page is where it is switched back on.
@@ -535,9 +544,33 @@ async function siteFiles(form: FormData) {
 /** The writes named, as a page's actions. */
 const pick = <K extends keyof typeof all>(...names: K[]) =>
   Object.fromEntries(names.map((n) => [n, all[n]])) as Pick<typeof all, K>;
+/**
+ * Gives the group `handle`, and goes to its settings by it, as the old
+ * one names it no more; or says why not, in the reader's words where
+ * the host's refusal is one they can act on.
+ */
+async function newHandle(event: Event, group: string, handle: string) {
+  const res = await event.fetch('/xrpc/fyi.opensocial.updateGroupHandle', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ group, handle })
+  });
+  if (res.ok) redirect(303, `/g/${handle}/settings`);
+  const failure: { error?: string; message?: string } | null = await res.json().catch(() => null);
+  const why: Record<string, string> = {
+    InvalidHandle: `${handle} isn't a domain.`,
+    NotPointing: `${handle} doesn't point to this group yet. Check its _atproto record, then try again in a few minutes.`,
+    HandleNotAvailable: `Another account here has ${handle} already.`
+  };
+  return fail(res.status, {
+    failed: why[failure?.error ?? ''] ?? failure?.message ?? res.statusText
+  });
+}
 
 export const profileActions = pick(
   'profile',
+  'handle',
+  'unhandle',
   'link',
   'unlink',
   'picture',

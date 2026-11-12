@@ -69,6 +69,7 @@ its icon.
 | --- | --- | --- | --- |
 | `group_show` | `group show` | `fyi.opensocial.getGroup` | the group as the member may see it: its profile, rules, how many are in it, roles and spaces |
 | `group_deactivate` | `group deactivate` | `fyi.opensocial.deactivateGroup` | switches the group off; with `undo`, `fyi.opensocial.activateGroup` switches it back on |
+| `group_handle` | `group handle` | `fyi.opensocial.updateGroupHandle` | gives the group a handle on a domain that names it, or its own address back |
 
 ## profile
 

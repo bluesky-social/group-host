@@ -1,5 +1,6 @@
 <script lang="ts">
   import Section from '#lib/molecules/Section.svelte';
+  import GroupHandle from '#lib/organisms/GroupHandle.svelte';
   import LinksEditor from '#lib/organisms/LinksEditor.svelte';
   import ProfileForm from '#lib/organisms/ProfileForm.svelte';
   import ProfilePictures from '#lib/organisms/ProfilePictures.svelte';
@@ -42,6 +43,15 @@
 </Section>
 <Section title="Who sees it">
   <Visibility listed={data.listed} />
+</Section>
+<Section title="Handle">
+  {#snippet actions()}<button class="quiet" type="button" popovertarget="use-domain"
+      >Use your own domain</button
+    >{/snippet}
+  {#snippet intro()}The name the group goes by in Bluesky and other apps. Its address here, <span
+      class="mono">{data.address}</span
+    >, and its site keep working whichever you use.{/snippet}
+  <GroupHandle did={g.did} handle={g.handle} address={data.address} pointing={data.pointing} />
 </Section>
 <Section title="Switch off or delete the group">
   {#snippet intro()}Switching the group off hides it from everyone until an admin switches it back
