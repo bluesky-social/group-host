@@ -764,3 +764,70 @@ async fn switches_between_accounts_signed_in_in_one_browser() {
     let none = kept(&last, &res);
     assert_eq!(viewer(&h, &none).await.1.get("actor"), None);
 }
+
+#[tokio::test]
+async fn a_session_is_the_consoles_alone_and_only_its_pages_use_it() {
+    // The console on https, as deployed: its cookies named `__Host-`.
+    let console = "https://console.test";
+    let h = start_reachable(&[("CONSOLE_URL", console)]).await;
+    let (did, _) = person(&h, true).await;
+    let value = h.host.session_cookie(&did, group_host::time::now_millis());
+    let name = h.host.cookie_name(COOKIE_NAME);
+    assert_eq!(name, "__Host-group_host_session");
+    let jar = format!("{name}={value}");
+    let as_from = async |origin: Option<&str>| {
+        let mut req = h
+            .http
+            .get(format!("{}/xrpc/{NS}.getViewer", h.url))
+            .header("cookie", &jar);
+        if let Some(o) = origin {
+            req = req.header("origin", o);
+        }
+        let said: Json_ = req.send().await.unwrap().json().await.unwrap();
+        said["actor"]["did"].as_str().map(String::from)
+    };
+    // From the console's own pages, or with no word of where from.
+    assert_eq!(as_from(None).await.as_deref(), Some(did.as_str()));
+    assert_eq!(as_from(Some(console)).await.as_deref(), Some(did.as_str()));
+    // From a page anywhere else, a group's site or a sandboxed page, it is
+    // as nobody's.
+    for elsewhere in [
+        "https://riders.groups.test",
+        "null",
+        "https://console.test:8443",
+    ] {
+        assert_eq!(as_from(Some(elsewhere)).await, None, "{elsewhere}");
+    }
+    // The name before `__Host-` is nobody's here.
+    let (_, plain) = viewer(&h, &format!("{COOKIE_NAME}={value}")).await;
+    assert_eq!(plain.get("actor"), None);
+
+    // Nor does a page elsewhere sign anyone in to another account, or out.
+    for path in ["/console/switch", "/console/logout"] {
+        let res = browser()
+            .post(format!("{}{path}", h.url))
+            .header("cookie", &jar)
+            .header("origin", "https://riders.groups.test")
+            .form(&[("did", did.as_str())])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 403, "{path}");
+        assert_eq!(res.headers().get("set-cookie"), None, "{path}");
+    }
+    assert_eq!(as_from(None).await.as_deref(), Some(did.as_str()));
+    // The console's own page signs out, the cookie cleared as it was set.
+    let out = browser()
+        .post(format!("{}/console/logout", h.url))
+        .header("cookie", &jar)
+        .header("origin", console)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(out.status(), 303);
+    assert_eq!(
+        out.headers()["set-cookie"],
+        "__Host-group_host_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure"
+    );
+    assert_eq!(as_from(None).await, None);
+}

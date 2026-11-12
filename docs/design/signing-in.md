@@ -86,6 +86,18 @@ good for 30 days. Signing out records the time in `console_logout`, and
 a cookie signed before a person's last sign-out names no one, in any
 browser.
 
+The cookie is HttpOnly and `SameSite=Lax`. Where the console is on https
+(`CONSOLE_URL`), it is also Secure and named `__Host-group_host_session`,
+as are the cookies beside it: a browser then keeps it as the console's
+name's alone, for its whole path, and a page at a name beside the
+console's, such as a group's address, cannot set one in its place. A
+request whose `Origin` is not the console's names no one, whatever
+cookie it carries, and signing in to another account
+(`/console/switch`) or out (`/console/logout`) from such a page is
+refused with 403. A page of the console's own, or a request saying no
+`Origin`, as a browser's own navigations and the console's server do,
+is answered as before.
+
 Details:
 
 - The sign-in under way is kept by its `state` for 15 minutes, and the

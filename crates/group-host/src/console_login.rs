@@ -7,10 +7,15 @@
 //! says so, it revokes the token it was given, and keeps nothing of theirs.
 //!
 //! The browser holds only a cookie the host signed, naming the person,
-//! HttpOnly and SameSite=Lax. A sign-in is answered only in the browser
-//! that started it, by a cookie naming its state, so a link to someone
-//! else's approval cannot sign a person in as them. Signing out refuses
-//! every cookie signed before.
+//! HttpOnly and SameSite=Lax; where the console is on https, named
+//! `__Host-` first, so the browser keeps it as the console's alone,
+//! Secure and for its whole path, and nothing at a name beside it can set
+//! one in its place. A request that says it comes from a page elsewhere
+//! (an `Origin` other than the console's) is as nobody's, whatever cookie
+//! it carries, and signs nobody in or out. A sign-in is answered only in
+//! the browser that started it, by a cookie naming its state, so a link
+//! to someone else's approval cannot sign a person in as them. Signing
+//! out refuses every cookie signed before.
 //!
 //! A browser can be signed in to several accounts at once: signing in to
 //! another keeps the one before in a second cookie, of such signed
@@ -39,7 +44,8 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// The session cookie, and the cookie naming a sign-in under way.
+/// The session cookie, and the cookie naming a sign-in under way, as
+/// named before `__Host-` (`Host::cookie_name`).
 pub const COOKIE: &str = "group_host_session";
 const STARTED: &str = "group_host_login";
 /// The cookie holding the other accounts a browser is signed in to: their
@@ -148,26 +154,18 @@ fn failed(status: StatusCode, why: impl Into<String>) -> Response {
 }
 
 /// A cookie, as the host sets one: for the whole site, HttpOnly, Lax, and
-/// Secure where the console is on https.
+/// Secure, named `__Host-`, where the console is on https.
 fn cookie(host: &Host, name: &str, value: &str, max_age: i64) -> String {
-    let secure = if host.config.console_url.starts_with("https://") {
-        "; Secure"
-    } else {
-        ""
-    };
+    let secure = if host.secure() { "; Secure" } else { "" };
+    let name = host.cookie_name(name);
     format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}")
 }
 
-/// The value of the cookie `name` a request carries.
-pub fn cookie_of<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers
-        .get_all(header::COOKIE)
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(';'))
-        .filter_map(|kv| kv.trim().split_once('='))
-        .find(|(k, _)| *k == name)
-        .map(|(_, v)| v)
+/// Refuses what only the console's own pages may ask: signing in to
+/// another account, or out.
+fn elsewhere() -> Response {
+    let why = "only the console's own pages sign in and out";
+    failed(StatusCode::FORBIDDEN, why)
 }
 
 /// The `Set-Cookie` keeping `others`, as many as a browser keeps: none
@@ -190,6 +188,43 @@ fn back_to(asked: Option<&String>) -> String {
 }
 
 impl Host {
+    /// Whether the console is on https, where its cookies are Secure.
+    fn secure(&self) -> bool {
+        self.config.console_url.starts_with("https://")
+    }
+
+    /// A cookie's name, as the host sets it: `__Host-` first where the
+    /// console is on https.
+    pub fn cookie_name(&self, name: &str) -> String {
+        match self.secure() {
+            true => format!("__Host-{name}"),
+            false => name.to_string(),
+        }
+    }
+
+    /// The value of the cookie `name` a request carries.
+    fn cookie_of<'a>(&self, headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+        let name = self.cookie_name(name);
+        headers
+            .get_all(header::COOKIE)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .flat_map(|v| v.split(';'))
+            .filter_map(|kv| kv.trim().split_once('='))
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v)
+    }
+
+    /// Whether a request says it comes from a page somewhere other than
+    /// the console: by an `Origin` other than the console's own.
+    fn asked_elsewhere(&self, headers: &HeaderMap) -> bool {
+        let console = reqwest::Url::parse(&self.config.console_url).expect("CONSOLE_URL is a URL");
+        let ours = console.origin().ascii_serialization();
+        headers
+            .get(header::ORIGIN)
+            .is_some_and(|o| o.as_bytes() != ours.as_bytes())
+    }
+
     /// The key the host signs its client assertions with, as the console.
     fn console_key(&self) -> Keypair {
         let secret = hmac(
@@ -226,7 +261,10 @@ impl Host {
     /// Who a request's session cookie names, while it lasts and they have
     /// not signed out since it was signed.
     pub fn console_caller(&self, headers: &HeaderMap) -> anyhow::Result<Option<String>> {
-        match cookie_of(headers, COOKIE) {
+        if self.asked_elsewhere(headers) {
+            return Ok(None);
+        }
+        match self.cookie_of(headers, COOKIE) {
             Some(value) => self.session_of(value),
             None => Ok(None),
         }
@@ -241,7 +279,11 @@ impl Host {
         but: Option<&str>,
     ) -> anyhow::Result<Vec<(String, String)>> {
         let mut found: Vec<(String, String)> = Vec::new();
-        for value in cookie_of(headers, OTHERS).unwrap_or_default().split('~') {
+        for value in self
+            .cookie_of(headers, OTHERS)
+            .unwrap_or_default()
+            .split('~')
+        {
             let Some(did) = self.session_of(value)? else {
                 continue;
             };
@@ -530,7 +572,7 @@ pub async fn callback(
     Query(q): Query<HashMap<String, String>>,
 ) -> Result<Response, XrpcError> {
     let state = q.get("state").map(String::as_str).unwrap_or_default();
-    let ours = cookie_of(&headers, STARTED) == Some(state);
+    let ours = host.cookie_of(&headers, STARTED) == Some(state);
     let since = now_millis() - TAKES;
     let pending = host
         .store
@@ -619,7 +661,7 @@ pub async fn callback(
     let mut others = host
         .console_others(&headers, Some(&p.did))
         .map_err(XrpcError::internal)?;
-    if let (Some(did), Some(value)) = (before, cookie_of(&headers, COOKIE))
+    if let (Some(did), Some(value)) = (before, host.cookie_of(&headers, COOKIE))
         && did != p.did
     {
         others.retain(|(d, _)| *d != did);
@@ -631,7 +673,7 @@ pub async fn callback(
     for c in [session, done] {
         set.append(header::SET_COOKIE, c.parse().expect("a cookie is a header"));
     }
-    if !others.is_empty() || cookie_of(&headers, OTHERS).is_some() {
+    if !others.is_empty() || host.cookie_of(&headers, OTHERS).is_some() {
         let kept = others_cookie(&host, &others);
         set.append(
             header::SET_COOKIE,
@@ -649,6 +691,9 @@ pub async fn switch(
     headers: HeaderMap,
     Form(form): Form<HashMap<String, String>>,
 ) -> Result<Response, XrpcError> {
+    if host.asked_elsewhere(&headers) {
+        return Ok(elsewhere());
+    }
     let to = form.get("did").map(String::as_str).unwrap_or_default();
     let current = host.console_caller(&headers).map_err(XrpcError::internal)?;
     let mut others = host
@@ -659,7 +704,7 @@ pub async fn switch(
         return Ok(failed(StatusCode::BAD_REQUEST, why));
     };
     let (_, value) = others.remove(at);
-    if let (Some(did), Some(was)) = (current, cookie_of(&headers, COOKIE)) {
+    if let (Some(did), Some(was)) = (current, host.cookie_of(&headers, COOKIE)) {
         others.insert(0, (did, was.to_string()));
     }
     let headers = AppendHeaders([
@@ -678,6 +723,9 @@ pub async fn logout(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
 ) -> Result<Response, XrpcError> {
+    if host.asked_elsewhere(&headers) {
+        return Ok(elsewhere());
+    }
     let who = host.console_caller(&headers).map_err(XrpcError::internal)?;
     if let Some(did) = &who {
         host.store
@@ -698,7 +746,7 @@ pub async fn logout(
         header::SET_COOKIE,
         next.parse().expect("a cookie is a header"),
     );
-    if cookie_of(&headers, OTHERS).is_some() {
+    if host.cookie_of(&headers, OTHERS).is_some() {
         let kept = others_cookie(&host, &others);
         set.append(
             header::SET_COOKIE,

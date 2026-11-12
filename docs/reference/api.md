@@ -37,9 +37,11 @@ A method of the host's own knows its caller in one of two ways:
   as `aud` (or `SERVICE_DID#<service>`, as a PDS proxying to the
   host's `#opensocial` service names it) and the method's NSID as `lxm`. This is how an app, or the
   `opensocial` command, calls as a person.
-- **The console's cookie**: `group_host_session`, which the host signs
-  once someone signs in to the console ([signing in](../design/signing-in.md#signing-people-in-to-the-console)),
-  used only when no `Authorization` is sent.
+- **The console's cookie**: `__Host-group_host_session` (`group_host_session`
+  where the console is not on https), which the host signs once someone
+  signs in to the console ([signing in](../design/signing-in.md#signing-people-in-to-the-console)),
+  used only when no `Authorization` is sent, and only from the console's
+  own pages: a request whose `Origin` is another is as nobody's.
 
 What a caller may then do in a group is what their roles there allow
 ([membership](../design/membership.md)); a method's lexicon names the

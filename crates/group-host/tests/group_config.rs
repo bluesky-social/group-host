@@ -405,7 +405,10 @@ async fn image(
         let cookie = h.host.session_cookie(&who.did, now);
         req = req.header(
             "cookie",
-            format!("{}={cookie}", group_host::console_login::COOKIE),
+            format!(
+                "{}={cookie}",
+                h.host.cookie_name(group_host::console_login::COOKIE)
+            ),
         );
     }
     let res = req.send().await.unwrap();

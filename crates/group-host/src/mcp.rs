@@ -880,7 +880,10 @@ impl Host {
         input: &Value,
     ) -> Result<Value, String> {
         let cookie = self.session_cookie(&who.member, now_millis());
-        let cookie = format!("{}={cookie}", crate::console_login::COOKIE);
+        let cookie = format!(
+            "{}={cookie}",
+            self.cookie_name(crate::console_login::COOKIE)
+        );
         let path = format!("/xrpc/{nsid}");
         let request = match procedure {
             true => Request::post(path)

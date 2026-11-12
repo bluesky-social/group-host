@@ -100,7 +100,11 @@ every group's pages for the same site as the console, at the host's own
 name. Left alone, a page's scripts could set a cookie for the whole
 domain, which the console would then receive. They could also send a
 request or a form to the host that carried a member's console session,
-since `SameSite` cookies only stop requests from other sites.
+since `SameSite` cookies only stop requests from other sites. The host
+names its console's cookies `__Host-`, so no page at a group's address
+can set one in their place, and takes no cookie from a request whose
+`Origin` is not the console's ([signing in](signing-in.md)); the sandbox
+keeps a page's requests from carrying the cookie at all.
 
 So every answer to a request for a site, redirects and errors included,
 carries:
