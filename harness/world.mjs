@@ -105,8 +105,15 @@ export const serviceAuth = async (pds, account, aud, lxm) => {
 /// served at the port `front` is given and reached at the https address
 /// `front` answers with (`front(consolePort, net, children)`): built, or
 /// with `live`, by the dev server, redrawn as its source changes. `pdsEnv`
-/// is the PDS's environment beyond this one's. Its parts, and `stop`.
-export async function start({ accounts, front, pdsEnv = {}, live = false }) {
+/// is the PDS's environment beyond this one's; `handleDomain`, the domain
+/// its groups' handles and addresses are under. Its parts, and `stop`.
+export async function start({
+  accounts,
+  front,
+  pdsEnv = {},
+  live = false,
+  handleDomain = '.groups.test'
+}) {
   const children = [];
   const icons = await favicons();
   const stop = () => {
@@ -136,7 +143,7 @@ export async function start({ accounts, front, pdsEnv = {}, live = false }) {
         DATA_DIR: mkdtempSync(join(tmpdir(), 'group-host-world-')),
         PLC_URL: net.plc,
         DID_WEB_SCHEME: 'http',
-        HANDLE_DOMAIN: '.groups.test',
+        HANDLE_DOMAIN: handleDomain,
         HANDLE_RESOLVERS: net.pds
       }
     });
@@ -176,7 +183,7 @@ export async function start({ accounts, front, pdsEnv = {}, live = false }) {
         'content-type': 'application/json',
         authorization: `Bearer ${await serviceAuth(net.pds, alice, did, lxm)}`
       },
-      body: JSON.stringify({ handle: 'riders.groups.test', displayName: 'Riders' })
+      body: JSON.stringify({ handle: `riders${handleDomain}`, displayName: 'Riders' })
     });
     if (!made.ok) throw new Error(`createGroup: ${await made.text()}`);
     const riders = await made.json();

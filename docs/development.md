@@ -24,6 +24,12 @@ account signs in as its handle (`alice.test`, `bob.test`,
 codes the PDS emails are read, and how to run the command against it. ctrl-c stops it all, and each start is empty
 again.
 
+Its groups are named under `groups.localtest.me`, as
+`riders.groups.localtest.me`, so a group's address opens in a browser:
+a site published with `site publish` is at https://riders.groups.localtest.me,
+sandboxed as it is when deployed, and a group with none sends `/` to its
+page in the console.
+
 Signing in to the console takes https at a name: the host is the
 console's OAuth client, and a PDS fetches a client's metadata only so.
 portless (a harness package) serves it: its proxy on port 443 sends

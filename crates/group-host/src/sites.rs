@@ -259,7 +259,7 @@ impl Host {
         let record = self.store.record(did, SITE, "self");
         let Some(record) = record.map_err(XrpcError::internal)? else {
             if asking.path.is_empty() {
-                let page = format!("{}/g/{handle}", self.config.public_url);
+                let page = format!("{}/g/{handle}", self.config.console_url);
                 return Ok(moved(&page, StatusCode::FOUND));
             }
             return Ok(plain(StatusCode::NOT_FOUND, "no site here"));

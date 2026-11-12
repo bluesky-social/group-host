@@ -2,7 +2,8 @@
 // look at: the reference PDS with alice, bob and harbor on it, the host, the
 // console at https://group-host.localtest.me, served by the dev server so a
 // change to it shows at once, a group of alice's, and one of bob's that has
-// invited her.
+// invited her. Groups are named under groups.localtest.me, so a group's
+// address, where its site is, opens in a browser too.
 // Stops on ctrl-c, and forgets everything: the PDS, the directory and the
 // host start empty each time.
 //
@@ -21,6 +22,10 @@ import { root, start } from './world.mjs';
 
 const NAME = 'group-host';
 const DOMAIN = 'localtest.me';
+/// What groups are named under, by an alias of this name: its wildcard
+/// sends each group's address to the host, as a deployment's does.
+const GROUPS = 'groups';
+const groups = `${GROUPS}.${DOMAIN}`;
 const portless = join(root, 'harness/node_modules/.bin/portless');
 const state = process.env.PORTLESS_STATE_DIR ?? join(homedir(), '.portless');
 
@@ -51,8 +56,18 @@ const w = await start({
   accounts: ['alice', 'bob', 'harbor'],
   front,
   pdsEnv: { NODE_EXTRA_CA_CERTS: join(state, 'ca.pem') },
-  live: true
+  live: true,
+  handleDomain: `.${groups}`
 });
+execFileSync(portless, ['alias', GROUPS, new URL(w.host).port, '--force'], { stdio: 'ignore' });
+
+/// Takes both names back from portless.
+const unalias = () => {
+  for (const name of [NAME, GROUPS])
+    try {
+      execFileSync(portless, ['alias', '--remove', name], { stdio: 'ignore' });
+    } catch {}
+};
 
 // Hikers, bob's, inviting alice: an invite waiting for her when she signs
 // in, as the header, its menu and the home page mark one.
@@ -72,24 +87,25 @@ const [alice, bob] = ['alice.test', 'bob.test'].map((h) =>
   w.net.accounts.find((a) => a.handle === h)
 );
 try {
-  as(bob, 'group', 'create', 'hikers.groups.test', '--display-name', 'Hikers');
+  as(bob, 'group', 'create', `hikers.${groups}`, '--display-name', 'Hikers');
   as(
     bob,
     'invite',
     'send',
-    'hikers.groups.test',
+    `hikers.${groups}`,
     alice.handle,
     '--message',
     'Walk with us on Sundays.'
   );
 } catch (e) {
+  unalias();
   w.stop();
   throw e;
 }
 
 const stop = () => {
   try {
-    execFileSync(portless, ['alias', '--remove', NAME], { stdio: 'ignore' });
+    unalias();
   } finally {
     w.stop();
     process.exit(0);
@@ -108,12 +124,14 @@ The directory ${w.net.plc}
 Sign in as any of them, with their password at the PDS's own page:
 ${people}
 
-alice runs Riders (riders.groups.test). bob runs Hikers (hikers.groups.test),
+alice runs Riders (riders.${groups}). bob runs Hikers (hikers.${groups}),
 which has invited alice: her invite waits on the home page. harbor is an account of its own, to
 move here from ${w.base}/move; the code its server emails is at
   ${w.net.mail}?to=harbor@test.com
 
+A group's site is at its address, once published: https://riders.${groups}
+
 The command, as alice:
-  OPENSOCIAL_HOST=${w.host} PDS_URL=${w.net.pds} OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=password just opensocial group show riders.groups.test
+  OPENSOCIAL_HOST=${w.host} PDS_URL=${w.net.pds} OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=password just opensocial group show riders.${groups}
 
 ctrl-c stops it all.`);

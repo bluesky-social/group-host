@@ -167,13 +167,14 @@ async fn a_site_is_published_and_served_sandboxed() {
 
 #[tokio::test]
 async fn a_site_without_its_pages_answers_plainly() {
-    let h = start(&[], false).await;
+    let h = start(&[("CONSOLE_URL", "https://console.test")], false).await;
     let (did, [alice, ..]) = group(&h).await;
+    // Its page in the console, wherever the console is.
     let console = page(&h, "/").await;
     assert_eq!(console.status, 302);
     assert_eq!(
         console.header("location"),
-        format!("https://host.test/g/{RIDERS}")
+        format!("https://console.test/g/{RIDERS}")
     );
     assert_eq!(page(&h, "/about").await.status, 404);
 

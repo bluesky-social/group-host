@@ -57,7 +57,7 @@ role
 site
   site publish <group> <dir> [--fallback <path>] [--not-found <path>]
                          publish the files under <dir> as the group's website, at its
-                         handle, in place of the one there
+                         address, in place of the one there
   site delete <group>    take the group's website down
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
