@@ -3,9 +3,10 @@
 A group can have a website: a front page that says who it is, or as many
 pages as it likes. The host serves it at the group's address,
 `https://<address>/`, as static files, the way they were published. It has
-no templates, no build step and no rendering on the server. A page that
-wants live data, such as the group's events or members, asks the host's
-public methods from the browser.
+no templates, no build step and no rendering on the server. A page is
+what was published: it cannot read the host's methods, as nobody is
+signed in in its sandbox, and the methods don't let another origin read
+their answers.
 
 ## What a site is
 
@@ -41,10 +42,16 @@ hash of its bytes, so a file that has not changed is the same blob. It
 answers how many files were new. `fyi.opensocial.deleteSite` takes the
 site down.
 
-Both require `group.configure`. The `opensocial site publish` command
-reads a folder and sends its files, leaving out those whose names start
-with a dot; `site delete` takes the site down. An AI app connected over
-MCP publishes with `site_publish`, writing each file as text.
+Both require `group.configure`. In the console, a group's own page links
+to its site while it has one, and its settings have a Site page, which
+says where the site is, how many files it has and when it was published,
+and publishes a folder chosen in the browser, or deletes the site, asked to be
+sure of. The `opensocial site publish` command reads a folder and sends
+its files; `site delete` takes the site down. Both leave out files whose
+names start with a dot, send each file as text if it is UTF-8 and as
+bytes otherwise, and take the folder's own name off each path. An AI app
+connected over MCP publishes with `site_publish`, writing each file as
+text.
 
 An app signed in as the group may also write the record itself, with
 `com.atproto.repo.putRecord`, after uploading the blobs. The host holds

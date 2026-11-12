@@ -9,6 +9,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
 import { asGroup, membersOf } from '#lib/asGroup.ts';
 import { changes, switchedOffActions } from '#lib/server/settings.ts';
+import { siteOf } from '#lib/server/site.ts';
 
 type Handle = `${string}.${string}`;
 
@@ -34,7 +35,8 @@ const STEP = 5;
  * who may read them, its members, `shown` of them (five more each time)
  * whose handle holds `q`; its invites waiting, for one who may invite;
  * the AI apps a member connected; whether its settings have anything
- * for them; and to one not in it, whether it has invited them.
+ * for them; to one not in it, whether it has invited them; and to
+ * anyone signed in, its site, while it has one.
  */
 export const load: PageServerLoad = async (event) => {
   const group = await groupOf(event);
@@ -70,6 +72,8 @@ export const load: PageServerLoad = async (event) => {
           })
         ).invites.length > 0
       : false;
+  const address = view.group.address;
+  const site = address && !view.group.deactivated ? await siteOf(event, group, address) : null;
   const { configures, issues } = changes(view);
   return {
     ...view,
@@ -81,6 +85,7 @@ export const load: PageServerLoad = async (event) => {
     invites,
     apps,
     invited,
+    site,
     mcp: `${event.url.origin}/mcp`
   };
 };

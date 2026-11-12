@@ -476,12 +476,61 @@ const all = {
       label: text(form, 'label')
     });
   },
+  site: async (event) => {
+    const { group, form } = await asked(event);
+    const files = await siteFiles(form);
+    if (!files.length)
+      return fail(400, { failed: 'Choose a folder with the pages of your site in it.' });
+    const named = Object.fromEntries(
+      ['fallback', 'notFound'].filter((k) => text(form, k)).map((k) => [k, text(form, k)])
+    );
+    return act(event, 'fyi.opensocial.putSite', { group, files, ...named });
+  },
+  unsite: async (event) => {
+    const { group } = await asked(event);
+    return act(event, 'fyi.opensocial.deleteSite', { group });
+  },
   delete: async (event) => {
     const { group } = await asked(event);
     // Gone, there is no page of it to come back to.
     return (await act(event, 'fyi.opensocial.deleteGroup', { group })) ?? redirect(303, '/');
   }
 } satisfies Record<string, Action<{ handle: string }>>;
+
+/** A file's bytes as text, where they are UTF-8: kept as they are, a byte-order mark included. */
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+/**
+ * The files of a folder chosen to publish, as `putSite` takes them, each
+ * at its path under the folder (`paths`, as the browser gives them, in
+ * the files' order, or else each file's name); those whose names start
+ * with a dot left out, as the command leaves them. Each as text if it is
+ * UTF-8, else as bytes.
+ */
+async function siteFiles(form: FormData) {
+  const paths: unknown = JSON.parse(text(form, 'paths') || '[]');
+  const given = form.getAll('files').filter((f): f is File => f instanceof File && f.name !== '');
+  const named = given.map((file, i) => ({
+    file,
+    path: (Array.isArray(paths) && typeof paths[i] === 'string' && paths[i]) || file.name
+  }));
+  // The folder's own name is no part of the site's paths.
+  const top = named[0]?.path.split('/')[0] ?? '';
+  const under = named.every((n) => n.path.startsWith(`${top}/`));
+  const files = [];
+  for (const { file, path: whole } of named) {
+    const path = under ? whole.slice(top.length + 1) : whole;
+    if (path.split('/').some((s) => s.startsWith('.'))) continue;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      files.push({ path, text: UTF8.decode(bytes) });
+    } catch {
+      const $bytes = Buffer.from(bytes).toString('base64').replace(/=+$/, '');
+      files.push({ path, bytes: { $bytes } });
+    }
+  }
+  return files;
+}
 
 /** The writes named, as a page's actions. */
 const pick = <K extends keyof typeof all>(...names: K[]) =>
@@ -504,3 +553,4 @@ export const labelActions = pick('define', 'undefine');
 export const roleActions = pick('role', 'unrole');
 export const appActions = pick('revoke', 'password', 'unpassword');
 export const recoveryActions = pick('key', 'unkey');
+export const siteActions = pick('site', 'unsite');

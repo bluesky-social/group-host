@@ -2,6 +2,9 @@
 // PDS, see her groups, sign an app in as one of them, and decline one;
 // and what the app then does as the group, read back from the host.
 
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import {
   App,
@@ -538,6 +541,63 @@ test('giving a group a picture, and taking it away', async () => {
   await expect(page.getByRole('button', { name: 'Add the avatar' })).toBeVisible();
   await page.goto(url('/g/hikers.groups.test'));
   await expect(page.locator('.identity img.av')).toHaveCount(0);
+});
+
+test('publishing a site from a folder, and deleting it', async () => {
+  // A folder as people keep a site: a front page, a page under it, a
+  // picture, and a file of their tools', which is left out.
+  const dir = mkdtempSync(join(tmpdir(), 'e2e-site-'));
+  mkdirSync(join(dir, 'rides'));
+  writeFileSync(join(dir, 'index.html'), '<h1>Hikers</h1>');
+  writeFileSync(join(dir, 'rides/index.html'), '<h1>Walks</h1>');
+  writeFileSync(join(dir, 'face.png'), PIXEL);
+  writeFileSync(join(dir, '.DS_Store'), 'tools');
+  await page.goto(url('/g/hikers.groups.test/settings'));
+  await page
+    .getByRole('navigation', { name: 'Settings' })
+    .getByRole('link', { name: 'Site' })
+    .click();
+  await expect(page.getByText('Nothing published yet')).toBeVisible();
+  await page.getByRole('button', { name: 'Publish a site' }).click();
+  const publishing = page.getByRole('dialog', { name: 'Publish a site' });
+  await publishing.getByLabel('Folder').setInputFiles(dir);
+  await publishing.getByRole('button', { name: 'Publish' }).click();
+  await expect(publishing).toBeHidden();
+  await expect(page.getByText(/^3 files, published /)).toBeVisible();
+
+  // Kept as the group's, each file at its path under the folder, typed by
+  // its extension: a page sent as text, the picture as its bytes, whole.
+  const { did } = await fetch(
+    `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=hikers.groups.test`
+  ).then((r) => r.json());
+  const { value } = await fetch(
+    `${world.host}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=fyi.opensocial.site&rkey=self`
+  ).then((r) => r.json());
+  const files = Object.fromEntries(
+    value.files.map((f) => [f.path, [f.blob.mimeType, f.blob.size]])
+  );
+  expect(files).toEqual({
+    'index.html': ['text/html', 15],
+    'rides/index.html': ['text/html', 14],
+    'face.png': ['image/png', PIXEL.length]
+  });
+
+  // Its page links to it, at its address.
+  await page.goto(url('/g/hikers.groups.test'));
+  const website = page
+    .getByRole('navigation', { name: 'The group' })
+    .getByRole('link', { name: 'Website' });
+  await expect(website).toHaveAttribute('href', 'https://hikers.groups.test/');
+
+  await page.goto(url('/g/hikers.groups.test/settings/site'));
+  await page.getByRole('button', { name: 'Delete the site' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete this site?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(page.getByText('Nothing published yet')).toBeVisible();
+  await page.goto(url('/g/hikers.groups.test'));
+  await expect(page.getByRole('link', { name: 'Website' })).toHaveCount(0);
 });
 
 test("hiding a group's profile, and showing it again", async () => {

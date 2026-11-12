@@ -62,15 +62,17 @@
         rules={g.rules}
       >
         {#snippet nav()}
-          {#if member && (data.settings || may.includes('mod.read'))}
+          {#if data.site || (member && (data.settings || may.includes('mod.read')))}
             <nav class="group-nav" aria-label="The group">
-              {#if may.includes('mod.read')}<a
+              {#if member && may.includes('mod.read')}<a
                   class="button quiet small"
                   href={`/g/${g.handle}/moderation`}>Moderation</a
                 >{/if}
-              {#if data.settings}<a class="button quiet small" href={`/g/${g.handle}/settings`}
-                  >Settings</a
+              {#if member && data.settings}<a
+                  class="button quiet small"
+                  href={`/g/${g.handle}/settings`}>Settings</a
                 >{/if}
+              {#if data.site}<a class="button quiet small" href={data.site.url}>Website</a>{/if}
             </nav>
           {/if}
         {/snippet}

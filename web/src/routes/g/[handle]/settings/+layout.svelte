@@ -12,6 +12,7 @@
     ...(data.configures
       ? [
           { href: at, text: 'Profile' },
+          { href: `${at}/site`, text: 'Site' },
           { href: `${at}/rules`, text: 'Rules' },
           { href: `${at}/labels`, text: 'Labels' },
           { href: `${at}/roles`, text: 'Roles' }
