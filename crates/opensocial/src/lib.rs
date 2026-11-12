@@ -58,9 +58,10 @@ role
   role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
                          add to what a role may do, or with --undo take it away
 site
-  site publish <group> <dir> [--fallback <path>] [--not-found <path>]
+  site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]
                          publish the files under <dir> as the group's website, at its
-                         address, in place of the one there
+                         address, in place of the one there; with --reads, the host's
+                         methods its pages may ask as whoever signs in on it
   site delete <group>    take the group's website down
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
@@ -672,13 +673,22 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             Ok(stats_lines(&said))
         }
         ["site", "publish", rest @ ..] => {
-            let a = parse(rest, &["fallback", "not-found"])?;
+            let a = parse(rest, &["fallback", "not-found", "reads"])?;
             let [group, dir] = a.take()?;
             let mut given = json!({"files": site_files(std::path::Path::new(dir))?});
             for (flag, name) in [("fallback", "fallback"), ("not-found", "not_found")] {
                 if let Some(path) = a.flags.get(flag) {
                     given[name] = json!(path);
                 }
+            }
+            // Each method by its NSID, or its name alone, as one of ours.
+            if let Some(reads) = a.flags.get("reads") {
+                let methods = reads.split(',').map(str::trim).filter(|r| !r.is_empty());
+                let named = |r: &str| match r.contains('.') {
+                    true => r.to_string(),
+                    false => m(r),
+                };
+                given["reads"] = methods.map(|r| json!({"method": named(r)})).collect();
             }
             let tools = group_host_mcp::tools();
             let tool = tools.iter().find(|t| t.name == "site_publish");

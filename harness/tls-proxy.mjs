@@ -1,7 +1,8 @@
 // An https front for the console under test, at the harness's console
 // hostname, passing every request on to it over plain http; or, given a
 // name, for what the target serves at that name (a group's site, at its
-// address), each request passed on as if to it.
+// address), each request passed on as if to it, with the name the browser
+// asked as `X-Forwarded-Host`, as a deployment's proxy sends it.
 //
 //   node harness/tls-proxy.mjs <cert> <key> <target port> [<host>]
 //
@@ -15,7 +16,8 @@ import { connect } from 'node:net';
 const [cert, key, target, host] = process.argv.slice(2);
 
 const server = createServer({ cert: readFileSync(cert), key: readFileSync(key) }, (req, res) => {
-  const headers = host ? { ...req.headers, host } : req.headers;
+  const asked = { 'x-forwarded-host': req.headers.host };
+  const headers = host ? { ...req.headers, ...asked, host } : req.headers;
   const upstream = request(
     { host: '127.0.0.1', port: target, path: req.url, method: req.method, headers },
     (answer) => {

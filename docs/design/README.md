@@ -62,7 +62,8 @@ accounts on their own PDSes, anywhere on the network.
   token may do.
 - [Moderation](moderation.md): labels, the queue, and reports.
 - [Sites](sites.md): a group's website, published whole and served
-  sandboxed at its address.
+  sandboxed at its address, and the live data a visitor sees once
+  signed in on it.
 - [MCP](mcp.md): connecting an AI app to a group, and its tools.
 - [Recovery](recovery.md): keys that let a group's stewards hold its
   identity.

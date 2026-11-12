@@ -33,6 +33,12 @@
             "type": "string",
             "format": "datetime",
             "description": "When this version of the site was published."
+          },
+          "reads": {
+            "type": "array",
+            "maxLength": 20,
+            "items": { "type": "ref", "ref": "#read" },
+            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none is served as its files alone."
           }
         }
       }
@@ -57,6 +63,26 @@
           "minLength": 1,
           "maxLength": 255,
           "description": "The `Content-Type` it is served with, such as `text/html; charset=utf-8`; without it, the type its path's extension names."
+        }
+      }
+    },
+    "read": {
+      "type": "object",
+      "description": "One of the host's methods a site's pages may ask.",
+      "required": ["method"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "format": "nsid",
+          "knownValues": [
+            "fyi.opensocial.getGroup",
+            "fyi.opensocial.listMembers",
+            "fyi.opensocial.listSpaceRecords",
+            "fyi.opensocial.getSpaceBlob",
+            "fyi.opensocial.getActor",
+            "fyi.opensocial.getViewer"
+          ],
+          "description": "The method's NSID: one of the host's reads, as `knownValues` lists them."
         }
       }
     }

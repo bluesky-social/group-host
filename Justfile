@@ -83,7 +83,7 @@ web-dev:
 # source changes; Riders, alice's, and Hikers, bob's, inviting her. Empty
 # each time; the host and the command are built again first.
 dev:
-    cd web && npm run lex
+    cd web && npm run lex && npm run shell
     {{cargo}} build -p group-host -p opensocial
     node harness/dev.mjs
 

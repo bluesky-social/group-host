@@ -22,12 +22,13 @@ use crate::api::invalid;
 use crate::group_api::{group_of, signed_in};
 use crate::rbac::NS;
 use crate::repo::{Asked, Write, record_cid};
+use crate::site_head;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::drisl;
 use axum::Json;
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
@@ -70,7 +71,7 @@ fn blob_of(file: &Value) -> Option<atproto::Cid> {
 }
 
 /// Refuses a site the host would not serve: one whose paths [`paths`]
-/// refuses, or a file naming no blob.
+/// refuses, a file naming no blob, or a read that is none of [`READS`].
 pub fn check(site: &Value) -> Result<(), XrpcError> {
     paths(site)?;
     for file in site["files"].as_array().into_iter().flatten() {
@@ -79,7 +80,34 @@ pub fn check(site: &Value) -> Result<(), XrpcError> {
             return Err(refused(format!("{path} names no blob")));
         }
     }
-    Ok(())
+    reads(site)
+}
+
+/// The host's methods a site's pages may ask, as whoever is looking and
+/// signed in, through the page the host serves around them: reads alone.
+pub const READS: &[&str] = &[
+    "fyi.opensocial.getGroup",
+    "fyi.opensocial.listMembers",
+    "fyi.opensocial.listSpaceRecords",
+    "fyi.opensocial.getSpaceBlob",
+    "fyi.opensocial.getActor",
+    "fyi.opensocial.getViewer",
+];
+
+/// The methods a site's `reads` name.
+fn reads_of(site: &Value) -> Vec<&str> {
+    let all = site["reads"].as_array().into_iter().flatten();
+    all.filter_map(|r| r["method"].as_str()).collect()
+}
+
+/// Refuses a site whose `reads` name a method that is none of [`READS`].
+fn reads(site: &Value) -> Result<(), XrpcError> {
+    match reads_of(site).into_iter().find(|m| !READS.contains(m)) {
+        Some(method) => Err(refused(format!(
+            "{method} is none of the methods a site's pages may ask"
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// Refuses a site's paths: a file at a path no file may be at, or at one
@@ -251,8 +279,15 @@ impl Host {
         Ok(read.map(|(_, bytes)| (kind.to_string(), bytes, etag)))
     }
 
-    /// The answer of `did`'s site, `handle`, to `asking`.
-    fn site_answer(&self, did: &str, handle: &str, asking: &Asking) -> Result<Response, XrpcError> {
+    /// The answer of `did`'s site, `handle`, to `asking`, its own folders
+    /// redirected under `under`.
+    fn site_answer(
+        &self,
+        did: &str,
+        handle: &str,
+        asking: &Asking,
+        under: &str,
+    ) -> Result<Response, XrpcError> {
         if self.active(did).is_err() {
             return Ok(plain(StatusCode::NOT_FOUND, "no site here"));
         }
@@ -281,7 +316,7 @@ impl Host {
             .is_some()
         {
             return Ok(moved(
-                &format!("/{}/", encoded(path)),
+                &format!("{under}/{}/", encoded(path)),
                 StatusCode::MOVED_PERMANENTLY,
             ));
         }
@@ -300,6 +335,38 @@ impl Host {
             }
         }
         Ok(plain(StatusCode::NOT_FOUND, "no such page"))
+    }
+
+    /// `did`'s site as its record has it, while the group is on.
+    fn live_site(&self, did: &str) -> Option<Value> {
+        self.active(did).ok()?;
+        let record = self.store.record(did, SITE, "self").ok().flatten()?;
+        let site = drisl::decode(&record.value).expect("a record the host wrote");
+        Some(site.to_json())
+    }
+
+    /// The page of `did`'s `site` the frame shows at `path`, and the status
+    /// it is served with: the file there or the folder's `index.html`, else
+    /// its `fallback`, else, not found, its `notFound`. Only HTML is read.
+    fn page_at(&self, did: &str, site: &Value, path: &str) -> (StatusCode, Option<String>) {
+        let tried = match path.is_empty() || path.ends_with('/') {
+            true => vec![format!("{path}index.html")],
+            false => vec![path.to_string(), format!("{path}/index.html")],
+        };
+        let fallback = site["fallback"].as_str().map(String::from);
+        let found = |paths: Vec<String>| {
+            let file = paths
+                .iter()
+                .find_map(|p| self.site_file(did, site, p).ok().flatten());
+            let html = file.filter(|(kind, ..)| kind.starts_with("text/html"));
+            html.and_then(|(_, bytes, _)| String::from_utf8(bytes).ok())
+        };
+        let shown = tried.into_iter().chain(fallback).collect::<Vec<_>>();
+        if let Some(html) = found(shown) {
+            return (StatusCode::OK, Some(html));
+        }
+        let missing = site["notFound"].as_str().map(String::from);
+        (StatusCode::NOT_FOUND, found(missing.into_iter().collect()))
     }
 }
 
@@ -330,8 +397,11 @@ pub async fn serve(State(host): State<Arc<Host>>, req: Request, next: Next) -> R
         .get(header::HOST)
         .and_then(|h| h.to_str().ok());
     let group = named.and_then(|n| host.site_of(n));
-    let (Some((did, handle)), false) = (group, req.uri().path().starts_with("/.well-known/"))
-    else {
+    // The host's own paths there: its `/.well-known/`, and its methods,
+    // which the page around a site asks (a handle being typed, say).
+    let path = req.uri().path();
+    let ours = path.starts_with("/.well-known/") || path.starts_with("/xrpc/");
+    let (Some((did, handle)), false) = (group, ours) else {
         return next.run(req).await;
     };
     if ![Method::GET, Method::HEAD].contains(req.method()) {
@@ -356,8 +426,143 @@ pub async fn serve(State(host): State<Arc<Host>>, req: Request, next: Next) -> R
         held: text(header::IF_NONE_MATCH).map(String::from),
         path,
     };
-    let answer = host.site_answer(&did, &handle, &asking);
-    sandboxed(answer.unwrap_or_else(IntoResponse::into_response))
+    // The name the browser asked, as a proxy in front says it if it says,
+    // else as the request does: the site's OAuth client is named for it.
+    let asked = text(HeaderName::from_static("x-forwarded-host"));
+    match host.live_site(&did).filter(|s| !reads_of(s).is_empty()) {
+        Some(site) => {
+            let origin = format!("https://{}", asked.or(named).unwrap_or_default());
+            live(&host, &did, &handle, &site, &origin, asking)
+        }
+        None => sandboxed(
+            host.site_answer(&did, &handle, &asking, "")
+                .unwrap_or_else(IntoResponse::into_response),
+        ),
+    }
+}
+
+/// The script a site's page runs to ask the page around it, `os`.
+const KIT: &str = include_str!("site_kit.js");
+
+/// What the page around a site's pages allows itself: its own script, and
+/// calls to any PDS its visitor signs in at.
+const SHELL_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+     connect-src *; img-src * data:; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; \
+     form-action 'none'";
+
+/// The answer of a site that asks for live data, as the browser at
+/// `origin` asked it: its files under `/_site/`, sandboxed; its OAuth
+/// client document, named for `origin`; the `os` script and the page's
+/// own; and at every other page, the page the host serves around them,
+/// holding the visitor's session.
+fn live(
+    host: &Host,
+    did: &str,
+    handle: &str,
+    site: &Value,
+    origin: &str,
+    mut asking: Asking,
+) -> Response {
+    let reads = reads_of(site);
+    match asking.path.as_str() {
+        "client-metadata.json" => client_metadata(host, handle, origin, &reads),
+        "_os/kit.js" => script(KIT.as_bytes().to_vec()),
+        "_os/shell.js" => {
+            let built = host.config.site_shell.as_ref().map(|d| d.join("shell.js"));
+            match built.map(std::fs::read) {
+                Some(Ok(bytes)) => script(bytes),
+                _ => plain(StatusCode::NOT_FOUND, "no page to run a site in here"),
+            }
+        }
+        path if path.starts_with("_site/") => {
+            asking.path = path["_site/".len()..].to_string();
+            let answer = host.site_answer(did, handle, &asking, "/_site");
+            sandboxed(answer.unwrap_or_else(IntoResponse::into_response))
+        }
+        _ if asking.page => shell(host, did, handle, site, &asking.path),
+        _ => {
+            let answer = host.site_answer(did, handle, &asking, "");
+            sandboxed(answer.unwrap_or_else(IntoResponse::into_response))
+        }
+    }
+}
+
+fn script(bytes: Vec<u8>) -> Response {
+    let kind = [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")];
+    (StatusCode::OK, kind, bytes).into_response()
+}
+
+/// The site's OAuth client document, at its address `origin`: `atproto`,
+/// and leave to ask each of `reads`, and `getViewer`, of the host.
+fn client_metadata(host: &Host, handle: &str, origin: &str, reads: &[&str]) -> Response {
+    let aud = format!("{}#opensocial", host.config.service_did);
+    let aud = reqwest::Url::parse_with_params("https://x/", &[("aud", aud)])
+        .expect("a URL")
+        .query()
+        .unwrap_or_default()
+        .to_string();
+    let mut scope = vec!["atproto".to_string()];
+    let viewer = "fyi.opensocial.getViewer";
+    for method in reads.iter().chain([&viewer]).collect::<BTreeSet<_>>() {
+        scope.push(format!("rpc:{method}?{aud}"));
+    }
+    let doc = json!({
+        "client_id": format!("{origin}/client-metadata.json"),
+        "client_name": handle,
+        "client_uri": origin,
+        "redirect_uris": [format!("{origin}/_os/callback")],
+        "scope": scope.join(" "),
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "application_type": "web",
+        "token_endpoint_auth_method": "none",
+        "dpop_bound_access_tokens": true,
+    });
+    let mut res = Json(doc).into_response();
+    res.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    res
+}
+
+/// The page around a site's pages at `path`: the group's page there in a
+/// sandboxed frame, and what the host's script needs to sign its visitor
+/// in and ask `reads` as them.
+fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Response {
+    let reads = reads_of(site);
+    let (status, html) = host.page_at(did, site, path);
+    let head = site_head::preview(html.as_deref().unwrap_or_default(), handle);
+    let config = json!({
+        "group": did,
+        "handle": handle,
+        "reads": reads,
+        "aud": format!("{}#opensocial", host.config.service_did),
+        "handleResolver": host.config.site_handle_resolver,
+        "plc": host.config.plc_url,
+        "signUpAt": host.config.signup_pds,
+        "console": host.config.console_url,
+        "allowHttp": host.config.public_url.starts_with("http://"),
+    });
+    // In a script element, `<` is the one thing that could end it early.
+    let config = config.to_string().replace('<', "\\u003c");
+    let frame = format!("/_site/{}", encoded(path));
+    let page = format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+         {head}</head><body>\
+         <iframe id=\"os-page\" title=\"{handle}\" data-src=\"{frame}\" \
+         sandbox=\"allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox\"></iframe>\
+         <script type=\"application/json\" id=\"os-config\">{config}</script>\
+         <script type=\"module\" src=\"/_os/shell.js\"></script></body></html>"
+    );
+    let headers = [
+        (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+        (header::CONTENT_SECURITY_POLICY, SHELL_POLICY),
+        (header::CACHE_CONTROL, "no-cache"),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    ];
+    (status, headers, page).into_response()
 }
 
 type Answer = Result<Json<Value>, XrpcError>;
@@ -418,11 +623,12 @@ pub async fn put_site(
     let group = configuring(&host, &headers, &body, "putSite").await?;
     host.active(&group)?;
     let mut site = json!({"$type": SITE, "files": [], "createdAt": iso(now_millis())});
-    for key in ["fallback", "notFound"] {
-        if let Some(path) = body.get(key) {
-            site[key] = path.clone();
+    for key in ["fallback", "notFound", "reads"] {
+        if let Some(given) = body.get(key) {
+            site[key] = given.clone();
         }
     }
+    reads(&site)?;
     let given = body["files"].as_array().expect("its lexicon requires it");
     let names: Vec<Value> = given.iter().map(|f| json!({"path": f["path"]})).collect();
     paths(&json!({"files": names, "fallback": site["fallback"], "notFound": site["notFound"]}))?;

@@ -26,6 +26,8 @@ trimmed of spaces and a trailing `/`.
 | `PROVISIONING_CLIENTS` | the apps the host makes groups for with `provisionGroup`, comma-separated OAuth client ids, each matched as written, a trailing `/` included; `*` for any | none |
 | `ACTOR_SEARCH` | where `searchActors` looks for a handle being typed: `plc`, the handles in `PLC_URL`'s own export, read a page at a time and kept a minute; or the URL of a service answering `tech.waow.typeahead.searchActors` | typeahead.waow.tech's, when `PLC_URL` is `https://plc.directory`; else `plc` |
 | `SIGNUP_PDS` | the PDS where someone with no account makes one, from the console's "Create one": its authorization server's sign-up (`prompt=create`); a trailing `/` dropped | `https://bsky.social` |
+| `SITE_SHELL_DIR` | where the built page around a site that names `reads` is: its `shell.js` (`web/build-shell`, which `npm run build` in `web/` makes; the image sets `/app/build-shell`) | none: such a site's pages load no script |
+| `SITE_HANDLE_RESOLVER` | where that page resolves a handle typed to sign in: a service answering `com.atproto.identity.resolveHandle` | `https://bsky.social` |
 | `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated, a trailing `/` dropped: at most every 20 minutes, and the first time after a start | none |
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON, written to stdout and kept in `logs.sqlite` for its operators | `info` |
 | `HOST_ADMINS` | its operators, comma-separated DIDs: the accounts that may read its logs (`getLogs`) and how it is used (`getStats`) | none |

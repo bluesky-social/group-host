@@ -490,10 +490,18 @@ const all = {
     const files = await siteFiles(form);
     if (!files.length)
       return fail(400, { failed: 'Choose a folder with the pages of your site in it.' });
-    const named = Object.fromEntries(
-      ['fallback', 'notFound'].filter((k) => text(form, k)).map((k) => [k, text(form, k)])
-    );
-    return act(event, 'fyi.opensocial.putSite', { group, files, ...named });
+    // A 404.html at the top of the folder is its page for addresses not
+    // found, as static hosts take it.
+    const notFound = files.some((f) => f.path === '404.html') ? { notFound: '404.html' } : {};
+    const fallback = text(form, 'fallback') ? { fallback: text(form, 'fallback') } : {};
+    const reads = form.getAll('reads').map((method) => ({ method: String(method) }));
+    return act(event, 'fyi.opensocial.putSite', {
+      group,
+      files,
+      ...notFound,
+      ...fallback,
+      ...(reads.length ? { reads } : {})
+    });
   },
   unsite: async (event) => {
     const { group } = await asked(event);

@@ -53,6 +53,7 @@ pub mod recovery;
 pub mod repo;
 pub mod scopes;
 pub mod secrets;
+pub mod site_head;
 pub mod sites;
 pub mod space;
 pub mod space_api;

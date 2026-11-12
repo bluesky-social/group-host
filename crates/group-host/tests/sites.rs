@@ -457,3 +457,241 @@ async fn a_site_is_larger_than_another_methods_input() {
     let made = call(&h, &alice, "putSite", json!({"group": did, "files": files})).await;
     assert_eq!(made.0, 200, "{}", made.1);
 }
+
+/// The page around a live site's pages, as the host writes it: its head,
+/// and the settings its script reads.
+fn shell_of(page: &Page) -> (&str, Json) {
+    let head = page.body.split("</head>").next().unwrap();
+    let config = page.body.split("id=\"os-config\">").nth(1).unwrap();
+    let config = config.split("</script>").next().unwrap();
+    (head, serde_json::from_str(config).unwrap())
+}
+
+#[tokio::test]
+async fn a_site_that_reads_is_served_in_the_page_that_holds_its_visitors_session() {
+    let built = tempfile::tempdir().unwrap();
+    std::fs::write(built.path().join("shell.js"), "// the shell").unwrap();
+    let dir = built.path().to_str().unwrap();
+    let vars = [
+        ("SITE_SHELL_DIR", dir),
+        ("SITE_HANDLE_RESOLVER", "https://pds.test"),
+    ];
+    let h = start(&vars, false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let front = "<html><head><title> Riders &amp; friends </title>\
+        <meta property=\"og:image\" content=\"/card.png\"></head><body>live</body></html>";
+    let files = json!([
+        {"path": "index.html", "text": front},
+        {"path": "rides/index.html", "text": "<h1>Rides</h1>"},
+        {"path": "card.png", "bytes": {"$bytes": "iVBORw0KGgo"}},
+        {"path": "404.html", "text": "<title>Lost</title>"},
+    ]);
+    let reads =
+        json!([{"method": format!("{NS}.getGroup")}, {"method": format!("{NS}.listMembers")}]);
+    let body = json!({"group": did, "files": files, "notFound": "404.html", "reads": reads});
+    let made = call(&h, &alice, "putSite", body.clone()).await;
+    assert_eq!(made.0, 200, "{}", made.1);
+
+    // A page is the host's, around the site's own in a sandboxed frame.
+    let shell = page(&h, "/").await;
+    assert_eq!(shell.status, 200);
+    assert!(
+        shell
+            .header("content-security-policy")
+            .contains("frame-ancestors 'none'")
+    );
+    assert_eq!(shell.header("cache-control"), "no-cache");
+    assert!(
+        shell.body.contains("data-src=\"/_site/\""),
+        "{}",
+        shell.body
+    );
+    let (head, config) = shell_of(&shell);
+    assert!(
+        head.contains("<title>Riders &amp; friends</title>"),
+        "{head}"
+    );
+    assert!(head.contains("<meta property=\"og:image\" content=\"/card.png\">"));
+    assert_eq!(config["group"], did);
+    assert_eq!(
+        config["reads"],
+        json!([format!("{NS}.getGroup"), format!("{NS}.listMembers")])
+    );
+    assert_eq!(config["handleResolver"], "https://pds.test");
+    // A page the site has no file for is missing there too, its preview
+    // the notFound page's; a site with neither, the group's handle.
+    let lost = page(&h, "/rides/42").await;
+    assert_eq!(lost.status, 404);
+    assert!(shell_of(&lost).0.contains("<title>Lost</title>"));
+    assert!(lost.body.contains("data-src=\"/_site/rides/42\""));
+    assert_eq!(page(&h, "/rides").await.status, 200);
+
+    // The site's own files, sandboxed, under /_site/; its folders too.
+    let framed = page(&h, "/_site/").await;
+    assert_eq!(
+        (framed.status, framed.header("content-security-policy")),
+        (200, SANDBOX)
+    );
+    assert!(framed.body.contains("live"));
+    let folder = page(&h, "/_site/rides").await;
+    assert_eq!(
+        (folder.status, folder.header("location")),
+        (301, "/_site/rides/")
+    );
+    // A file that is no page, at its own path, as the frame's links ask.
+    let image = page(&h, "/card.png").await;
+    assert_eq!(
+        (image.status, image.header("content-type")),
+        (200, "image/png")
+    );
+
+    // The scripts: the kit a page loads, and the host's own page's.
+    let kit = page(&h, "/_os/kit.js").await;
+    assert_eq!(kit.header("content-type"), "text/javascript; charset=utf-8");
+    assert!(kit.body.contains("customElements.define('os-sign-in'"));
+    assert_eq!(page(&h, "/_os/shell.js").await.body, "// the shell");
+
+    // Its OAuth client: at the address, asking only for what it reads.
+    let client = page(&h, "/client-metadata.json").await;
+    let doc: Json = serde_json::from_str(&client.body).unwrap();
+    let origin = format!("https://{RIDERS}");
+    assert_eq!(doc["client_id"], format!("{origin}/client-metadata.json"));
+    assert_eq!(
+        doc["redirect_uris"],
+        json!([format!("{origin}/_os/callback")])
+    );
+    let scope = doc["scope"]
+        .as_str()
+        .unwrap()
+        .split(' ')
+        .collect::<Vec<_>>();
+    let aud = "aud=did%3Aweb%3Ahost.test%23opensocial";
+    let rpc = |m: &str| format!("rpc:{NS}.{m}?{aud}");
+    let wanted = [
+        "atproto".into(),
+        rpc("getGroup"),
+        rpc("getViewer"),
+        rpc("listMembers"),
+    ];
+    assert_eq!(scope, wanted);
+    // Behind a proxy, it is named for the name the browser asked.
+    let proxied = [("x-forwarded-host", "riders.example:8443")];
+    let client = ask(&h, "GET", RIDERS, "/client-metadata.json", &proxied).await;
+    let doc: Json = serde_json::from_str(&client.body).unwrap();
+    let callback = json!(["https://riders.example:8443/_os/callback"]);
+    assert_eq!(doc["redirect_uris"], callback);
+
+    // The host's methods answer there, for the page around the site.
+    let health = page(&h, "/xrpc/_health").await;
+    assert_eq!(
+        (health.status, health.header("content-security-policy")),
+        (200, "")
+    );
+
+    // Published without reads, it is its files alone again.
+    let mut plain = body;
+    plain.as_object_mut().unwrap().remove("reads");
+    assert_eq!(call(&h, &alice, "putSite", plain).await.0, 200);
+    let front = page(&h, "/").await;
+    assert_eq!(
+        (front.status, front.header("content-security-policy")),
+        (200, SANDBOX)
+    );
+    assert!(front.body.contains("live"));
+}
+
+#[tokio::test]
+async fn a_site_reads_only_what_the_host_lets_a_page_read() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let files = json!([{"path": "index.html", "text": "<p>hi</p>"}]);
+    let reads = json!([{"method": format!("{NS}.createGroup")}]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "reads": reads}),
+    )
+    .await;
+    assert_eq!(error(&said), (400, "InvalidSite"));
+    let message = said.1["message"].as_str().unwrap();
+    assert!(
+        message.contains("createGroup is none of the methods"),
+        "{message}"
+    );
+
+    // Without a built page to hold a session, a page of the site still
+    // loads, and says what it lacks.
+    let reads = json!([{"method": format!("{NS}.getGroup")}]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "reads": reads}),
+    )
+    .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+    let shell = page(&h, "/_os/shell.js").await;
+    assert_eq!(
+        (shell.status, shell.body.as_str()),
+        (404, "no page to run a site in here")
+    );
+    // A site with no page anywhere for a path, its preview the handle's.
+    let lost = page(&h, "/nowhere").await;
+    assert_eq!(lost.status, 404);
+    assert!(
+        shell_of(&lost)
+            .0
+            .contains(&format!("<title>{RIDERS}</title>"))
+    );
+}
+
+#[test]
+fn a_page_previews_as_its_own_head_says_and_never_as_markup() {
+    let preview = |html: &str| group_host::site_head::preview(html, "riders.test");
+    // The title, trimmed; none, or an empty one, is the fallback's.
+    assert_eq!(preview("<TITLE> Rides </TITLE>"), "<title>Rides</title>");
+    assert_eq!(preview("<p>no head</p>"), "<title>riders.test</title>");
+    assert_eq!(preview("<title> </title>"), "<title>riders.test</title>");
+    assert_eq!(preview("<title>never closed"), "<title>riders.test</title>");
+
+    // The tags a preview is read from, however their attributes are
+    // written; nothing else, and nothing after the head.
+    let head = r##"<title>R</title>
+        <meta name="description" content='Rides, "all paces"'>
+        <META PROPERTY=og:title CONTENT=Riders />
+        <meta name="twitter:card" content="summary" defer>
+        <meta name=theme-color content="#0a0">
+        <meta name="robots" content="noindex">
+        <meta property="fb:app_id" content="1">
+        <meta http-equiv="refresh" content="0;url=https://elsewhere.test">
+        <meta charset="utf-8">
+        <metadata name="description" content="no tag">
+        <meta name="description" content="unclosed>
+        </head><body><meta name="description" content="in the body">"##;
+    assert_eq!(
+        preview(head),
+        "<title>R</title>\
+         <meta name=\"description\" content=\"Rides, &quot;all paces&quot;\">\
+         <meta property=\"og:title\" content=\"Riders\">\
+         <meta name=\"twitter:card\" content=\"summary\">\
+         <meta name=\"theme-color\" content=\"#0a0\">"
+    );
+
+    // What a page wrote can't end the host's tags or open one of its own;
+    // an entity it wrote stays as written.
+    let sly = "<title>1 < 2 &amp; \"q\" > 0</title>\
+        <meta property='og:x\"><script>' content=\"a\">";
+    assert_eq!(
+        preview(sly),
+        "<title>1 &lt; 2 &amp; &quot;q&quot; &gt; 0</title>\
+         <meta property=\"og:x&quot;&gt;&lt;script&gt;\" content=\"a\">"
+    );
+
+    // Only so much of a page is read, at a character's edge, and only so
+    // many tags taken from it.
+    let long = format!("a{}<title>late</title>", "é".repeat(40_000));
+    assert_eq!(preview(&long), "<title>riders.test</title>");
+    let many = "<meta name=description content=x>".repeat(40);
+    assert_eq!(preview(&many).matches("<meta").count(), 32);
+}

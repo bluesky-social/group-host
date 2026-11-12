@@ -393,7 +393,9 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "Publishes the group's website, whole, at its address (`https://<address>/`): every file \
          of it, each as text or as bytes, in place of the site there; a file the group holds \
          already is used again. Its pages run sandboxed, each in an origin of its own, with no \
-         cookies or storage; a page reads live data from the host's public methods.",
+         cookies or storage. A site that names `reads`, methods of the host's such as \
+         fyi.opensocial.listMembers, is served in a page of the host's that signs its visitor in, \
+         and its pages ask those as whoever is looking, with `os.call` from `/_os/kit.js`.",
         Made::Method("putSite", None),
     ),
     (

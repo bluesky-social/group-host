@@ -127,9 +127,13 @@ A group's website ([sites](../design/sites.md)).
 
 | Method | What it does |
 | --- | --- |
-| `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there; takes a body as large as `BLOB_UPLOAD_LIMIT` |
+| `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there, with the host's methods its pages may read (`reads`); takes a body as large as `BLOB_UPLOAD_LIMIT` |
 | `POST fyi.opensocial.deleteSite` | takes a group's site down |
-| `GET`, `HEAD` `https://<address>/<path>` | a file of the site of the group whose address the request's `Host` names, sandboxed; the host keeps `/.well-known/` there for itself |
+| `GET`, `HEAD` `https://<address>/<path>` | a file of the site of the group whose address the request's `Host` names, sandboxed; the host keeps `/.well-known/` and `/xrpc/` there for itself. For a site that names `reads`, a page is the host's page around the site's, holding the visitor's session, with the site's page's title and preview tags and the status it would have |
+| `GET https://<address>/_site/<path>` | for a site that names `reads`, the file the frame shows, sandboxed, as above |
+| `GET https://<address>/client-metadata.json` | for a site that names `reads`, its OAuth client's metadata: a public client asking `atproto` and an `rpc:` scope for each read and `getViewer`, named for the request's `X-Forwarded-Host` if a proxy sends one, else its `Host` |
+| `GET https://<address>/_os/kit.js` | for a site that names `reads`, the script its pages load for `os` |
+| `GET https://<address>/_os/shell.js` | for a site that names `reads`, the host's page's script, from `SITE_SHELL_DIR`; 404 without it |
 
 As the spaces' authority and the PDS of the group's own repo in each, the
 host answers the space alpha's methods:

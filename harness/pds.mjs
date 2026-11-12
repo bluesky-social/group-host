@@ -65,6 +65,9 @@ async function migrateOnce(dir) {
 }
 
 const CONSOLE_HOST = 'console.group-host.internal';
+// Names beside it, as a group's site is reached in harness/e2e: the PDS
+// fetches a site's OAuth client there.
+const BESIDE = '.group-host.internal';
 const certs = mkdtempSync(join(tmpdir(), 'group-host-tls-'));
 const cert = join(certs, 'cert.pem');
 const key = join(certs, 'key.pem');
@@ -87,7 +90,7 @@ execFileSync(
     '-subj',
     `/CN=${CONSOLE_HOST}`,
     '-addext',
-    `subjectAltName=DNS:${CONSOLE_HOST}`
+    `subjectAltName=DNS:${CONSOLE_HOST},DNS:*${BESIDE}`
   ],
   { stdio: 'ignore' }
 );
@@ -95,7 +98,7 @@ tls.setDefaultCACertificates([...tls.getCACertificates('default'), readFileSync(
 const lookup = dns.lookup;
 dns.lookup = (hostname, options, callback) => {
   if (typeof options === 'function') [callback, options] = [options, {}];
-  if (hostname !== CONSOLE_HOST) return lookup(hostname, options, callback);
+  if (!hostname.endsWith(BESIDE)) return lookup(hostname, options, callback);
   return options?.all
     ? callback(null, [{ address: '127.0.0.1', family: 4 }])
     : callback(null, '127.0.0.1', 4);

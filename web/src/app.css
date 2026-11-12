@@ -362,6 +362,23 @@ fieldset {
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-5);
 }
+/* Choices that are sentences, one to a line rather than run together. */
+fieldset.choices {
+  flex-direction: column;
+  align-items: flex-start;
+}
+/* What most leave as it is, folded under a quiet line until opened. */
+details.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+details.more > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--mute);
+  font-weight: var(--weight-medium);
+}
 legend {
   padding: 0 var(--space-2);
   font-weight: var(--weight-medium);
@@ -704,8 +721,20 @@ ol > li::marker {
   font-size: var(--text-sm);
 }
 .dialog .what a,
-.dialog .create a {
+.dialog .create a,
+.dialog .create button.link {
   color: var(--fg);
+}
+/* A link that acts in the page rather than going somewhere: drawn as one. */
+.dialog .create button.link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--link-line);
+  cursor: pointer;
 }
 .dialog .create {
   padding-top: var(--space-3);

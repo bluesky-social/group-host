@@ -6,8 +6,18 @@ import { error } from '@sveltejs/kit';
 /** The record of a group's site, at `self` in its public repo. */
 const SITE = 'fyi.opensocial.site';
 
-/** A site as the pages show it: where it is, how many files it has, and when it was published. */
-export type Site = { url: string; files: number; publishedAt: string };
+/**
+ * A site as the pages show it: where it is, how many files it has, when
+ * it was published, the page every address goes to if any, and the
+ * host's methods its pages read.
+ */
+export type Site = {
+  url: string;
+  files: number;
+  publishedAt: string;
+  fallback?: string;
+  reads: string[];
+};
 
 type Load = { fetch: typeof fetch; url: URL };
 
@@ -27,6 +37,8 @@ export async function siteOf(event: Load, group: string, address: string): Promi
   return {
     url: `${event.url.protocol}//${address}/`,
     files: answer.value.files?.length ?? 0,
-    publishedAt: answer.value.createdAt
+    publishedAt: answer.value.createdAt,
+    fallback: answer.value.fallback,
+    reads: (answer.value.reads ?? []).map((r: { method: string }) => r.method)
   };
 }

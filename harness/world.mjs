@@ -158,7 +158,11 @@ export async function start({
         PLC_URL: net.plc,
         DID_WEB_SCHEME: 'http',
         HANDLE_DOMAIN: handleDomain,
-        HANDLE_RESOLVERS: net.pds
+        HANDLE_RESOLVERS: net.pds,
+        // The page around a site that asks for live data (web/shell), and
+        // where it looks up a handle typed to sign in: this world's PDS.
+        SITE_SHELL_DIR: join(root, 'web/build-shell'),
+        SITE_HANDLE_RESOLVER: net.pds
       }
     });
     children.push(server);

@@ -28,7 +28,9 @@ Its groups are named under `groups.localtest.me`, as
 `riders.groups.localtest.me`, so a group's address opens in a browser:
 a site published with `site publish` is at https://riders.groups.localtest.me,
 sandboxed as it is when deployed, and a group with none sends `/` to its
-page in the console.
+page in the console. `just dev` builds the page around a site that names
+`reads` (`web/shell`, by `npm run shell` in `web/`) before it starts, and
+the host reads it from there; a change to it means starting again.
 
 Signing in to the console takes https at a name: the host is the
 console's OAuth client, and a PDS fetches a client's metadata only so.
@@ -62,18 +64,22 @@ as it should and writes the coverage it counted.
 Playwright (`harness/e2e/flows.spec.mjs`): it signs in through the
 reference PDS's own approval page, signs an app in as a group and has it
 write as the group, publishes a site and checks that a page of it reaches
-the console without the session of whoever opens it, declines an app,
-and signs out. Its setup (`harness/e2e/setup.mjs`) runs the reference
+the console without the session of whoever opens it, signs in on a site
+that shows its members to those who may see them, declines an app, and
+signs out. Its setup (`harness/e2e/setup.mjs`) runs the reference
 PDS, the host over it, and the built console behind an https front at
 `console.group-host.internal` (`harness/tls-proxy.mjs`), as the PDS
 reaches an OAuth client only over https at a hostname; `harness/pds.mjs`
-makes that name's certificate and resolves it. Hikers' site has a front
-of its own at `hikers.group-host.internal`, a name beside the console's,
-so the browser takes its pages for the same site as the console, as it
-does a deployment's group addresses. Chromium comes with `cd harness &&
-npx playwright install chromium`, and is told that every name under
-`group-host.internal` is this machine. A failed flow leaves its trace and
-a picture under `target/e2e/results`.
+makes a certificate for that name and every name beside it, and resolves
+them. Hikers' and Riders' sites have fronts of their own at
+`hikers.group-host.internal` and `riders.group-host.internal`, names
+beside the console's, so the browser takes their pages for the same site
+as the console, as it does a deployment's group addresses; each front
+passes the name asked on as `X-Forwarded-Host`, which a site's OAuth
+client is named for (the PDS refuses a client under `.test`). Chromium
+comes with `cd harness && npx playwright install chromium`, and is told
+that every name under `group-host.internal` is this machine. A failed
+flow leaves its trace and a picture under `target/e2e/results`.
 
 ## Looking at the console
 

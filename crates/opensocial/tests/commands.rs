@@ -922,6 +922,23 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
         (Some("index.html"), Some("rides/index.html"))
     );
 
+    // Reads by name, as one of the host's, or by NSID.
+    let args = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--reads",
+        "getGroup, fyi.opensocial.listMembers",
+    ];
+    ok(&alice, &args).await;
+    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
+    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
+    let reads = &site.to_json()["reads"];
+    let wanted =
+        json!([{"method": "fyi.opensocial.getGroup"}, {"method": "fyi.opensocial.listMembers"}]);
+    assert_eq!(reads, &wanted);
+
     let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
     assert!(missing.contains("reading /no/such/folder"), "{missing}");
 

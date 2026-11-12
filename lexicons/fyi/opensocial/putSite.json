@@ -34,6 +34,12 @@
               "minLength": 1,
               "maxLength": 512,
               "description": "The path of a file given, served with status 200 for a page no file has, as a single-page app routes in the browser."
+            },
+            "reads": {
+              "type": "array",
+              "maxLength": 20,
+              "items": { "type": "ref", "ref": "fyi.opensocial.site#read" },
+              "description": "The host's methods the site's pages may ask, as whoever is looking and signed in; none, and the site is its files alone."
             }
           }
         }
@@ -41,7 +47,7 @@
       "errors": [
         {
           "name": "InvalidSite",
-          "description": "A site the host would not serve: a file at a path no file may be at, or at one another has; a file giving both its text and its bytes, or neither; or a fallback or notFound that is none of the files."
+          "description": "A site the host would not serve: a file at a path no file may be at, or at one another has; a file giving both its text and its bytes, or neither; a fallback or notFound that is none of the files; or a read that is none of the methods a site's pages may ask."
         }
       ],
       "output": {

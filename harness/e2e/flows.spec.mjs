@@ -545,11 +545,13 @@ test('giving a group a picture, and taking it away', async () => {
 
 test('publishing a site from a folder, and deleting it', async () => {
   // A folder as people keep a site: a front page, a page under it, a
-  // picture, and a file of their tools', which is left out.
+  // page for addresses not found, a picture, and a file of their tools',
+  // which is left out.
   const dir = mkdtempSync(join(tmpdir(), 'e2e-site-'));
   mkdirSync(join(dir, 'rides'));
   writeFileSync(join(dir, 'index.html'), '<h1>Hikers</h1>');
   writeFileSync(join(dir, 'rides/index.html'), '<h1>Walks</h1>');
+  writeFileSync(join(dir, '404.html'), 'Lost');
   writeFileSync(join(dir, 'face.png'), PIXEL);
   writeFileSync(join(dir, '.DS_Store'), 'tools');
   await page.goto(url('/g/hikers.groups.test/settings'));
@@ -563,7 +565,7 @@ test('publishing a site from a folder, and deleting it', async () => {
   await publishing.getByLabel('Folder').setInputFiles(dir);
   await publishing.getByRole('button', { name: 'Publish' }).click();
   await expect(publishing).toBeHidden();
-  await expect(page.getByText(/^3 files, published /)).toBeVisible();
+  await expect(page.getByText(/^4 files, published /)).toBeVisible();
 
   // Kept as the group's, each file at its path under the folder, typed by
   // its extension: a page sent as text, the picture as its bytes, whole.
@@ -579,8 +581,11 @@ test('publishing a site from a folder, and deleting it', async () => {
   expect(files).toEqual({
     'index.html': ['text/html', 15],
     'rides/index.html': ['text/html', 14],
+    '404.html': ['text/html', 4],
     'face.png': ['image/png', PIXEL.length]
   });
+  // Its 404.html, found, is its page for addresses that aren't.
+  expect(value.notFound).toBe('404.html');
 
   // Its page links to it, at its address.
   await page.goto(url('/g/hikers.groups.test'));
@@ -654,6 +659,90 @@ test("a site's page reaches the console without the session of whoever opens it"
   await expect.poll(() => signedInAs(page)).toBe('@alice.test');
 
   await page.goto(url('/g/hikers.groups.test/settings/site'));
+  await page.getByRole('button', { name: 'Delete the site' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete this site?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(page.getByText('Nothing published yet')).toBeVisible();
+});
+
+test('a site showing its members to whoever signs in on it', async () => {
+  // A front page that lists the members to those who may see them, with
+  // the kit's sign-in button, and a page under it.
+  const dir = mkdtempSync(join(tmpdir(), 'e2e-site-'));
+  mkdirSync(join(dir, 'rides'));
+  writeFileSync(
+    join(dir, 'index.html'),
+    `<!doctype html><title>Riders' rides</title>
+<script src="/_os/kit.js"></script>
+<os-sign-in></os-sign-in>
+<a href="rides/">Rides</a>
+<ul id="members"></ul>
+<script>
+  const list = document.getElementById('members');
+  const line = (text) => Object.assign(document.createElement('li'), { textContent: text });
+  const draw = async () => {
+    const { did } = await os.group();
+    try {
+      const { members } = await os.call('fyi.opensocial.listMembers', { group: did });
+      list.replaceChildren(...members.map((m) => line('@' + m.actor.handle)));
+    } catch (e) {
+      list.replaceChildren(line(e.locked ? 'Members only.' : e.message));
+    }
+  };
+  os.onChange(draw);
+  draw();
+</script>`
+  );
+  writeFileSync(
+    join(dir, 'rides/index.html'),
+    '<!doctype html><title>Rides</title><script src="/_os/kit.js"></script><h1>Saturday rides</h1>'
+  );
+  await page.goto(url('/g/riders.groups.test/settings/site'));
+  await page.getByRole('button', { name: 'Publish a site' }).click();
+  const publishing = page.getByRole('dialog', { name: 'Publish a site' });
+  await publishing.getByLabel('Folder').setInputFiles(dir);
+  await publishing.getByText('Advanced').click();
+  await publishing.getByLabel('Who the members are').check();
+  await publishing.getByRole('button', { name: 'Publish' }).click();
+  await expect(publishing).toBeHidden();
+  // Published again, the dialog has it as the site does, Advanced open.
+  await page.getByRole('button', { name: 'Publish a site' }).click();
+  await expect(publishing.getByLabel('Who the members are')).toBeChecked();
+  await expect(publishing.getByLabel("The group's profile and rules")).not.toBeChecked();
+  await publishing.getByRole('button', { name: 'Cancel' }).click();
+
+  // Signed out, the page shows what it may, and the tab its title.
+  await page.goto(world.ridersSite);
+  const site = page.frameLocator('#os-page');
+  await expect(site.getByText('Members only.')).toBeVisible();
+  await expect(page).toHaveTitle("Riders' rides");
+
+  // Signed in on the site with the console's own dialog, at her PDS.
+  await site.getByRole('button', { name: 'Sign in' }).click();
+  const signing = page.getByRole('dialog', { name: 'Sign in with your Atmosphere account' });
+  await signing.getByLabel('Handle').fill('alice.test');
+  await signing.getByRole('button', { name: 'Sign in' }).click();
+  await approve(page, 'alice');
+  await page.waitForURL((u) => u.origin === new URL(world.ridersSite).origin);
+  await expect(site.getByRole('listitem').filter({ hasText: '@alice.test' })).toBeVisible();
+  await expect(site.getByRole('button', { name: 'Sign out' })).toBeVisible();
+
+  // Its page under it is in the address bar and the tab, so a reload
+  // opens it, signed in still.
+  await site.getByRole('link', { name: 'Rides' }).click();
+  await expect(page).toHaveURL(`${world.ridersSite}/rides/`);
+  await expect(page).toHaveTitle('Rides');
+  await page.reload();
+  await expect(site.getByRole('heading', { name: 'Saturday rides' })).toBeVisible();
+
+  // Signed out, in place.
+  await page.goto(world.ridersSite);
+  await site.getByRole('button', { name: 'Sign out' }).click();
+  await expect(site.getByText('Members only.')).toBeVisible();
+
+  await page.goto(url('/g/riders.groups.test/settings/site'));
   await page.getByRole('button', { name: 'Delete the site' }).click();
   await page
     .getByRole('dialog', { name: 'Delete this site?' })

@@ -64,6 +64,15 @@ pub struct Config {
     /// How many of the lines it logs at info and below it keeps to read
     /// back, `LOGS_KEEP`; any line is kept 30 days at most.
     pub logs_keep: u64,
+    /// Where the built page that holds a site visitor's session is,
+    /// `SITE_SHELL_DIR`: its `shell.js`, served at `/_os/shell.js` on a
+    /// group's address. A site that asks for live data has none to run
+    /// without it.
+    pub site_shell: Option<std::path::PathBuf>,
+    /// Where that page looks up a handle typed to sign in,
+    /// `SITE_HANDLE_RESOLVER`: a service answering
+    /// `com.atproto.identity.resolveHandle`. Bluesky's unless set.
+    pub site_handle_resolver: String,
 }
 
 /// The service that finds anyone on the network by what is typed.
@@ -157,6 +166,9 @@ impl Config {
                 .with_context(|| format!("LOGS_KEEP is no number of lines: {n}"))?,
             None => crate::logs::KEEP,
         };
+        let site_shell = var("SITE_SHELL_DIR").map(std::path::PathBuf::from);
+        let site_handle_resolver =
+            var("SITE_HANDLE_RESOLVER").unwrap_or_else(|| "https://bsky.social".into());
         Ok(Config {
             port,
             public_url,
@@ -176,6 +188,8 @@ impl Config {
             signup_pds,
             host_admins,
             logs_keep,
+            site_shell,
+            site_handle_resolver,
         })
     }
 

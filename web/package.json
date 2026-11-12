@@ -9,9 +9,13 @@
   "scripts": {
     "lex": "lex build --lexicons ../lexicons --out src/lib/lexicons --clear --import-ext .ts",
     "dev": "npm run lex && vite dev",
-    "build": "npm run lex && vite build",
+    "build": "npm run lex && vite build && npm run shell",
+    "shell": "vite build --config shell/vite.config.ts",
     "prepare": "svelte-kit sync || echo ''",
     "check": "npm run lex && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
+  },
+  "dependencies": {
+    "@atproto/oauth-client-browser": "0.0.0-spaces-alpha-20261105160032"
   },
   "devDependencies": {
     "@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
@@ -38,6 +42,7 @@
     "@atproto/lex-resolver": "0.0.0-spaces-alpha-20261029171913",
     "@atproto/lex-schema": "0.0.0-spaces-alpha-20261029171913",
     "@atproto/lex-server": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lexicon": "0.0.0-spaces-alpha-20261029171913"
+    "@atproto/lexicon": "0.0.0-spaces-alpha-20261029171913",
+    "@atproto/oauth-client": "0.0.0-spaces-alpha-20261105160032"
   }
 }

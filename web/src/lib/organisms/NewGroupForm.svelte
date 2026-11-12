@@ -13,11 +13,17 @@
   let label = $state('');
   let edited = $state(false);
   let address: HTMLInputElement;
-  // An address typed before the page's script ran was typed by hand all the same.
+  let named: HTMLInputElement;
+  // What was typed before the page's script ran: an address, by hand all
+  // the same; or a name alone, which the address is made from.
   onMount(() => {
-    if (!address.value) return;
-    edited = true;
-    label = labelOf(address.value);
+    if (address.value) {
+      edited = true;
+      label = labelOf(address.value);
+    } else if (named.value) {
+      name = named.value;
+      label = labelOf(named.value);
+    }
   });
   // Taken, and the next free one if there is one near: none while free or unasked.
   let taken = $state<{ label: string; next?: string } | null>(null);
@@ -50,6 +56,7 @@
   <label class="field">
     Name
     <input
+      bind:this={named}
       name="displayName"
       required
       maxlength="64"
