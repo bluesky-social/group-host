@@ -69,7 +69,7 @@ When a report is not yours to decide, escalate it.
 
 1. Press **Review** on the post's row. The dialog **Review** opens, with
    everything you can do about the post and its history.
-2. Under **Decision**, in **A note, if you like**, type why, such as
+2. Under **Decision**, in **Note**, type why, such as
    "Third time this month; over to the admins."
 3. Press **Escalate**. The dialog closes, and the subject leaves the
    **Open** tab.
@@ -195,7 +195,7 @@ they can ask to join again.
 ## How do I resolve a report?
 
 1. On the Moderation page, press **Review** on the account's row.
-2. Under **Decision**, in **A note, if you like**, type what was done,
+2. Under **Decision**, in **Note**, type what was done,
    such as "Taken down and removed from the group."
 
    <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --type ':popover-open [name=note]=Taken down and removed from the group.' --element ':popover-open .review-part:has([name=note])' -->

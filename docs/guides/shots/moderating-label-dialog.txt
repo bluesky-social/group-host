@@ -15,8 +15,8 @@
   - paragraph: Asks apps that follow the group's labels to hide everything this account posted. They stay in the group.
   - button "Take down"
   - heading "Decision" [level=3]
-  - text: A note, if you like
-  - textbox "A note, if you like"
+  - text: Note
+  - textbox "Note"
   - button "Cancel"
   - button "Escalate"
   - button "Resolve"

@@ -1,6 +1,6 @@
 - heading "Decision" [level=3]
-- text: A note, if you like
-- textbox "A note, if you like": Taken down and removed from the group.
+- text: Note
+- textbox "Note": Taken down and removed from the group.
 - button "Cancel"
 - button "Escalate"
 - button "Resolve"

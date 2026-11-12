@@ -31,7 +31,7 @@ here is yours to change".
 1. Press **Add a rule**.
 2. In **Rule**, type the rule in a few words, such as "Ride with lights
    after dark". It can be 64 characters long.
-3. In **What it means**, say more if you like, such as "Front and back
+3. In **What it means**, say more, such as "Front and back
    lights on from sunset, every ride." You can leave it empty.
 
    <!-- look /g/riders.groups.test/settings/rules --as alice --click 'button[popovertarget=add-rule]' --type '[name=title]=Ride with lights after dark' --type '[name=text]=Front and back lights on from sunset, every ride.' --element ':popover-open' -->

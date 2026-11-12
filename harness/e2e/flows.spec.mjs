@@ -178,7 +178,7 @@ test('asking to join with a note, and being approved', async () => {
   await expect(bob.getByRole('heading', { name: 'Hikers', exact: true })).toBeVisible();
   await expect(bob.getByText('Joining is by request.')).toBeVisible();
   await expect(bob.getByRole('heading', { name: 'Ask to join' })).toBeVisible();
-  const note = bob.getByRole('textbox', { name: 'A note to them, if you like' });
+  const note = bob.getByRole('textbox', { name: 'Note' });
   await note.fill('I walk most Sundays.');
   await bob.getByRole('button', { name: 'Send request' }).click();
   await expect(bob.getByRole('heading', { name: 'Your request is waiting' })).toBeVisible();
@@ -219,7 +219,7 @@ async function send() {
   await dialog.getByRole('option', { name: 'Bob @bob.test' }).click();
   await expect(handle).toHaveValue('bob.test');
   await expect(dialog.getByRole('listbox')).toBeHidden();
-  await dialog.getByRole('textbox', { name: 'A note, if you like' }).fill('Come walk with us.');
+  await dialog.getByRole('textbox', { name: 'Note' }).fill('Come walk with us.');
   await dialog.getByRole('button', { name: 'Send invite' }).click();
   await expect(page.locator('.invites', { hasText: 'bob.test' })).toBeVisible();
 }
@@ -451,7 +451,7 @@ test("changing a group's profile", async () => {
     await page.getByRole('button', { name: 'Add a link' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add a link' });
     await dialog.getByRole('textbox', { name: 'Its address' }).fill(address);
-    if (title) await dialog.getByRole('textbox', { name: 'Title, if you like' }).fill(title);
+    if (title) await dialog.getByRole('textbox', { name: 'Title' }).fill(title);
     await dialog.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.locator('.link-list', { hasText: address })).toBeVisible();
   };
@@ -975,7 +975,7 @@ test('moderating: a label, and the queue', async () => {
     .click();
   await expect(review.locator('.labels')).toContainText('!takedown');
   // Escalated with a note, it leaves the open queue for the escalated.
-  await review.getByRole('textbox', { name: 'A note, if you like' }).fill('Asked him to stop');
+  await review.getByRole('textbox', { name: 'Note' }).fill('Asked him to stop');
   await review.getByRole('button', { name: 'Escalate' }).click();
   await expect(row(who.bob.handle)).toHaveCount(0);
   await page

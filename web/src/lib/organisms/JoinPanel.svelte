@@ -60,8 +60,7 @@
     <p class="mute">Someone in {name} reviews each request.</p>
     <form class="stack" method="post" action="?/join" use:enhance={inPlace}>
       <label class="field"
-        >A note to them, if you like <textarea name="message" rows="3" maxlength="2000"
-        ></textarea></label
+        >Note <textarea name="message" rows="3" maxlength="2000"></textarea></label
       >
       <button type="submit">Send request</button>
     </form>

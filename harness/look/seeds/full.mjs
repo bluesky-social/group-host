@@ -66,7 +66,7 @@ export default async ({ world, opensocial, ask, page, picture, who, exists }) =>
     await p.getByRole('button', { name: 'Add a link' }).click();
     const dialog = p.getByRole('dialog', { name: 'Add a link' });
     await dialog.getByRole('textbox', { name: 'Its address' }).fill(address);
-    if (title) await dialog.getByRole('textbox', { name: 'Title, if you like' }).fill(title);
+    if (title) await dialog.getByRole('textbox', { name: 'Title' }).fill(title);
     await dialog.getByRole('button', { name: 'Add', exact: true }).click();
     await p.locator('.link-list li', { hasText: address }).waitFor();
   }

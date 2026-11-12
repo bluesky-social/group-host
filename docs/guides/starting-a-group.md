@@ -108,11 +108,12 @@ app, so it can act for you in the group with what your roles let you do.
    its first card is **About it**.
 2. Type into **What it is for**, such as "We read one book a month and
    meet to talk it over."
-3. Fill in where it meets if you like: **Town or city it meets in** with
-   its **Country**, or **It meets online**.
+3. Fill in where it meets: **Town or city it meets in** with its
+   **Country**, or **It meets online**.
 4. Type into **Topics**, with commas between them, such as "novels,
    reading". It takes up to ten.
-5. Fill in **Languages it uses** and **Its own site** if you like.
+5. Fill in **Languages it uses** and **Its own site**. Leave empty any
+   field here that doesn't apply.
 6. Press **Save**, at the foot of **About it**. **Saved** shows beside
    it once your changes are kept.
 
@@ -145,7 +146,7 @@ it. Removing takes a picture off at once, without asking.
 1. On the card **Links**, press **Add a link**.
 2. In the dialog, type the link into **Its address**, starting with
    `https://`. This is the web address the link goes to.
-3. Type a title for it if you like, such as "Our chat". Without one, the
+3. Type a title for it, such as "Our chat". Without one, the
    link shows as its address.
 4. Press **Add**. The dialog closes, and the link is on the card.
 
@@ -165,8 +166,8 @@ up to five, shown on its card in the order they were added.
 
 Someone signed in who is not a member sees the same card, without your
 standing, **Moderation** or **Settings**. Under it is the way to join
-you chose. With people asking to join, they can write in **A note to
-them, if you like** and press **Send request**, and the request shows in
+you chose. With people asking to join, they can write in **Note** and
+press **Send request**, and the request shows in
 **Asking to join** for you to approve.
 
 <!-- look /g/bookclub.groups.test --as bob -->

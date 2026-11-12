@@ -192,7 +192,7 @@
         use:enhance={inDialog(id, (w) => (failed = w))}
       >
         <input type="hidden" name="subject" value={s.key} />
-        <label class="field">A note, if you like <input name="note" maxlength="2000" /></label>
+        <label class="field">Note <input name="note" maxlength="2000" /></label>
         <div class="actions">
           <button class="quiet" type="button" popovertarget={id} popovertargetaction="hide"
             >Cancel</button
