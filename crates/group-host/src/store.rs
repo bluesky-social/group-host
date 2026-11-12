@@ -427,6 +427,15 @@ pub const MIGRATIONS: &[&str] = &[
     "
     UPDATE account SET created_at = created_at / 1000 WHERE created_at > 100000000000;
 ",
+    // A group's site served at its handle's own domain, switched on by a
+    // steward once the domain reaches the host; only while the handle is it.
+    "
+    CREATE TABLE IF NOT EXISTS site_domain (
+        did TEXT PRIMARY KEY REFERENCES account (did),
+        domain TEXT NOT NULL UNIQUE,
+        at INTEGER NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -562,6 +571,7 @@ const FORGET_ACCOUNT: &[&str] = &[
     "DELETE FROM index_record WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM index_repo WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM deactivation WHERE did = ?1",
+    "DELETE FROM site_domain WHERE did = ?1",
     "DELETE FROM address WHERE did = ?1",
     "DELETE FROM outbox WHERE repo = ?1",
     "DELETE FROM space_recipient WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
@@ -1829,6 +1839,34 @@ impl Store {
             r.get(0)
         });
         Ok(found.optional()?)
+    }
+
+    /// The domain `did`'s site is served at, while its handle is still it.
+    pub fn site_domain(&self, did: &str) -> Result<Option<String>> {
+        let sql = "SELECT s.domain FROM site_domain s JOIN account a ON a.did = s.did AND a.handle = s.domain WHERE s.did = ?1";
+        let found = self.conn().query_row(sql, [did], |r| r.get(0));
+        Ok(found.optional()?)
+    }
+
+    /// The group whose site is served at `domain`.
+    pub fn sited(&self, domain: &str) -> Result<Option<String>> {
+        let sql = "SELECT a.did FROM site_domain s JOIN account a ON a.did = s.did AND a.handle = s.domain WHERE s.domain = lower(?1)";
+        let found = self.conn().query_row(sql, [domain], |r| r.get(0));
+        Ok(found.optional()?)
+    }
+
+    /// Serves `did`'s site at `domain` from `at`, or with none, at its
+    /// address alone.
+    pub fn set_site_domain(&self, did: &str, domain: Option<&str>, at: i64) -> Result<()> {
+        let conn = self.conn();
+        match domain {
+            Some(domain) => conn.execute(
+                "INSERT INTO site_domain (did, domain, at) VALUES (?1, ?2, ?3) ON CONFLICT (did) DO UPDATE SET domain = ?2, at = ?3",
+                params![did, domain, at],
+            )?,
+            None => conn.execute("DELETE FROM site_domain WHERE did = ?1", [did])?,
+        };
+        Ok(())
     }
 
     /// Gives `did` the handle `handle`, with `events`; refused if another

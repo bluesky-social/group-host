@@ -7,7 +7,7 @@ use common::groups::*;
 use common::members::{granting, keep};
 use common::oauth::App;
 use common::spaces::*;
-use common::{Running, start};
+use common::{Running, start, start_naming_itself};
 use group_host::sites::{self, SANDBOX, SITE};
 use serde_json::{Value as Json, json};
 
@@ -694,4 +694,101 @@ fn a_page_previews_as_its_own_head_says_and_never_as_markup() {
     assert_eq!(preview(&long), "<title>riders.test</title>");
     let many = "<meta name=description content=x>".repeat(40);
     assert_eq!(preview(&many).matches("<meta").count(), 32);
+}
+
+/// Riders' handle on a domain of its own, as updateGroupHandle gives it.
+const OWN: &str = "riders.example";
+
+/// Whether a proxy in front may get a certificate for `domain`.
+async fn certified(h: &Running, domain: &str) -> u16 {
+    let asked = reqwest::get(format!("{}/tls/ask?domain={domain}", h.url)).await;
+    asked.unwrap().status().as_u16()
+}
+
+#[tokio::test]
+async fn a_site_moves_to_the_groups_own_domain_once_it_reaches_the_host() {
+    // A host whose groups' domains reach it, as the proxy in front would.
+    let h = start_naming_itself("SITE_CHECK_AT", &[]).await;
+    let (did, [alice, bob, ..]) = group(&h).await;
+    let site = json!({"group": did, "files": [{"path": "index.html", "text": "hi"}]});
+    assert_eq!(call(&h, &alice, "putSite", site.clone()).await.0, 200);
+    let body = json!({"group": did});
+    // Its handle its address, it has no domain of its own to move to.
+    let said = call(&h, &alice, "putSiteDomain", body.clone()).await;
+    assert_eq!(error(&said), (400, "NoOwnDomain"));
+    assert_eq!(certified(&h, RIDERS).await, 404);
+
+    h.host.store.set_handle(&did, OWN, &[]).unwrap();
+    // Certificates for its domain and www. under it, before it is switched
+    // on, so the host can check the domain reaches it; for no other.
+    assert_eq!(certified(&h, OWN).await, 200);
+    assert_eq!(certified(&h, "WWW.riders.example").await, 200);
+    assert_eq!(certified(&h, "elsewhere.example").await, 404);
+    // Until it is, the domain serves nothing of the site.
+    let there = ask(&h, "GET", OWN, "/", &[]).await;
+    assert_eq!(there.header("content-security-policy"), "");
+    let said = call(&h, &bob, "putSiteDomain", body.clone()).await;
+    assert_eq!(error(&said), (403, "Forbidden"));
+
+    let said = call(&h, &alice, "putSiteDomain", body.clone()).await;
+    assert_eq!(said, (200, json!({"domain": OWN})));
+    // The domain serves it, keeping the host's own paths; the address and
+    // www. send visitors there, path and query kept.
+    let there = ask(&h, "GET", OWN, "/", &[]).await;
+    assert_eq!((there.status, there.body.as_str()), (200, "hi"));
+    let from = page(&h, "/rides/?when=sat").await;
+    let to = "https://riders.example/rides/?when=sat";
+    assert_eq!((from.status, from.header("location")), (301, to));
+    assert_eq!(from.header("content-security-policy"), SANDBOX);
+    let www = ask(&h, "GET", "www.riders.example", "/a", &[]).await;
+    assert_eq!(
+        (www.status, www.header("location")),
+        (301, "https://riders.example/a")
+    );
+    let named = ask(&h, "GET", OWN, "/.well-known/atproto-did", &[]).await;
+    assert_eq!(named.body, did);
+    // The group and a publish say where it is.
+    let lxm = format!("{NS}.getGroup");
+    let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(shown["group"]["siteDomain"], OWN);
+    let made = call(&h, &alice, "putSite", site).await;
+    assert_eq!(made.1["url"], "https://riders.example/");
+
+    // Switched off, the site is at its address alone again.
+    assert_eq!(
+        call(&h, &alice, "deleteSiteDomain", body.clone()).await,
+        (200, json!({}))
+    );
+    assert_eq!(page(&h, "/").await.body, "hi");
+    let there = ask(&h, "GET", OWN, "/", &[]).await;
+    assert_eq!(there.header("content-security-policy"), "");
+    let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(shown["group"].get("siteDomain"), None);
+
+    // On again, a new handle ends it: the new domain was never checked.
+    call(&h, &alice, "putSiteDomain", body).await;
+    let lxm = format!("{NS}.updateGroupHandle");
+    let back = json!({"group": did, "handle": RIDERS});
+    assert_eq!(
+        post(&h, &lxm, &back, &[auth(&h, &alice, &lxm)]).await.0,
+        200
+    );
+    assert_eq!(page(&h, "/").await.body, "hi");
+    h.host.store.set_handle(&did, OWN, &[]).unwrap();
+    assert_eq!(page(&h, "/").await.body, "hi");
+}
+
+#[tokio::test]
+async fn a_site_stays_at_its_address_while_its_domain_reaches_no_host() {
+    // Asked as itself, over https, a domain under .example never answers.
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    h.host.store.set_handle(&did, OWN, &[]).unwrap();
+    let said = call(&h, &alice, "putSiteDomain", json!({"group": did})).await;
+    assert_eq!(error(&said), (400, "NotReaching"));
+    let message = said.1["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("riders.example doesn't reach this host yet"),
+        "{message}"
+    );
 }

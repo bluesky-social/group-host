@@ -165,13 +165,18 @@ fn rules(host: &Host, group: &str) -> Result<Vec<Value>, XrpcError> {
 
 fn base(host: &Host, did: &str, handle: &str) -> Result<Value, XrpcError> {
     let address = host.store.address(did).map_err(XrpcError::internal)?;
-    Ok(json!({
+    let mut view = json!({
         "did": did,
         "handle": handle,
         "address": address,
         "meta": meta_space(did),
         "members": members_space(did),
-    }))
+    });
+    let domain = host.store.site_domain(did).map_err(XrpcError::internal)?;
+    if let Some(domain) = domain {
+        view["siteDomain"] = json!(domain);
+    }
+    Ok(view)
 }
 
 fn merge(into: &mut Value, from: Value) {

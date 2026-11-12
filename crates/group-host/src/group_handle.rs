@@ -14,6 +14,7 @@ use crate::group_api::{group_of, signed_in};
 use crate::group_config::forbidden;
 use crate::rbac::NS;
 use crate::repo::identity;
+use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use atproto::plc::Signed;
 use atproto::syntax;
@@ -153,6 +154,10 @@ pub async fn update_group_handle(
         .store
         .set_handle(group, &handle, &[identity(group, &handle)]);
     set.map_err(XrpcError::internal)?;
+    // The site was served at the old handle's domain, checked to reach
+    // here; the new one isn't, so the site goes back to the address.
+    let unsite = host.store.set_site_domain(group, None, now_millis());
+    unsite.map_err(XrpcError::internal)?;
     host.announce();
     Ok(Json(json!({ "handle": handle })))
 }

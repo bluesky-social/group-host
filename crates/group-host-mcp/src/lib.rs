@@ -55,6 +55,8 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("resolveSubject"),
     lexicon!("putSite"),
     lexicon!("deleteSite"),
+    lexicon!("putSiteDomain"),
+    lexicon!("deleteSiteDomain"),
     lexicon!("profile"),
     lexicon!("rule"),
     lexicon!("role"),
@@ -403,6 +405,16 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         &[],
         "Takes the group's website down.",
         Made::Method("deleteSite", None),
+    ),
+    (
+        "site_domain",
+        &[],
+        "Serves the group's website at its handle's own domain, such as riders.org, once that \
+         domain reaches this host: the domain serves it, and www. under it and the group's \
+         address redirect there. Refused while the handle is the address, or before the domain's \
+         A and AAAA records name this host's addresses. With undo, serves it at its address \
+         alone again.",
+        Made::Method("putSiteDomain", Some("deleteSiteDomain")),
     ),
     (
         "member_list",

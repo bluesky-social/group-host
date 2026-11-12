@@ -507,6 +507,28 @@ const all = {
     const { group } = await asked(event);
     return act(event, 'fyi.opensocial.deleteSite', { group });
   },
+  domain: async (event) => {
+    const { group, form } = await asked(event);
+    const res = await event.fetch('/xrpc/fyi.opensocial.putSiteDomain', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ group })
+    });
+    if (res.ok) return;
+    const failure: { error?: string; message?: string } | null = await res.json().catch(() => null);
+    const domain = text(form, 'domain');
+    const why: Record<string, string> = {
+      NotReaching: `${domain} doesn't reach this host yet. Check its DNS records, then try again in a few minutes.`,
+      NoOwnDomain: 'Give the group a handle on its own domain first.'
+    };
+    return fail(res.status, {
+      failed: why[failure?.error ?? ''] ?? failure?.message ?? res.statusText
+    });
+  },
+  undomain: async (event) => {
+    const { group } = await asked(event);
+    return act(event, 'fyi.opensocial.deleteSiteDomain', { group });
+  },
   delete: async (event) => {
     const { group } = await asked(event);
     // Gone, there is no page of it to come back to.
@@ -594,4 +616,4 @@ export const labelActions = pick('define', 'undefine');
 export const roleActions = pick('role', 'unrole');
 export const appActions = pick('revoke', 'password', 'unpassword');
 export const recoveryActions = pick('key', 'unkey');
-export const siteActions = pick('site', 'unsite');
+export const siteActions = pick('site', 'unsite', 'domain', 'undomain');

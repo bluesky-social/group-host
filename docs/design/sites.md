@@ -80,9 +80,9 @@ there: while the address is the group's handle, its `atproto-did` is how
 anyone checks that the handle names the group, and the page around a site
 that reads asks the host's methods at its own origin. The address is where
 the group was made ([groups](groups.md#its-address)), and stays its site's
-when the group takes a handle on a domain of its own; that domain is the
-group's name, not its site's. A request to the host's own name,
-`PUBLIC_URL`, is never a site's.
+when the group takes a handle on a domain of its own, until a steward
+moves the site there ([on its own domain](#on-its-own-domain)). A request
+to the host's own name, `PUBLIC_URL`, is never a site's.
 
 Only `GET` and `HEAD` are answered; anything else is 405. A path is read
 with its `%XX` escapes decoded, then answered in this order:
@@ -102,6 +102,37 @@ it that names no blob is served as if it were not there.
 
 Each file is sent with its CID as its `ETag` and `Cache-Control: public,
 max-age=60`. A browser that holds that ETag already is answered 304.
+
+## On its own domain
+
+A group with a handle on a domain of its own, such as `riders.org`, may
+want its site there too. The handle proves the group controls the domain,
+but not that the domain's web traffic reaches this host: its A record may
+still name an old site the group is leaving. So the site moves only when
+a steward moves it, with `fyi.opensocial.putSiteDomain` (for
+`group.configure`), and only if the domain answers as this host then: the
+host asks `https://<domain>/xrpc/com.atproto.server.describeServer`, or
+`SITE_CHECK_AT` with the domain as its `Host`, for its own DID. A handle
+that is the group's address is `NoOwnDomain`; a domain that doesn't
+answer so is `NotReaching`.
+
+Once moved, the domain serves the site as the address did, keeping
+`/.well-known/` and `/xrpc/` for the host. A request to the address, or
+to `www.` under the domain, is redirected (301) to the same path and
+query at the domain, but for the host's own paths at the address. The
+group's view names the domain as `siteDomain`, and `putSite` answers the
+site's `url` there. `fyi.opensocial.deleteSiteDomain` serves the site at
+its address alone again, and so does the group taking another handle,
+whose domain was never checked.
+
+In the console, the Site page's Domain card says where the site is,
+moves it to the domain, saying which DNS records to add first, and moves
+it back. `opensocial site domain <group>` moves it, `--undo` back; an AI
+app connected over MCP does the same with `site_domain`.
+
+The host's proxy gets each domain's certificate as it is first asked
+for, once the host says it is a group's own domain, or `www.` under it,
+while the group is on ([deploying](../deploying.md#serving-sites-on-groups-own-domains)).
 
 ## The sandbox
 

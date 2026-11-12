@@ -942,6 +942,12 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
     let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
     assert!(missing.contains("reading /no/such/folder"), "{missing}");
 
+    // Its handle its address, there is no domain to move it to; moving it
+    // back is the opposite method, and leaves it where it is.
+    let moved = fails(&alice, &["site", "domain", group]).await;
+    assert!(moved.contains("NoOwnDomain"), "{moved}");
+    ok(&alice, &["site", "domain", group, "--undo"]).await;
+
     ok(&alice, &["site", "delete", group]).await;
     assert!(
         h.host

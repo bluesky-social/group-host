@@ -72,7 +72,7 @@ export const load: PageServerLoad = async (event) => {
           })
         ).invites.length > 0
       : false;
-  const address = view.group.address;
+  const address = view.group.siteDomain ?? view.group.address;
   const site = address && !view.group.deactivated ? await siteOf(event, group, address) : null;
   const { configures, issues } = changes(view);
   return {

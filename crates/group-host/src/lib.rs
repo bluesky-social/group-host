@@ -53,6 +53,7 @@ pub mod recovery;
 pub mod repo;
 pub mod scopes;
 pub mod secrets;
+pub mod site_domain;
 pub mod site_head;
 pub mod sites;
 pub mod space;
@@ -472,6 +473,15 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(sites::put_site).layer(axum::extract::DefaultBodyLimit::max(site_limit)),
         )
         .route("/xrpc/fyi.opensocial.deleteSite", post(sites::delete_site))
+        .route(
+            "/xrpc/fyi.opensocial.putSiteDomain",
+            post(site_domain::put_site_domain),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.deleteSiteDomain",
+            post(site_domain::delete_site_domain),
+        )
+        .route("/tls/ask", get(site_domain::tls_ask))
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))

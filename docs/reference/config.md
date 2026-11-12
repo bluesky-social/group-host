@@ -28,6 +28,7 @@ trimmed of spaces and a trailing `/`.
 | `SIGNUP_PDS` | the PDS where someone with no account makes one, from the console's "Create one": its authorization server's sign-up (`prompt=create`); a trailing `/` dropped | `https://bsky.social` |
 | `SITE_SHELL_DIR` | where the built page around a site that names `reads` is: its `shell.js` (`web/build-shell`, which `npm run build` in `web/` makes; the image sets `/app/build-shell`) | none: such a site's pages load no script |
 | `SITE_HANDLE_RESOLVER` | where that page resolves a handle typed to sign in: a service answering `com.atproto.identity.resolveHandle` | `https://bsky.social` |
+| `SITE_CHECK_AT` | where the host asks a group's own domain whether it reaches this host, before serving the group's site there: a URL asked in the domain's place, with the domain as its `Host`, for a host that can't reach its own public addresses | the domain itself, over https |
 | `PDS_CRAWLERS` | relays told of news with `requestCrawl`, comma-separated, a trailing `/` dropped: at most every 20 minutes, and the first time after a start | none |
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it; lines are JSON, written to stdout and kept in `logs.sqlite` for its operators | `info` |
 | `HOST_ADMINS` | its operators, comma-separated DIDs: the accounts that may read its logs (`getLogs`) and how it is used (`getStats`) | none |

@@ -129,6 +129,9 @@ A group's website ([sites](../design/sites.md)).
 | --- | --- |
 | `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there, with the host's methods its pages may read (`reads`); takes a body as large as `BLOB_UPLOAD_LIMIT` |
 | `POST fyi.opensocial.deleteSite` | takes a group's site down |
+| `POST fyi.opensocial.putSiteDomain` | serves a group's site at its handle's own domain, once that domain answers as this host; its address and `www.` under the domain redirect there |
+| `POST fyi.opensocial.deleteSiteDomain` | serves a group's site at its address alone again |
+| `GET /tls/ask?domain=<domain>` | 200 if the proxy in front may get a certificate for `domain`: a group's own domain, or `www.` under it, while the group is on; else 404 |
 | `GET`, `HEAD` `https://<address>/<path>` | a file of the site of the group whose address the request's `Host` names, sandboxed; the host keeps `/.well-known/` and `/xrpc/` there for itself. For a site that names `reads`, a page is the host's page around the site's, holding the visitor's session, with the site's page's title and preview tags and the status it would have |
 | `GET https://<address>/_site/<path>` | for a site that names `reads`, the file the frame shows, sandboxed, as above |
 | `GET https://<address>/client-metadata.json` | for a site that names `reads`, its OAuth client's metadata: a public client asking `atproto` and an `rpc:` scope for each read and `getViewer`, named for the request's `X-Forwarded-Host` if a proxy sends one, else its `Host` |

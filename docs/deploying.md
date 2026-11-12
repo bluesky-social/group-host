@@ -112,6 +112,27 @@ group.example.com {
 
 `lb_try_duration` holds each request through the second or two the host is down while it restarts. The body limit sits above the upload limit. How groups are named and made is in [Groups](design/groups.md).
 
+## Serving sites on groups' own domains
+
+A group that takes a handle on a domain of its own, such as `riders.org`, may move its site there from its settings ([Sites](design/sites.md#on-its-own-domain)). The group points the domain's A and AAAA records, and `www.` under it, at the host's addresses. The proxy can't know those domains ahead, so it gets each one's certificate as it is first asked for, asking the host first at `/tls/ask?domain=<domain>`. The host answers 200 only for a group's own domain, or `www.` under it, while the group is on. So nobody can point DNS at the host and spend its certificate limits. Every other name goes to the host as it is, which serves the site there or answers nothing:
+
+```
+{
+	on_demand_tls {
+		ask http://group-host:2600/tls/ask
+	}
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy group-host:2600
+}
+```
+
+Before it moves a site, the host checks that the domain reaches it, asking `https://<domain>/xrpc/com.atproto.server.describeServer` for its own DID. A host that can't reach its own public addresses from inside asks `SITE_CHECK_AT` instead, with the domain as the `Host`. Caddy passes the name a browser asked as `X-Forwarded-Host`, which a site that signs its visitors in names its OAuth client for.
+
 ## Checking it is up
 
 `GET /xrpc/_health` answers with the host's version and the commit it was built from:

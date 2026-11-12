@@ -105,6 +105,7 @@ its icon.
 | --- | --- | --- | --- |
 | `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's website whole, from `files`, each `{path, text}` or `{path, bytes}`, with `fallback` and `not_found` naming files of them, and `reads` the host's methods its pages may ask as whoever signs in; the command reads them from a folder |
 | `site_delete` | `site delete` | `fyi.opensocial.deleteSite` | takes the group's website down |
+| `site_domain` | `site domain` | `fyi.opensocial.putSiteDomain` | serves the group's website at its handle's own domain once it reaches this host; with `undo`, `fyi.opensocial.deleteSiteDomain`, at its address alone again |
 
 ## member
 

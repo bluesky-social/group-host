@@ -63,6 +63,9 @@ site
                          address, in place of the one there; with --reads, the host's
                          methods its pages may ask as whoever signs in on it
   site delete <group>    take the group's website down
+  site domain <group> [--undo]
+                         serve the website at the group's own domain, its handle, once
+                         that domain reaches this host; or with --undo, at its address
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
                          who is in the group, and their roles, a page at a time

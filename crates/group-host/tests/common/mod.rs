@@ -263,6 +263,16 @@ pub async fn start_reachable(vars: &[(&str, &str)]) -> Running {
     start_on(listener, &vars, false).await
 }
 
+/// A host given where it listens as `var` too, as for a domain that
+/// reaches it (`SITE_CHECK_AT`).
+pub async fn start_naming_itself(var: &str, vars: &[(&str, &str)]) -> Running {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let mut vars = vars.to_vec();
+    vars.push((var, &url));
+    start_on(listener, &vars, false).await
+}
+
 /// A host reachable by name, at `http://localhost:<port>`, its `did:web`
 /// of that name: for servers elsewhere that resolve its DID, as one
 /// resolves `localhost` over http. It listens on every address, IPv6 and

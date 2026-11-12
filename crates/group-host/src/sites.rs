@@ -236,10 +236,20 @@ fn moved(to: &str, status: StatusCode) -> Response {
     (status, [(header::LOCATION, to)]).into_response()
 }
 
+/// Where a request to a name finds a group's site.
+enum SiteAt {
+    /// Here: the group, and its handle.
+    Here(String, String),
+    /// At this domain instead, the group's own.
+    There(String),
+}
+
 impl Host {
-    /// The group whose address a request to `name` names, and its handle,
-    /// unless `name` is the host's own.
-    fn site_of(&self, name: &str) -> Option<(String, String)> {
+    /// Where a request to `name` finds a group's site: the group whose
+    /// address or own domain it is, or the domain its site is served at
+    /// instead (from its address, or `www.` under that domain); nothing if
+    /// `name` is the host's own or no group's.
+    fn site_of(&self, name: &str) -> Option<SiteAt> {
         let name = name
             .split(':')
             .next()
@@ -254,9 +264,22 @@ impl Host {
         if name.is_empty() || name == own.split(':').next().unwrap_or_default() {
             return None;
         }
-        let did = self.store.addressed(&name).ok().flatten()?;
-        let account = self.store.account(&did).ok().flatten()?;
-        Some((account.did, account.handle))
+        let here = |did: String| {
+            let account = self.store.account(&did).ok().flatten()?;
+            Some(SiteAt::Here(account.did, account.handle))
+        };
+        if let Some(did) = self.store.addressed(&name).ok().flatten() {
+            return match self.store.site_domain(&did).ok().flatten() {
+                Some(domain) => Some(SiteAt::There(domain)),
+                None => here(did),
+            };
+        }
+        if let Some(did) = self.store.sited(&name).ok().flatten() {
+            return here(did);
+        }
+        let apex = name.strip_prefix("www.")?;
+        self.store.sited(apex).ok().flatten()?;
+        Some(SiteAt::There(apex.to_string()))
     }
 
     /// The file of `did`'s site at `path`: its type and bytes, and its ETag.
@@ -389,8 +412,9 @@ fn file(
     (status, headers, [(header::CONTENT_TYPE, kind)], bytes).into_response()
 }
 
-/// Answers a request to a group's handle from its site, but for the
-/// host's own paths under `/.well-known/`; passes on any other.
+/// Answers a request to a group's address or own domain from its site,
+/// but for the host's own paths under `/.well-known/` and `/xrpc/`, or
+/// redirects it to where the site is; passes on any other.
 pub async fn serve(State(host): State<Arc<Host>>, req: Request, next: Next) -> Response {
     let named = req
         .headers()
@@ -401,8 +425,16 @@ pub async fn serve(State(host): State<Arc<Host>>, req: Request, next: Next) -> R
     // which the page around a site asks (a handle being typed, say).
     let path = req.uri().path();
     let ours = path.starts_with("/.well-known/") || path.starts_with("/xrpc/");
-    let (Some((did, handle)), false) = (group, ours) else {
+    let (Some(at), false) = (group, ours) else {
         return next.run(req).await;
+    };
+    let (did, handle) = match at {
+        SiteAt::Here(did, handle) => (did, handle),
+        SiteAt::There(domain) => {
+            let asked = req.uri().path_and_query().map_or("/", |p| p.as_str());
+            let to = format!("https://{domain}{asked}");
+            return sandboxed(moved(&to, StatusCode::MOVED_PERMANENTLY));
+        }
     };
     if ![Method::GET, Method::HEAD].contains(req.method()) {
         let mut res = plain(StatusCode::METHOD_NOT_ALLOWED, "a site is only read");
@@ -568,7 +600,7 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
 type Answer = Result<Json<Value>, XrpcError>;
 
 /// The group a body names, once its caller of `lxm` may configure it.
-async fn configuring(
+pub(crate) async fn configuring(
     host: &Host,
     headers: &HeaderMap,
     body: &Value,
@@ -659,10 +691,18 @@ pub async fn put_site(
         .split("://")
         .next()
         .unwrap_or("https");
+    let domain = host
+        .store
+        .site_domain(&group)
+        .map_err(XrpcError::internal)?;
+    let url = match domain {
+        Some(domain) => format!("https://{domain}/"),
+        None => format!("{scheme}://{address}/"),
+    };
     Ok(Json(json!({
         "uri": format!("at://{group}/{SITE}/self"),
         "cid": record_cid(SITE, &site)?.to_string(),
-        "url": format!("{scheme}://{address}/"),
+        "url": url,
         "uploaded": uploaded,
     })))
 }

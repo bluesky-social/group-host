@@ -133,6 +133,10 @@
           "type": "string",
           "description": "The group's address here: one label under this host's handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
         },
+        "siteDomain": {
+          "type": "string",
+          "description": "The domain the group's website is served at rather than its address, when it is: its handle, a domain of its own (putSiteDomain)."
+        },
         "meta": {
           "type": "string",
           "format": "space-ref"
@@ -233,6 +237,10 @@
         "address": {
           "type": "string",
           "description": "The group's address here: one label under this host's handle domain, set when the group is made or arrives. Its handle, until the group takes one of its own."
+        },
+        "siteDomain": {
+          "type": "string",
+          "description": "The domain the group's website is served at rather than its address, when it is: its handle, a domain of its own (putSiteDomain)."
         },
         "meta": {
           "type": "string",
