@@ -9,7 +9,8 @@
    * the form.
    * The form is sent each chosen as `name`, after a blank one, so a form
    * with none chosen still says so. Under it, how many it takes; at
-   * `max`, the field goes, and the hint says why.
+   * `max`, the field goes, and the hint says why. `optional`, it says so
+   * after its label, as a field the form can be sent without.
    */
   let {
     id,
@@ -19,7 +20,8 @@
     chosen = $bindable([]),
     max,
     placeholder,
-    most
+    most,
+    optional = false
   }: {
     id: string;
     label: string;
@@ -30,6 +32,7 @@
     placeholder: string;
     /** How many at most, in words, for the hint under it: "five". */
     most: string;
+    optional?: boolean;
   } = $props();
   let field = $state<HTMLInputElement>();
   let typed = $state('');
@@ -96,7 +99,9 @@
 </script>
 
 <div class="field" role="group" aria-labelledby="{id}-label">
-  <label id="{id}-label" for={id}>{label}</label>
+  <label id="{id}-label" for={id}
+    >{label}{#if optional}{' '}<span class="optional">(optional)</span>{/if}</label
+  >
   <div class="pick-many">
     <input type="hidden" {name} value="" />
     {#each chosen as value (value)}<input type="hidden" {name} {value} />{/each}

@@ -15,10 +15,10 @@
   - heading "About it" [level=2]
   - text: Name
   - textbox "Name": Book club
-  - text: What it is for
-  - textbox "What it is for": We read one book a month and meet to talk it over.
-  - text: Town or city it meets in
-  - textbox "Town or city it meets in"
+  - text: What it is for (optional)
+  - textbox "What it is for (optional)": We read one book a month and meet to talk it over.
+  - text: Town or city it meets in (optional)
+  - textbox "Town or city it meets in (optional)"
   - text: Country
   - combobox "Country":
     - option "No country" [selected]
@@ -272,20 +272,20 @@
     - option "Zambia"
     - option "Zimbabwe"
   - checkbox "It meets online"
-  - text: It meets online Topics
-  - textbox "Topics Separate up to ten with commas, like climbing, choir or renters' union.": novels, reading
+  - text: It meets online Topics (optional)
+  - textbox "Topics (optional) Separate up to ten with commas, like climbing, choir or renters' union.": novels, reading
   - text: Separate up to ten with commas, like climbing, choir or renters' union.
-  - group "Languages it uses":
-    - text: Languages it uses
-    - combobox "Languages it uses"
+  - group "Languages it uses (optional)":
+    - text: Languages it uses (optional)
+    - combobox "Languages it uses (optional)"
     - text: Choose up to five.
   - text: How people join
   - combobox "How people join":
     - option "An admin approves who joins" [selected]
     - option "Anyone can join right away"
     - option "Only people who are invited"
-  - text: Its own site
-  - textbox "Its own site"
+  - text: Its own site (optional)
+  - textbox "Its own site (optional)"
   - button "Save the profile": Save
   - status: Saved
   - heading "Links0" [level=2]

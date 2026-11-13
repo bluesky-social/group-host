@@ -45,5 +45,8 @@
   <label class="field"
     >Rule <input name="title" required maxlength="64" placeholder="Be kind" /></label
   >
-  <label class="field">What it means <textarea name="text" maxlength="1000"></textarea></label>
+  <label class="field"
+    ><span>What it means <span class="optional">(optional)</span></span>
+    <textarea name="text" maxlength="1000"></textarea></label
+  >
 </FormDialog>

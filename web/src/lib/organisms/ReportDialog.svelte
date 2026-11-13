@@ -43,6 +43,7 @@
     >
   {/if}
   <label class="field"
-    >What happened <textarea name="reason" rows="3" maxlength="2000"></textarea></label
+    ><span>What happened <span class="optional">(optional)</span></span>
+    <textarea name="reason" rows="3" maxlength="2000"></textarea></label
   >
 </FormDialog>

@@ -5,7 +5,7 @@
   - textbox "Rule":
     - /placeholder: Be kind
     - text: Ride with lights after dark
-  - text: What it means
-  - textbox "What it means": Front and back lights on from sunset, every ride.
+  - text: What it means (optional)
+  - textbox "What it means (optional)": Front and back lights on from sunset, every ride.
   - button "Cancel"
   - button "Add"

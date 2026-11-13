@@ -93,7 +93,8 @@
     <p class="mute small">This is the group's handle and web address. You can change it.</p>
   {/if}
   <label class="field"
-    >What it is for <textarea name="description" maxlength="2000"></textarea></label
+    ><span>What it is for <span class="optional">(optional)</span></span>
+    <textarea name="description" maxlength="2000"></textarea></label
   >
   <label class="field">
     How people join

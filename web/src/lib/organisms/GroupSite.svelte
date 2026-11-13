@@ -77,7 +77,11 @@
   <details class="more" open={!!(site?.reads.length || site?.fallback)}>
     <summary>Advanced</summary>
     <label class="field"
-      >Send every address to one page, for single-page apps
+      ><span
+        >Send every address to one page, for single-page apps <span class="optional"
+          >(optional)</span
+        ></span
+      >
       <input
         name="fallback"
         maxlength="512"

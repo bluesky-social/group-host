@@ -42,5 +42,8 @@
   <label class="field"
     >Its address <input name="url" type="url" required placeholder="https://" /></label
   >
-  <label class="field">Title <input name="title" maxlength="64" placeholder="Our chat" /></label>
+  <label class="field"
+    ><span>Title <span class="optional">(optional)</span></span>
+    <input name="title" maxlength="64" placeholder="Our chat" /></label
+  >
 </FormDialog>

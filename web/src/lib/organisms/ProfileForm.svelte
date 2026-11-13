@@ -58,12 +58,13 @@
     >Name <input name="displayName" required maxlength="64" value={displayName ?? ''} /></label
   >
   <label class="field"
-    >What it is for <textarea name="description" maxlength="2000">{description ?? ''}</textarea
-    ></label
+    ><span>What it is for <span class="optional">(optional)</span></span>
+    <textarea name="description" maxlength="2000">{description ?? ''}</textarea></label
   >
   <div class="pair">
     <label class="field"
-      >Town or city it meets in <input name="town" maxlength="128" bind:value={town} /></label
+      ><span>Town or city it meets in <span class="optional">(optional)</span></span>
+      <input name="town" maxlength="128" bind:value={town} /></label
     >
     <label class="field">
       Country
@@ -76,7 +77,7 @@
   <input type="hidden" name="online" value="" />
   <label><input type="checkbox" name="online" checked={online} /> It meets online</label>
   <label class="field">
-    Topics
+    <span>Topics <span class="optional">(optional)</span></span>
     <input
       name="topics"
       maxlength="700"
@@ -96,6 +97,7 @@
     max={5}
     most="five"
     placeholder="Type a language"
+    optional
   />
   <label class="field">
     How people join
@@ -105,6 +107,9 @@
       <option value="invite">Only people who are invited</option>
     </select>
   </label>
-  <label class="field">Its own site <input name="url" type="url" value={url ?? ''} /></label>
+  <label class="field"
+    ><span>Its own site <span class="optional">(optional)</span></span>
+    <input name="url" type="url" value={url ?? ''} /></label
+  >
   <SaveBar {saving} what="the profile" />
 </form>

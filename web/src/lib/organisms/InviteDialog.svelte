@@ -9,5 +9,8 @@
   {#snippet intro()}They'll see it the next time they sign in, here or in any app that shows
     invites.{/snippet}
   <HandleInput id="{id}-handle" label="Their handle" placeholder="someone.bsky.social" />
-  <label class="field">Note <textarea name="message" rows="3" maxlength="2000"></textarea></label>
+  <label class="field"
+    ><span>Note <span class="optional">(optional)</span></span>
+    <textarea name="message" rows="3" maxlength="2000"></textarea></label
+  >
 </FormDialog>

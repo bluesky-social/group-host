@@ -134,6 +134,12 @@ a capital: Atmosphere, Bluesky, PDS, DID, AI. Labels end with no full
 stop; what is said, a sentence, ends with one. Names stay as written:
 opensocial, handles, roles such as `admin`. No `text-transform`.
 
+**Optional fields.** A text field a form can be sent without says so
+after its label, `<span>Note <span class="optional">(optional)</span></span>`,
+in the muted colour; a required one has `required` and no mark. Never
+"if you like", an asterisk, or "Required". A dropdown or checkbox, which
+always has a value, and a search box take no mark.
+
 **Empty states.** One component, `Empty.svelte`, for every empty list or
 part, drawn where the list's rows would be: inside the part's card, in
 the same dashed box, never as loose text under its heading. Its title

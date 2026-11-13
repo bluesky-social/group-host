@@ -346,6 +346,11 @@ input[type='file']::file-selector-button {
 .field textarea {
   font-weight: var(--weight-normal);
 }
+/* A field a form can be sent without, said after its label. */
+.field .optional {
+  color: var(--mute);
+  font-weight: var(--weight-normal);
+}
 label:has(> input[type='checkbox']),
 label:has(> input[type='radio']) {
   display: inline-flex;

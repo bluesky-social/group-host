@@ -11,8 +11,8 @@
   - paragraph:
     - text: riders.groups.test is taken.
     - button "Use riders-2.groups.test"
-  - text: What it is for
-  - textbox "What it is for"
+  - text: What it is for (optional)
+  - textbox "What it is for (optional)"
   - text: How people join
   - combobox "How people join":
     - option "An admin approves who joins" [selected]
