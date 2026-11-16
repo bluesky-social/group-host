@@ -8,7 +8,7 @@ use atproto::{Cid, Curve, Keypair};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Each version of the schema, applied in order to a database below it.
 pub const MIGRATIONS: &[&str] = &[
@@ -436,6 +436,40 @@ pub const MIGRATIONS: &[&str] = &[
         at INTEGER NOT NULL
     );
 ",
+    // A writer leaves a space's writer set at a revision of its own, kept
+    // with the one before; a syncer registers by authorizing, its endpoint
+    // and token told each change while its credential lasts, and owed word
+    // of a lapse or a deletion until it lands; a space deleted is
+    // remembered as deleted until it is made again.
+    "
+    ALTER TABLE space_writer ADD COLUMN prev_space_rev TEXT;
+    ALTER TABLE space_writer ADD COLUMN removed_at INTEGER;
+    DROP TABLE space_recipient;
+    CREATE TABLE space_registration (
+        space TEXT NOT NULL REFERENCES space (uri),
+        endpoint TEXT NOT NULL,
+        token TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        expiry_told INTEGER NOT NULL,
+        PRIMARY KEY (space, endpoint, token)
+    );
+    CREATE TABLE syncer_notice (
+        space TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        token TEXT NOT NULL,
+        space_rev TEXT,
+        attempts INTEGER NOT NULL,
+        next_at INTEGER NOT NULL,
+        deliver_by INTEGER NOT NULL,
+        PRIMARY KEY (space, endpoint, token)
+    );
+    CREATE INDEX syncer_notice_due ON syncer_notice (next_at);
+    CREATE TABLE deleted_space (
+        uri TEXT PRIMARY KEY,
+        authority TEXT NOT NULL,
+        deleted_at INTEGER NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -481,7 +515,7 @@ const SPACE_LIST_UP: &str = "SELECT path, cid, value FROM space_record WHERE did
 const SPACE_LIST_DOWN: &str = "SELECT path, cid, value FROM space_record WHERE did = ?1 AND space = ?2 AND (?3 IS NULL OR substr(path, 1, length(?3) + 1) = ?3 || '/') AND path < ?4 ORDER BY path DESC LIMIT ?5";
 // An op's value is its record's, while the record is still what it made.
 const SPACE_OPS: &str = "SELECT o.rev, o.idx, o.path, o.cid, o.prev, r.value FROM space_op o LEFT JOIN space_record r ON r.did = o.did AND r.space = o.space AND r.path = o.path AND r.cid = o.cid WHERE o.did = ?1 AND o.space = ?2 AND (o.rev > ?3 OR (o.rev = ?3 AND o.idx > ?4)) ORDER BY o.rev, o.idx LIMIT ?5";
-const SPACE_BLOBS: &str = "SELECT DISTINCT rb.cid FROM space_record_blob rb JOIN space_record r ON r.did = rb.did AND r.space = rb.space AND r.path = rb.path WHERE rb.did = ?1 AND rb.space = ?2 AND r.rev > ?3 AND rb.cid > ?4 ORDER BY rb.cid LIMIT ?5";
+const SPACE_BLOBS: &str = "SELECT DISTINCT rb.cid FROM space_record_blob rb JOIN space_record r ON r.did = rb.did AND r.space = rb.space AND r.path = rb.path WHERE rb.did = ?1 AND rb.space = ?2 AND rb.cid > ?3 ORDER BY rb.cid LIMIT ?4";
 const SPACE_HAS_BLOB: &str =
     "SELECT 1 FROM space_record_blob WHERE did = ?1 AND space = ?2 AND cid = ?3 LIMIT 1";
 const REVOKE: &str =
@@ -496,11 +530,30 @@ const GRANT: &str = "SELECT read, write FROM space_grant WHERE space = ?1 AND di
 const UNGRANT: &str = "DELETE FROM space_grant WHERE space = ?1 AND did = ?2";
 const WRITER_REV: &str = "SELECT repo_rev FROM space_writer WHERE space = ?1 AND did = ?2";
 const LAST_SPACE_REV: &str = "SELECT MAX(space_rev) FROM space_writer WHERE space = ?1";
-const PUT_WRITER: &str = "INSERT INTO space_writer (space, did, repo_rev, data, space_rev) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (space, did) DO UPDATE SET repo_rev = ?3, data = ?4, space_rev = ?5";
-const WRITERS: &str = "SELECT did, repo_rev, data, space_rev FROM space_writer WHERE space = ?1 AND space_rev > ?2 ORDER BY space_rev LIMIT ?3";
-const PUT_RECIPIENT: &str = "INSERT INTO space_recipient (space, service, endpoint, expires_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (space, service) DO UPDATE SET endpoint = ?3, expires_at = ?4";
-const RECIPIENTS: &str = "SELECT service, endpoint FROM space_recipient WHERE space = ?1 AND expires_at > ?2 ORDER BY service";
-const UNREGISTER: &str = "DELETE FROM space_recipient WHERE space = ?1 AND service = ?2";
+const PUT_WRITER: &str = "INSERT INTO space_writer (space, did, repo_rev, data, space_rev, prev_space_rev, removed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL) ON CONFLICT (space, did) DO UPDATE SET repo_rev = ?3, data = ?4, space_rev = ?5, prev_space_rev = ?6, removed_at = NULL";
+const REMOVE_WRITER: &str = "UPDATE space_writer SET space_rev = ?3, prev_space_rev = ?4, removed_at = ?5 WHERE space = ?1 AND did = ?2 AND removed_at IS NULL";
+const WRITERS: &str = "SELECT did, repo_rev, data, space_rev FROM space_writer WHERE space = ?1 AND removed_at IS NULL AND space_rev > ?2 ORDER BY space_rev LIMIT ?3";
+const WRITER_LOG: &str = "SELECT did, repo_rev, data, space_rev, prev_space_rev, removed_at IS NOT NULL FROM space_writer WHERE space = ?1 AND space_rev > ?2 ORDER BY space_rev LIMIT ?3";
+const PUT_REGISTRATION: &str = "INSERT INTO space_registration (space, endpoint, token, expires_at, expiry_told) VALUES (?1, ?2, ?3, ?4, 0) ON CONFLICT (space, endpoint, token) DO UPDATE SET expires_at = ?4, expiry_told = 0";
+const REGISTRATION: &str =
+    "SELECT expires_at FROM space_registration WHERE space = ?1 AND endpoint = ?2 AND token = ?3";
+const REGISTRATIONS: &str = "SELECT endpoint, token FROM space_registration WHERE space = ?1 AND expires_at > ?2 ORDER BY endpoint, token";
+const ALL_REGISTRATIONS: &str =
+    "SELECT endpoint, token FROM space_registration WHERE space = ?1 ORDER BY endpoint, token";
+const REGISTRATIONS_OF: &str = "SELECT r.space, r.endpoint, r.token FROM space_registration r JOIN space s ON s.uri = r.space WHERE s.authority = ?1 ORDER BY r.space, r.endpoint, r.token";
+const CLAIM_LAPSED: &str = "UPDATE space_registration SET expiry_told = 1 WHERE space = ?1 AND expires_at <= ?2 AND expiry_told = 0 RETURNING endpoint, token";
+const UNREGISTER: &str =
+    "DELETE FROM space_registration WHERE space = ?1 AND endpoint = ?2 AND token = ?3";
+const UNREGISTER_LAPSED: &str = "DELETE FROM space_registration WHERE space = ?1 AND endpoint = ?2 AND token = ?3 AND expires_at <= ?4";
+const OWE_DELETED: &str = "INSERT INTO syncer_notice (space, endpoint, token, space_rev, attempts, next_at, deliver_by) VALUES (?1, ?2, ?3, NULL, 1, ?4, ?5) ON CONFLICT (space, endpoint, token) DO UPDATE SET space_rev = NULL, attempts = 1, next_at = ?4, deliver_by = ?5";
+const OWE_EXPIRED: &str = "INSERT INTO syncer_notice (space, endpoint, token, space_rev, attempts, next_at, deliver_by) VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6) ON CONFLICT (space, endpoint, token) DO NOTHING";
+const SYNCER_DUE: &str = "SELECT space, endpoint, token, space_rev, attempts, next_at, deliver_by FROM syncer_notice WHERE next_at <= ?1 ORDER BY next_at LIMIT ?2";
+const SYNCER_TOLD: &str =
+    "DELETE FROM syncer_notice WHERE space = ?1 AND endpoint = ?2 AND token = ?3 AND next_at = ?4";
+const SYNCER_RETRY: &str = "UPDATE syncer_notice SET attempts = attempts + 1, next_at = ?5 WHERE space = ?1 AND endpoint = ?2 AND token = ?3 AND next_at = ?4";
+const DELETED_SPACE: &str = "SELECT 1 FROM deleted_space WHERE uri = ?1";
+const UNDELETE_SPACE: &str = "DELETE FROM deleted_space WHERE uri = ?1";
+const MARK_DELETED: &str = "INSERT INTO deleted_space (uri, authority, deleted_at) VALUES (?1, ?2, ?3) ON CONFLICT (uri) DO UPDATE SET deleted_at = ?3";
 const FORGET_SPENT: &str = "DELETE FROM spent_token WHERE expires_at <= ?1";
 const SPEND: &str = "INSERT OR IGNORE INTO spent_token (iss, jti, expires_at) VALUES (?1, ?2, ?3)";
 const OWE: &str = "INSERT INTO outbox (repo, space, rev, data, attempts, next_at, deliver_by) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6) ON CONFLICT (repo, space) DO UPDATE SET rev = ?3, data = ?4, attempts = 0, next_at = ?5, deliver_by = ?6";
@@ -512,7 +565,7 @@ const LAPSED: &str = "DELETE FROM outbox WHERE deliver_by <= ?1 RETURNING repo, 
 const FORGET_SPACE: &[&str] = &[
     "DELETE FROM index_record WHERE space = ?1",
     "DELETE FROM index_repo WHERE space = ?1",
-    "DELETE FROM space_recipient WHERE space = ?1",
+    "DELETE FROM space_registration WHERE space = ?1",
     "DELETE FROM space_writer WHERE space = ?1",
     "DELETE FROM space_grant WHERE space = ?1",
     "DELETE FROM issued_credential WHERE space = ?1",
@@ -574,7 +627,10 @@ const FORGET_ACCOUNT: &[&str] = &[
     "DELETE FROM site_domain WHERE did = ?1",
     "DELETE FROM address WHERE did = ?1",
     "DELETE FROM outbox WHERE repo = ?1",
-    "DELETE FROM space_recipient WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM space_registration WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM syncer_notice WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
+    "DELETE FROM syncer_notice WHERE space IN (SELECT uri FROM deleted_space WHERE authority = ?1)",
+    "DELETE FROM deleted_space WHERE authority = ?1",
     "DELETE FROM space_writer WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM space_grant WHERE space IN (SELECT uri FROM space WHERE authority = ?1)",
     "DELETE FROM space WHERE authority = ?1",
@@ -590,8 +646,10 @@ const FORGET_BLOBS: &str = "DELETE FROM blob WHERE did = ?1 RETURNING cid";
 const COLLECTIONS: &str =
     "SELECT DISTINCT collection FROM record WHERE did = ?1 ORDER BY collection";
 
+/// The database, shared: a clone is another handle on the same connection.
+#[derive(Clone)]
 pub struct Store {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 /// An account the host keeps.
@@ -708,6 +766,45 @@ pub struct Writer {
     pub space_rev: String,
 }
 
+/// A change to a space's writer set, as its authority keeps it: the
+/// writer as last written, the space's revision before this one, and
+/// whether the change took it out of the set.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WriterChange {
+    pub writer: Writer,
+    pub prev_space_rev: Option<String>,
+    pub removed: bool,
+}
+
+/// Where a syncer of a space is told of it: the endpoint and the token
+/// it registered with.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Registration {
+    pub endpoint: String,
+    pub token: String,
+}
+
+/// What a syncer is owed word of until it lands.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SyncerUpdate {
+    /// The space was deleted.
+    SpaceDeleted,
+    /// Its registration lapsed, at the space's revision then.
+    RegistrationExpired { space_rev: String },
+}
+
+/// Word owed to a syncer: the space, where the syncer is told, what, how
+/// often telling it has failed, when it is tried next, and until when.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SyncerNotice {
+    pub space: String,
+    pub to: Registration,
+    pub update: SyncerUpdate,
+    pub attempts: i64,
+    pub next_at: i64,
+    pub deliver_by: i64,
+}
+
 /// A write an authority elsewhere is owed word of: the repo, the space,
 /// the revision and digest, and how often telling it has failed.
 #[derive(Debug, Clone, PartialEq)]
@@ -810,6 +907,22 @@ pub struct Blob {
     pub temporary: bool,
 }
 
+fn writer(row: &rusqlite::Row) -> rusqlite::Result<Writer> {
+    Ok(Writer {
+        did: row.get(0)?,
+        repo_rev: row.get(1)?,
+        data: row.get(2)?,
+        space_rev: row.get(3)?,
+    })
+}
+
+fn registration(row: &rusqlite::Row) -> rusqlite::Result<Registration> {
+    Ok(Registration {
+        endpoint: row.get(0)?,
+        token: row.get(1)?,
+    })
+}
+
 /// A CID the host wrote: one that does not read is a database broken.
 fn cid(text: String) -> Cid {
     Cid::parse(&text).expect("a CID the host wrote")
@@ -857,7 +970,7 @@ impl Store {
         }
         tx.commit()?;
         Ok(Store {
-            conn: Mutex::new(conn),
+            conn: Arc::new(Mutex::new(conn)),
         })
     }
 
@@ -1329,19 +1442,18 @@ impl Store {
         Ok((ops, head.optional()?))
     }
 
-    /// The blobs `did`'s records in `space` reference, as
-    /// [`Store::list_blobs`] lists a repo's.
+    /// The blobs `did`'s records in `space` reference, in CID order past
+    /// `cursor`, at most `limit`.
     pub fn space_blobs(
         &self,
         did: &str,
         space: &str,
-        since: Option<&str>,
         cursor: Option<&str>,
         limit: u32,
     ) -> Result<Vec<Cid>> {
         let conn = self.conn();
         let mut q = conn.prepare(SPACE_BLOBS)?;
-        let asked = params![did, space, since.unwrap_or(""), cursor.unwrap_or(""), limit];
+        let asked = params![did, space, cursor.unwrap_or(""), limit];
         let rows = q.query_map(asked, |r| Ok(cid(r.get(0)?)));
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -1377,7 +1489,8 @@ impl Store {
         Ok(found.optional()?.is_some())
     }
 
-    /// Keeps a new space of `authority`'s; `false` if there is one at `uri`.
+    /// Keeps a new space of `authority`'s, no longer deleted if it was;
+    /// `false` if there is one at `uri`.
     pub fn create_space(
         &self,
         uri: &str,
@@ -1385,9 +1498,20 @@ impl Store {
         public_read: bool,
         now: i64,
     ) -> Result<bool> {
-        let conn = self.conn();
-        let added = conn.execute(NEW_SPACE, params![uri, authority, public_read, now])?;
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let added = tx.execute(NEW_SPACE, params![uri, authority, public_read, now])?;
+        let undeleted = tx.execute(UNDELETE_SPACE, [uri]);
+        undeleted?;
+        tx.commit()?;
         Ok(added > 0)
+    }
+
+    /// Whether the space at `uri` was deleted, and not made again since.
+    pub fn space_deleted(&self, uri: &str) -> Result<bool> {
+        let conn = self.conn();
+        let found = conn.query_row(DELETED_SPACE, [uri], |_| Ok(()));
+        Ok(found.optional()?.is_some())
     }
 
     /// The space at `uri`, if its authority is here.
@@ -1402,11 +1526,23 @@ impl Store {
         Ok(found.optional()?)
     }
 
-    /// Forgets the space at `uri` and `authority`'s own repo in it. The
-    /// blobs only that repo referenced, for their files to go.
-    pub fn delete_space(&self, uri: &str, authority: &str) -> Result<Vec<Cid>> {
+    /// Forgets the space at `uri` and `authority`'s own repo in it, at
+    /// `now`, remembering it as deleted. The blobs only that repo
+    /// referenced, for their files to go, and the syncers that were
+    /// registered, lapsed or not, to tell.
+    pub fn delete_space(
+        &self,
+        uri: &str,
+        authority: &str,
+        now: i64,
+    ) -> Result<(Vec<Cid>, Vec<Registration>)> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
+        let registered = {
+            let mut q = tx.prepare(ALL_REGISTRATIONS)?;
+            let rows = q.query_map([uri], registration);
+            rows?.collect::<rusqlite::Result<_>>()?
+        };
         let unlinked: Vec<Cid> = {
             let mut q = tx.prepare(
                 "DELETE FROM space_record_blob WHERE space = ?1 AND did = ?2 RETURNING cid",
@@ -1422,6 +1558,8 @@ impl Store {
             let gone = tx.execute(sql, [uri, authority]);
             gone?;
         }
+        let marked = tx.execute(MARK_DELETED, params![uri, authority, now]);
+        marked?;
         let mut orphans = Vec::new();
         for cid in unlinked {
             let gone = tx.execute(FORGET_ORPHAN, params![authority, cid.to_string()]);
@@ -1430,7 +1568,7 @@ impl Store {
             }
         }
         tx.commit()?;
-        Ok(orphans)
+        Ok((orphans, registered))
     }
 
     /// How far the index has read `did`'s repo in `space`: its revision and
@@ -1692,7 +1830,8 @@ impl Store {
 
     /// Keeps `did`'s repo in `space` as at `repo_rev` with digest `data`, at
     /// the space's revision `space_rev`, unless it is known at that
-    /// revision or a later one: none then. The space's revision before.
+    /// revision or a later one: none then. A writer taken out of the set
+    /// is back in it. The space's revision before.
     pub fn record_writer(
         &self,
         space: &str,
@@ -1708,56 +1847,209 @@ impl Store {
             return Ok(None);
         }
         let before = tx.query_row(LAST_SPACE_REV, [space], |r| r.get::<_, Option<String>>(0))?;
-        let kept = tx.execute(PUT_WRITER, params![space, did, repo_rev, data, space_rev]);
+        let row = params![space, did, repo_rev, data, space_rev, before];
+        let kept = tx.execute(PUT_WRITER, row);
         kept?;
         tx.commit()?;
         Ok(Some(before))
     }
 
-    /// The repos written in `space`, in the order the space last heard of
-    /// each, after `cursor` (a space revision), at most `limit`.
+    /// Takes `did` out of `space`'s writer set at the space's revision
+    /// `space_rev`, at `now`: the space's revision before, or none if it
+    /// was not in the set.
+    pub fn remove_writer(
+        &self,
+        space: &str,
+        did: &str,
+        space_rev: &str,
+        now: i64,
+    ) -> Result<Option<Option<String>>> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let before = tx.query_row(LAST_SPACE_REV, [space], |r| r.get::<_, Option<String>>(0))?;
+        let removed = tx.execute(REMOVE_WRITER, params![space, did, space_rev, before, now])?;
+        tx.commit()?;
+        Ok((removed > 0).then_some(before))
+    }
+
+    /// The repos written in `space` and still in its writer set, in the
+    /// order the space last heard of each, after `cursor` (a space
+    /// revision), at most `limit`.
     pub fn writers(&self, space: &str, cursor: Option<&str>, limit: u32) -> Result<Vec<Writer>> {
         let conn = self.conn();
         let mut q = conn.prepare(WRITERS)?;
+        let rows = q.query_map(params![space, cursor.unwrap_or(""), limit], writer);
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The last change for each repo written in `space`, those taken out
+    /// of its writer set too, in the space's order, after `cursor` (a
+    /// space revision), at most `limit`.
+    pub fn writer_log(
+        &self,
+        space: &str,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<WriterChange>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(WRITER_LOG)?;
         let rows = q.query_map(params![space, cursor.unwrap_or(""), limit], |r| {
-            Ok(Writer {
-                did: r.get(0)?,
-                repo_rev: r.get(1)?,
-                data: r.get(2)?,
-                space_rev: r.get(3)?,
+            Ok(WriterChange {
+                writer: writer(r)?,
+                prev_space_rev: r.get(4)?,
+                removed: r.get(5)?,
             })
         });
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Tells `service`, at `endpoint`, of `space`'s writes until
-    /// `expires_at` (in seconds).
-    pub fn register(
-        &self,
-        space: &str,
-        service: &str,
-        endpoint: &str,
-        expires_at: i64,
-    ) -> Result<()> {
+    /// `space`'s revision: its writer set's last change, a removal or
+    /// not; none before the first.
+    pub fn space_rev(&self, space: &str) -> Result<Option<String>> {
         let conn = self.conn();
-        conn.execute(PUT_RECIPIENT, params![space, service, endpoint, expires_at])?;
+        Ok(conn.query_row(LAST_SPACE_REV, [space], |r| r.get(0))?)
+    }
+
+    /// Tells the syncer at `to` of `space`'s changes until `expires_at`
+    /// (in seconds), owed word once that lapses.
+    pub fn register(&self, space: &str, to: &Registration, expires_at: i64) -> Result<()> {
+        let conn = self.conn();
+        let row = params![space, to.endpoint, to.token, expires_at];
+        conn.execute(PUT_REGISTRATION, row)?;
         Ok(())
     }
 
-    pub fn unregister(&self, space: &str, service: &str) -> Result<()> {
+    /// Until when the syncer at `to` is registered for `space`, lapsed or
+    /// not, if it is.
+    pub fn registration(&self, space: &str, to: &Registration) -> Result<Option<i64>> {
         let conn = self.conn();
-        conn.execute(UNREGISTER, [space, service])?;
+        let found = conn.query_row(REGISTRATION, [space, &to.endpoint, &to.token], |r| r.get(0));
+        Ok(found.optional()?)
+    }
+
+    /// Tells the syncer at `to` of `space` no more.
+    pub fn unregister(&self, space: &str, to: &Registration) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(UNREGISTER, [space, &to.endpoint, &to.token])?;
         Ok(())
     }
 
-    /// The services told of `space`'s writes at `now`, and where.
-    pub fn recipients(&self, space: &str, now: i64) -> Result<Vec<(String, String)>> {
+    /// Tells the syncer at `to` of `space` no more, unless it renewed its
+    /// registration to last past `now`.
+    pub fn unregister_lapsed(&self, space: &str, to: &Registration, now: i64) -> Result<()> {
         let conn = self.conn();
-        let mut q = conn.prepare(RECIPIENTS)?;
-        let rows = q.query_map(params![space, now], |r| Ok((r.get(0)?, r.get(1)?)));
+        conn.execute(
+            UNREGISTER_LAPSED,
+            params![space, to.endpoint, to.token, now],
+        )?;
+        Ok(())
+    }
+
+    /// The syncers registered for `space` at `now`.
+    pub fn registrations(&self, space: &str, now: i64) -> Result<Vec<Registration>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(REGISTRATIONS)?;
+        let rows = q.query_map(params![space, now], registration);
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The syncers registered for any of `authority`'s spaces, lapsed or
+    /// not, by space.
+    pub fn registrations_of(&self, authority: &str) -> Result<Vec<(String, Registration)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(REGISTRATIONS_OF)?;
+        let rows = q.query_map([authority], |r| {
+            Ok((
+                r.get(0)?,
+                Registration {
+                    endpoint: r.get(1)?,
+                    token: r.get(2)?,
+                },
+            ))
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The registrations for `space` lapsed by `now` whose syncers are
+    /// not yet owed word of it, each claimed once: a syncer is told of a
+    /// lapse once however many changes follow it.
+    pub fn claim_lapsed(&self, space: &str, now: i64) -> Result<Vec<Registration>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(CLAIM_LAPSED)?;
+        let rows = q.query_map(params![space, now], registration);
+        let rows = rows?;
+        let mut claimed: Vec<Registration> = rows.collect::<rusqlite::Result<_>>()?;
+        claimed.sort();
+        Ok(claimed)
+    }
+
+    /// Owes `notice`'s syncer its word, tried first at `notice.next_at`.
+    /// A deletion takes the place of any word owed; a lapse never does,
+    /// so a deletion's is never lost.
+    pub fn owe_syncer(&self, notice: &SyncerNotice) -> Result<()> {
+        let conn = self.conn();
+        let (space, to) = (&notice.space, &notice.to);
+        let (next, by) = (notice.next_at, notice.deliver_by);
+        match &notice.update {
+            SyncerUpdate::SpaceDeleted => {
+                conn.execute(OWE_DELETED, params![space, to.endpoint, to.token, next, by])?
+            }
+            SyncerUpdate::RegistrationExpired { space_rev } => conn.execute(
+                OWE_EXPIRED,
+                params![space, to.endpoint, to.token, space_rev, next, by],
+            )?,
+        };
+        Ok(())
+    }
+
+    /// The word owed to syncers due at `now`, at most `limit`, the longest
+    /// due first.
+    pub fn syncer_notices_due(&self, now: i64, limit: u32) -> Result<Vec<SyncerNotice>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(SYNCER_DUE)?;
+        let rows = q.query_map(params![now, limit], |r| {
+            Ok(SyncerNotice {
+                space: r.get(0)?,
+                to: Registration {
+                    endpoint: r.get(1)?,
+                    token: r.get(2)?,
+                },
+                // A lapse's word carries the space's revision; a deletion's
+                // none.
+                update: match r.get(3)? {
+                    Some(space_rev) => SyncerUpdate::RegistrationExpired { space_rev },
+                    None => SyncerUpdate::SpaceDeleted,
+                },
+                attempts: r.get(4)?,
+                next_at: r.get(5)?,
+                deliver_by: r.get(6)?,
+            })
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Owes `notice` no more, unless it was owed again since it was read.
+    pub fn syncer_told(&self, notice: &SyncerNotice) -> Result<()> {
+        let conn = self.conn();
+        let (space, to) = (&notice.space, &notice.to);
+        let row = params![space, to.endpoint, to.token, notice.next_at];
+        conn.execute(SYNCER_TOLD, row)?;
+        Ok(())
+    }
+
+    /// Tries `notice` again at `next_at`, unless it was owed again since
+    /// it was read.
+    pub fn retry_syncer(&self, notice: &SyncerNotice, next_at: i64) -> Result<()> {
+        let conn = self.conn();
+        let (space, to) = (&notice.space, &notice.to);
+        let row = params![space, to.endpoint, to.token, notice.next_at, next_at];
+        conn.execute(SYNCER_RETRY, row)?;
+        Ok(())
     }
 
     /// Spends `iss`'s token `jti`, good until `expires_at`: `false` if it

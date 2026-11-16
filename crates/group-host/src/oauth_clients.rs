@@ -185,6 +185,36 @@ fn validate(id: &str, metadata: Value) -> Result<Value, OAuthError> {
     }
 }
 
+/// A client for requests to `url`, an https URL at a public address (or
+/// http at any address, with `http_here`, as on a network of test servers
+/// whose host is on http itself), and the URL. Its connections go to the
+/// addresses checked, so a name that resolves elsewhere a moment later is
+/// not followed there, and it follows no redirect.
+pub(crate) async fn pinned_client(
+    url: &str,
+    http_here: bool,
+) -> Result<(reqwest::Client, Url), String> {
+    let at = Url::parse(url).map_err(|_| format!("{url} is not a URL"))?;
+    let scheme_ok = at.scheme() == "https" || (http_here && at.scheme() == "http");
+    if !scheme_ok || at.fragment().is_some() || !at.username().is_empty() {
+        return Err(format!("{url} is not an https URL"));
+    }
+    let host = at.host_str().unwrap_or_default().to_string();
+    let port = at.port_or_known_default().unwrap_or_default();
+    let found = tokio::net::lookup_host(format!("{host}:{port}")).await;
+    let addrs: Vec<SocketAddr> = found.map_err(|e| format!("{url}: {e}"))?.collect();
+    if !http_here && !addrs.iter().all(|a| public(a.ip())) {
+        return Err(format!("{url} is not at a public address"));
+    }
+    let pinned = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve_to_addrs(host.trim_matches(['[', ']']), &addrs)
+        .build()
+        .expect("a client builds");
+    Ok((pinned, at))
+}
+
 /// Whether `ip` is on the public internet: not loopback, private,
 /// link-local (a cloud's metadata service among them), shared, reserved,
 /// documentation or multicast.
@@ -276,32 +306,10 @@ impl Host {
         })
     }
 
-    /// A client for requests to `url`, an https URL at a public address
-    /// (or http at any address, while this host is on http itself, as a
-    /// network of test servers is), and the URL. Its connections go to the
-    /// addresses checked, so a name that resolves elsewhere a moment later
-    /// is not followed there, and it follows no redirect.
+    /// A client for requests to `url`, as [`pinned_client`] makes one, and
+    /// the URL: http allowed while this host is on http itself.
     pub(crate) async fn pinned(&self, url: &str) -> Result<(reqwest::Client, Url), String> {
-        let at = Url::parse(url).map_err(|_| format!("{url} is not a URL"))?;
-        let http_here = self.config.public_url.starts_with("http://");
-        let scheme_ok = at.scheme() == "https" || (http_here && at.scheme() == "http");
-        if !scheme_ok || at.fragment().is_some() || !at.username().is_empty() {
-            return Err(format!("{url} is not an https URL"));
-        }
-        let host = at.host_str().unwrap_or_default().to_string();
-        let port = at.port_or_known_default().unwrap_or_default();
-        let found = tokio::net::lookup_host(format!("{host}:{port}")).await;
-        let addrs: Vec<SocketAddr> = found.map_err(|e| format!("{url}: {e}"))?.collect();
-        if !http_here && !addrs.iter().all(|a| public(a.ip())) {
-            return Err(format!("{url} is not at a public address"));
-        }
-        let pinned = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none())
-            .resolve_to_addrs(host.trim_matches(['[', ']']), &addrs)
-            .build()
-            .expect("a client builds");
-        Ok((pinned, at))
+        pinned_client(url, self.config.public_url.starts_with("http://")).await
     }
 
     /// The JSON object at `url`, fetched by a [`Host::pinned`] client.

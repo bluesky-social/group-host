@@ -6,9 +6,7 @@ mod common;
 
 use atproto::plc::Op;
 use atproto::service_auth;
-use atproto::space::{
-    COMMIT_MAC, Commit, LtHash, RECORD_MAC, element, mac_header, record_mac, star, want_mac_header,
-};
+use atproto::space::{COMMIT_MAC, Commit, LtHash, RECORD_MAC, accept_signature, element, star};
 use atproto::space_auth::{self, Kind, Make};
 use atproto::{Cid, Curve, Keypair, Value, drisl};
 use axum::Router;
@@ -61,12 +59,9 @@ impl Fixture {
         format!("space={}&repo={}{rest}", self.space, self.group)
     }
 
-    async fn get(&self, nsid: &str, rest: &str, kind: &str) -> (Read, [u8; 32]) {
-        let (headers, secret) = signed(&self.syncer, &self.group, &self.kem, kind);
-        (
-            read(&self.h, nsid, &self.query(rest), &headers).await,
-            secret,
-        )
+    async fn get(&self, nsid: &str, rest: &str, kind: &str) -> (Read, Mac) {
+        let (headers, mac) = signed(&self.syncer, &self.group, &self.kem, kind);
+        (read(&self.h, nsid, &self.query(rest), &headers).await, mac)
     }
 }
 
@@ -138,7 +133,7 @@ async fn writes_a_repo_in_a_space_and_tells_its_authority() {
     let claims = service_auth::verify(token, &account.signing.public(), now()).unwrap();
     let aud = format!("{}#atproto_pds", f.authority.did);
     assert_eq!(
-        service_auth::check(&claims, &aud, "com.atproto.space.notifyWrite").unwrap(),
+        service_auth::check(&claims, &aud, "com.atproto.space.notifyRepoUpdate").unwrap(),
         f.group
     );
 
@@ -249,7 +244,7 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
 
     // The whole repo, as an archive of its commit and records, the commit
     // vouched for under the secret the syncer agreed.
-    let (repo, secret) = f.get("com.atproto.space.getRepo", "", COMMIT_MAC).await;
+    let (repo, mac) = f.get("com.atproto.space.getRepo", "", COMMIT_MAC).await;
     assert_eq!(repo.status, 200);
     let records: BTreeMap<String, Vec<u8>> = writes
         .iter()
@@ -269,17 +264,19 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
         })
         .collect();
     assert_eq!(repo.body, star(&commit, &records));
-    assert_eq!(
-        repo.mac(),
-        Some(mac_header(COMMIT_MAC, &commit.mac(&secret)).as_str())
-    );
+    assert_eq!(repo.headers["content-type"], "application/vnd.dasl.star");
+    assert_eq!(mac.commit(&repo).unwrap(), commit);
     assert_eq!(repo.headers["cache-control"], "private");
+    assert_eq!(repo.headers["vary"], "authorization, accept-signature");
     assert_eq!(
-        repo.headers["vary"],
-        "authorization, atproto-space-want-mac"
+        repo.headers["access-control-expose-headers"],
+        "atproto-space-commit, signature-input, signature"
     );
+    // Checked under another secret, the MAC does not hold.
+    let (_, other) = signed(&f.syncer, &f.group, &f.kem, COMMIT_MAC);
+    assert!(other.commit(&repo).is_err());
 
-    let (latest, secret) = f
+    let (latest, mac) = f
         .get("com.atproto.space.getLatestCommit", "", COMMIT_MAC)
         .await;
     assert_eq!(
@@ -292,13 +289,10 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
             "data": Value::Bytes(commit.data.to_vec()).to_json(),
         }})
     );
-    assert_eq!(
-        latest.mac(),
-        Some(mac_header(COMMIT_MAC, &commit.mac(&secret)).as_str())
-    );
+    assert_eq!(mac.commit(&latest).unwrap(), commit);
 
     // One record, vouched for by its URI and CID.
-    let (one, secret) = f
+    let (one, mac) = f
         .get(
             "com.atproto.space.getRecord",
             &format!("&collection={RULE}&rkey=b"),
@@ -311,9 +305,10 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
         one.json(),
         json!({"uri": uri, "cid": cid.to_string(), "value": rule("Be kind")})
     );
+    assert_eq!(mac.record(&one).unwrap(), (uri, cid.to_string()));
     assert_eq!(
-        one.mac(),
-        Some(mac_header(RECORD_MAC, &record_mac(&secret, &uri, &cid)).as_str())
+        one.headers["access-control-expose-headers"],
+        "atproto-space-record, signature-input, signature"
     );
     let (none, _) = f
         .get(
@@ -335,20 +330,35 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
             .kem
             .public()
             .did_key();
-    for nsid in ["getRepo", "getLatestCommit"] {
+    for nsid in ["getRepo", "getLatestCommit", "listRepoOps"] {
         let (headers, _) = signed(&f.syncer, &other, &kem, COMMIT_MAC);
         let query = format!("space={}&repo={other}", f.space);
         let got = read(&f.h, &format!("com.atproto.space.{nsid}"), &query, &headers).await;
         assert_eq!(got.error(), (400, "RepoNotFound".into()), "{nsid}");
     }
-    let (headers, _) = signed(&f.syncer, &other, &kem, COMMIT_MAC);
-    let query = format!("space={}&repo={other}", f.space);
-    let ops = read(&f.h, "com.atproto.space.listRepoOps", &query, &headers).await;
-    assert_eq!(
-        ops.json(),
-        json!({"ops": [], "cursor": null, "commit": null})
-    );
-    assert_eq!(ops.mac(), None);
+
+    // A read with a space credential that asks for no MAC is refused.
+    let (headers, _) = signed(&f.syncer, &f.group, &f.kem, COMMIT_MAC);
+    let headers: Vec<(&str, String)> = headers
+        .into_iter()
+        .filter(|(k, _)| *k != "accept-signature")
+        .collect();
+    let record = format!("&collection={RULE}&rkey=b");
+    for (nsid, rest) in [
+        ("getRecord", record.as_str()),
+        ("getRepo", ""),
+        ("getLatestCommit", ""),
+        ("listRepoOps", ""),
+    ] {
+        let got = read(
+            &f.h,
+            &format!("com.atproto.space.{nsid}"),
+            &f.query(rest),
+            &headers,
+        )
+        .await;
+        assert_eq!(got.error(), (400, "InvalidSpaceMac".into()), "{nsid}");
+    }
 }
 
 async fn list(f: &Fixture, rest: String) -> Json {
@@ -402,33 +412,32 @@ async fn lists_a_repos_records_a_page_at_a_time() {
     assert_eq!(all["records"][0]["value"], rule("B"));
     assert_eq!(all["cursor"], Json::Null);
 
-    let first = list(&f, "&limit=2&reverse=true".into()).await;
-    assert_eq!(
-        paths(&first),
-        ["fyi.opensocial.rule.x/a".to_string(), format!("{RULE}/a")]
-    );
+    let first = list(&f, "&limit=2".into()).await;
+    assert_eq!(paths(&first), [format!("{RULE}/b"), format!("{RULE}/a")]);
     let cursor = first["cursor"].as_str().unwrap().to_string();
     assert_eq!(cursor, format!("{}/{}/{RULE}/a", f.space, f.group));
-    let rest = list(&f, format!("&limit=2&reverse=true&cursor={cursor}")).await;
-    assert_eq!(paths(&rest), [format!("{RULE}/b")]);
+    let rest = list(&f, format!("&limit=2&cursor={cursor}")).await;
+    assert_eq!(paths(&rest), ["fyi.opensocial.rule.x/a".to_string()]);
 
     let rules = list(&f, format!("&collection={RULE}&excludeValues=true")).await;
     assert_eq!(paths(&rules), [format!("{RULE}/b"), format!("{RULE}/a")]);
     assert_eq!(rules["records"][0].get("value"), None);
 
-    for (rest, why) in [
-        (
+    let (got, _) = f
+        .get(
+            "com.atproto.space.listRecords",
             "&cursor=at://elsewhere/x/y",
-            "the cursor is not a record of this repo",
-        ),
-        ("&limit=1001", "limit is 1 to 1000"),
-    ] {
-        let (got, _) = f
-            .get("com.atproto.space.listRecords", rest, COMMIT_MAC)
-            .await;
-        assert_eq!(got.status, 400);
-        assert_eq!(got.json()["message"], why);
-    }
+            COMMIT_MAC,
+        )
+        .await;
+    assert_eq!(got.error(), (400, "InvalidCursor".into()));
+    let (got, _) = f
+        .get("com.atproto.space.listRecords", "&limit=1001", COMMIT_MAC)
+        .await;
+    assert_eq!(got.status, 400);
+    assert_eq!(got.json()["message"], "limit is 1 to 1000");
+    // A list carries no MAC.
+    assert_eq!(got.header("signature"), None);
 }
 
 #[tokio::test]
@@ -466,7 +475,7 @@ async fn lists_a_repos_changes_and_vouches_for_where_they_lead() {
         Cid::of_cbor(&drisl::encode(&Value::from_json(&rule(title)).unwrap())).to_string()
     };
 
-    let (all, secret) = f.get("com.atproto.space.listRepoOps", "", COMMIT_MAC).await;
+    let (all, mac) = f.get("com.atproto.space.listRepoOps", "", COMMIT_MAC).await;
     let all_json = all.json();
     // An op superseded since has no value: the record is not what it made.
     assert_eq!(
@@ -480,18 +489,17 @@ async fn lists_a_repos_changes_and_vouches_for_where_they_lead() {
     );
     assert_eq!(all_json["cursor"], Json::Null);
     assert_eq!(all_json["commit"]["rev"], second.rev);
-    assert_eq!(
-        all.mac(),
-        Some(mac_header(COMMIT_MAC, &second.mac(&secret)).as_str())
-    );
+    assert_eq!(mac.commit(&all).unwrap(), second);
 
-    // A page at a time: a full page has a cursor, and no commit.
-    let (page, _) = f
+    // A page at a time: a full page has a cursor, and the repo's commit
+    // as every page does.
+    let (page, mac) = f
         .get("com.atproto.space.listRepoOps", "&limit=3", COMMIT_MAC)
         .await;
+    assert_eq!(mac.commit(&page).unwrap(), second);
     let page = page.json();
     assert_eq!(page["ops"].as_array().unwrap().len(), 3);
-    assert_eq!(page["commit"], Json::Null);
+    assert_eq!(page["commit"], all_json["commit"]);
     let cursor = page["cursor"].as_str().unwrap();
     assert_eq!(cursor, format!("{}/0", second.rev));
     let (last, _) = f
@@ -525,7 +533,7 @@ async fn lists_a_repos_changes_and_vouches_for_where_they_lead() {
                 COMMIT_MAC,
             )
             .await;
-        assert_eq!(bad.error(), (400, "MalformedCursor".into()));
+        assert_eq!(bad.error(), (400, "InvalidCursor".into()));
     }
 }
 
@@ -542,15 +550,14 @@ async fn serves_and_lists_a_spaces_blobs() {
             .unwrap();
     let link = |r: &Json| r["ref"]["$link"].as_str().unwrap().to_string();
     let profile = |avatar: &Json| json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "avatar": avatar});
-    let first =
-        f.h.host
-            .space_write(
-                &f.group,
-                &f.space,
-                &[create("fyi.opensocial.profile", "self", profile(&picture))],
-            )
-            .await
-            .unwrap();
+    f.h.host
+        .space_write(
+            &f.group,
+            &f.space,
+            &[create("fyi.opensocial.profile", "self", profile(&picture))],
+        )
+        .await
+        .unwrap();
     // A blob a record elsewhere references is not this space's.
     f.h.host
         .write(
@@ -601,14 +608,8 @@ async fn serves_and_lists_a_spaces_blobs() {
         .get("com.atproto.space.listBlobs", "&limit=1", COMMIT_MAC)
         .await;
     assert_eq!(page.json()["cursor"], link(&picture));
-    let (since, _) = f
-        .get(
-            "com.atproto.space.listBlobs",
-            &format!("&since={}", first.rev),
-            COMMIT_MAC,
-        )
-        .await;
-    assert_eq!(since.json()["cids"], json!([]));
+    // A listing of blobs carries no MAC.
+    assert_eq!(listed.header("signature"), None);
 
     // Once no record references it, it is gone.
     f.h.host
@@ -758,14 +759,27 @@ async fn reads_only_with_a_credential_the_authority_issued() {
             (401, "BadSignature"),
         ),
         (without("signature"), (401, "BadSignature")),
-        (without("atproto-space-want-mac"), (400, "BadSpaceMac")),
+        (without("accept-signature"), (400, "InvalidSpaceMac")),
+        // Asking for a MAC of a record of a read that vouches for a commit
+        // asks for none of what it can give.
         (
             with(
-                "atproto-space-want-mac",
-                want_mac_header(COMMIT_MAC, &other_key.public().did_key())
-                    .replace("ver=1", "ver=2"),
+                "accept-signature",
+                accept_signature(RECORD_MAC, &other_key.public().did_key()),
             ),
-            (400, "BadSpaceMac"),
+            (400, "InvalidSpaceMac"),
+        ),
+        (
+            with("accept-signature", "((".into()),
+            (400, "InvalidSpaceMac"),
+        ),
+        // A key share that is not a P-256 key.
+        (
+            with(
+                "accept-signature",
+                accept_signature(COMMIT_MAC, &f.authority.key.public().did_key()),
+            ),
+            (400, "InvalidSpaceMac"),
         ),
     ] {
         let headers: Vec<(&str, String)> = headers;
@@ -807,7 +821,7 @@ async fn reads_only_with_a_credential_the_authority_issued() {
     assert_eq!(got.json()["message"], "repo is required");
 }
 
-/// `notifyCredentialRevoked` with `body`, as `iss` for `aud`, signed with
+/// `notifyCredentialsRevoked` with `body`, as `iss` for `aud`, signed with
 /// `key`, for `lxm`.
 async fn revoke(
     f: &Fixture,
@@ -831,7 +845,7 @@ async fn revoke(
     let res =
         f.h.http
             .post(format!(
-                "{}/xrpc/com.atproto.space.notifyCredentialRevoked",
+                "{}/xrpc/com.atproto.space.notifyCredentialsRevoked",
                 f.h.url
             ))
             .bearer_auth(token)
@@ -863,7 +877,7 @@ async fn reads_no_more_with_a_credential_its_authority_revoked() {
     );
     let (_, token) = space_auth::parse(Kind::Credential, &f.syncer.credential).unwrap();
     let body = json!({"space": f.space, "credentials": [token.jti]});
-    let lxm = "com.atproto.space.notifyCredentialRevoked";
+    let lxm = "com.atproto.space.notifyCredentialsRevoked";
     let a = &f.authority;
 
     let error = |r: (u16, Json)| (r.0, r.1["error"].as_str().unwrap_or_default().to_string());
@@ -876,7 +890,7 @@ async fn reads_no_more_with_a_credential_its_authority_revoked() {
                 &a.did,
                 &f.group,
                 &a.key,
-                "com.atproto.space.notifyWrite",
+                "com.atproto.space.notifyRepoUpdate",
             )
             .await,
             (401, "BadJwtLexiconMethod"),
@@ -947,7 +961,7 @@ async fn reads_no_more_with_a_credential_its_authority_revoked() {
     let res =
         f.h.http
             .post(format!(
-                "{}/xrpc/com.atproto.space.notifyCredentialRevoked",
+                "{}/xrpc/com.atproto.space.notifyCredentialsRevoked",
                 f.h.url
             ))
             .json(&body)
@@ -1079,7 +1093,10 @@ async fn web_authority(told: Arc<Told>) -> (String, Keypair) {
     let doc = Arc::new(Mutex::new(Json::Null));
     let served = doc.clone();
     let router = Router::new()
-        .route("/xrpc/com.atproto.space.notifyWrite", post(notify_write))
+        .route(
+            "/xrpc/com.atproto.space.notifyRepoUpdate",
+            post(notify_write),
+        )
         .with_state(told)
         .route(
             "/.well-known/did.json",
@@ -1138,13 +1155,10 @@ async fn a_space_of_a_did_web_authority() {
     );
     // And its credential reads.
     let syncer = syncer(&authority, &space);
-    let (headers, secret) = signed(&syncer, &group, &kem, COMMIT_MAC);
+    let (headers, mac) = signed(&syncer, &group, &kem, COMMIT_MAC);
     // A did:web's `%3A` is sent as it is, escaped.
     let query = format!("space={}&repo={group}", space.replace('%', "%25"));
     let got = read(&h, "com.atproto.space.getLatestCommit", &query, &headers).await;
     assert_eq!(got.status, 200, "{}", String::from_utf8_lossy(&got.body));
-    assert_eq!(
-        got.mac(),
-        Some(mac_header(COMMIT_MAC, &commit.mac(&secret)).as_str())
-    );
+    assert_eq!(mac.commit(&got).unwrap(), commit);
 }

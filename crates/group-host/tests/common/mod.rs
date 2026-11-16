@@ -48,6 +48,61 @@ pub fn turn(switch: &AtomicBool, to: bool) {
     switch.store(to, Ordering::SeqCst);
 }
 
+/// Takes a database back to its schema before migration `to`, as one
+/// made then would be, so opening it runs `to` and those after again:
+/// each later migration undone, the last first, statement by statement.
+/// A table or index it made is dropped, a rename is reversed, a column it
+/// added is dropped, and a table it dropped is made again as an earlier
+/// one made it. What only moves rows is left as it is.
+#[allow(dead_code)]
+pub fn rewind(conn: &rusqlite::Connection, to: usize) {
+    let migrations = group_host::store::MIGRATIONS;
+    let statements = |m: &str| -> Vec<String> {
+        m.split(';')
+            .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+    let name = |rest: &str| {
+        let rest = rest.strip_prefix("IF NOT EXISTS ").unwrap_or(rest);
+        let rest = rest.strip_prefix("IF EXISTS ").unwrap_or(rest);
+        rest.split([' ', '(']).next().unwrap().to_string()
+    };
+    for (at, migration) in migrations.iter().enumerate().skip(to).rev() {
+        for statement in statements(migration).iter().rev() {
+            let undo = if let Some(rest) = statement.strip_prefix("CREATE TABLE ") {
+                format!("DROP TABLE IF EXISTS {}", name(rest))
+            } else if let Some(rest) = statement
+                .strip_prefix("CREATE INDEX ")
+                .or_else(|| statement.strip_prefix("CREATE UNIQUE INDEX "))
+            {
+                format!("DROP INDEX IF EXISTS {}", name(rest))
+            } else if let Some(rest) = statement.strip_prefix("ALTER TABLE ") {
+                let words: Vec<&str> = rest.split(' ').collect();
+                match words[..] {
+                    [from, "RENAME", "TO", to] => format!("ALTER TABLE {to} RENAME TO {from}"),
+                    [table, "ADD", "COLUMN", column, ..] => {
+                        format!("ALTER TABLE {table} DROP COLUMN {column}")
+                    }
+                    _ => panic!("no undoing {statement}"),
+                }
+            } else if let Some(rest) = statement.strip_prefix("DROP TABLE ") {
+                let table = name(rest);
+                let made = |s: &String| {
+                    s.strip_prefix("CREATE TABLE ")
+                        .is_some_and(|r| name(r) == table)
+                };
+                let mut earlier = migrations[..at].iter().flat_map(|m| statements(m));
+                earlier.rfind(made).expect("a table made before")
+            } else {
+                continue;
+            };
+            conn.execute(&undo, []).unwrap();
+        }
+    }
+    conn.pragma_update(None, "user_version", to as i64).unwrap();
+}
+
 async fn publish(
     State(plc): State<Arc<Plc>>,
     Path(did): Path<String>,

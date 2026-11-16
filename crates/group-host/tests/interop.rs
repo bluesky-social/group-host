@@ -5,13 +5,13 @@ mod common;
 
 use atproto::did;
 use atproto::space::{
-    COMMIT_MAC, LtHash, RECORD_MAC, element, encapsulate, mac_header, read_space_meta, read_star,
-    record_mac, star, want_mac_header,
+    COMMIT_MAC, LtHash, RECORD_MAC, accept_signature, check_record_mac, element, encapsulate,
+    read_repo_star, read_space_meta, read_star, star,
 };
 use atproto::space_auth::{Expect, Kind, sign_request, space_host_aud, verify};
 use atproto::{Curve, Keypair};
 use common::net::net;
-use common::{start, start_reachable};
+use common::{start, start_reachable_by_name};
 use group_host::repo::Write;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -143,19 +143,17 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
         }),
     )
     .await;
-    let space = created["uri"].as_str().unwrap().to_string();
-    for (did, read, write) in [
-        (bob.did.as_str(), true, false),
-        (group.as_str(), false, true),
-    ] {
-        call(
-            &net.pds,
-            "com.atproto.memberspace.putMember",
-            jwt,
-            &json!({"space": space, "did": did, "read": read, "write": write}),
-        )
-        .await;
-    }
+    let space = created["space"].as_str().unwrap().to_string();
+    call(
+        &net.pds,
+        "com.atproto.memberspace.putMembers",
+        jwt,
+        &json!({"space": space, "members": [
+            {"did": bob.did, "read": true, "write": false},
+            {"did": group, "read": false, "write": true},
+        ]}),
+    )
+    .await;
 
     // The group writes there, and its host tells Bob's PDS.
     let rule = json!({"$type": "fyi.opensocial.rule", "title": "Clip in", "createdAt": "2026-11-03T00:00:00Z"});
@@ -190,11 +188,11 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
     let key = Keypair::generate(Curve::P256);
     let issued = call(
         &net.pds,
-        "com.atproto.space.getSpaceCredential",
+        "com.atproto.space.authorizeSpaceSync",
         "",
         &json!({
             "space": space,
-            "credentialKid": key.public().did_key(),
+            "credentialKey": key.public().did_key(),
             "delegationToken": token["token"],
         }),
     )
@@ -207,7 +205,7 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
     // The authority heard of the write: the group's repo there is at the
     // commit the host made.
     let mut req = http
-        .get(format!("{}/xrpc/com.atproto.space.listRepos", net.pds))
+        .get(format!("{}/xrpc/com.atproto.space.listWriters", net.pds))
         .query(&[("space", space.as_str())]);
     for (k, v) in sign_request(&key, &authorization, &bob.did).unwrap() {
         req = req.header(k, v);
@@ -217,7 +215,8 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
     let repos: Value = res.json().await.unwrap();
     assert!(status.is_success(), "{status} {repos}");
     let repos = repos["repos"].as_array().unwrap();
-    let ours = repos.iter().find(|r| r["did"] == group.as_str()).unwrap();
+    let ours = repos.iter().find(|r| r["repo"] == group.as_str()).unwrap();
+    assert_eq!(ours["$type"], "com.atproto.space.defs#repoWrite");
     assert_eq!(ours["repoRev"], commit.rev.as_str());
     assert_eq!(
         ours["data"],
@@ -231,25 +230,23 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
     let mut req = http
         .get(format!("{}/xrpc/com.atproto.space.getRepo", h.url))
         .query(&[("space", space.as_str()), ("repo", group.as_str())])
-        .header(
-            "atproto-space-want-mac",
-            want_mac_header(COMMIT_MAC, &share),
-        );
+        .header("accept-signature", accept_signature(COMMIT_MAC, &share));
     for (k, v) in sign_request(&key, &authorization, &group).unwrap() {
         req = req.header(k, v);
     }
     let res = req.send().await.unwrap();
     assert_eq!(res.status(), 200);
-    let mac = res.headers()["atproto-space-mac"]
-        .to_str()
-        .unwrap()
-        .to_string();
-    assert_eq!(mac, mac_header(COMMIT_MAC, &commit.mac(&secret)));
+    let said = res.headers().clone();
+    assert_eq!(said["content-type"], "application/vnd.dasl.star");
+    let bytes = res.bytes().await.unwrap().to_vec();
+    let header = |n: &str| said.get(n).and_then(|v| v.to_str().ok());
+    let (read, _) = read_repo_star(&bytes, &space, &group, &share, &secret, header).unwrap();
+    assert_eq!(read, commit);
     let records = BTreeMap::from([(
         "fyi.opensocial.rule/one".to_string(),
         atproto::drisl::encode(&atproto::Value::from_json(&rule).unwrap()),
     )]);
-    assert_eq!(res.bytes().await.unwrap().to_vec(), star(&commit, &records));
+    assert_eq!(bytes, star(&commit, &records));
 }
 
 /// What `GET nsid` with `query` and `headers` answers at `url`.
@@ -277,7 +274,8 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
         eprintln!("the reference PDS has no spaces: GROUP_HOST_DEV_ENV names the alpha's build");
         return;
     }
-    let h = start_reachable(&[("PLC_URL", net.plc.as_str())]).await;
+    // By name: the reference PDS reaches no server at an IP address.
+    let h = start_reachable_by_name(&[("PLC_URL", net.plc.as_str())]).await;
     let group = h.host.create_account("runners.groups.test").await.unwrap();
     let space = h
         .host
@@ -342,13 +340,16 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
     assert!(status.is_success(), "{status} {token}");
     let key = Keypair::generate(Curve::P256);
     let res = reqwest::Client::new()
-        .post(format!("{}/xrpc/com.atproto.space.getSpaceCredential", h.url))
-        .json(&json!({"space": space, "credentialKid": key.public().did_key(), "delegationToken": token["token"]}))
+        .post(format!("{}/xrpc/com.atproto.space.authorizeSpaceSync", h.url))
+        .json(&json!({"space": space, "credentialKey": key.public().did_key(), "delegationToken": token["token"]}))
         .send()
         .await
         .unwrap();
     assert_eq!(res.status(), 200);
     let issued: Value = res.json().await.unwrap();
+    // The space's revision is the writer set's, which her write moved.
+    let space_rev = issued["spaceRev"].as_str().unwrap();
+    assert_eq!(space_rev, writers[0].space_rev);
     let authorization = format!(
         "Atproto-Space-Credential {}",
         issued["credential"].as_str().unwrap()
@@ -369,10 +370,7 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
         .unwrap()
         .into_iter()
         .collect();
-    headers.push((
-        "atproto-space-want-mac",
-        want_mac_header(RECORD_MAC, &share),
-    ));
+    headers.push(("accept-signature", accept_signature(RECORD_MAC, &share)));
     let (status, said, record) = get(
         &net.pds,
         "com.atproto.space.getRecord",
@@ -387,11 +385,14 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
     .await;
     assert!(status.is_success(), "{status} {record}");
     assert_eq!(record["value"], note);
-    let uri = record["uri"].as_str().unwrap();
-    let cid = atproto::Cid::parse(record["cid"].as_str().unwrap()).unwrap();
+    let header = |n: &str| said.get(n).and_then(|v| v.to_str().ok());
+    let (uri, cid) = check_record_mac(header, &share, &secret).unwrap();
     assert_eq!(
-        said["atproto-space-mac"].to_str().unwrap(),
-        mac_header(RECORD_MAC, &record_mac(&secret, uri, &cid))
+        (uri.as_str(), cid.as_str()),
+        (
+            record["uri"].as_str().unwrap(),
+            record["cid"].as_str().unwrap()
+        )
     );
 
     // And the host lists her repo to the same credential.
@@ -401,13 +402,18 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
         .collect();
     let (status, _, repos) = get(
         &h.url,
-        "com.atproto.space.listRepos",
+        "com.atproto.space.listWriters",
         &[("space", space.as_str())],
         &headers,
     )
     .await;
     assert_eq!(status, 200, "{repos}");
-    assert_eq!(repos["repos"][0]["did"], alice.did);
+    assert_eq!(
+        repos["repos"][0]["$type"],
+        "com.atproto.space.defs#repoWrite"
+    );
+    assert_eq!(repos["repos"][0]["repo"], alice.did);
+    assert_eq!(repos["cursor"], space_rev);
 }
 
 #[tokio::test]
@@ -417,7 +423,7 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         eprintln!("the reference PDS has no spaces: GROUP_HOST_DEV_ENV names the alpha's build");
         return;
     }
-    let h = common::start_reachable_by_name(&[("PLC_URL", net.plc.as_str())]).await;
+    let h = start_reachable_by_name(&[("PLC_URL", net.plc.as_str())]).await;
     let service = h.host.config.service_did.clone();
     assert!(service.starts_with("did:web:localhost"), "{service}");
 
@@ -438,11 +444,11 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         &json!({
             "spaceType": "fyi.opensocial.invites",
             "skey": "self",
-            "policy": {"$type": "com.atproto.managedspace.policy", "managingApp": service},
+            "policy": {"$type": "com.atproto.managedspace.policy", "managingApp": format!("{service}#opensocial")},
         }),
     )
     .await;
-    let inbox = created["uri"].as_str().unwrap().to_string();
+    let inbox = created["space"].as_str().unwrap().to_string();
 
     // A group here invites her: its write is told to her PDS, which asks
     // this host whether the group may write there.
@@ -479,9 +485,9 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
     let key = Keypair::generate(Curve::P256);
     let issued = call(
         &net.pds,
-        "com.atproto.space.getSpaceCredential",
+        "com.atproto.space.authorizeSpaceSync",
         "",
-        &json!({"space": inbox, "credentialKid": key.public().did_key(), "delegationToken": token["token"]}),
+        &json!({"space": inbox, "credentialKey": key.public().did_key(), "delegationToken": token["token"]}),
     )
     .await;
     let authorization = format!(
@@ -494,7 +500,7 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         .collect();
     let (status, _, repos) = get(
         &net.pds,
-        "com.atproto.space.listRepos",
+        "com.atproto.space.listWriters",
         &[("space", inbox.as_str())],
         &headers,
     )
@@ -504,7 +510,7 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|r| r["did"].as_str().unwrap())
+        .map(|r| r["repo"].as_str().unwrap())
         .collect();
     assert!(writers.contains(&group.as_str()), "{repos}");
 }
@@ -537,12 +543,12 @@ async fn reads_the_archives_the_reference_pds_exports_of_a_space() {
         }),
     )
     .await;
-    let space = created["uri"].as_str().unwrap().to_string();
+    let space = created["space"].as_str().unwrap().to_string();
     call(
         &net.pds,
-        "com.atproto.memberspace.putMember",
+        "com.atproto.memberspace.putMembers",
         jwt,
-        &json!({"space": space, "did": bob.did, "read": true, "write": false}),
+        &json!({"space": space, "members": [{"did": bob.did, "read": true, "write": false}]}),
     )
     .await;
     let note = json!({"$type": "com.example.note", "text": "moving soon", "createdAt": "2026-11-04T00:00:00Z"});
@@ -593,6 +599,7 @@ async fn reads_the_archives_the_reference_pds_exports_of_a_space() {
         (alice.did.as_str(), space.as_str())
     );
     assert_eq!(writer.data, commit.data.to_vec());
+    assert_eq!(writer.repo_rev, commit.rev);
     let mut hash = LtHash::default();
     for (path, value) in &records {
         let (collection, rkey) = path.split_once('/').unwrap();

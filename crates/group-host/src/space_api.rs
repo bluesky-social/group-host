@@ -1,7 +1,8 @@
 //! The `com.atproto.space.*` methods a repo host answers for its accounts'
 //! repos in spaces: reading them, for whoever holds a credential the
-//! space's authority issued, each answer vouched for with a MAC under a
-//! secret agreed for the request; and being told a credential is revoked.
+//! space's authority issued, each answer vouched for with a MAC (an HTTP
+//! Message Signature) under a secret agreed for the request; and being told
+//! credentials are revoked.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
@@ -10,8 +11,8 @@ use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use atproto::service_auth::{self, Claims};
 use atproto::space::{
-    COMMIT_MAC, Commit, LtHash, RECORD_MAC, SpaceRef, decapsulate, mac_header, parse_want_mac,
-    record_mac, star,
+    COMMIT_MAC, Commit, LtHash, MacRequest, RECORD_MAC, SpaceRef, decapsulate, mac_headers,
+    read_accept_signature, record_header, star,
 };
 use atproto::space_auth::{self, CLOCK_SKEW, CREDENTIAL_MAX_AGE, Expect, Kind, TokenError};
 use atproto::{Cid, drisl};
@@ -23,10 +24,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// The method an authority revokes credentials with.
-pub const NOTIFY_REVOKED: &str = "com.atproto.space.notifyCredentialRevoked";
-
-const WANT_MAC: &str = "atproto-space-want-mac";
-const MAC: HeaderName = HeaderName::from_static("atproto-space-mac");
+pub const NOTIFY_REVOKED: &str = "com.atproto.space.notifyCredentialsRevoked";
 
 pub(crate) fn unauthorized(code: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::UNAUTHORIZED, code, message)
@@ -120,24 +118,61 @@ async fn asked(host: &Host, p: &Params, headers: &HeaderMap) -> Result<Asked, Xr
     Ok(Asked { account, space })
 }
 
-/// The secret agreed for the request, from the key share its
-/// `Atproto-Space-Want-Mac` header for a MAC of `kind` sends.
-fn secret(headers: &HeaderMap, account: &Account, kind: &str) -> Result<[u8; 32], XrpcError> {
-    let header = headers.get(WANT_MAC).and_then(|v| v.to_str().ok());
-    let share = parse_want_mac(header.unwrap_or_default(), kind);
-    let agreed = share.and_then(|share| decapsulate(&account.kem, &share));
-    agreed.map_err(|e| XrpcError::new(StatusCode::BAD_REQUEST, "BadSpaceMac", e.0))
+/// A MAC a read asks for, and the secret agreed with its key share.
+struct Mac {
+    request: MacRequest,
+    profile: &'static str,
+    secret: [u8; 32],
+}
+
+fn bad_mac(message: impl Into<String>) -> XrpcError {
+    XrpcError::new(StatusCode::BAD_REQUEST, "InvalidSpaceMac", message)
+}
+
+fn bad_cursor(message: &str) -> XrpcError {
+    XrpcError::new(StatusCode::BAD_REQUEST, "InvalidCursor", message)
+}
+
+/// The MAC of `profile` the request's `Accept-Signature` asks for. Every
+/// read here is with a space credential, which must ask for one.
+fn mac(headers: &HeaderMap, account: &Account, profile: &'static str) -> Result<Mac, XrpcError> {
+    let header = headers
+        .get("accept-signature")
+        .and_then(|v| v.to_str().ok());
+    let request = read_accept_signature(header.unwrap_or_default(), profile);
+    let request = request.map_err(|e| bad_mac(e.0))?;
+    let request = request
+        .ok_or_else(|| bad_mac(format!("a MAC must be asked for with tag \"{profile}\"")))?;
+    // The share is a P-256 key, as reading the request checked, and so is
+    // every account's KEM key.
+    let secret = decapsulate(&account.kem, &request.key_share).expect("a P-256 key share");
+    Ok(Mac {
+        request,
+        profile,
+        secret,
+    })
 }
 
 /// An answer for one reader: not kept by a shared cache, and varying with
-/// the credential and the key share.
-fn private(mut res: Response, mac: Option<String>) -> Response {
+/// the credential and the MAC asked for; with a MAC, `vouched` the covered
+/// header's value, and the MAC's headers exposed to a browser app.
+fn private(mut res: Response, vouched: Option<(&Mac, String)>) -> Response {
     let headers = res.headers_mut();
     headers.insert(header::CACHE_CONTROL, "private".parse().unwrap());
-    let vary = format!("authorization, {WANT_MAC}");
-    headers.insert(header::VARY, vary.parse().unwrap());
-    if let Some(mac) = mac {
-        headers.insert(MAC, mac.parse().expect("a MAC header is ASCII"));
+    headers.insert(
+        header::VARY,
+        "authorization, accept-signature".parse().unwrap(),
+    );
+    if let Some((mac, value)) = vouched {
+        let expose = format!("{}, signature-input, signature", mac.profile);
+        headers.insert(
+            header::ACCESS_CONTROL_EXPOSE_HEADERS,
+            expose.parse().unwrap(),
+        );
+        for (name, value) in mac_headers(&mac.request, mac.profile, &value, &mac.secret) {
+            let name = HeaderName::try_from(name).expect("a MAC header's name");
+            headers.insert(name, value.parse().expect("a MAC header is ASCII"));
+        }
     }
     res
 }
@@ -198,7 +233,7 @@ pub async fn get_record(
     headers: HeaderMap,
 ) -> Answer {
     let asked = asked(&host, &p, &headers).await?;
-    let secret = secret(&headers, &asked.account, RECORD_MAC)?;
+    let mac = mac(&headers, &asked.account, RECORD_MAC)?;
     let (collection, rkey) = (param(&p, "collection")?, param(&p, "rkey")?);
     let found = host
         .store
@@ -212,9 +247,9 @@ pub async fn get_record(
             format!("no record {uri}"),
         )
     })?;
-    let mac = mac_header(RECORD_MAC, &record_mac(&secret, &uri, &record.cid));
+    let vouched = record_header(&uri, &record.cid.to_string());
     let body = json!({"uri": uri, "cid": record.cid.to_string(), "value": value(&record.value)});
-    Ok(private(Json(body).into_response(), Some(mac)))
+    Ok(private(Json(body).into_response(), Some((&mac, vouched))))
 }
 
 pub async fn list_records(
@@ -230,20 +265,14 @@ pub async fn list_records(
         None => None,
         Some(c) => Some(
             c.strip_prefix(&prefix)
-                .ok_or_else(|| invalid("the cursor is not a record of this repo"))?,
+                .ok_or_else(|| bad_cursor("the cursor is not a record of this repo"))?,
         ),
     };
     let collection = p.get("collection").map(String::as_str);
+    let did = &asked.account.did;
     let records = host
         .store
-        .space_list(
-            &asked.account.did,
-            &asked.space,
-            collection,
-            cursor,
-            limit,
-            flag("reverse"),
-        )
+        .space_list(did, &asked.space, collection, cursor, limit, false)
         .map_err(XrpcError::internal)?;
     let cursor = records
         .last()
@@ -271,19 +300,18 @@ pub async fn get_repo(
     headers: HeaderMap,
 ) -> Answer {
     let asked = asked(&host, &p, &headers).await?;
-    let secret = secret(&headers, &asked.account, COMMIT_MAC)?;
+    let mac = mac(&headers, &asked.account, COMMIT_MAC)?;
     let head = head(&host, &asked)?;
     let records = host
         .store
         .space_records(&asked.account.did, &asked.space)
         .map_err(XrpcError::internal)?;
     let commit = commit(&asked, &head);
-    let mac = mac_header(COMMIT_MAC, &commit.mac(&secret));
     let res = (
-        [(header::CONTENT_TYPE, "application/octet-stream")],
+        [(header::CONTENT_TYPE, "application/vnd.dasl.star")],
         star(&commit, &records),
     );
-    Ok(private(res.into_response(), Some(mac)))
+    Ok(private(res.into_response(), Some((&mac, commit.header()))))
 }
 
 pub async fn get_latest_commit(
@@ -292,35 +320,31 @@ pub async fn get_latest_commit(
     headers: HeaderMap,
 ) -> Answer {
     let asked = asked(&host, &p, &headers).await?;
-    let secret = secret(&headers, &asked.account, COMMIT_MAC)?;
+    let mac = mac(&headers, &asked.account, COMMIT_MAC)?;
     let commit = commit(&asked, &head(&host, &asked)?);
-    let mac = mac_header(COMMIT_MAC, &commit.mac(&secret));
     let body = json!({"commit": commit_json(&commit)});
-    Ok(private(Json(body).into_response(), Some(mac)))
+    Ok(private(
+        Json(body).into_response(),
+        Some((&mac, commit.header())),
+    ))
 }
 
-/// The changes after `since`, a page at a time; the last page carries the
-/// commit they lead to, vouched for, for the syncer to check its running
-/// set hash against.
+/// The changes after `since`, a page at a time; each page carries the
+/// repo's current commit, vouched for, for the syncer to check its running
+/// set hash against once it reaches the last.
 pub async fn list_repo_ops(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
     let asked = asked(&host, &p, &headers).await?;
-    let secret = secret(&headers, &asked.account, COMMIT_MAC)?;
+    let mac = mac(&headers, &asked.account, COMMIT_MAC)?;
     let limit = page(&p, 100, 1000)?;
     let after = match p.get("cursor") {
         Some(c) => c
             .split_once('/')
             .and_then(|(rev, idx)| Some((rev, idx.parse().ok()?)))
-            .ok_or_else(|| {
-                XrpcError::new(
-                    StatusCode::BAD_REQUEST,
-                    "MalformedCursor",
-                    "malformed cursor",
-                )
-            })?,
+            .ok_or_else(|| bad_cursor("malformed cursor"))?,
         // Every op of a revision after `since`, or every op.
         None => (p.get("since").map_or("", String::as_str), i64::MAX),
     };
@@ -328,12 +352,12 @@ pub async fn list_repo_ops(
         .store
         .space_ops(&asked.account.did, &asked.space, after, limit)
         .map_err(XrpcError::internal)?;
-    // A full page is not the end: a cursor to go on from, and no commit.
-    let full = ops.len() == limit as usize;
-    let commit = head.filter(|_| !full).map(|h| commit(&asked, &h));
+    let head = head.ok_or_else(|| no_repo_in(&asked.space))?;
+    let commit = commit(&asked, &head);
+    // A full page may not be the end: a cursor to go on from.
     let cursor = ops
         .last()
-        .filter(|_| full)
+        .filter(|_| ops.len() == limit as usize)
         .map(|op| format!("{}/{}", op.rev, op.idx));
     let exclude = p.get("excludeValues").is_some_and(|v| v == "true");
     let ops: Vec<Value> = ops
@@ -352,11 +376,11 @@ pub async fn list_repo_ops(
             entry
         })
         .collect();
-    let mac = commit
-        .as_ref()
-        .map(|c| mac_header(COMMIT_MAC, &c.mac(&secret)));
-    let body = json!({"ops": ops, "cursor": cursor, "commit": commit.as_ref().map(commit_json)});
-    Ok(private(Json(body).into_response(), mac))
+    let body = json!({"ops": ops, "cursor": cursor, "commit": commit_json(&commit)});
+    Ok(private(
+        Json(body).into_response(),
+        Some((&mac, commit.header())),
+    ))
 }
 
 /// A blob a record of the repo in the space references, served as a
@@ -402,13 +426,10 @@ pub async fn list_blobs(
 ) -> Answer {
     let asked = asked(&host, &p, &headers).await?;
     let limit = page(&p, 500, 1000)?;
-    let (since, cursor) = (
-        p.get("since").map(String::as_str),
-        p.get("cursor").map(String::as_str),
-    );
+    let cursor = p.get("cursor").map(String::as_str);
     let cids = host
         .store
-        .space_blobs(&asked.account.did, &asked.space, since, cursor, limit)
+        .space_blobs(&asked.account.did, &asked.space, cursor, limit)
         .map_err(XrpcError::internal)?;
     let cursor = cids
         .last()
@@ -455,7 +476,7 @@ pub(crate) fn forbidden(message: &str) -> XrpcError {
 
 /// A space's authority says credentials it issued are revoked: they read
 /// no repo here until they would have lapsed anyway.
-pub async fn notify_credential_revoked(
+pub async fn notify_credentials_revoked(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,

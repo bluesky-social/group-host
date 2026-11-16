@@ -1,7 +1,7 @@
 //! Invites. A group invites someone by writing an invite in its own repo
 //! in the invitee's inbox: a space under the invitee's own DID, at their
 //! PDS, which lets this host say who may write there
-//! (`com.atproto.managedspace.checkUserAccess`). An app writes it as the
+//! (`com.atproto.managedspace.checkAccess`). An app writes it as the
 //! group, through `com.atproto.space.*` with a session for the group, and
 //! takes it back by deleting it. The invitee's apps read it there; the
 //! host keeps its own list of what it sent, which is what redeems an
@@ -35,8 +35,8 @@ use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
-/// The method a space's authority asks this host who may read or write.
-pub const CHECK_USER_ACCESS: &str = "com.atproto.managedspace.checkUserAccess";
+/// The method a space's authority asks this host what a repo may do.
+pub const CHECK_ACCESS: &str = "com.atproto.managedspace.checkAccess";
 
 fn bad(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)
@@ -473,16 +473,17 @@ pub async fn decline_invite(
     Ok(Json(json!({})))
 }
 
-/// Whether a user may read or write a space this host manages for its
-/// authority: someone's inbox, which its owner reads and groups here
-/// write their invites in. McpRequest by the space's authority, with service
-/// auth for this host.
-pub async fn check_user_access(
+/// Whether an account may read or write a space this host manages for
+/// its authority: someone's inbox, which its owner reads and groups here
+/// write their invites in. Asked by the space's authority, with service
+/// auth for this host (`<host DID>#opensocial`, the managing app an inbox
+/// names).
+pub async fn check_access(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let asker = caller(&host, &headers, CHECK_USER_ACCESS).await?;
+    let asker = caller(&host, &headers, CHECK_ACCESS).await?;
     let asker = asker
         .ok_or_else(|| crate::space_api::unauthorized("AuthMissing", "service auth is required"))?;
     let space = SpaceRef::parse(param(&p, "space")?).map_err(|e| invalid(e.to_string()))?;
@@ -493,20 +494,20 @@ pub async fn check_user_access(
             "only the space's authority asks",
         ));
     }
-    let user = param(&p, "user")?;
     let inbox = space.kind == format!("{NS}.invites");
-    let authorized = match p.get("access").map(String::as_str) {
-        // Its owner reads it; a group here writes in it.
-        Some("write") => {
-            inbox
-                && host
-                    .store
-                    .account(user)
-                    .map_err(XrpcError::internal)?
-                    .is_some_and(|a| a.did == user)
-                && group_of(&host, user).is_ok()
+    // Its owner reads it; a group here writes in it. Without a repo, no
+    // one is asking as anyone, and may do neither.
+    let (read, write) = match p.get("repo").filter(|_| inbox) {
+        Some(repo) => {
+            let group = host
+                .store
+                .account(repo)
+                .map_err(XrpcError::internal)?
+                .is_some_and(|a| &a.did == repo)
+                && group_of(&host, repo).is_ok();
+            (repo == &space.authority, group)
         }
-        _ => inbox && user == space.authority,
+        None => (false, false),
     };
-    Ok(Json(json!({ "authorized": authorized })))
+    Ok(Json(json!({ "read": read, "write": write })))
 }

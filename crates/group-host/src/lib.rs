@@ -215,28 +215,20 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             get(space_api::list_blobs),
         )
         .route(
-            "/xrpc/com.atproto.space.notifyCredentialRevoked",
-            post(space_api::notify_credential_revoked),
+            "/xrpc/com.atproto.space.notifyCredentialsRevoked",
+            post(space_api::notify_credentials_revoked),
         )
         .route(
-            "/xrpc/com.atproto.space.getSpaceCredential",
-            post(authority_api::get_space_credential),
+            "/xrpc/com.atproto.space.authorizeSpaceSync",
+            post(authority_api::authorize_space_sync),
         )
         .route(
-            "/xrpc/com.atproto.space.notifyWrite",
-            post(authority_api::notify_write),
+            "/xrpc/com.atproto.space.notifyRepoUpdate",
+            post(authority_api::notify_repo_update),
         )
         .route(
-            "/xrpc/com.atproto.space.listRepos",
-            get(authority_api::list_repos),
-        )
-        .route(
-            "/xrpc/com.atproto.space.registerNotify",
-            post(authority_api::register_notify),
-        )
-        .route(
-            "/xrpc/com.atproto.space.unregisterNotify",
-            post(authority_api::unregister_notify),
+            "/xrpc/com.atproto.space.listWriters",
+            get(authority_api::list_writers),
         )
         .route(
             "/xrpc/fyi.opensocial.createGroup",
@@ -324,8 +316,8 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(group_invites::decline_invite),
         )
         .route(
-            "/xrpc/com.atproto.managedspace.checkUserAccess",
-            get(group_invites::check_user_access),
+            "/xrpc/com.atproto.managedspace.checkAccess",
+            get(group_invites::check_access),
         )
         .route(
             "/xrpc/fyi.opensocial.getAuthorization",
@@ -688,12 +680,15 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             let _ = tokio::time::timeout(minute, woken).await;
         }
     });
-    // Word of writes owed to authorities elsewhere, tried as it falls due.
+    // Word of writes owed to authorities elsewhere, and word of lapses and
+    // deletions owed to syncers, tried as it falls due.
     let delivering = host.clone();
     tokio::spawn(async move {
         loop {
             let tried = delivering.deliver_due().await;
-            tracing::debug!(?tried, "delivered the notifyWrites due");
+            tracing::debug!(?tried, "delivered the notifyRepoUpdates due");
+            let retried = delivering.retry_syncers_due().await;
+            tracing::debug!(?retried, "retried the word owed to syncers");
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });

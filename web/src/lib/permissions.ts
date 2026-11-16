@@ -207,7 +207,7 @@ export function warnings(scopes: string[]): string[] {
   if (
     scopes.some((s) => {
       const sp = SpacePermission.fromString(s);
-      return sp?.type === '*' && sp.authority === '*';
+      return sp?.spaceType === '*' && sp.authority === '*';
     })
   )
     out.push(
@@ -339,9 +339,9 @@ function spaceRows(scopes: string[], group: { did: string; handle: string }): Sp
     if (!sp) continue;
     const owner =
       sp.authority === group.did || sp.authority === 'self' ? `@${group.handle}` : sp.authority;
-    const key = `${sp.type}|${owner}|${sp.skey}`;
+    const key = `${sp.spaceType}|${owner}|${sp.skey}`;
     const row = rows.get(key) ?? {
-      type: sp.type,
+      type: sp.spaceType,
       owner,
       read: false,
       readSelf: false,

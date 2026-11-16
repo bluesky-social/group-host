@@ -15,7 +15,7 @@ use anyhow::{Context, Result, bail};
 use atproto::space::{Commit, LtHash, SpaceRef, element};
 
 /// The method a repo host tells an authority of a write with.
-pub const NOTIFY_WRITE: &str = "com.atproto.space.notifyWrite";
+pub const NOTIFY_REPO_UPDATE: &str = "com.atproto.space.notifyRepoUpdate";
 
 impl Host {
     /// Makes `writes` to `did`'s repo in `space`, as one revision, and
@@ -63,7 +63,7 @@ impl Host {
                 bail!("{} may not write in {uri}", commit.repo);
             }
             let data = commit.data;
-            return self.record_writer(&uri, &hosted.authority, &commit.repo, &commit.rev, &data);
+            return self.record_writer(&uri, &commit.repo, &commit.rev, &data);
         }
         let notice = Notice {
             repo: commit.repo.clone(),

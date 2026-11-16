@@ -81,7 +81,7 @@ async fn two_hosts_with(
     };
     a.host.write(&did, &[post]).unwrap();
     a.host
-        .record_writer(&calendar, &did, &carol.did, "3lzrev", &[7u8; 32])
+        .record_writer(&calendar, &carol.did, "3lzrev", &[7u8; 32])
         .unwrap();
     a.host.grant(&calendar, &bob.did, true, true).unwrap();
     (a, b, did, calendar, [alice, bob, carol])

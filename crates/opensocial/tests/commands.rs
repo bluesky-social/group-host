@@ -647,13 +647,20 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
         Some(json!({"spaceType": "com.example.forum", "skey": "general", "policy": {"$type": "com.atproto.memberspace.policy", "publicRead": true}})),
         None,
     )
-    .await["uri"]
+    .await["space"]
     .as_str()
     .unwrap()
     .to_string();
     let alice = &n.accounts[0];
-    let member = json!({"space": forum, "did": alice.did, "read": true, "write": false});
-    pds("com.atproto.memberspace.putMember", jwt, Some(member), None).await;
+    let member =
+        json!({"space": forum, "members": [{"did": alice.did, "read": true, "write": false}]});
+    pds(
+        "com.atproto.memberspace.putMembers",
+        jwt,
+        Some(member),
+        None,
+    )
+    .await;
     let photo = pds(
         "com.atproto.repo.uploadBlob",
         jwt,
@@ -672,10 +679,10 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
     let hers = session["accessJwt"].as_str().unwrap();
     let calendar = json!({"spaceType": "com.example.calendar", "skey": name, "policy": {"$type": "com.atproto.memberspace.policy"}});
     let calendar = pds("com.atproto.space.createSpace", hers, Some(calendar), None).await;
-    let calendar = calendar["uri"].as_str().unwrap().to_string();
-    let member = json!({"space": calendar, "did": did, "read": true, "write": true});
+    let calendar = calendar["space"].as_str().unwrap().to_string();
+    let member = json!({"space": calendar, "members": [{"did": did, "read": true, "write": true}]});
     pds(
-        "com.atproto.memberspace.putMember",
+        "com.atproto.memberspace.putMembers",
         hers,
         Some(member),
         None,

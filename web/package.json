@@ -15,11 +15,11 @@
     "check": "npm run lex && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
   },
   "dependencies": {
-    "@atproto/oauth-client-browser": "0.0.0-spaces-alpha-20261105160032"
+    "@atproto/oauth-client-browser": "0.0.0-spaces-alpha-20261113224550"
   },
   "devDependencies": {
-    "@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/oauth-scopes": "^0.0.0-spaces-alpha-20261029171913",
+    "@atproto/lex": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/oauth-scopes": "0.0.0-spaces-alpha-20261113224550",
     "@sveltejs/adapter-node": "^6.0.0",
     "@sveltejs/kit": "^3.0.0",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
@@ -31,18 +31,18 @@
     "vite": "^8.3.0"
   },
   "overrides": {
-    "@atproto/lex": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-builder": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-cbor": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-client": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-data": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-document": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-installer": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-json": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-resolver": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-schema": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lex-server": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/lexicon": "0.0.0-spaces-alpha-20261029171913",
-    "@atproto/oauth-client": "0.0.0-spaces-alpha-20261105160032"
+    "@atproto/lex": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-builder": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-cbor": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-client": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-data": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-document": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-installer": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-json": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-resolver": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-schema": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-server": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lexicon": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/oauth-client": "0.0.0-spaces-alpha-20261113224550"
   }
 }

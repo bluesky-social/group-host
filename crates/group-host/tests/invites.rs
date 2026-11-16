@@ -446,19 +446,15 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     assert!(h.host.store.invited(&did, erin).unwrap().is_some());
 }
 
-async fn check(
-    h: &Running,
-    asker: &Authority,
-    space: &str,
-    user: &str,
-    access: &str,
-) -> (u16, Json) {
-    let lxm = "com.atproto.managedspace.checkUserAccess";
+const CHECK: &str = "com.atproto.managedspace.checkAccess";
+
+async fn check(h: &Running, asker: &Authority, space: &str, repo: Option<&str>) -> (u16, Json) {
+    let repo = repo.map(|r| format!("&repo={r}")).unwrap_or_default();
     get(
         h,
-        lxm,
-        &format!("space={space}&user={user}&access={access}"),
-        &[auth(h, asker, lxm)],
+        CHECK,
+        &format!("space={space}{repo}&clientId=https://app.test/client.json"),
+        &[auth(h, asker, CHECK)],
     )
     .await
 }
@@ -474,34 +470,56 @@ async fn an_inbox_is_its_owners_to_read_and_groups_here_to_write() {
     )
     .await;
     let inbox = inbox_of(&bob.did);
-    let yes = (200, json!({"authorized": true}));
-    let no = (200, json!({"authorized": false}));
-    assert_eq!(check(&h, &bob, &inbox, &did, "write").await, yes);
-    assert_eq!(check(&h, &bob, &inbox, &carol.did, "write").await, no);
+    let access = |read: bool, write: bool| (200, json!({"read": read, "write": write}));
+    assert_eq!(
+        check(&h, &bob, &inbox, Some(&did)).await,
+        access(false, true)
+    );
+    assert_eq!(
+        check(&h, &bob, &inbox, Some(&carol.did)).await,
+        access(false, false)
+    );
     let plain = h.host.create_account("plain.groups.test").await.unwrap();
-    assert_eq!(check(&h, &bob, &inbox, &plain, "write").await, no);
-    assert_eq!(check(&h, &bob, &inbox, &bob.did, "read").await, yes);
-    assert_eq!(check(&h, &bob, &inbox, &did, "read").await, no);
+    assert_eq!(
+        check(&h, &bob, &inbox, Some(&plain)).await,
+        access(false, false)
+    );
+    assert_eq!(
+        check(&h, &bob, &inbox, Some(&bob.did)).await,
+        access(true, false)
+    );
+    // Asked for no repo, it answers what anyone may do: nothing.
+    assert_eq!(check(&h, &bob, &inbox, None).await, access(false, false));
     // A space that is no inbox, this host manages nothing in.
     let other = format!("at://{}/space/xyz.app.board/self", bob.did);
-    assert_eq!(check(&h, &bob, &other, &did, "write").await, no);
+    assert_eq!(
+        check(&h, &bob, &other, Some(&did)).await,
+        access(false, false)
+    );
+    assert_eq!(
+        check(&h, &bob, &other, Some(&bob.did)).await,
+        access(false, false)
+    );
     // Only its authority asks.
     assert_eq!(
-        error(&check(&h, &carol, &inbox, &did, "write").await),
+        error(&check(&h, &carol, &inbox, Some(&did)).await),
         (403, "Forbidden")
     );
     assert_eq!(
-        error(&check(&h, &bob, "nope", &did, "write").await),
+        error(&check(&h, &bob, "nope", Some(&did)).await),
         (400, "InvalidRequest")
     );
-    let lxm = "com.atproto.managedspace.checkUserAccess";
+    // Its authority asks with a token for this method alone.
+    let wrong = "com.atproto.managedspace.checkUserAccess";
     let (status, _) = get(
         &h,
-        lxm,
-        &format!("space={inbox}&user={did}&access=write"),
-        &[],
+        CHECK,
+        &format!("space={inbox}&repo={did}"),
+        &[auth(&h, &bob, wrong)],
     )
     .await;
+    assert!(status == 401 || status == 403, "{status}");
+    let (status, _) = get(&h, CHECK, &format!("space={inbox}&repo={did}"), &[]).await;
     assert_eq!(status, 401);
 }
 

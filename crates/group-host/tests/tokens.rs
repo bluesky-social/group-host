@@ -844,15 +844,18 @@ fn reads_a_scope_as_atproto_has_it() {
     assert!(!p.space(&ours, None, "create") && !p.space(&ours, Some("x.y.z"), "create"));
     assert!(!p.space(&theirs, None, "read"));
     let p = Permissions::new(
-        "space?type=com.example.calendar&authority=*&skey=other&action=read_self",
+        "space?spaceType=com.example.calendar&authority=*&skey=other&action=read_self",
         group,
     );
     assert!(!p.space(&theirs, None, "read_self"));
     let p = Permissions::new(
-        "space?type=com.example.calendar&authority=*&action=read_self",
+        "space?spaceType=com.example.calendar&authority=*&action=read_self",
         group,
     );
     assert!(p.space(&theirs, None, "read_self") && !p.space(&theirs, None, "read"));
+    // The old name of the space type is read no longer.
+    let p = Permissions::new("space?type=com.example.calendar&authority=*", group);
+    assert!(!p.space(&theirs, None, "read"));
     let p = Permissions::new(
         "space:*?authority=did:plc:other&skey=rides&collection=*&action=delete",
         group,

@@ -343,7 +343,7 @@ fn meta_archive(space: &str, policy: Json, state: &[(&str, Json)], writers: &[&s
         .iter()
         .map(|(k, v)| (k.as_bytes().to_vec(), value(v.clone())))
         .collect();
-    let writer = json!({"rev": "3lzaaaaaaaaab", "data": {"$bytes": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"}, "spaceRev": "3lzaaaaaaaaac"});
+    let writer = json!({"repoRev": "3lzaaaaaaaaab", "data": {"$bytes": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"}, "spaceRev": "3lzaaaaaaaaac"});
     let writers: BTreeMap<Vec<u8>, Vec<u8>> = writers
         .iter()
         .map(|did| (format!("writer/{did}").into_bytes(), value(writer.clone())))

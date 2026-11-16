@@ -86,10 +86,11 @@ pub async fn activate_group(
 /// Deletes a group: its DID is ended; its account, repos and spaces here
 /// go, and what the host keeps of them; the services syncing its spaces
 /// are told. The directory refusing, the group stays, to be deleted
-/// again. They are told first, while the group has a key to sign with:
-/// best effort, so a delete that then fails has told them of one that
-/// did not happen, and they find it again when they next read. What
-/// members wrote in its spaces is theirs, at their own PDSes.
+/// again. They are told first, while the host still knows where: best
+/// effort, and nothing kept to try again, as the group goes with its
+/// spaces; so a delete that then fails has told them of one that did not
+/// happen, and they find it again when they next authorize. What members
+/// wrote in its spaces is theirs, at their own PDSes.
 pub async fn delete_group(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,

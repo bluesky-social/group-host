@@ -18,8 +18,10 @@ on:
   pull: {base: [refs/heads/main, refs/heads/feature/*]}
 cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/tools, /opt/node, /opt/atproto, harness/node_modules]
 env:
-  # The space alpha the tests run against.
-  ATPROTO_COMMIT: 11c5d98cd50261c5e1201fedc5c6c05a7b8d1ccf
+  # The space alpha the tests run against: permissioned-data-alpha as of
+  # November 13, 2026, the build @atproto/space 0.0.0-spaces-alpha-20261113224550
+  # was published from.
+  ATPROTO_COMMIT: 83d473dec69bbf19fe95fcbbb20a39842779db82
   # Bumped when the steps that build the alpha change, to build it again.
   ALPHA_BUILD: "2"
 steps:

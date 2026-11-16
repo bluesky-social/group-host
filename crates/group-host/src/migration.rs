@@ -243,7 +243,7 @@ pub async fn migrate_export(
                 let writers: Vec<Value> = writers
                     .iter()
                     .filter(|w| w.did != group)
-                    .map(|w| json!({"did": w.did, "rev": w.repo_rev, "data": jose::b64(&w.data)}))
+                    .map(|w| json!({"did": w.did, "repoRev": w.repo_rev, "data": jose::b64(&w.data)}))
                     .collect();
                 let grants = host.store.grants(space).map_err(XrpcError::internal)?;
                 let grants: Vec<Value> = grants
@@ -284,7 +284,7 @@ pub async fn migrate_export(
                 data,
             };
             Ok((
-                [(header::CONTENT_TYPE, "application/octet-stream")],
+                [(header::CONTENT_TYPE, "application/vnd.dasl.star")],
                 star(&commit, &records),
             )
                 .into_response())
@@ -616,9 +616,9 @@ async fn receive(
             let data = w["data"].as_str().and_then(jose::unb64).unwrap_or_default();
             let (who, rev) = (
                 w["did"].as_str().unwrap_or_default(),
-                w["rev"].as_str().unwrap_or_default(),
+                w["repoRev"].as_str().unwrap_or_default(),
             );
-            host.record_writer(uri, group, who, rev, &data)
+            host.record_writer(uri, who, rev, &data)
                 .map_err(XrpcError::internal)?;
         }
         for g in meta["grants"].as_array().into_iter().flatten() {

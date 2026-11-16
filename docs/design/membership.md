@@ -187,9 +187,11 @@ where they already look: their inbox,
 `at://<invitee>/space/fyi.opensocial.invites/self`, a space of their own at
 their PDS. The invite is an `fyi.opensocial.invite` record in the group's
 repo there, with a `createdAt` and an optional `message` and
-`expiresAt`. The host answers
-`com.atproto.managedspace.checkUserAccess` for inboxes: only a group on
-this host may write one, and only its owner may read it.
+`expiresAt`. An inbox's policy is `com.atproto.managedspace.policy` naming
+this host as its managing app, `<host DID>#opensocial`, and the host
+answers `com.atproto.managedspace.checkAccess` for it, asked by the
+inbox's authority with service auth: a group on this host may write one,
+its owner may read it, and with no account named nobody may do either.
 
 An app invites someone by writing that record as the group, through
 `com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
@@ -245,14 +247,16 @@ is one the ejecter's `eject` grants may assign. Either way the host:
    [MCP clients'](mcp.md) grants, with every session those began;
 3. drops their app passwords for the group;
 4. deletes their membership;
-5. unindexes their repo in each of the group's spaces.
+5. takes them out of the writer set of each of the group's spaces: the
+   index forgets what they wrote there, and the services syncing each
+   space are told (`repoRemoved`).
 
 Credentials go first, so that if revoking fails they are still in and
 the call, or the write deleting their membership, can be made again.
 Removed, the rest follows the write; deleting a membership that is gone
 already changes nothing and does nothing more. A credential lasts ten minutes; the group keeps
 each it issues until it lapses, to revoke it at once. For writers on other
-PDSes it sends `com.atproto.space.notifyCredentialRevoked`, best effort.
+PDSes it sends `com.atproto.space.notifyCredentialsRevoked`, best effort.
 With no membership they hold no roles, so the access records grant them
 nothing.
 

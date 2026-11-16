@@ -182,25 +182,12 @@ fn gives_an_account_made_before_addresses_its_handle_as_its_address() {
     // As a database from before: no address, its schema a version back.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute("DELETE FROM address", []).unwrap();
-    // Back to just before the backfill: what came after it, undone.
-    let migrations = group_host::store::MIGRATIONS;
-    let backfill = migrations
+    // Back to just before the backfill.
+    let backfill = group_host::store::MIGRATIONS
         .iter()
         .position(|m| m.contains("INSERT OR IGNORE INTO address"))
         .unwrap();
-    // A table made after it is dropped, under the name a later one gave it.
-    for later in &migrations[backfill + 1..] {
-        let made = later.split("CREATE TABLE ").skip(1);
-        let renamed = later.split("RENAME TO ").skip(1);
-        for table in made.chain(renamed) {
-            let name = table.split_whitespace().next().unwrap();
-            let name = name.trim_end_matches(';');
-            let drop = format!("DROP TABLE IF EXISTS {name}");
-            conn.execute(&drop, []).unwrap();
-        }
-    }
-    conn.pragma_update(None, "user_version", backfill as i64)
-        .unwrap();
+    common::rewind(&conn, backfill);
     drop(conn);
     let store = group_host::store::Store::open(&path).unwrap();
     assert_eq!(

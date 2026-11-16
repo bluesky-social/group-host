@@ -311,8 +311,8 @@ async fn xrpc(
         // Two pages: the forum and an empty space of its own, then the
         // calendar of someone else's it writes in.
         "com.atproto.space.listSpaces" => Json(match q.get("cursor") {
-            None => json!({"spaces": [{"uri": old.forum()}, {"uri": old.empty()}], "cursor": "p2"}),
-            Some(_) => json!({"spaces": [{"uri": "at://did:plc:elsewhere/space/com.example.calendar/main"}]}),
+            None => json!({"spaces": [{"space": old.forum()}, {"space": old.empty()}], "cursor": "p2"}),
+            Some(_) => json!({"spaces": [{"space": "at://did:plc:elsewhere/space/com.example.calendar/main"}]}),
         })
         .into_response(),
         "com.atproto.space.exportSpaceMeta" => {
@@ -328,7 +328,7 @@ async fn xrpc(
                     write_star(&m, [(&b"policy"[..], &policy[..])])
                 }
             };
-            octets(meta, "application/octet-stream")
+            octets(meta, "application/vnd.dasl.star")
         }
         "com.atproto.space.listBlobs" => Json(match q["space"] == old.forum() {
             true => json!({"cids": [Cid::of_raw(PHOTO).to_string()]}),
@@ -342,7 +342,7 @@ async fn xrpc(
                 Json(json!({"error": "RepoNotFound", "message": "no repo there"})),
             )
                 .into_response(),
-            false => octets(space_repo(&did, &q["space"]), "application/octet-stream"),
+            false => octets(space_repo(&did, &q["space"]), "application/vnd.dasl.star"),
         },
         "com.atproto.identity.requestPlcOperationSignature" => {
             assert!(body.is_empty(), "a body sent where none is taken");

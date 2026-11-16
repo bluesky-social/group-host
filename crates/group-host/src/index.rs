@@ -19,7 +19,8 @@ use crate::store::SpaceHead;
 use crate::time::now_millis;
 use anyhow::{Context, Result, bail, ensure};
 use atproto::space::{
-    COMMIT_MAC, Commit, LtHash, element, encapsulate, parse_mac_header, read_star, want_mac_header,
+    COMMIT_MAC, Commit, LtHash, accept_signature, check_commit_mac, element, encapsulate,
+    read_repo_star,
 };
 use atproto::space_auth::{self, Kind, Make, sign_request};
 use atproto::{Cid, Curve, Keypair, Value, did, drisl};
@@ -48,12 +49,20 @@ struct Remote {
     key: Keypair,
 }
 
-/// An answer vouched for: the secret agreed for it, the MAC it carried,
-/// and its body.
+/// An answer to a request that asked for a MAC: the key share asked with,
+/// the secret agreed with it, and the answer's headers and body.
 struct Vouched {
+    share: String,
     secret: [u8; 32],
-    mac: Vec<u8>,
+    headers: reqwest::header::HeaderMap,
     body: Vec<u8>,
+}
+
+impl Vouched {
+    /// An answer's header by its name in lower case.
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).and_then(|v| v.to_str().ok())
+    }
 }
 
 impl Remote {
@@ -64,32 +73,28 @@ impl Remote {
             .get(format!("{}/xrpc/com.atproto.space.{method}", self.pds))
             .query(&[("space", self.space.as_str()), ("repo", self.did.as_str())])
             .query(params)
-            .header(
-                "atproto-space-want-mac",
-                want_mac_header(COMMIT_MAC, &share),
-            );
+            .header("accept-signature", accept_signature(COMMIT_MAC, &share));
         for (k, v) in sign_request(&self.key, &self.authorization, &self.did)? {
             req = req.header(k, v);
         }
         let res = req.send().await?.error_for_status()?;
-        let header = res.headers().get("atproto-space-mac");
-        let header = header.and_then(|h| h.to_str().ok()).unwrap_or_default();
-        // A page without a commit carries no MAC.
-        let mac = parse_mac_header(header, COMMIT_MAC).unwrap_or_default();
+        let headers = res.headers().clone();
         let body = crate::index_api::capped(res, REPO_AT_MOST).await;
         let body = body.context("an answer past the most a repo is read for")?;
-        Ok(Vouched { secret, mac, body })
+        Ok(Vouched {
+            share,
+            secret,
+            headers,
+            body,
+        })
     }
 
-    /// Whether `commit` is this repo's, vouched for with `mac`.
-    fn vouched(&self, commit: &Commit, answer: &Vouched) -> Result<()> {
+    /// The commit `answer`'s MAC vouches for, if it is this repo's.
+    fn vouched(&self, answer: &Vouched) -> Result<Commit> {
+        let commit = check_commit_mac(|n| answer.header(n), &answer.share, &answer.secret)?;
         let ours = commit.repo == self.did && commit.space == self.space;
         ensure!(ours, "a commit of another repo");
-        ensure!(
-            commit.mac(&answer.secret).to_vec() == answer.mac,
-            "a commit not vouched for"
-        );
-        Ok(())
+        Ok(commit)
     }
 }
 
@@ -247,7 +252,7 @@ impl Host {
         let mut last: BTreeMap<String, Json> = BTreeMap::new();
         let mut cursor: Option<String> = None;
         let mut seen = HashSet::new();
-        let (commit, answer) = loop {
+        let (page, answer) = loop {
             let mut params = vec![("since", from.rev.as_str()), ("limit", PAGE)];
             if let Some(c) = &cursor {
                 params.push(("cursor", c));
@@ -274,12 +279,14 @@ impl Host {
             // A server that answers a page it gave would be read forever.
             ensure!(seen.insert(cursor.clone()), "the oplog repeats a page");
             if cursor.is_none() {
-                let commit =
-                    commit_of(&page["commit"]).context("the oplog's head with no commit")?;
-                break (commit, answer);
+                break (page, answer);
             }
         };
-        remote.vouched(&commit, &answer)?;
+        // Every page carries the repo's head; the last one's is where the
+        // oplog leads.
+        let commit = remote.vouched(&answer)?;
+        let written = commit_of(&page["commit"]).context("the oplog's head with no commit")?;
+        ensure!(written == commit, "a commit not the one vouched for");
         ensure!(
             hash.digest() == commit.data,
             "the oplog does not come to its commit"
@@ -319,14 +326,18 @@ impl Host {
     /// commit it opens with.
     async fn read_whole(&self, remote: &Remote) -> Result<()> {
         let answer = remote.ask(self, "getRepo", &[]).await?;
-        let (commit, records) = read_star(&answer.body)?;
-        remote.vouched(&commit, &answer)?;
+        let (commit, records) = read_repo_star(
+            &answer.body,
+            &remote.space,
+            &remote.did,
+            &answer.share,
+            &answer.secret,
+            |n| answer.header(n),
+        )?;
         let mut hash = LtHash::default();
         let mut changes = Changes::new();
         for (path, bytes) in records {
-            let (collection, rkey) = path
-                .split_once('/')
-                .context("a record's path with no key")?;
+            let (collection, rkey) = path.split_once('/').expect("a record's path");
             let cid = Cid::of_cbor(&bytes);
             hash.add(&element(collection, rkey, &cid));
             // Hashed as it is, kept only if it is a record.
@@ -342,10 +353,7 @@ impl Host {
                 ),
             }
         }
-        ensure!(
-            hash.digest() == commit.data,
-            "the repo does not come to its commit"
-        );
+        // The archive's records came to its commit as it was read.
         let head = SpaceHead {
             rev: commit.rev,
             state: hash.state(),

@@ -401,7 +401,7 @@ impl Host {
                 .moving_json(mover, m, "com.atproto.space.listSpaces", &page, None)
                 .await?;
             let uris = listed["spaces"].as_array().into_iter().flatten();
-            spaces.extend(uris.filter_map(|s| s["uri"].as_str().map(String::from)));
+            spaces.extend(uris.filter_map(|s| s["space"].as_str().map(String::from)));
             cursor = next(&listed);
         }
         let (mut records, mut files) = (0, 0);

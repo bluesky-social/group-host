@@ -17,9 +17,10 @@
 //!   group holds `member`.
 //! - Deleting a membership puts the member out, for one whose `eject`
 //!   grants may give each of their roles: their credentials are revoked,
-//!   the apps they signed in as the group end, their app passwords go, the
-//!   index forgets what they wrote, and the ejection waits in the group's
-//!   moderation queue.
+//!   the apps they signed in as the group end, their app passwords go,
+//!   they leave the writer set of each of its spaces (the index forgets
+//!   what they wrote, and the spaces' syncers are told), and the ejection
+//!   waits in the group's moderation queue.
 //! - Whatever is written, someone is left holding a role that configures
 //!   the group, if anyone did.
 //!
@@ -462,7 +463,7 @@ impl Host {
                 Write::Delete { rkey, .. } => {
                     let member = leaving.get(rkey).map_or(rkey.as_str(), String::as_str);
                     self.cut_off(group, member).await?;
-                    self.unindex_member(group, member)?;
+                    self.remove_writer_of(group, member)?;
                     // Kept in the group's queue, on them, for its moderators.
                     let event = Event {
                         kind: "eject".into(),

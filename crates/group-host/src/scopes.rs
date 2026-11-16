@@ -153,7 +153,7 @@ impl Permissions {
                 return false;
             };
             let kind = if kind.is_empty() {
-                query(s, "type").first().copied()
+                query(s, "spaceType").first().copied()
             } else {
                 Some(kind)
             };
@@ -210,7 +210,7 @@ pub fn covers(held: &[String], scope: &str, group: &str) -> bool {
     }
     if let Some(kind) = named(&scope, "space") {
         let kind = match kind {
-            "" => query(&scope, "type").first().copied().unwrap_or("*"),
+            "" => query(&scope, "spaceType").first().copied().unwrap_or("*"),
             k => k,
         };
         return space_covered(&held, &p, &scope, kind, group);

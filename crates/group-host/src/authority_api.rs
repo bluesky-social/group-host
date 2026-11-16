@@ -1,28 +1,29 @@
 //! The `com.atproto.space.*` methods a space's authority answers, for the
-//! spaces of the groups here: issuing credentials, hearing of writes,
-//! listing the repos written, and registering the services told of them.
+//! spaces of the groups here: authorizing a syncer, with a credential and
+//! a registration to be told of changes; hearing of writes; and listing
+//! the changes to the writer set.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
-use crate::authority::Access;
-use crate::space::NOTIFY_WRITE;
+use crate::authority::{Access, repo_removed, repo_write};
+use crate::space::NOTIFY_REPO_UPDATE;
 use crate::space_api::{credential, forbidden, now, refused, service_caller};
-use crate::store::Space;
-use crate::time::iso;
+use crate::store::{Registration, Space};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
 use atproto::space_auth::{self, Expect, Kind, Make, space_host_aud};
-use atproto::{PublicKey, Value as Drisl, did, syntax, tid};
+use atproto::{PublicKey, Value as Drisl, syntax, tid};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
+use reqwest::Url;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-/// How long a service is told of a space's writes once it registers.
-const REGISTERED_FOR: u64 = 24 * 60 * 60;
 /// How far ahead of the host's clock a revision may be.
 const FUTURE_REV: u64 = 5 * 60;
+/// The longest token a syncer registers with, in bytes.
+const TOKEN_AT_MOST: usize = 512;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
@@ -45,29 +46,82 @@ fn text<'a>(body: &'a Value, name: &str) -> Result<&'a str, XrpcError> {
         .ok_or_else(|| invalid(format!("{name} is required")))
 }
 
-/// A space credential for the body's `credentialKid`, a P-256 key of the
-/// caller's: to the user a `delegationToken` names, if the space lets them
-/// read it, or to anyone, without one, for a space anyone may read. A user
-/// it does not let read is answered as if there were no such space.
-pub async fn get_space_credential(
+/// The endpoint and token a body's `notify` registers, if it has one: an
+/// https URL (or http, while this host is on http itself, as a network of
+/// test servers is), and a token of at most 512 bytes.
+fn notify_of(host: &Host, body: &Value) -> Result<Option<Registration>, XrpcError> {
+    let notify = &body["notify"];
+    if notify.is_null() {
+        return Ok(None);
+    }
+    let (endpoint, token) = (text(notify, "endpoint")?, text(notify, "token")?);
+    let http_here = host.config.public_url.starts_with("http://");
+    let url = Url::parse(endpoint).ok();
+    if !url.is_some_and(|u| u.scheme() == "https" || (http_here && u.scheme() == "http")) {
+        return Err(invalid("notify's endpoint is an https URL"));
+    }
+    if token.len() > TOKEN_AT_MOST {
+        return Err(invalid("notify's token is at most 512 bytes"));
+    }
+    Ok(Some(Registration {
+        endpoint: endpoint.into(),
+        token: token.into(),
+    }))
+}
+
+/// A space credential for the body's `credentialKey`, a P-256 key of the
+/// caller's, and the space's revision: to the user a `delegationToken`
+/// names, if the space lets them read it, or to anyone, without one, for a
+/// space anyone may read. A user it does not let read is answered as if
+/// there were no such space, and the registration they ask for withdrawn.
+/// With `notify`, the endpoint it names is told of the space's changes
+/// while the credential lasts, once it confirms it asked to be.
+pub async fn authorize_space_sync(
     State(host): State<Arc<Host>>,
     Json(body): Json<Value>,
 ) -> Answer {
     let uri = text(&body, "space")?;
     let space = space_ref(uri)?;
-    let kid = text(&body, "credentialKid")?;
-    if !matches!(PublicKey::from_did_key(kid), Ok(PublicKey::P256(_))) {
-        return Err(invalid("credentialKid is a P-256 did:key"));
+    let key = text(&body, "credentialKey")?;
+    if !matches!(PublicKey::from_did_key(key), Ok(PublicKey::P256(_))) {
+        return Err(invalid("credentialKey is a P-256 did:key"));
+    }
+    let notify = notify_of(&host, &body)?;
+    let authority = host
+        .store
+        .account(&space.authority)
+        .map_err(XrpcError::internal)?;
+    let authority = authority
+        .filter(|a| a.did == space.authority)
+        .ok_or_else(not_found)?;
+    let off = host.store.deactivation(&authority.did);
+    if off.map_err(XrpcError::internal)?.is_some() {
+        return Err(bad(
+            "RepoDeactivated",
+            "the space's authority is switched off",
+        ));
+    }
+    // Whoever asks: a syncer that missed the deletion learns of it here.
+    let deleted = host.store.space_deleted(uri).map_err(XrpcError::internal)?;
+    if deleted {
+        return Err(bad("SpaceDeleted", "the space was deleted"));
     }
     let delegation = match body["delegationToken"].as_str() {
         Some(token) => Some(delegated(&host, token, &space).await?),
         None => None,
     };
+    // `clientAttestation` is taken and neither checked nor used: no space
+    // here admits by the app asking.
     let user = delegation.as_ref().map(|d| d.iss.as_str());
     let hosted = host.store.space(uri).map_err(XrpcError::internal)?;
     let hosted = hosted.ok_or_else(not_found)?;
     let may = host.may(uri, &hosted, user, Access::Read);
     if !may.map_err(XrpcError::internal)? {
+        // A syncer that lost the space is told of it no more.
+        if let Some(to) = &notify {
+            let gone = host.store.unregister(uri, to);
+            gone.map_err(XrpcError::internal)?;
+        }
         return Err(not_found());
     }
     // Spent once it buys a credential: one token, one credential.
@@ -80,27 +134,41 @@ pub async fn get_space_credential(
             ));
         }
     }
-    let authority = host
-        .store
-        .account(&hosted.authority)
-        .map_err(XrpcError::internal)?;
-    let authority = authority.ok_or_else(not_found)?;
+    // An endpoint registered already, lapsed or not, confirmed it then.
+    if let Some(to) = &notify {
+        let registered = host.store.registration(uri, to);
+        if registered.map_err(XrpcError::internal)?.is_none() {
+            host.confirm_registration(uri, to).await?;
+        }
+    }
     let make = Make {
         iss: &authority.did,
         sub: uri,
-        key_id: Some(kid),
+        key_id: Some(key),
         ..Make::default()
     };
     let credential = space_auth::create(Kind::Credential, &make, &authority.signing, now())
         .map_err(XrpcError::internal)?;
+    let (_, issued) = space_auth::parse(Kind::Credential, &credential).map_err(refused)?;
     // Kept, so a member who loses the space has theirs revoked.
     if let Some(user) = user {
-        let (_, issued) = space_auth::parse(Kind::Credential, &credential).map_err(refused)?;
         host.store
             .issued(uri, user, &issued.jti, issued.exp as i64, now() as i64)
             .map_err(XrpcError::internal)?;
     }
-    Ok(Json(json!({ "credential": credential })))
+    // Renewed with each credential, so a syncer that keeps authorizing
+    // stays registered.
+    if let Some(to) = &notify {
+        let kept = host.store.register(uri, to, issued.exp as i64);
+        kept.map_err(XrpcError::internal)?;
+    }
+    // Read once registered, so that any change after it is told.
+    let space_rev = host.store.space_rev(uri).map_err(XrpcError::internal)?;
+    let mut answer = json!({ "credential": credential });
+    if let Some(rev) = space_rev {
+        answer["spaceRev"] = json!(rev);
+    }
+    Ok(Json(answer))
 }
 
 /// What a delegation token says, once it is signed by the user it names,
@@ -127,12 +195,12 @@ async fn delegated(
 /// A repo host says a repo of one of its accounts was written in a space
 /// of a group here: kept in the space's writer set if the space lets the
 /// account write, and told to the space's syncers.
-pub async fn notify_write(
+pub async fn notify_repo_update(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let caller = service_caller(&host, &headers, NOTIFY_WRITE).await?;
+    let caller = service_caller(&host, &headers, NOTIFY_REPO_UPDATE).await?;
     let uri = text(&body, "space")?;
     let space = space_ref(uri)?;
     let (repo, rev) = (text(&body, "repo")?, text(&body, "repoRev")?);
@@ -145,10 +213,12 @@ pub async fn notify_write(
     };
     // A repo host speaks for its own accounts alone.
     if caller.account() != repo {
-        return Err(forbidden("notifyWrite's issuer is not the writer"));
+        return Err(forbidden("notifyRepoUpdate's issuer is not the repo"));
     }
     if caller.aud != space.authority && caller.aud != space_host_aud(&space.authority) {
-        return Err(forbidden("notifyWrite is not for this space's authority"));
+        return Err(forbidden(
+            "notifyRepoUpdate is not for this space's authority",
+        ));
     }
     let hosted = host.store.space(uri).map_err(XrpcError::internal)?;
     let hosted = hosted.ok_or_else(not_found)?;
@@ -158,9 +228,9 @@ pub async fn notify_write(
     }
     let may = host.may(uri, &hosted, Some(repo), Access::Write);
     if !may.map_err(XrpcError::internal)? {
-        return Err(forbidden("the writer may not write in this space"));
+        return Err(forbidden("the repo may not write in this space"));
     }
-    let kept = host.record_writer(uri, &hosted.authority, repo, rev, &data);
+    let kept = host.record_writer(uri, repo, rev, &data);
     kept.map_err(XrpcError::internal)?;
     Ok(Json(json!({})))
 }
@@ -173,9 +243,10 @@ async fn as_authority(host: &Host, headers: &HeaderMap, uri: &str) -> Result<Spa
     host.hosted_space(uri)
 }
 
-/// The repos written in a space, in the order the space last heard of
-/// each: who syncs it reads each from its host.
-pub async fn list_repos(
+/// The changes to a space's writer set, in its order: the last for each
+/// repo, a write or its removal. Who syncs it reads each repo written from
+/// its host.
+pub async fn list_writers(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
@@ -184,66 +255,23 @@ pub async fn list_repos(
     as_authority(&host, &headers, uri).await?;
     let limit = page(&p, 100, 1000)?;
     let cursor = p.get("cursor").map(String::as_str);
-    let writers = host
+    let changes = host
         .store
-        .writers(uri, cursor, limit)
+        .writer_log(uri, cursor, limit)
         .map_err(XrpcError::internal)?;
-    // A short page is the last: no cursor to ask for an empty one after it.
-    let cursor = writers
-        .last()
-        .filter(|_| writers.len() == limit as usize)
-        .map(|w| w.space_rev.clone());
-    let repos: Vec<Value> = writers
+    let repos: Vec<Value> = changes
         .iter()
-        .map(|w| {
-            json!({
-                "did": w.did,
-                "repoRev": w.repo_rev,
-                "data": Drisl::Bytes(w.data.clone()).to_json(),
-                "spaceRev": w.space_rev,
-            })
+        .map(|c| {
+            let (w, prev) = (&c.writer, c.prev_space_rev.as_deref());
+            match c.removed {
+                true => repo_removed(&w.did, &w.space_rev, prev),
+                false => repo_write(&w.did, &w.repo_rev, &w.data, &w.space_rev, prev),
+            }
         })
         .collect();
-    Ok(Json(json!({"repos": repos, "cursor": cursor})))
-}
-
-/// A service that syncs a space is told of its writes, for a day, at the
-/// endpoint its own DID document names.
-pub async fn register_notify(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let uri = text(&body, "space")?;
-    let service = text(&body, "service")?;
-    as_authority(&host, &headers, uri).await?;
-    let (who, fragment) = service.split_once('#').unwrap_or((service, "atproto_pds"));
-    let doc = host.identity.document(who).await.ok();
-    let endpoint = doc.and_then(|d| did::service(&d, &format!("#{fragment}")));
-    let endpoint = endpoint.ok_or_else(|| {
-        bad(
-            "ServiceNotResolvable",
-            format!("no service endpoint for {service}"),
-        )
-    })?;
-    let until = now() + REGISTERED_FOR;
-    host.store
-        .register(uri, service, &endpoint, until as i64)
-        .map_err(XrpcError::internal)?;
-    Ok(Json(json!({ "expiresAt": iso(until as i64 * 1000) })))
-}
-
-/// A service is told of a space's writes no more.
-pub async fn unregister_notify(
-    State(host): State<Arc<Host>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Answer {
-    let uri = text(&body, "space")?;
-    let service = text(&body, "service")?;
-    as_authority(&host, &headers, uri).await?;
-    host.store
-        .unregister(uri, service)
-        .map_err(XrpcError::internal)?;
-    Ok(Json(json!({})))
+    let mut answer = json!({ "repos": repos });
+    if let Some(last) = changes.last() {
+        answer["cursor"] = json!(last.writer.space_rev);
+    }
+    Ok(Json(answer))
 }

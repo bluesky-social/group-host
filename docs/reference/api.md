@@ -76,7 +76,7 @@ spaces through the atproto methods below.
 | `GET fyi.opensocial.listInvites` | the group's invites still waiting, each with whom it invites by their handle |
 | `GET fyi.opensocial.getActorInvites` | the caller's own invites from groups here |
 | `POST fyi.opensocial.declineInvite` | turns an invite down |
-| `GET com.atproto.managedspace.checkUserAccess` | whether someone may read or write an inbox the host keeps, asked by its authority |
+| `GET com.atproto.managedspace.checkAccess` | whether an account (`repo`) may read or write an inbox the host keeps, asked by its authority; `{read, write}` |
 
 A group's roles, what each may do, and who holds them are records in its
 members space, written as the group with the `com.atproto.space.*`
@@ -143,12 +143,13 @@ host answers the space alpha's methods:
 
 | Method | What it does |
 | --- | --- |
-| `POST com.atproto.space.getSpaceCredential` | a credential to read a space, for a member it lets |
-| `POST com.atproto.space.notifyWrite` | told of a member's write in a space |
-| `GET com.atproto.space.listRepos` | the repos in a space |
-| `POST com.atproto.space.registerNotify`, `POST com.atproto.space.unregisterNotify` | a reader asks to be told of writes, or no longer |
-| `POST com.atproto.space.notifyCredentialRevoked` | told a credential no longer holds |
-| `GET com.atproto.space.getRecord`, `GET com.atproto.space.listRecords`, `GET com.atproto.space.getRepo`, `GET com.atproto.space.getLatestCommit`, `GET com.atproto.space.listRepoOps`, `GET com.atproto.space.getBlob`, `GET com.atproto.space.listBlobs` | the group's own repo in a space, for a credential that may read it |
+| `POST com.atproto.space.authorizeSpaceSync` | a credential to read a space, for a user it lets (`delegationToken`) or anyone for a space open to all, bound to `credentialKey`, with the space's revision (`spaceRev`); with `notify`, registers an endpoint, once it confirms, to be told of changes until the credential lapses (`SpaceDeleted`, `RepoDeactivated`, `InvalidDelegationToken`, `RegistrationNotConfirmed`) |
+| `POST com.atproto.space.notifyRepoUpdate` | told of a member's write in a space, by service auth from the writer (`FutureRev`) |
+| `GET com.atproto.space.listWriters` | the space's writer set in the order of its revisions, each a `repoWrite` or a `repoRemoved`, a page of up to 1000 (100 unless asked); `cursor` is the last one's `spaceRev` |
+| `POST com.atproto.space.notifyCredentialsRevoked` | told by a space's authority that credentials no longer hold |
+| `GET com.atproto.space.getRecord`, `GET com.atproto.space.listRecords`, `GET com.atproto.space.getRepo`, `GET com.atproto.space.getLatestCommit`, `GET com.atproto.space.listRepoOps`, `GET com.atproto.space.getBlob`, `GET com.atproto.space.listBlobs` | the group's own repo in a space, for a credential that may read it. `getRecord`, `getRepo` (a STAR archive, `application/vnd.dasl.star`), `getLatestCommit` and `listRepoOps` (its `commit` on every page) need a MAC asked for in `Accept-Signature` (`InvalidSpaceMac`); a malformed cursor is `InvalidCursor` |
+
+A service registered for a space is sent `com.atproto.space.notifySpaceUpdate` at its endpoint: each change to the writer set, a registration lapsed, and the space deleted ([spaces](../design/spaces.md#hearing-of-writes)).
 
 ## Signing apps in as a group
 

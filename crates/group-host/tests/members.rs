@@ -373,7 +373,7 @@ fn reads_a_scope_as_covered_by_those_held() {
         "repo?collection=a.b.c&collection=d.e.f",
         "space:com.example.calendar?skey=rides&collection=com.example.event&action=create",
         "space:com.example.calendar?skey=rides&action=read",
-        "space?type=com.example.calendar&skey=rides&collection=com.example.event",
+        "space?spaceType=com.example.calendar&skey=rides&collection=com.example.event",
         "space:com.example.thing?manage=create",
         "rpc:com.example.other?aud=did:web:example.com",
         "blob:image/png",
@@ -553,8 +553,8 @@ async fn one_put_out_reads_no_more() {
         ..Make::default()
     };
     let token = space_auth::create(Kind::Delegation, &make, &bob.key, now()).unwrap();
-    let body = json!({"space": members, "credentialKid": key.public().did_key(), "delegationToken": token});
-    let (status, issued) = post(&h, "com.atproto.space.getSpaceCredential", &body, &[]).await;
+    let body = json!({"space": members, "credentialKey": key.public().did_key(), "delegationToken": token});
+    let (status, issued) = post(&h, "com.atproto.space.authorizeSpaceSync", &body, &[]).await;
     assert_eq!(status, 200, "{issued}");
     let (_, credential) =
         space_auth::parse(Kind::Credential, issued["credential"].as_str().unwrap()).unwrap();
@@ -636,6 +636,13 @@ async fn one_put_out_reads_no_more() {
             .unwrap()
     );
     assert_eq!(h.host.store.index_state(&members, &bob.did).unwrap(), None);
+    // He leaves the space's writer set, the removal kept for its syncers.
+    let log = h.host.store.writer_log(&members, None, 100).unwrap();
+    let his = log.iter().find(|c| c.writer.did == bob.did).unwrap();
+    assert!(his.removed);
+    let writers = h.host.store.writers(&members, None, 100).unwrap();
+    assert!(writers.iter().all(|w| w.did != bob.did));
+    assert!(writers.iter().any(|w| w.did == carol.did));
     let told = carol.told.writes.lock().unwrap().clone();
     assert_eq!(
         told[0].1,
@@ -705,11 +712,28 @@ async fn the_last_who_runs_it_is_neither_put_out_nor_stripped() {
 async fn members_leave_but_the_last_who_runs_it_stays() {
     let h = start(&[], false).await;
     let (did, [alice, bob, carol]) = group(&h).await;
+    // Bob wrote in the members space.
+    let members = members_space(&did);
+    h.host
+        .store
+        .record_writer(
+            &members,
+            &bob.did,
+            "3l5mz5mkbn22b",
+            &[1; 32],
+            &h.host.clock.next(),
+        )
+        .unwrap();
     assert_eq!(
         call(&h, &bob, "leaveGroup", json!({"group": did})).await,
         (200, json!({}))
     );
     assert_eq!(record(&h, &did, "membership", &bob.did), None);
+    // And leaves its writer set.
+    let writers = h.host.store.writers(&members, None, 100).unwrap();
+    assert!(writers.iter().all(|w| w.did != bob.did));
+    let log = h.host.store.writer_log(&members, None, 100).unwrap();
+    assert!(log.iter().any(|c| c.writer.did == bob.did && c.removed));
     assert_eq!(
         error(&call(&h, &bob, "leaveGroup", json!({"group": did})).await),
         (400, "NotAMember")

@@ -330,11 +330,11 @@ async fn its_access_records_say_who_reads_and_writes_its_spaces() {
             now(),
         )
         .unwrap();
-        json!({"space": space, "credentialKid": Keypair::generate(Curve::P256).public().did_key(), "delegationToken": token})
+        json!({"space": space, "credentialKey": Keypair::generate(Curve::P256).public().did_key(), "delegationToken": token})
     };
     let (status, _) = post(
         &h,
-        "com.atproto.space.getSpaceCredential",
+        "com.atproto.space.authorizeSpaceSync",
         &ask(&alice, &members),
         &[],
     )
@@ -342,7 +342,7 @@ async fn its_access_records_say_who_reads_and_writes_its_spaces() {
     assert_eq!(status, 200);
     let refused = post(
         &h,
-        "com.atproto.space.getSpaceCredential",
+        "com.atproto.space.authorizeSpaceSync",
         &ask(&carol, &members),
         &[],
     )
@@ -351,7 +351,7 @@ async fn its_access_records_say_who_reads_and_writes_its_spaces() {
     // A token refused is not spent: it is no good to anyone else anyway.
     let carols = ask(&carol, &meta);
     assert_eq!(
-        post(&h, "com.atproto.space.getSpaceCredential", &carols, &[])
+        post(&h, "com.atproto.space.authorizeSpaceSync", &carols, &[])
             .await
             .0,
         200

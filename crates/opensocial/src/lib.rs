@@ -1246,7 +1246,7 @@ async fn start_import(
             .own("com.atproto.space.listSpaces", &page, None)
             .await?;
         let uris = listed["spaces"].as_array().into_iter().flatten();
-        spaces.extend(uris.map(|s| text(&s["uri"]).to_string()));
+        spaces.extend(uris.map(|s| text(&s["space"]).to_string()));
         cursor = next(&listed);
     }
     let (mut files, mut records) = (0, 0);

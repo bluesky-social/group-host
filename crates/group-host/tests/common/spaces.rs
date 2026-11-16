@@ -6,7 +6,9 @@
 use super::{Running, serve};
 use atproto::Cid;
 use atproto::plc::Op;
-use atproto::space::{encapsulate, want_mac_header};
+use atproto::space::{
+    Commit, SpaceError, accept_signature, check_commit_mac, check_record_mac, encapsulate,
+};
 use atproto::space_auth::{self, Kind, Make, sign_request};
 use atproto::{Curve, Keypair};
 use axum::Router;
@@ -37,8 +39,8 @@ pub fn create(collection: &str, rkey: &str, value: Json) -> Write {
     }
 }
 
-/// What an authority's PDS was told: each notifyWrite's authorization
-/// and body.
+/// What an authority's PDS was told: each notifyRepoUpdate's (or
+/// notifyCredentialsRevoked's) authorization and body.
 #[derive(Default)]
 pub struct Told {
     pub writes: Mutex<Vec<(String, Json)>>,
@@ -83,13 +85,12 @@ pub async fn authority(h: &Running, refuse: bool, pds: bool) -> Authority {
         told.answer(500);
     }
     let router = Router::new()
-        .route("/xrpc/com.atproto.space.notifyWrite", post(notify_write))
         .route(
-            "/xrpc/com.atproto.space.notifySpaceDeleted",
+            "/xrpc/com.atproto.space.notifyRepoUpdate",
             post(notify_write),
         )
         .route(
-            "/xrpc/com.atproto.space.notifyCredentialRevoked",
+            "/xrpc/com.atproto.space.notifyCredentialsRevoked",
             post(notify_write),
         )
         .with_state(told.clone());
@@ -190,10 +191,28 @@ impl Read {
         (self.status, self.json()["error"].as_str().unwrap().into())
     }
 
-    pub fn mac(&self) -> Option<&str> {
-        self.headers
-            .get("atproto-space-mac")
-            .map(|v| v.to_str().unwrap())
+    /// The answer's header `name`, if it has one.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).map(|v| v.to_str().unwrap())
+    }
+}
+
+/// The secret a syncer agreed for one read, and the key share it sent:
+/// what it checks the answer's MAC with.
+pub struct Mac {
+    pub share: String,
+    pub secret: [u8; 32],
+}
+
+impl Mac {
+    /// The commit `read`'s MAC vouches for, if it checks.
+    pub fn commit(&self, read: &Read) -> Result<Commit, SpaceError> {
+        check_commit_mac(|n| read.header(n), &self.share, &self.secret)
+    }
+
+    /// The record (URI, CID) `read`'s MAC vouches for, if it checks.
+    pub fn record(&self, read: &Read) -> Result<(String, String), SpaceError> {
+        check_record_mac(|n| read.header(n), &self.share, &self.secret)
     }
 }
 
@@ -211,20 +230,116 @@ pub async fn read(h: &Running, nsid: &str, query: &str, headers: &[(&str, String
     }
 }
 
-/// The headers a syncer reads `repo` with: its credential, signed, and a
-/// key share for a MAC of `kind`; and the secret agreed.
+/// The headers a syncer reads `repo` with: its credential, signed, and an
+/// `Accept-Signature` asking for a MAC of `profile` (`COMMIT_MAC` or
+/// `RECORD_MAC`); and the secret agreed, to check the answer with.
 pub fn signed(
     s: &Syncer,
     repo: &str,
     kem: &str,
-    kind: &str,
-) -> (Vec<(&'static str, String)>, [u8; 32]) {
+    profile: &str,
+) -> (Vec<(&'static str, String)>, Mac) {
     let authorization = format!("Atproto-Space-Credential {}", s.credential);
     let mut headers: Vec<(&str, String)> = sign_request(&s.key, &authorization, repo)
         .unwrap()
         .into_iter()
         .collect();
     let (share, secret) = encapsulate(kem).unwrap();
-    headers.push(("atproto-space-want-mac", want_mac_header(kind, &share)));
-    (headers, secret)
+    headers.push(("accept-signature", accept_signature(profile, &share)));
+    (headers, Mac { share, secret })
+}
+
+// A syncing service's notify endpoint, for the host as a space's
+// authority to confirm a registration with and tell of changes.
+
+/// What a syncer's notify endpoint heard: each confirmRegistration's body
+/// and each notifySpaceUpdate's; and how it answers.
+#[derive(Default)]
+pub struct Endpoint {
+    pub asked: Mutex<Vec<Json>>,
+    pub told: Mutex<Vec<Json>>,
+    /// What it answers each notifySpaceUpdate: 200 unless set.
+    pub status: Mutex<Option<u16>>,
+    /// Whether it echoes a challenge other than the one it was asked.
+    pub wrong: std::sync::atomic::AtomicBool,
+}
+
+impl Endpoint {
+    /// Answers each notifySpaceUpdate with `status` from now on.
+    pub fn answer(&self, status: u16) {
+        *self.status.lock().unwrap() = Some(status);
+    }
+
+    /// What it was told, once it was told `times` things.
+    pub async fn told(&self, times: usize) -> Vec<Json> {
+        for _ in 0..200 {
+            let told = self.told.lock().unwrap().clone();
+            if told.len() >= times {
+                return told;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("not told {times} times");
+    }
+
+    /// What it was told of `kind` (an update's `$type`), once it was told
+    /// so `times` times: a write's word, forwarded on its own, may land
+    /// before or after.
+    pub async fn told_of(&self, kind: &str, times: usize) -> Vec<Json> {
+        for _ in 0..200 {
+            let told = self.told.lock().unwrap().clone();
+            let of: Vec<Json> = told
+                .into_iter()
+                .filter(|t| t["update"]["$type"] == kind)
+                .collect();
+            if of.len() >= times {
+                return of;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("not told of {kind} {times} times");
+    }
+
+    /// What it was told, after a while for anything more to arrive.
+    pub async fn told_by_now(&self) -> Vec<Json> {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        self.told.lock().unwrap().clone()
+    }
+}
+
+async fn confirm_registration(
+    State(e): State<Arc<Endpoint>>,
+    axum::Json(body): axum::Json<Json>,
+) -> axum::Json<Json> {
+    e.asked.lock().unwrap().push(body.clone());
+    let challenge = match e.wrong.load(std::sync::atomic::Ordering::SeqCst) {
+        true => json!("not the one asked"),
+        false => body["challenge"].clone(),
+    };
+    axum::Json(json!({ "challenge": challenge }))
+}
+
+async fn notify_space_update(
+    State(e): State<Arc<Endpoint>>,
+    axum::Json(body): axum::Json<Json>,
+) -> StatusCode {
+    e.told.lock().unwrap().push(body);
+    let status = e.status.lock().unwrap().unwrap_or(200);
+    StatusCode::from_u16(status).unwrap()
+}
+
+/// A syncer's notify endpoint, served: its URL, and what it hears.
+pub async fn endpoint() -> (String, Arc<Endpoint>) {
+    let e = Arc::new(Endpoint::default());
+    let router = Router::new()
+        .route(
+            "/xrpc/com.atproto.space.confirmRegistration",
+            post(confirm_registration),
+        )
+        .route(
+            "/xrpc/com.atproto.space.notifySpaceUpdate",
+            post(notify_space_update),
+        )
+        .with_state(e.clone());
+    (serve(router).await, e)
 }

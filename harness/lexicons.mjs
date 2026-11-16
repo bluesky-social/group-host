@@ -308,7 +308,12 @@ const loosened = (before, after, path) => {
 // change may remove: what is said of each is why.
 // - com.atproto.moderation.createReport: reports come to the group's own
 //   fyi.opensocial.createReport, as the opensocial proposal has them.
-const RETIRED = new Set(['com.atproto.moderation.createReport']);
+// - com.atproto.managedspace.checkUserAccess: the space alpha of November
+//   13, 2026 replaced it with com.atproto.managedspace.checkAccess.
+const RETIRED = new Set([
+  'com.atproto.moderation.createReport',
+  'com.atproto.managedspace.checkUserAccess'
+]);
 
 // None of ours is published yet, so nothing out there was written to it.
 // Until one is, a schema, a def or a field may go when nothing here refers

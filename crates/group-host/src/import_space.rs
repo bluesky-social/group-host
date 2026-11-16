@@ -201,7 +201,7 @@ impl Host {
             .writers
             .into_iter()
             .filter(|w| w.did != did)
-            .map(|w| (w.did, w.rev, w.data, self.clock.next()))
+            .map(|w| (w.did, w.repo_rev, w.data, self.clock.next()))
             .collect();
         let now = crate::time::now_millis();
         let kept = self
@@ -237,12 +237,8 @@ impl Host {
         let mut hash = LtHash::default();
         let mut writes = Vec::new();
         for (path, value) in &records {
-            let Some((collection, rkey)) = path.split_once('/') else {
-                return Err(refused(
-                    "InvalidArchive",
-                    format!("{path} is no record's path"),
-                ));
-            };
+            // `read_star` takes only `collection/rkey` keys.
+            let (collection, rkey) = path.split_once('/').expect("a record path");
             hash.add(&element(collection, rkey, &Cid::of_cbor(value)));
             writes.extend(create(path, value).filter(keeps));
         }

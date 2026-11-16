@@ -7,7 +7,8 @@
 //!
 //! Someone who stops being a member reads its spaces no more: the
 //! credentials they hold are revoked, the apps they signed in as the group
-//! end, and the index forgets what they wrote there.
+//! end, and they leave the writer set of each of its spaces, the index
+//! forgetting what they wrote there and the spaces' syncers told.
 
 use crate::Host;
 use crate::group::{did_rkey, members_space};
@@ -184,12 +185,12 @@ impl Host {
         Ok(())
     }
 
-    /// Forgets, in the index of each of `group`'s spaces, what `member`
-    /// wrote there.
-    pub(crate) fn unindex_member(&self, group: &str, member: &str) -> Result<(), XrpcError> {
+    /// Takes `member` out of the writer set of each of `group`'s spaces:
+    /// the index forgets what they wrote there, and the spaces' syncers
+    /// are told.
+    pub(crate) fn remove_writer_of(&self, group: &str, member: &str) -> Result<(), XrpcError> {
         for space in self.store.spaces_of(group).map_err(XrpcError::internal)? {
-            self.store
-                .unindex(&space, member)
+            self.remove_writer(&space, member)
                 .map_err(XrpcError::internal)?;
         }
         Ok(())
@@ -197,7 +198,7 @@ impl Host {
 
     /// Takes `member` out of `group`: what they hold of it ended first, so
     /// that if that fails they are still in and may ask again; then their
-    /// membership, and what they wrote, forgotten.
+    /// membership, and their place among its spaces' writers.
     async fn put_out(&self, group: &str, member: &str) -> Result<(), XrpcError> {
         self.cut_off(group, member).await?;
         let gone = Write::Delete {
@@ -207,7 +208,7 @@ impl Host {
         let (space, gone) = (members_space(group), [gone]);
         let written = self.space_write(group, &space, &gone);
         written.await?;
-        self.unindex_member(group, member)
+        self.remove_writer_of(group, member)
     }
 }
 

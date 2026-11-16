@@ -6,7 +6,7 @@ mod common;
 
 use atproto::plc::Op;
 use atproto::space::{
-    COMMIT_MAC, Commit, LtHash, decapsulate, element, mac_header, parse_want_mac, star,
+    COMMIT_MAC, Commit, LtHash, decapsulate, element, mac_headers, read_accept_signature, star,
 };
 use atproto::{Cid, Curve, Keypair, Value, drisl};
 use axum::Router;
@@ -399,15 +399,15 @@ async fn answer(
     };
     let mut res = (StatusCode::from_u16(next.status).unwrap(), next.body).into_response();
     if let Some((commit, right)) = next.vouch {
-        let want = headers["atproto-space-want-mac"].to_str().unwrap();
-        let share = parse_want_mac(want, COMMIT_MAC).unwrap();
+        let asked = headers["accept-signature"].to_str().unwrap();
+        let request = read_accept_signature(asked, COMMIT_MAC).unwrap().unwrap();
         let kem = fake.kem.lock().unwrap().clone().unwrap();
-        let secret = decapsulate(&kem, &share).unwrap();
-        let mac = if right { commit.mac(&secret) } else { [0; 32] };
-        res.headers_mut().insert(
-            "atproto-space-mac",
-            mac_header(COMMIT_MAC, &mac).parse().unwrap(),
-        );
+        let secret = decapsulate(&kem, &request.key_share).unwrap();
+        let secret = if right { secret } else { [0; 32] };
+        for (name, value) in mac_headers(&request, COMMIT_MAC, &commit.header(), &secret) {
+            let name = axum::http::HeaderName::try_from(name).unwrap();
+            res.headers_mut().insert(name, value.parse().unwrap());
+        }
     }
     res
 }
@@ -545,7 +545,7 @@ async fn takes_only_what_a_writers_host_vouches_for() {
     // Read already, it is not read again.
     h.host.sync_space(&space).await.unwrap();
 
-    // Read on: two pages, the commit on the last.
+    // Read on: two pages, the commit vouched for on the last.
     let second = bytes_of(&note("Second"));
     let mut on = hash.clone();
     on.add(&element(NOTE, "two", &Cid::of_cbor(&second)));
@@ -622,32 +622,34 @@ async fn takes_only_what_a_writers_host_vouches_for() {
             set(page_two.clone(), &|p| p["commit"] = commit_json(&at_three)),
             Some((at_three.clone(), true)),
         ),
+        // A commit in the page that is not the one vouched for.
+        pages(page_two.clone(), Some((at_three.clone(), true))),
         // A head with no commit, or one that is not one.
         pages(
             set(page_two.clone(), &|p| {
                 p.as_object_mut().unwrap().remove("commit");
             }),
-            None,
+            Some((at_two.clone(), true)),
         ),
         pages(
             set(page_two.clone(), &|p| p["commit"]["ver"] = json!(2)),
-            None,
+            Some((at_two.clone(), true)),
         ),
         pages(
             set(page_two.clone(), &|p| p["commit"]["data"] = json!("x")),
-            None,
+            Some((at_two.clone(), true)),
         ),
         pages(
             set(page_two.clone(), &|p| {
                 p["commit"]["data"] = Value::Bytes(vec![1]).to_json()
             }),
-            None,
+            Some((at_two.clone(), true)),
         ),
         pages(
             set(page_two.clone(), &|p| {
                 p["commit"].as_object_mut().unwrap().remove("rev");
             }),
-            None,
+            Some((at_two.clone(), true)),
         ),
         // Ops that are not ops.
         pages(json!({"cursor": null}), None),

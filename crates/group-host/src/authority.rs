@@ -1,31 +1,41 @@
 //! Being the authority for groups' spaces: which spaces a group here has,
 //! who may read and write each, the repos written in each (the writer
-//! set `listRepos` answers), and telling the services that sync a space
-//! of each write.
+//! set `listWriters` answers, with the repos taken out of it), and telling
+//! the services that sync a space of each change to it.
 //!
 //! Who may do what is the host's own to decide, from its grants: the
 //! group itself always; others as granted, or anyone reading a space open
 //! to all. Groups and their roles fill the grants in.
+//!
+//! A syncer registers an endpoint as it authorizes, for as long as the
+//! credential it gets lasts. Each change to the writer set is sent there
+//! once, best effort; word that its registration lapsed, or that the space
+//! was deleted, is kept and tried again after a minute, ten minutes, an
+//! hour, six hours, then every twelve, for three days.
 //!
 //! As a repo host, it owes the authority of each space a group writes to
 //! word of the write: kept in an outbox and tried again until it lands,
 //! or a day has passed, as pds.js's `outbox.js` does.
 
 use crate::Host;
+use crate::index_api::capped;
+use crate::oauth_clients::pinned_client;
 use crate::rbac::{self, NS};
 use crate::repo::invalid;
-use crate::space::NOTIFY_WRITE;
+use crate::space::NOTIFY_REPO_UPDATE;
 use crate::space_api::NOTIFY_REVOKED;
-use crate::store::{Notice, Space};
+use crate::store::{Notice, Registration, Space, Store, SyncerNotice, SyncerUpdate};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use anyhow::{Context, Result};
 use atproto::service_auth::{self, Claims};
 use atproto::space::SpaceRef;
 use atproto::space_auth::{self, space_host_aud};
-use atproto::{Value, did, syntax};
+use atproto::{Value, did, jose, syntax};
 use axum::http::StatusCode;
-use serde_json::json;
+use futures::future::join_all;
+use futures::{StreamExt, stream};
+use serde_json::{Value as Json, json};
 
 /// What a user would do in a space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,8 +44,11 @@ pub enum Access {
     Write,
 }
 
-/// The method an authority tells a syncer a space is gone with.
-pub const NOTIFY_SPACE_DELETED: &str = "com.atproto.space.notifySpaceDeleted";
+/// The method an authority tells a syncer of a change to a space with.
+pub const NOTIFY_SPACE_UPDATE: &str = "com.atproto.space.notifySpaceUpdate";
+/// The method an authority asks a syncer's endpoint to confirm it asked
+/// to be registered with.
+pub const CONFIRM_REGISTRATION: &str = "com.atproto.space.confirmRegistration";
 
 /// How long a write's word is tried before it is given up, in seconds.
 pub const DELIVER_FOR: i64 = 24 * 60 * 60;
@@ -45,10 +58,27 @@ const LAST_RETRY: i64 = 60 * 60;
 /// How many notices one round of delivery tries.
 const ROUND: u32 = 50;
 
+/// How long word owed to a syncer is tried before it is given up, in
+/// seconds.
+pub const SYNCER_DELIVER_FOR: i64 = 72 * 60 * 60;
+/// The waits before each retry of word owed to a syncer, the last
+/// repeated.
+const SYNCER_RETRIES: [i64; 5] = [60, 10 * 60, 60 * 60, 6 * 60 * 60, 12 * 60 * 60];
+/// How many syncers are told at once.
+const AT_ONCE: usize = 50;
+/// The most bytes a syncer's confirmation is read to.
+const CONFIRMATION_AT_MOST: usize = 4096;
+
 /// The wait before retry number `attempts`, counted from 1, in seconds.
 pub fn retry_delay(attempts: i64) -> i64 {
     let doubled = FIRST_RETRY.saturating_mul(1 << (attempts - 1).clamp(0, 20));
     doubled.min(LAST_RETRY)
+}
+
+/// The wait before retry number `attempts` of word owed to a syncer,
+/// counted from 1, in seconds.
+pub fn syncer_retry_delay(attempts: i64) -> i64 {
+    SYNCER_RETRIES[(attempts.clamp(1, 5) - 1) as usize]
 }
 
 fn now() -> i64 {
@@ -59,10 +89,226 @@ fn now() -> i64 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Delivery {
     Delivered,
-    /// It may land later: the authority was not reached, or said so.
+    /// It may land later: the recipient was not reached, or said so.
     Retry,
-    /// It never will: the authority refused it.
+    /// It never will: the recipient refused it.
     Failed,
+}
+
+/// A repo written in a space, at the space's revision `space_rev`, after
+/// `prev`: as a syncer is told it, and `listWriters` lists it.
+pub fn repo_write(
+    repo: &str,
+    repo_rev: &str,
+    data: &[u8],
+    space_rev: &str,
+    prev: Option<&str>,
+) -> Json {
+    let update = json!({
+        "$type": "com.atproto.space.defs#repoWrite",
+        "repo": repo,
+        "repoRev": repo_rev,
+        "data": Value::Bytes(data.to_vec()).to_json(),
+        "spaceRev": space_rev,
+    });
+    after(update, prev)
+}
+
+/// A repo taken out of a space's writer set, at the space's revision
+/// `space_rev`, after `prev`.
+pub fn repo_removed(repo: &str, space_rev: &str, prev: Option<&str>) -> Json {
+    let update = json!({
+        "$type": "com.atproto.space.defs#repoRemoved",
+        "repo": repo,
+        "spaceRev": space_rev,
+    });
+    after(update, prev)
+}
+
+fn after(mut update: Json, prev: Option<&str>) -> Json {
+    if let Some(prev) = prev {
+        update["prevSpaceRev"] = json!(prev);
+    }
+    update
+}
+
+/// Word owed to a syncer, as it is told it.
+fn syncer_update(update: &SyncerUpdate) -> Json {
+    match update {
+        SyncerUpdate::SpaceDeleted => {
+            json!({"$type": format!("{NOTIFY_SPACE_UPDATE}#spaceDeleted")})
+        }
+        SyncerUpdate::RegistrationExpired { space_rev } => json!({
+            "$type": format!("{NOTIFY_SPACE_UPDATE}#registrationExpired"),
+            "spaceRev": space_rev,
+        }),
+    }
+}
+
+/// What a request's answer says of delivering it.
+fn delivery(sent: reqwest::Result<reqwest::Response>) -> Delivery {
+    match sent.map(|r| r.status()) {
+        Ok(s) if s.is_success() => Delivery::Delivered,
+        Ok(s) if retryable(s) => Delivery::Retry,
+        Ok(_) => Delivery::Failed,
+        Err(_) => Delivery::Retry,
+    }
+}
+
+/// What telling syncers needs, owned, so that it goes on apart from the
+/// request or write that set it off.
+#[derive(Clone)]
+struct Syncers {
+    store: Store,
+    /// Whether the host is on http, and so may call endpoints on http.
+    http_here: bool,
+}
+
+impl Syncers {
+    /// Tells the syncer at `to` of `update` to `space`, once.
+    async fn send(&self, space: &str, to: &Registration, update: &Json) -> Delivery {
+        let url = format!(
+            "{}/xrpc/{NOTIFY_SPACE_UPDATE}",
+            to.endpoint.trim_end_matches('/')
+        );
+        // The syncer chose the endpoint: it is fetched as one not trusted.
+        let Ok((client, at)) = pinned_client(&url, self.http_here).await else {
+            return Delivery::Retry;
+        };
+        let body = json!({"space": space, "token": to.token, "update": update});
+        delivery(client.post(at).json(&body).send().await)
+    }
+
+    /// Tells each syncer registered for `space` of `update`, a change to
+    /// its writer set at `space_rev`, best effort; then owes those whose
+    /// registration lapsed since the last change word of it, in place of
+    /// the change.
+    async fn forward(&self, space: &str, update: &Json, space_rev: &str) -> Result<()> {
+        let now = now();
+        let active = self.store.registrations(space, now)?;
+        // All at once, so that one slow endpoint holds up none of the others.
+        stream::iter(&active)
+            .for_each_concurrent(AT_ONCE, |to| async move {
+                let told = self.send(space, to, update).await;
+                if told != Delivery::Delivered {
+                    tracing::warn!(
+                        space,
+                        endpoint = to.endpoint,
+                        ?told,
+                        "notifySpaceUpdate failed"
+                    );
+                }
+            })
+            .await;
+        let lapsed = self.store.claim_lapsed(space, now)?;
+        let expired = SyncerUpdate::RegistrationExpired {
+            space_rev: space_rev.into(),
+        };
+        self.notify(space, lapsed, &expired, now).await
+    }
+
+    /// Owes each syncer at `to` word of `update` to `space`: tried now,
+    /// and kept to be tried again if it may land later.
+    async fn notify(
+        &self,
+        space: &str,
+        to: Vec<Registration>,
+        update: &SyncerUpdate,
+        now: i64,
+    ) -> Result<()> {
+        let body = &syncer_update(update);
+        let tried: Vec<(Registration, Delivery)> = stream::iter(to)
+            .map(|to| async move {
+                let told = self.send(space, &to, body).await;
+                (to, told)
+            })
+            .buffer_unordered(AT_ONCE)
+            .collect()
+            .await;
+        for (to, told) in tried {
+            match told {
+                Delivery::Delivered => {}
+                Delivery::Failed => self.give_up(space, &to, update, now)?,
+                Delivery::Retry => self.store.owe_syncer(&SyncerNotice {
+                    space: space.into(),
+                    to,
+                    update: update.clone(),
+                    attempts: 1,
+                    next_at: now + syncer_retry_delay(1),
+                    deliver_by: now + SYNCER_DELIVER_FOR,
+                })?,
+            }
+        }
+        Ok(())
+    }
+
+    /// Gives up telling the syncer at `to` of `update`: one that refuses
+    /// word of its lapse, or is never reached, is registered no more,
+    /// unless it renewed since. A deleted space's registrations went with
+    /// it.
+    fn give_up(
+        &self,
+        space: &str,
+        to: &Registration,
+        update: &SyncerUpdate,
+        now: i64,
+    ) -> Result<()> {
+        if let SyncerUpdate::RegistrationExpired { .. } = update {
+            self.store.unregister_lapsed(space, to, now)?;
+        }
+        Ok(())
+    }
+
+    /// Tries `notice` again, fallen due at `now`.
+    async fn retry(&self, notice: &SyncerNotice, now: i64) -> Result<()> {
+        let space = SpaceRef::parse(&notice.space)?;
+        // Word waits while the space's authority is switched off.
+        if self.store.deactivation(&space.authority)?.is_some() {
+            return self.reschedule(notice, now);
+        }
+        if !self.owed(notice, now)? {
+            return self.store.syncer_told(notice);
+        }
+        let body = syncer_update(&notice.update);
+        match self.send(&notice.space, &notice.to, &body).await {
+            Delivery::Delivered => self.store.syncer_told(notice),
+            Delivery::Failed => {
+                self.store.syncer_told(notice)?;
+                self.give_up(&notice.space, &notice.to, &notice.update, now)
+            }
+            Delivery::Retry => self.reschedule(notice, now),
+        }
+    }
+
+    /// Whether `notice` still says what is so: a lapse the syncer has not
+    /// renewed since, or a deletion the space has not been made again
+    /// since.
+    fn owed(&self, notice: &SyncerNotice, now: i64) -> Result<bool> {
+        Ok(match &notice.update {
+            SyncerUpdate::RegistrationExpired { .. } => self
+                .store
+                .registration(&notice.space, &notice.to)?
+                .is_some_and(|until| until <= now),
+            SyncerUpdate::SpaceDeleted => self.store.space_deleted(&notice.space)?,
+        })
+    }
+
+    /// Tries `notice` again after its next wait; or, its three days past,
+    /// gives it up.
+    fn reschedule(&self, notice: &SyncerNotice, now: i64) -> Result<()> {
+        if notice.deliver_by <= now {
+            let (space, endpoint) = (&notice.space, &notice.to.endpoint);
+            tracing::warn!(
+                space,
+                endpoint,
+                "word to a syncer given up after three days"
+            );
+            self.store.syncer_told(notice)?;
+            return self.give_up(&notice.space, &notice.to, &notice.update, now);
+        }
+        let next = now + syncer_retry_delay(notice.attempts + 1);
+        self.store.retry_syncer(notice, next)
+    }
 }
 
 impl Host {
@@ -173,12 +419,29 @@ impl Host {
         })
     }
 
+    fn syncers(&self) -> Syncers {
+        Syncers {
+            store: self.store.clone(),
+            http_here: self.config.public_url.starts_with("http://"),
+        }
+    }
+
+    /// Tells the syncers of `space` of `update`, a change to its writer
+    /// set at `space_rev`, apart from what set it off: neither a write here
+    /// nor a repo host telling of one waits on them.
+    fn forward(&self, space: &str, update: Json, space_rev: String) {
+        let (syncers, space) = (self.syncers(), space.to_string());
+        tokio::spawn(async move {
+            let forwarded = syncers.forward(&space, &update, &space_rev).await;
+            tracing::debug!(space, ?forwarded, "forwarded a change to the writer set");
+        });
+    }
+
     /// A write to `space`, of a group here, by `repo`: kept in the writer
     /// set unless it knows a later one, and told to the space's syncers.
     pub fn record_writer(
         &self,
         space: &str,
-        authority: &str,
         repo: &str,
         repo_rev: &str,
         data: &[u8],
@@ -191,72 +454,73 @@ impl Host {
             return Ok(());
         };
         self.reindex(space);
-        let mut body = json!({
-            "space": space,
-            "repo": repo,
-            "repoRev": repo_rev,
-            "data": Value::Bytes(data.to_vec()).to_json(),
-            "spaceRev": space_rev,
-        });
-        if let Some(prev) = prev {
-            body["prevSpaceRev"] = json!(prev);
-        }
-        let recipients = self.store.recipients(space, now())?;
-        let signing = self
-            .store
-            .account(authority)?
-            .context("the authority is here")?
-            .signing;
-        for (service, endpoint) in recipients {
-            let claims = self.claims(authority, &service, NOTIFY_WRITE);
-            let token = service_auth::sign(&signing, &claims);
-            let send = self
-                .http
-                .post(format!("{endpoint}/xrpc/{NOTIFY_WRITE}"))
-                .bearer_auth(token)
-                .json(&body)
-                .send();
-            // Best effort, after the write: a syncer that misses one finds
-            // out with the next, or on its own next read.
-            tokio::spawn(async move {
-                let said = send.await.and_then(|r| r.error_for_status());
-                if let Err(e) = said {
-                    tracing::warn!(service, error = %e, "forwarding notifyWrite failed");
-                }
-            });
+        let update = repo_write(repo, repo_rev, data, &space_rev, prev.as_deref());
+        self.forward(space, update, space_rev);
+        Ok(())
+    }
+
+    /// Takes `repo` out of `space`'s writer set, the index forgetting what
+    /// it read of it there, and tells the space's syncers.
+    pub fn remove_writer(&self, space: &str, repo: &str) -> Result<()> {
+        self.store.unindex(space, repo)?;
+        let space_rev = self.clock.next();
+        let removed = self.store.remove_writer(space, repo, &space_rev, now())?;
+        if let Some(prev) = removed {
+            let update = repo_removed(repo, &space_rev, prev.as_deref());
+            self.forward(space, update, space_rev);
         }
         Ok(())
     }
 
-    /// Tells the services syncing each of `authority`'s spaces that it is
-    /// gone, as the authority, before its key is: best effort, as a syncer
-    /// that misses it learns so when its credential is refused.
+    /// Asks the syncer endpoint `to` names to confirm it asked to be told
+    /// of `space`: it echoes a challenge, within ten seconds, unredirected.
+    pub(crate) async fn confirm_registration(
+        &self,
+        space: &str,
+        to: &Registration,
+    ) -> Result<(), XrpcError> {
+        let challenge = jose::random(16);
+        let url = format!(
+            "{}/xrpc/{CONFIRM_REGISTRATION}",
+            to.endpoint.trim_end_matches('/')
+        );
+        let body = json!({"space": space, "token": to.token, "challenge": challenge});
+        let echoed = async {
+            // The syncer chose the endpoint: it is fetched as one not
+            // trusted.
+            let (client, at) = self.pinned(&url).await.ok()?;
+            let res = client.post(at).json(&body).send().await.ok()?;
+            let bytes = capped(res, CONFIRMATION_AT_MOST).await?;
+            let said: Json = serde_json::from_slice(&bytes).ok()?;
+            said["challenge"].as_str().map(String::from)
+        };
+        if echoed.await.as_deref() == Some(challenge.as_str()) {
+            return Ok(());
+        }
+        tracing::warn!(space, endpoint = to.endpoint, "registration not confirmed");
+        Err(XrpcError::new(
+            StatusCode::BAD_REQUEST,
+            "RegistrationNotConfirmed",
+            "the notify endpoint did not confirm the registration",
+        ))
+    }
+
+    /// Tells the syncers of each of `authority`'s spaces, lapsed or not,
+    /// that it is gone: best effort, and nothing kept to try again, as the
+    /// authority goes with its spaces. A syncer that misses it learns so
+    /// when it next authorizes.
     pub fn tell_spaces_deleted(&self, authority: &str) -> Result<()> {
-        for space in self.store.spaces_of(authority)? {
-            self.tell_space_deleted(authority, &space)?;
-        }
-        Ok(())
-    }
-
-    fn tell_space_deleted(&self, authority: &str, space: &str) -> Result<()> {
-        let signing = self
-            .store
-            .account(authority)?
-            .context("the authority is here")?
-            .signing;
-        for (service, endpoint) in self.store.recipients(space, now())? {
-            let claims = self.claims(authority, &service, NOTIFY_SPACE_DELETED);
-            let send = self
-                .http
-                .post(format!("{endpoint}/xrpc/{NOTIFY_SPACE_DELETED}"))
-                .bearer_auth(service_auth::sign(&signing, &claims))
-                .json(&json!({ "space": space }))
-                .send();
+        let gone = syncer_update(&SyncerUpdate::SpaceDeleted);
+        for (space, to) in self.store.registrations_of(authority)? {
+            let (syncers, gone) = (self.syncers(), gone.clone());
             tokio::spawn(async move {
-                let said = send.await.and_then(|r| r.error_for_status());
-                if let Err(e) = said {
-                    tracing::warn!(service, error = %e, "notifySpaceDeleted failed");
-                }
+                let told = syncers.send(&space, &to, &gone).await;
+                tracing::debug!(
+                    space,
+                    endpoint = to.endpoint,
+                    ?told,
+                    "told a syncer the space is gone"
+                );
             });
         }
         Ok(())
@@ -292,7 +556,7 @@ impl Host {
                     .tell_revoked(&signing, authority, &writer.did, &space, &jtis)
                     .await;
                 if let Err(e) = told {
-                    tracing::warn!(space, repo = writer.did, error = %format!("{e:#}"), "notifyCredentialRevoked failed");
+                    tracing::warn!(space, repo = writer.did, error = %format!("{e:#}"), "notifyCredentialsRevoked failed");
                 }
             }
         }
@@ -321,13 +585,30 @@ impl Host {
         Ok(())
     }
 
-    /// Ends `authority`'s space at `space`: its syncers are told, and its
-    /// state and the authority's own repo in it go.
+    /// Ends `authority`'s space at `space`: its state and the authority's
+    /// own repo in it go, it is remembered as deleted, and every syncer
+    /// registered for it, lapsed or not, is owed word of it.
     pub fn end_space(&self, authority: &str, space: &str) -> Result<()> {
-        self.tell_space_deleted(authority, space)?;
-        let orphans = self.store.delete_space(space, authority)?;
+        let (orphans, registered) = self.store.delete_space(space, authority, now())?;
         self.remove_blobs(orphans.iter().map(|cid| (authority, cid)));
+        let (syncers, space) = (self.syncers(), space.to_string());
+        tokio::spawn(async move {
+            let deleted = SyncerUpdate::SpaceDeleted;
+            let told = syncers.notify(&space, registered, &deleted, now()).await;
+            tracing::debug!(space, ?told, "told the syncers the space is gone");
+        });
         Ok(())
+    }
+
+    /// Tries the word owed to syncers due now. How much was tried.
+    pub async fn retry_syncers_due(&self) -> Result<usize> {
+        let now = now();
+        let due = self.store.syncer_notices_due(now, ROUND)?;
+        let syncers = self.syncers();
+        // At most a round at once.
+        let tried = join_all(due.iter().map(|notice| syncers.retry(notice, now)));
+        tried.await.into_iter().collect::<Result<()>>()?;
+        Ok(due.len())
     }
 
     /// Tries `notice` now: tells its space's authority, at its PDS, as the
@@ -350,7 +631,7 @@ impl Host {
         let aud = space_host_aud(&space.authority);
         let token = service_auth::sign(
             &account.signing,
-            &self.claims(&account.did, &aud, NOTIFY_WRITE),
+            &self.claims(&account.did, &aud, NOTIFY_REPO_UPDATE),
         );
         let body = json!({
             "space": notice.space,
@@ -360,17 +641,12 @@ impl Host {
         });
         let sent = self
             .http
-            .post(format!("{pds}/xrpc/{NOTIFY_WRITE}"))
+            .post(format!("{pds}/xrpc/{NOTIFY_REPO_UPDATE}"))
             .bearer_auth(token)
             .json(&body)
             .send()
             .await;
-        match sent.map(|r| r.status()) {
-            Ok(s) if s.is_success() => Delivery::Delivered,
-            Ok(s) if retryable(s) => Delivery::Retry,
-            Ok(_) => Delivery::Failed,
-            Err(_) => Delivery::Retry,
-        }
+        delivery(sent)
     }
 
     /// Tries `notice`, and keeps what came of it: owed no more, or owed
@@ -387,7 +663,7 @@ impl Host {
                 tracing::warn!(
                     space = notice.space,
                     repo = notice.repo,
-                    "the authority refused notifyWrite"
+                    "the authority refused notifyRepoUpdate"
                 );
                 self.store.delivered(notice)?;
             }
@@ -399,7 +675,7 @@ impl Host {
     /// were tried.
     pub async fn deliver_due(&self) -> Result<usize> {
         for (repo, space, rev) in self.store.lapse(now())? {
-            tracing::warn!(repo, space, rev, "notifyWrite given up after a day");
+            tracing::warn!(repo, space, rev, "notifyRepoUpdate given up after a day");
         }
         let due = self.store.due(now(), ROUND)?;
         for notice in &due {

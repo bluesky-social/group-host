@@ -11,6 +11,7 @@ use common::{Running, start, turn};
 use group_host::authority::Access;
 use group_host::group::{members_space, meta_space};
 use group_host::repo::Write;
+use group_host::store::Registration;
 use serde_json::{Value as Json, json};
 
 const NS: &str = "fyi.opensocial";
@@ -222,7 +223,8 @@ async fn a_group_switched_off_is_read_by_nobody() {
 
 #[tokio::test]
 async fn a_group_deleted_is_gone() {
-    let h = start(&[], false).await;
+    // On http, so that it calls syncers' endpoints here.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let (did, [alice, _, carol]) = group(&h).await;
     let picture = h.host.upload_blob(&did, b"face", "image/png").unwrap();
     h.host
@@ -237,28 +239,37 @@ async fn a_group_deleted_is_gone() {
         )
         .await
         .unwrap();
-    // A service syncing its members space is told it is gone.
-    let syncer = authority(&h, false, true).await;
-    h.host
-        .store
-        .register(
-            &members_space(&did),
-            &syncer.did,
-            &syncer.pds,
-            now() as i64 + 60,
-        )
+    // The services syncing its members space are told it is gone, lapsed
+    // or not.
+    let (url, syncer) = endpoint().await;
+    let members = members_space(&did);
+    let to = |token: &str| Registration {
+        endpoint: url.clone(),
+        token: token.into(),
+    };
+    let store = &h.host.store;
+    store
+        .register(&members, &to("live"), now() as i64 + 60)
+        .unwrap();
+    store
+        .register(&members, &to("lapsed"), now() as i64 - 1)
         .unwrap();
     // One that refuses it holds nothing up.
-    let refusing = authority(&h, true, true).await;
-    h.host
-        .store
-        .register(
-            &members_space(&did),
-            &refusing.did,
-            &refusing.pds,
-            now() as i64 + 60,
-        )
+    let (refusing_url, refusing) = endpoint().await;
+    refusing.answer(500);
+    let refused = Registration {
+        endpoint: refusing_url,
+        token: "t".into(),
+    };
+    store
+        .register(&members, &refused, now() as i64 + 60)
         .unwrap();
+    // A space it ended before is forgotten with it.
+    let ended = h
+        .host
+        .create_space(&did, &format!("{NS}.calendar"), "old", false);
+    let ended = ended.unwrap();
+    h.host.end_space(&did, &ended).unwrap();
 
     assert_eq!(
         error(&call(&h, &carol, "deleteGroup", &did).await),
@@ -276,21 +287,26 @@ async fn a_group_deleted_is_gone() {
     assert!(matches!(ops.last(), Some(Signed::Tombstone { .. })));
     let (status, _) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
     assert_eq!(status, 400);
-    for _ in 0..100 {
-        if !syncer.told.writes.lock().unwrap().is_empty() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    let told = syncer.told.writes.lock().unwrap().clone();
-    assert_eq!(told[0].1, json!({"space": members_space(&did)}));
-    for _ in 0..100 {
-        if !refusing.told.writes.lock().unwrap().is_empty() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let told = syncer
+        .told_of("com.atproto.space.notifySpaceUpdate#spaceDeleted", 2)
+        .await;
+    let mut tokens: Vec<&str> = told
+        .iter()
+        .map(|t| {
+            assert_eq!(t["space"], members);
+            assert_eq!(
+                t["update"],
+                json!({"$type": "com.atproto.space.notifySpaceUpdate#spaceDeleted"})
+            );
+            t["token"].as_str().unwrap()
+        })
+        .collect();
+    tokens.sort();
+    assert_eq!(tokens, ["lapsed", "live"]);
+    refusing.told(1).await;
+    // Nothing is kept to try again: the group is gone.
+    assert_eq!(store.syncer_notices_due(i64::MAX, 10).unwrap(), vec![]);
+    assert!(!store.space_deleted(&ended).unwrap());
 }
 
 #[tokio::test]

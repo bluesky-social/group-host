@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.89"
 
 [workspace.dependencies]
-atproto = { version = "0.1", registry = "atproto" }
+atproto = { version = "0.2", registry = "atproto" }
 group-host = { path = "crates/group-host" }
 group-host-mcp = { path = "crates/group-host-mcp" }
 opensocial = { path = "crates/opensocial" }

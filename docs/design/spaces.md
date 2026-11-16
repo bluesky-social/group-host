@@ -54,8 +54,8 @@ The group also writes in spaces it is not the authority for. An invite
 goes in the group's repo in the invitee's inbox,
 `at://<invitee>/space/fyi.opensocial.invites/self`. The inbox's authority
 asks this host who may use it, with
-`com.atproto.managedspace.checkUserAccess`: its owner may read, and a
-group here may write ([membership](membership.md)).
+`com.atproto.managedspace.checkAccess`: its owner may read, and a group
+here may write ([membership](membership.md)).
 
 Details:
 
@@ -92,35 +92,68 @@ writes in its spaces, the group included.
 ## Credentials
 
 A reader proves to a repo host that the authority lets them read with a
-space credential. A user asks for one with
-`com.atproto.space.getSpaceCredential`, sending a delegation token their
+space credential. A service syncing a space asks for one with
+`com.atproto.space.authorizeSpaceSync`, naming the P-256 key the
+credential is to be bound to and sending a delegation token the user's
 own key signs. The token lives 60 seconds and is spent on first use, so
 one seen in transit cannot buy a second credential. A user the space does
-not let read gets `SpaceNotFound`, the same as for a space not here.
+not let read gets `SpaceNotFound`, the same as for a space not here; a
+space deleted since gets `SpaceDeleted`, and one of a group switched off
+`RepoDeactivated`. A client attestation, if sent, is not read: no space
+here lets in only some apps.
 
-A credential is a JWT the group signs for one space, bound to a P-256 key
-the caller holds, and lasts 10 minutes. The host records each it issues,
-so it can take them back. Putting a member out revokes their unexpired
-credentials to all the group's spaces: at once for repos here, and by
-`com.atproto.space.notifyCredentialRevoked` to each other writer's PDS,
-best effort.
+A credential is a JWT the group signs for one space, bound to that key,
+and lasts 10 minutes. The answer also gives the space's revision, the
+point in its writer set it was issued at. The host records each
+credential it issues, so it can take them back. Putting a member out
+revokes their unexpired credentials to all the group's spaces: at once
+for repos here, and by `com.atproto.space.notifyCredentialsRevoked` to
+each other writer's PDS, best effort.
 
 ## Hearing of writes
 
 A member's write lands on the member's PDS, so the authority knows of it
 only if that PDS says so. In turn, after each write to a group's repo in
 any space, this host tells the space's authority with
-`com.atproto.space.notifyWrite`, signed by the group. The write stands
-whether the authority heard or not. Word owed waits in an outbox, which
-keeps only the newest write per repo and space, and is retried for a day.
-An authority that is a group here is told at once, inside the host.
+`com.atproto.space.notifyRepoUpdate`, signed by the group. The write
+stands whether the authority heard or not. Word owed waits in an outbox,
+which keeps only the newest write per repo and space, and is retried for
+a day. An authority that is a group here is told at once, inside the
+host.
 
-As an authority, the host takes `notifyWrite` only from the writer's own
-account, for a repo the space lets write. It keeps a writer set: each
-repo's latest revision and digest. `com.atproto.space.listRepos` answers
-it. Other services follow a space by `registerNotify`, for a day, and get
-each kept write forwarded; one that misses a notice learns of the write
-with the next, or on its own next read.
+As an authority, the host takes `notifyRepoUpdate` only from the
+writer's own account, for a repo the space lets write. It keeps a writer
+set: each repo's latest revision and digest, and each step of the set
+numbered by a space revision. A member who leaves or is put out is taken
+out of the set, at a revision of its own, and a newer write puts a writer
+back. `com.atproto.space.listWriters` answers the set in revision order,
+the removals included, so a syncer reads on from the last revision it
+saw.
+
+A syncing service asks to be told of changes by sending `notify`, an
+endpoint and a token of its own, with `authorizeSpaceSync`. The host
+first asks the endpoint to confirm with
+`com.atproto.space.confirmRegistration`, echoing a random challenge, and
+refuses with `RegistrationNotConfirmed` if it does not. The registration
+lasts as long as the credential, and each authorization renews it; one
+refused withdraws it. Each change to the writer set goes to every live
+registration as `com.atproto.space.notifySpaceUpdate`, once, best
+effort: a syncer that misses one learns of it from `listWriters`. A
+registration that has lapsed is told so once, and a space deleted is told
+to every registration; those two are kept and retried for three days.
+
+Details:
+
+- An endpoint is https, or http while the host itself is; it is reached
+  only at public addresses, without following redirects, with 10 seconds
+  to answer. A token is 512 bytes at most.
+- A revision more than 5 minutes ahead of the host's clock is refused
+  (`FutureRev`).
+- A change goes to 50 registrations at a time. The lapse and deletion
+  notices are retried after a minute, 10 minutes, an hour, 6 hours, then
+  every 12 hours. A deletion replaces a lapse notice still owed; a lapse
+  notice is dropped once the syncer renews, and a registration whose
+  lapse notice is refused or never lands is forgotten.
 
 ## The index
 
@@ -173,18 +206,25 @@ in the space lets read.
 The `com.atproto.space.*` methods read one repo directly: `getRecord`,
 `listRecords`, `getRepo`, `getLatestCommit`, `listRepoOps`, `getBlob`,
 `listBlobs`. Each needs a credential from the space's authority, on a
-request signed with the key it is bound to. A reader may send a key
-share; the host agrees a secret against the group's `#atproto_kem` key
-and returns a MAC over the commit or record. The MAC proves to that
-reader alone that this host answered.
+request signed with the key it is bound to. `getRecord`, `getRepo`,
+`getLatestCommit` and `listRepoOps` answer only a reader who asks for a
+MAC, in `Accept-Signature`, with a key share: the host agrees a secret
+against the group's `#atproto_kem` key and signs the commit or record
+with it as an HTTP message signature. The MAC proves to that reader
+alone that this host answered; a request without one, or with a share
+that is not a P-256 key, is refused `InvalidSpaceMac`.
 
 Not yet built: an app signed in as the group reading its own repos.
 Parameters, limits and headers are in [the API reference](../reference/api.md).
 
 ## Ending a space or a group
 
-Deleting a space removes its entry in members and tells its followers
-with `com.atproto.space.notifySpaceDeleted`. The host forgets the space's
-index, writer set, grants, issued credentials, and the group's own repo
-in it. Members' repos on their own PDSes are theirs, and stay. Deleting a
-group tells the followers of each of its spaces the same way, best effort.
+Deleting a space removes its entry in members and tells every service
+registered to it, `spaceDeleted` by `notifySpaceUpdate`, retried as
+above. The host forgets the space's index, writer set, registrations,
+grants, issued credentials, and the group's own repo in it, and keeps
+only that it was deleted, so `authorizeSpaceSync` answers
+`SpaceDeleted` until a space is made at the same address again.
+Members' repos on their own PDSes are theirs, and stay. Deleting a group
+tells the services registered to each of its spaces once, best effort,
+and keeps nothing.

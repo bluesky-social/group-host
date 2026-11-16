@@ -9,6 +9,7 @@ use common::{Running, start};
 use group_host::authority::Access;
 use group_host::group::{members_space, meta_space};
 use group_host::repo::Write;
+use group_host::store::Registration;
 use serde_json::{Value as Json, json};
 
 const NS: &str = "fyi.opensocial";
@@ -468,7 +469,8 @@ async fn an_admin_changes_a_space() {
 
 #[tokio::test]
 async fn an_admin_ends_a_space() {
-    let h = start(&[], false).await;
+    // On http, so that it calls syncers' endpoints here.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let (did, [alice, bob, _]) = group(&h).await;
     let (_, made) = call(
         &h,
@@ -491,11 +493,12 @@ async fn an_admin_ends_a_space() {
         )
         .await
         .unwrap();
-    let syncer = authority(&h, false, true).await;
-    h.host
-        .store
-        .register(&uri, &syncer.did, &syncer.pds, now() as i64 + 60)
-        .unwrap();
+    let (url, syncer) = endpoint().await;
+    let to = Registration {
+        endpoint: url,
+        token: "tok".into(),
+    };
+    h.host.store.register(&uri, &to, now() as i64 + 60).unwrap();
 
     assert_eq!(
         error(&call(&h, &bob, "deleteSpace", json!({"group": did, "space": uri})).await),
@@ -516,16 +519,18 @@ async fn an_admin_ends_a_space() {
     assert!(h.host.store.space_head(&did, &uri).unwrap().is_none());
     let cid = atproto::Cid::parse(picture["ref"]["$link"].as_str().unwrap()).unwrap();
     assert_eq!(h.host.store.blob(&did, &cid).unwrap(), None);
-    for _ in 0..100 {
-        if !syncer.told.writes.lock().unwrap().is_empty() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
+    // Its syncers are told, and it says it was deleted.
+    let told = syncer
+        .told_of("com.atproto.space.notifySpaceUpdate#spaceDeleted", 1)
+        .await;
     assert_eq!(
-        syncer.told.writes.lock().unwrap()[0].1,
-        json!({"space": uri})
+        told,
+        [
+            json!({"space": uri, "token": "tok", "update": {"$type": "com.atproto.space.notifySpaceUpdate#spaceDeleted"}})
+        ]
     );
+    assert!(h.host.store.space_deleted(&uri).unwrap());
+    assert_eq!(h.host.store.registration(&uri, &to).unwrap(), None);
 
     for space in [meta_space(&did), members_space(&did)] {
         let said = call(

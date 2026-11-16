@@ -780,14 +780,15 @@ fn keeps_what_was_resolved_escalated_and_noted_as_a_status_set() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("host.sqlite");
     drop(Store::open(&path).unwrap());
-    // As a database from before: events of each kind, its schema a
-    // version back.
+    // As a database from before: its schema back to just before the
+    // migration that made events statuses, then events of each kind.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.pragma_update(None, "foreign_keys", false).unwrap();
-    for column in ["cid", "rule", "uri", "status"] {
-        let sql = format!("ALTER TABLE mod_event DROP COLUMN {column}");
-        conn.execute(&sql, []).unwrap();
-    }
+    let added = group_host::store::MIGRATIONS
+        .iter()
+        .position(|m| m.contains("ALTER TABLE mod_event ADD COLUMN cid"))
+        .unwrap();
+    common::rewind(&conn, added);
     for (subject, kind, note) in [
         ("did:plc:b", "report", None),
         ("did:plc:b", "escalate", None),
@@ -802,25 +803,6 @@ fn keeps_what_was_resolved_escalated_and_noted_as_a_status_set() {
         )
         .unwrap();
     }
-    // Back to just before the migration that added them; those after it
-    // run again on what they made.
-    let migrations = group_host::store::MIGRATIONS;
-    let added = migrations
-        .iter()
-        .position(|m| m.contains("ALTER TABLE mod_event ADD COLUMN cid"))
-        .unwrap();
-    // A table a later one renamed has its old name again, to be renamed.
-    let lines = migrations[added + 1..].iter().flat_map(|m| m.lines());
-    let renames = lines.filter_map(|l| {
-        let l = l.trim().strip_prefix("ALTER TABLE ")?;
-        l.trim_end_matches(';').split_once(" RENAME TO ")
-    });
-    for (from, to) in renames {
-        let back = format!("ALTER TABLE {to} RENAME TO {from}");
-        conn.execute(&back, []).unwrap();
-    }
-    conn.pragma_update(None, "user_version", added as i64)
-        .unwrap();
     drop(conn);
     let store = Store::open(&path).unwrap();
     let said = |subject: &str| {
