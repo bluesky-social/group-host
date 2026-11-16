@@ -470,6 +470,11 @@ pub const MIGRATIONS: &[&str] = &[
         deleted_at INTEGER NOT NULL
     );
 ",
+    // A record in a space found by its path alone, as a person's
+    // memberships are, without reading every account's.
+    "
+    CREATE INDEX IF NOT EXISTS space_record_path ON space_record (path);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -602,6 +607,7 @@ const INVITES_TO: &str = "SELECT seq, grp, invitee, by, message, rkey, created_a
 const LAPSED_INVITES: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE expires_at <= ?1 ORDER BY seq";
 const UNINVITE: &str = "DELETE FROM invite WHERE grp = ?1 AND invitee = ?2";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
+const OWN_SPACE_HOLDING: &str = "SELECT did FROM space_record WHERE path = ?2 AND space = 'at://' || did || '/space/' || ?1 || '/self' ORDER BY did";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";
@@ -1803,6 +1809,16 @@ impl Store {
         let conn = self.conn();
         let mut q = conn.prepare(SPACES_OF)?;
         let rows = q.query_map([authority], |r| r.get(0));
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The accounts whose own repo in their own space of `space_type`,
+    /// at `self`, holds a record at `path`, in DID order.
+    pub fn own_space_holding(&self, space_type: &str, path: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(OWN_SPACE_HOLDING)?;
+        let rows = q.query_map([space_type, path], |r| r.get(0));
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }

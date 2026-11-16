@@ -6,7 +6,7 @@
 
 use crate::Host;
 use crate::api::{Params, param};
-use crate::group::meta_space;
+use crate::group::{did_rkey, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::mcp;
 use crate::oauth_scope::{concrete, set_of};
@@ -64,11 +64,15 @@ impl Host {
         Ok(did)
     }
 
-    /// The groups here, switched on, where `member` holds a role.
+    /// The groups here, switched on, where `member` holds a role: those
+    /// whose own members space holds a membership naming them.
     pub(crate) fn groups_of(&self, member: &str) -> Result<Vec<String>, XrpcError> {
-        let accounts = self.store.accounts(None, u32::MAX);
+        let path = format!("{NS}.membership/{}", did_rkey(member));
+        let holding = self
+            .store
+            .own_space_holding(&format!("{NS}.members"), &path);
         let mut groups = Vec::new();
-        for (did, _) in accounts.map_err(XrpcError::internal)? {
+        for did in holding.map_err(XrpcError::internal)? {
             let roles = self.roles(&did, member).map_err(XrpcError::internal)?;
             if group_of(self, &did).is_ok() && self.active(&did).is_ok() && !roles.is_empty() {
                 groups.push(did);
