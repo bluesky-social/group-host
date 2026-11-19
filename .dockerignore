@@ -13,3 +13,4 @@ docs-site/dist
 docs-site/.astro
 packages/sdk/node_modules
 packages/sdk/src/lexicons
+examples

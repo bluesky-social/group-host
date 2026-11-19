@@ -51,6 +51,7 @@ accounts on their own PDSes, anywhere on the network.
 | `packages/sdk` | `@opensocial/sdk`, for apps on group hosts: a group's spaces read and written with atproto's lex-space, and the host's own methods, as a member ([the SDK](../reference/sdk.md)) |
 | `Dockerfile`, `deploy/` | one image of the host, the console and the command, and the compose file that runs it ([deploying](../deploying.md)) |
 | `lexicons/` | the schemas of the records and methods. The host checks every `fyi.opensocial.*` method's parameters and input against its schema before the handler runs. It also checks a record of our own collections that an app writes as a group before it keeps it. |
+| `examples/` | apps built on a group host, run against this repository's host. `examples/kicker` is a skate club's members-only site, published as its group's site, with no server of its own. |
 
 ## The pages
 

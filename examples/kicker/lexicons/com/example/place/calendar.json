@@ -1,0 +1,15 @@
+{
+  "lexicon": 1,
+  "id": "com.example.place.calendar",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:self",
+      "name": "Place: calendar",
+      "description": "A place's events, each in the repo of the host who wrote it, written by its hosts and admins alone and read by its members.",
+      "collections": [
+        "com.example.place.event"
+      ]
+    }
+  }
+}

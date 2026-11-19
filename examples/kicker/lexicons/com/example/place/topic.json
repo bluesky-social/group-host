@@ -1,0 +1,31 @@
+{
+  "lexicon": 1,
+  "id": "com.example.place.topic",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "description": "A discussion started at a place, in its author's repo in the place's room: what it is about, and the first words of it.",
+      "record": {
+        "type": "object",
+        "required": ["title", "createdAt"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 3000,
+            "maxGraphemes": 300
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 30000,
+            "maxGraphemes": 3000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

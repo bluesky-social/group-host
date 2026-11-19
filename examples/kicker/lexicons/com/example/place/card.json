@@ -1,0 +1,41 @@
+{
+  "lexicon": 1,
+  "id": "com.example.place.card",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "A member's card in a place's directory, in their repo in the place's room.",
+      "record": {
+        "type": "object",
+        "required": [
+          "createdAt"
+        ],
+        "properties": {
+          "about": {
+            "type": "string",
+            "description": "Who they are, and what they are working on.",
+            "maxLength": 3000,
+            "maxGraphemes": 300
+          },
+          "offers": {
+            "type": "string",
+            "description": "What they can help others with.",
+            "maxLength": 3000,
+            "maxGraphemes": 300
+          },
+          "avatar": {
+            "type": "blob",
+            "accept": ["image/*"],
+            "maxSize": 1000000,
+            "description": "Their picture, shown beside their name in the place, in their own repo."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

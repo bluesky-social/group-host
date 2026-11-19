@@ -74,6 +74,11 @@ right, and come before the code they test.
   deployed with `just docs-deploy` (`docs/development.md`).
 - `harness/`: the checks beside the tests, and the console's flows end to
   end (`harness/e2e`).
+- `examples/`: apps built on a group host, each run against this
+  repository's host by its own Justfile and harness, outside the checks.
+  `examples/kicker` is a skate club's members-only site, published
+  as its group's site with no server of its own; its `AGENTS.md` says how
+  to work on it, and its `DESIGN.md` how it looks.
 
 ## Commands and tools
 

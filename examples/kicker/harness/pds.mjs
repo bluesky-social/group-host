@@ -1,0 +1,214 @@
+// Runs the reference PDS (@atproto/pds, through @atproto/dev-env) and a PLC
+// directory on free ports, makes test accounts, prints one JSON line naming
+// them (and where the codes the PDS mails are read), and stops when stdin
+// closes.
+//
+//   node harness/pds.mjs [--accounts alice,bob]
+//
+// ATPROTO_DEV_ENV names a built dev-env package to run: an atproto
+// checkout's packages/dev-env on the spaces alpha, as `just bootstrap`
+// builds it into .deps/atproto, which is taken where ATPROTO_DEV_ENV is not
+// set. The alpha's PDS migrates an account's database each time it opens
+// it; here only the first time.
+//
+// The console is an OAuth client, which the PDS reaches only over https at a
+// hostname. So the harness makes a certificate for CONSOLE_HOST, trusts it,
+// and resolves that name to 127.0.0.1; the flows put harness/tls-proxy.mjs
+// in front of the console with it.
+
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import dns from 'node:dns';
+import tls from 'node:tls';
+import http from 'node:http';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/// The group host this example sits in.
+const groupHost = resolve(root, '../..');
+// The PDS's better-sqlite3 is built for the Node the repository's .node-version names.
+const pinned = readFileSync(join(groupHost, '.node-version'), 'utf8').trim();
+if (process.versions.node.split('.')[0] !== pinned.split('.')[0]) {
+  console.error(
+    `harness/pds.mjs runs on Node ${pinned}, as .node-version says, not ${process.version}`
+  );
+  process.exit(1);
+}
+const bootstrapped = join(root, '.deps/atproto/packages/dev-env');
+const devEnv =
+  process.env.ATPROTO_DEV_ENV ??
+  (existsSync(join(bootstrapped, 'dist')) ? bootstrapped : undefined);
+const { TestNetworkNoAppView } = await import(
+  devEnv ? pathToFileURL(resolve(root, devEnv, 'dist/index.js')).href : '@atproto/dev-env'
+);
+if (devEnv) await migrateOnce(resolve(root, devEnv));
+
+/// Has the dev-env's PDS migrate each account's database on its first
+/// opening alone, rather than on every one.
+async function migrateOnce(dir) {
+  const index = createRequire(join(dir, 'package.json')).resolve('@atproto/pds');
+  const dist = dirname(realpathSync(index));
+  const load = (file) => import(pathToFileURL(join(dist, file)).href);
+  const { ActorStore } = await load('actor-store/actor-store.js');
+  const { Migrator } = await load('db/migrator.js');
+  const opened = new Set();
+  const again = new AsyncLocalStorage();
+  const open = ActorStore.prototype.openDb;
+  ActorStore.prototype.openDb = async function (did) {
+    const { dbLocation } = await this.getLocation(did);
+    const db = await again.run(opened.has(dbLocation), () => open.call(this, did));
+    opened.add(dbLocation);
+    return db;
+  };
+  const migrate = Migrator.prototype.migrateToLatestOrThrow;
+  Migrator.prototype.migrateToLatestOrThrow = function () {
+    return again.getStore() ? Promise.resolve([]) : migrate.call(this);
+  };
+}
+
+const CONSOLE_HOST = 'console.group-host.internal';
+// Names beside it, as a group's site is reached in harness/e2e: the PDS
+// fetches a site's OAuth client there.
+const BESIDE = '.group-host.internal';
+const certs = mkdtempSync(join(tmpdir(), 'group-host-tls-'));
+const cert = join(certs, 'cert.pem');
+const key = join(certs, 'key.pem');
+execFileSync(
+  'openssl',
+  [
+    'req',
+    '-x509',
+    '-newkey',
+    'ec',
+    '-pkeyopt',
+    'ec_paramgen_curve:prime256v1',
+    '-nodes',
+    '-keyout',
+    key,
+    '-out',
+    cert,
+    '-days',
+    '7',
+    '-subj',
+    `/CN=${CONSOLE_HOST}`,
+    '-addext',
+    `subjectAltName=DNS:${CONSOLE_HOST},DNS:*${BESIDE}`
+  ],
+  { stdio: 'ignore' }
+);
+tls.setDefaultCACertificates([...tls.getCACertificates('default'), readFileSync(cert, 'utf8')]);
+const lookup = dns.lookup;
+dns.lookup = (hostname, options, callback) => {
+  if (typeof options === 'function') [callback, options] = [options, {}];
+  if (!hostname.endsWith(BESIDE)) return lookup(hostname, options, callback);
+  return options?.all
+    ? callback(null, [{ address: '127.0.0.1', family: 4 }])
+    : callback(null, '127.0.0.1', 4);
+};
+
+const at = process.argv.indexOf('--accounts');
+const names = (at === -1 ? 'alice,bob' : process.argv[at + 1]).split(',');
+
+const net = await TestNetworkNoAppView.create({ pds: { hostname: 'localhost' } });
+
+const accounts = [];
+for (const name of names) {
+  const password = 'password';
+  const res = await fetch(`${net.pds.url}/xrpc/com.atproto.server.createAccount`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: `${name}@test.com`, handle: `${name}.test`, password })
+  });
+  if (!res.ok) throw new Error(`createAccount ${name}: ${await res.text()}`);
+  const { did, handle } = await res.json();
+  accounts.push({ handle, did, password });
+}
+
+// The space types the host keeps, published as lexicons from an account
+// of their own, which the PDS is told to resolve every lexicon from (as
+// PDS_LEXICON_AUTHORITY_DID would tell it): the PDS grants a `space:`
+// scope, as a site that writes asks for, only for a space whose
+// declaration it can read.
+{
+  const { readdirSync, statSync } = await import('node:fs');
+  const all = (dir) =>
+    readdirSync(dir).flatMap((f) => {
+      const path = join(dir, f);
+      return statSync(path).isDirectory() ? all(path) : f.endsWith('.json') ? [path] : [];
+    });
+  // The site's space types, and the group host's (its members space).
+  const spaces = [join(root, 'lexicons'), join(groupHost, 'lexicons')]
+    .flatMap(all)
+    .map((f) => JSON.parse(readFileSync(f, 'utf8')))
+    .filter((doc) => doc.defs?.main?.type === 'space');
+  const made = await fetch(`${net.pds.url}/xrpc/com.atproto.server.createAccount`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'lexicons@test.com',
+      handle: 'lexicons.test',
+      password: 'password'
+    })
+  }).then((r) => r.json());
+  for (const doc of spaces) {
+    const res = await fetch(`${net.pds.url}/xrpc/com.atproto.repo.createRecord`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${made.accessJwt}` },
+      body: JSON.stringify({
+        repo: made.did,
+        collection: 'com.atproto.lexicon.schema',
+        rkey: doc.id,
+        validate: false,
+        record: { $type: 'com.atproto.lexicon.schema', ...doc }
+      })
+    });
+    if (!res.ok) throw new Error(`publishing ${doc.id}: ${await res.text()}`);
+  }
+  net.pds.ctx.cfg.lexicon.didAuthority = made.did;
+}
+
+// The codes the PDS mails to let an account's identity move (an account
+// moving to a group host asks for one), kept by address and served at
+// `mail`, as the account's inbox would have them.
+const codes = new Map();
+const mailer = net.pds.ctx.mailer;
+const sendPlcOperation = mailer.sendPlcOperation.bind(mailer);
+mailer.sendPlcOperation = async (params, opts) => {
+  codes.set(opts.to, params.token);
+  return sendPlcOperation(params, opts);
+};
+const inbox = http.createServer((req, res) => {
+  const code = codes.get(new URL(req.url, 'http://inbox').searchParams.get('to'));
+  res.writeHead(code ? 200 : 404, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(code ? { code } : { error: 'NoMail' }));
+});
+await new Promise((resolve) => inbox.listen(0, '127.0.0.1', resolve));
+
+const described = await fetch(`${net.pds.url}/xrpc/com.atproto.server.describeServer`).then((r) =>
+  r.json()
+);
+console.log(
+  JSON.stringify({
+    pds: net.pds.url,
+    plc: net.plc.url,
+    spaces: described.spacesAlpha === true,
+    mail: `http://127.0.0.1:${inbox.address().port}`,
+    console: { host: CONSOLE_HOST, cert, key },
+    accounts
+  })
+);
+
+const shutdown = async () => {
+  inbox.close();
+  await net.close();
+  process.exit(0);
+};
+process.stdin.on('end', shutdown);
+process.stdin.on('close', shutdown);
+process.stdin.resume();
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
