@@ -58,6 +58,8 @@ Compose reads these and passes each to the host under the name the host knows:
 | `GROUP_HOST_PROVISIONING_CLIENTS` | `PROVISIONING_CLIENTS` | none |
 | `GROUP_HOST_CRAWLERS` | `PDS_CRAWLERS` | none |
 | `GROUP_HOST_SIGNUP_PDS` | `SIGNUP_PDS` | `https://bsky.social` |
+| `GROUP_HOST_SITE_HANDLE_RESOLVER` | `SITE_HANDLE_RESOLVER` | `https://bsky.social` |
+| `GROUP_HOST_SITE_PLC_URL` | `SITE_PLC_URL` | `GROUP_HOST_PLC_URL`'s |
 | `GROUP_HOST_BLOB_UPLOAD_LIMIT` | host `BLOB_UPLOAD_LIMIT` and console `BODY_SIZE_LIMIT` | `52428800` |
 | `GROUP_HOST_LOG` | `RUST_LOG` | `info` |
 | `GROUP_HOST_ADMINS` | `HOST_ADMINS`, the operators who read its logs and stats | none |

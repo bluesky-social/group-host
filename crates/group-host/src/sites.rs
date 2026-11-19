@@ -698,7 +698,7 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
         "writes": writes,
         "aud": format!("{}#opensocial", host.config.service_did),
         "handleResolver": host.config.site_handle_resolver,
-        "plc": host.config.plc_url,
+        "plc": host.config.site_plc_url,
         "signUpAt": host.config.signup_pds,
         "console": host.config.console_url,
         "allowHttp": host.config.public_url.starts_with("http://"),
@@ -706,9 +706,13 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
     // In a script element, `<` is the one thing that could end it early.
     let config = config.to_string().replace('<', "\\u003c");
     let frame = format!("/_site/{}", encoded(path));
+    // The frame sized before the page's script runs, so the browser never
+    // draws its own small bordered box first.
     let page = format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+         <style>html,body{{margin:0;height:100%}}\
+         #os-page{{display:block;width:100%;height:100%;border:0}}</style>\
          {head}</head><body>\
          <iframe id=\"os-page\" title=\"{handle}\" data-src=\"{frame}\" \
          sandbox=\"allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox\"></iframe>\

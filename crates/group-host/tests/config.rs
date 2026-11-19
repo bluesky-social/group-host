@@ -136,6 +136,18 @@ fn someone_signs_up_at_bluesky_unless_told() {
 }
 
 #[test]
+fn a_sites_page_finds_its_visitor_in_the_directory_their_browser_reaches() {
+    assert_eq!(config(&[]).unwrap().site_plc_url, "https://plc.directory");
+    let own = config(&[("PLC_URL", "http://next-plc:3000")]).unwrap();
+    assert_eq!(own.site_plc_url, "http://next-plc:3000");
+    let told = [
+        ("PLC_URL", "http://next-plc:3000"),
+        ("SITE_PLC_URL", "https://plc.next.test"),
+    ];
+    assert_eq!(config(&told).unwrap().site_plc_url, "https://plc.next.test");
+}
+
+#[test]
 fn its_admins_and_how_many_lines_it_keeps() {
     let c = config(&[]).unwrap();
     assert!(c.host_admins.is_empty());

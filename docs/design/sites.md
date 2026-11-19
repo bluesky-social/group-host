@@ -383,9 +383,11 @@ has a handle field, which `searchActors` at the address fills with
 suggestions as you type, and "Create one", which makes an account at
 `SIGNUP_PDS`. A page may suggest a handle, but it can't send anyone
 anywhere. The visitor sees where they're signing in, types or confirms
-the handle, and enters their password only at their own PDS. The host
-resolves the typed handle through `SITE_HANDLE_RESOLVER`. Back from
-approving, the visitor lands signed in on the page they started from.
+the handle, and enters their password only at their own PDS. The page
+resolves the typed handle through `SITE_HANDLE_RESOLVER`, and the DID
+that names through `SITE_PLC_URL`, both from the visitor's browser
+([configuration](../reference/config.md)). Back from approving, the
+visitor lands signed in on the page they started from.
 
 The host's page at the address isn't sandboxed, since it must keep a
 session. It's the host's own code, the same for every group. The site's

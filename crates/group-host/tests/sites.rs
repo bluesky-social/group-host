@@ -492,6 +492,7 @@ async fn a_site_that_reads_is_served_in_the_page_that_holds_its_visitors_session
     let vars = [
         ("SITE_SHELL_DIR", dir),
         ("SITE_HANDLE_RESOLVER", "https://pds.test"),
+        ("SITE_PLC_URL", "https://plc.test"),
     ];
     let h = start(&vars, false).await;
     let (did, [alice, ..]) = group(&h).await;
@@ -535,6 +536,13 @@ async fn a_site_that_reads_is_served_in_the_page_that_holds_its_visitors_session
         json!([format!("{NS}.getGroup"), format!("{NS}.listMembers")])
     );
     assert_eq!(config["handleResolver"], "https://pds.test");
+    assert_eq!(config["plc"], "https://plc.test");
+    // Its frame sized before the page's script runs.
+    assert!(
+        shell
+            .body
+            .contains("#os-page{display:block;width:100%;height:100%;border:0}")
+    );
     // A page the site has no file for is missing there too, its preview
     // the notFound page's; a site with neither, the group's handle.
     let lost = page(&h, "/rides/42").await;

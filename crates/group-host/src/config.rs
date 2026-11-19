@@ -73,6 +73,10 @@ pub struct Config {
     /// `SITE_HANDLE_RESOLVER`: a service answering
     /// `com.atproto.identity.resolveHandle`. Bluesky's unless set.
     pub site_handle_resolver: String,
+    /// Where that page looks up the `did:plc` of whoever signs in,
+    /// `SITE_PLC_URL`: the directory as their browser reaches it, where
+    /// `PLC_URL` names one only the host reaches. `PLC_URL` unless set.
+    pub site_plc_url: String,
     /// Where the host asks a group's own domain whether it reaches this
     /// host, before serving the group's site there, `SITE_CHECK_AT`: a URL
     /// asked in the domain's place, with the domain as its `Host` (a proxy
@@ -175,6 +179,7 @@ impl Config {
         let site_shell = var("SITE_SHELL_DIR").map(std::path::PathBuf::from);
         let site_handle_resolver =
             var("SITE_HANDLE_RESOLVER").unwrap_or_else(|| "https://bsky.social".into());
+        let site_plc_url = var("SITE_PLC_URL").unwrap_or_else(|| plc_url.clone());
         let site_check_at = var("SITE_CHECK_AT").map(|u| u.trim_end_matches('/').to_string());
         Ok(Config {
             port,
@@ -197,6 +202,7 @@ impl Config {
             logs_keep,
             site_shell,
             site_handle_resolver,
+            site_plc_url,
             site_check_at,
         })
     }

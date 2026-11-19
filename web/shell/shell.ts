@@ -57,8 +57,7 @@ const style = document.createElement('style');
 style.textContent = `${consoleStyles}
 html:root:not([data-theme='light']) { color-scheme: normal; }
 html, body { margin: 0; padding: 0; height: 100%; background: none; }
-@media (prefers-color-scheme: dark) { #${SIGN_IN} { color-scheme: dark; } }
-#os-page { display: block; width: 100%; height: 100%; border: 0; }`;
+@media (prefers-color-scheme: dark) { #${SIGN_IN} { color-scheme: dark; } }`;
 document.head.append(style);
 
 const client = BrowserOAuthClient.load({
