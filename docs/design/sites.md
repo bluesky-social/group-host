@@ -36,8 +36,11 @@ call as the visitor who signs in on it. Those are
 `getSpaceBlob`, `getActor` and `getViewer`, and no others.
 
 It may name `acts`, up to 20 of the host's procedures its pages may call
-as that person, each acting for them alone. For now that's
-`fyi.opensocial.createReport` only. It may name `spaces`, up to 20 of
+as that person, each acting for them alone, and only in this group: the
+host's page sets each call's `group` itself. Those are
+`fyi.opensocial.createReport`, to report what they see, and
+`requestJoin`, `cancelJoinRequest` and `leaveGroup`, so a site can let
+people ask to join, cancel the request, and leave. It may name `spaces`, up to 20 of
 the group's spaces its pages may read whole as that person. Each is a
 type, such as `fyi.opensocial.siteSpace`, and may give a `key` to name
 one space of that type, such as `board`. Without a key, it's every space
@@ -308,7 +311,7 @@ gives each ask's parameters, answers and refusals, and an example page:
 | `os.group()` | `{did, handle, console}` of the group whose site it is, where `console` is the address of the host's console |
 | `os.me()` | `{signedIn, did, handle}` of the visitor |
 | `os.call(method, params)` | the method's answer, asked as the visitor. That's its JSON, or a `Blob` for a method that answers with a file (`getSpaceBlob`) |
-| `os.act(method, input)` | the procedure's answer, asked as the visitor with `input` as its JSON. For `createReport` that's its `id` and `createdAt` |
+| `os.act(method, input)` | the procedure's answer, asked as the visitor with `input` as its JSON, its `group` the site's own. For `createReport` that's its `id` and `createdAt`; for `requestJoin`, its `status` |
 | `os.space(uri)` | one of the group's spaces (`at://<group>/space/<type>/<skey>`), with the SDK's `GroupSpace` methods below. The same `uri` gives the same object |
 | `space.sync()` | `{failed}`, once the page's records of a space are up to date as the visitor may read them. The site must name the space in `spaces`, by its type alone or by its type and key. `failed` lists the writers whose PDS didn't answer |
 | `space.records({collections})` | every record held, right away, each as `{uri, repo, collection, rkey, cid, value}`. Given `collections`, only those collections' records |

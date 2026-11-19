@@ -46,8 +46,16 @@ export type Tell = { os: 1 } & (
   | { type: 'at'; path: string; title: string }
 );
 
-/** Why an ask was refused: `locked` when it is for someone else to make, as `reason` says. */
-export type Refusal = { error: string; locked?: true; reason?: 'sign in' | 'not for you' };
+/**
+ * Why an ask was refused: `locked` when it is for someone else to make, as
+ * `reason` says; `name`, the method's own error name when it gave one.
+ */
+export type Refusal = {
+  error: string;
+  name?: string;
+  locked?: true;
+  reason?: 'sign in' | 'not for you';
+};
 
 /** The host's page's answer to an ask: its value, or its refusal. */
 export type Reply = { os: 1; type: 'reply'; id: number } & ({ value: unknown } | Refusal);

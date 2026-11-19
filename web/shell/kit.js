@@ -44,6 +44,7 @@
     pending.delete(m.id);
     if (!('error' in m)) return waiting.resolve(m.value);
     const error = Object.assign(new Error(m.error), { locked: !!m.locked, reason: m.reason });
+    if (m.name) error.name = m.name;
     waiting.reject(error);
   });
 
@@ -170,8 +171,9 @@
     call: (method, params = {}) => ask('call', { method, params }),
     /**
      * One of the host's procedures the site acts by, as whoever is looking:
-     * `input` its JSON, answered with what the method answers. Such as
-     * `fyi.opensocial.createReport`, reporting what they see.
+     * `input` its JSON, answered with what the method answers, its `group`
+     * always this site's. Such as `fyi.opensocial.createReport`, reporting
+     * what they see, or `fyi.opensocial.requestJoin`, asking to join.
      *
      * @param {string} method
      * @param {object} [input]

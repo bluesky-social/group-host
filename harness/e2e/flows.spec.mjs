@@ -688,6 +688,8 @@ test('a site showing its members to whoever signs in on it, and writing for them
 <button id="accept" type="button">Take up your place</button>
 <button id="upload" type="button">Upload a picture</button>
 <p id="uploaded"></p>
+<button id="elsewhere" type="button">Ask to join elsewhere</button>
+<p id="joined"></p>
 <script>
   const list = document.getElementById('members');
   const place = document.getElementById('place');
@@ -731,6 +733,17 @@ test('a site showing its members to whoever signs in on it, and writing for them
       out.textContent = 'Not uploaded: ' + e.message;
     }
   };
+  // Asks to join a group that isn't this one: the host's page asks this
+  // one's all the same.
+  document.getElementById('elsewhere').onclick = async () => {
+    const out = document.getElementById('joined');
+    try {
+      await os.act('fyi.opensocial.requestJoin', { group: 'did:plc:elsewhere' });
+      out.textContent = 'Asked';
+    } catch (e) {
+      out.textContent = 'Refused: ' + e.name;
+    }
+  };
   os.onChange(draw);
   draw();
 </script>`
@@ -747,6 +760,7 @@ test('a site showing its members to whoever signs in on it, and writing for them
   await publishing.getByText('Advanced').click();
   await publishing.getByLabel('Who the members are').check();
   await publishing.getByLabel("The group's profile and rules").check();
+  await publishing.getByLabel('Join the group, or ask to join').check();
   await publishing.getByLabel('Kinds of record, one per line').fill(writes);
   await publishing.getByRole('button', { name: 'Publish' }).click();
   await expect(publishing).toBeHidden();
@@ -786,6 +800,11 @@ test('a site showing its members to whoever signs in on it, and writing for them
   // could point to, as her sign-in there let it.
   await site.getByRole('button', { name: 'Upload a picture' }).click();
   await expect(site.getByText('Uploaded image/png, 70 bytes')).toBeVisible();
+
+  // Asking to join another group asks this one, where she is already in,
+  // and the method's error name reaches the page.
+  await site.getByRole('button', { name: 'Ask to join elsewhere' }).click();
+  await expect(site.getByText('Refused: AlreadyMember')).toBeVisible();
 
   // Its page under it is in the address bar and the tab, so a reload
   // opens it, signed in still.

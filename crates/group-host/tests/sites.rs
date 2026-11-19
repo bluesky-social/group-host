@@ -694,9 +694,17 @@ async fn a_site_acts_as_its_visitor_only_as_the_host_lets_a_page() {
         "{message}"
     );
 
-    // Reporting, though it reads and writes nothing, has its pages served
-    // in the page that holds a session, which is told what they may do.
-    let acts = json!([{"method": format!("{NS}.createReport")}]);
+    // Reporting, joining, cancelling a request and leaving, though they
+    // read and write nothing, have its pages served in the page that
+    // holds a session, which is told what they may do.
+    let named = [
+        "createReport",
+        "requestJoin",
+        "cancelJoinRequest",
+        "leaveGroup",
+    ];
+    let methods: Vec<String> = named.iter().map(|m| format!("{NS}.{m}")).collect();
+    let acts: Json = methods.iter().map(|m| json!({"method": m})).collect();
     let said = call(
         &h,
         &alice,
@@ -707,17 +715,20 @@ async fn a_site_acts_as_its_visitor_only_as_the_host_lets_a_page() {
     assert_eq!(said.0, 200, "{}", said.1);
     let shell = page(&h, "/").await;
     let (_, config) = shell_of(&shell);
-    assert_eq!(config["acts"], json!([format!("{NS}.createReport")]));
+    assert_eq!(config["acts"], json!(methods));
 
-    // Its OAuth client asks the host for that, as for a read.
+    // Its OAuth client asks the host for each, as for a read.
     let client = page(&h, "/client-metadata.json").await;
     let doc: Json = serde_json::from_str(&client.body).unwrap();
     let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
     let aud = "aud=did%3Aweb%3Ahost.test%23opensocial";
     let wanted = [
         "atproto".to_string(),
+        format!("rpc:{NS}.cancelJoinRequest?{aud}"),
         format!("rpc:{NS}.createReport?{aud}"),
         format!("rpc:{NS}.getViewer?{aud}"),
+        format!("rpc:{NS}.leaveGroup?{aud}"),
+        format!("rpc:{NS}.requestJoin?{aud}"),
     ];
     assert_eq!(scope, wanted);
 

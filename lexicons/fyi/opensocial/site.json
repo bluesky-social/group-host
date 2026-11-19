@@ -86,13 +86,18 @@
     },
     "act": {
       "type": "object",
-      "description": "One of the host's procedures a site's pages may ask, as the visitor.",
+      "description": "One of the host's procedures a site's pages may ask, as the visitor, of the group whose site it is.",
       "required": ["method"],
       "properties": {
         "method": {
           "type": "string",
           "format": "nsid",
-          "knownValues": ["fyi.opensocial.createReport"],
+          "knownValues": [
+            "fyi.opensocial.createReport",
+            "fyi.opensocial.requestJoin",
+            "fyi.opensocial.cancelJoinRequest",
+            "fyi.opensocial.leaveGroup"
+          ],
           "description": "The procedure's NSID, as `knownValues` lists those a site may ask."
         }
       }

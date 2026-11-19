@@ -99,8 +99,14 @@ pub const READS: &[&str] = &[
 /// The host's procedures a site's pages may ask, as whoever is looking and
 /// signed in: those that act for the visitor alone, and that the host
 /// checks as it checks the same from anywhere. Reporting what they see,
-/// or appealing what was done to them.
-pub const ACTS: &[&str] = &["fyi.opensocial.createReport"];
+/// or appealing what was done to them; asking to join, taking that back,
+/// and leaving. The host's page asks each of the site's own group alone.
+pub const ACTS: &[&str] = &[
+    "fyi.opensocial.createReport",
+    "fyi.opensocial.requestJoin",
+    "fyi.opensocial.cancelJoinRequest",
+    "fyi.opensocial.leaveGroup",
+];
 
 /// The methods a site's `reads`, or its `acts`, name.
 fn named<'a>(site: &'a Value, key: &str) -> Vec<&'a str> {

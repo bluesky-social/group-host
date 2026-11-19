@@ -96,11 +96,12 @@ async function restore(): Promise<string> {
   return asked;
 }
 
-/** A read the host refused, with its status. */
+/** A read the host refused, with its status, and the method's error name when it gave one. */
 class Refused extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly error?: string
   ) {
     super(message);
   }
@@ -120,20 +121,23 @@ async function ask(method: string, params: object) {
   const json = res.headers.get('content-type')?.startsWith('application/json');
   if (res.ok && !json) return await res.blob();
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Refused(body?.message ?? res.statusText, res.status);
+  if (!res.ok) throw new Refused(body?.message ?? res.statusText, res.status, body?.error);
   return body;
 }
 
 /**
  * One of the host's procedures, as the visitor, through their PDS: `input`
  * its JSON, and its answer. Refused for want of scope, as a write is.
+ * Every one a site may ask is of a group, and its `group` is always this
+ * site's: the visitor's sign-in lets the site act for them in any group
+ * here, which it is never to ask of another.
  */
 async function act(method: string, input: object) {
   if (!session) throw new Refused('sign in', 401);
   const res = await session.fetchHandler(`/xrpc/${method}`, {
     method: 'POST',
     headers: { 'atproto-proxy': config.aud, 'content-type': 'application/json' },
-    body: JSON.stringify(input)
+    body: JSON.stringify({ ...input, group: config.group })
   });
   const said = await res.json().catch(() => null);
   if (res.ok) return said ?? {};
@@ -245,7 +249,7 @@ async function unwritten(
     await drop();
     throw new Refused('sign in', 401);
   }
-  throw new Refused(said?.message ?? res.statusText, res.status);
+  throw new Refused(said?.message ?? res.statusText, res.status, said?.error);
 }
 
 /**
@@ -460,6 +464,7 @@ function refusal(err: unknown): Refusal {
   const reason = err instanceof Error && err.message === 'sign in' ? 'sign in' : 'not for you';
   return {
     error: err instanceof Error ? err.message : String(err),
+    ...(err instanceof Refused && err.error ? { name: err.error } : {}),
     ...(locked ? { locked: true, reason } : {})
   };
 }

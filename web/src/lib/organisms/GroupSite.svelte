@@ -25,7 +25,12 @@
     ['fyi.opensocial.getActor', "People's profiles"]
   ];
   // What a site's pages may do for whoever signs in, in the reader's words.
-  const acts = [['fyi.opensocial.createReport', 'Report posts and members to moderators']];
+  const acts = [
+    ['fyi.opensocial.createReport', 'Report posts and members to moderators'],
+    ['fyi.opensocial.requestJoin', 'Join the group, or ask to join'],
+    ['fyi.opensocial.cancelJoinRequest', 'Cancel their request to join'],
+    ['fyi.opensocial.leaveGroup', 'Leave the group']
+  ];
   // A space as a person types it: its type, and `/<key>` when it names one.
   const spaceText = (s: { space: string; key?: string }) =>
     s.key === undefined ? s.space : `${s.space}/${s.key}`;

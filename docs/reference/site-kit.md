@@ -32,7 +32,16 @@ A site declares what its pages may ask in its `fyi.opensocial.site` record. Give
 
 `spaces` is a list of `{space, key}`. `space` is a type of the group's spaces whose records a page may read whole with [`os.space`](#osspace), such as `fyi.opensocial.siteSpace`. `key`, if given, narrows the entry to the one space of that type with that key, such as `board`. Without it, the entry covers every space of the type. No pair of type and key may be named twice. A type named both whole and by a key is allowed.
 
-`acts` is a list of `{method}`, each a procedure `os.act` may ask. The only one is `fyi.opensocial.createReport`, which reports what the visitor sees ([moderation](../design/moderation.md)).
+`acts` is a list of `{method}`, each a procedure `os.act` may ask, always of the site's own group:
+
+| Act | What it does for the visitor |
+| --- | --- |
+| `fyi.opensocial.createReport` | reports what they see, or appeals what was done to them ([moderation](../design/moderation.md)) |
+| `fyi.opensocial.requestJoin` | joins the group, or asks to, as its join policy says. It answers `status`, `admitted` or `pending`, and redeems an invite waiting for them |
+| `fyi.opensocial.cancelJoinRequest` | cancels their request to join while it waits |
+| `fyi.opensocial.leaveGroup` | takes them out of the group. The host refuses with `LastConfigurer` if nobody would be left able to configure it |
+
+Whether they're a member, or have a request waiting, is in `getGroup`'s `viewer` (`member`, `request`).
 
 `writes` is a list of `{space, key, collection}`, where `space` is a type of the group's spaces, `key` is optional, and `collection` is an NSID. An entry lets a space's `create`, `put` and `delete` ([`os.space`](#osspace)) write records of that collection in the group's space of that type with that key, or in any space of the type if it has no key. A site with at least one entry in `writes` may also `os.upload` pictures. The space's access record still decides whether a given visitor may write in a given space.
 
@@ -64,7 +73,7 @@ It's refused, unlocked, if `method` is none of the site's `reads`. It's refused 
 
 ### os.act
 
-`os.act(method, input = {})` asks one of the site's `acts` as the visitor, with `input` as its JSON body. It answers the method's JSON, or `{}` if the method answers none.
+`os.act(method, input = {})` asks one of the site's `acts` as the visitor, with `input` as its JSON body. Its `group` is always the site's own: the host's page sets it, whatever the page sent, so a site can't act for its visitors in another group. It answers the method's JSON, or `{}` if the method answers none.
 
 It's refused the same way `os.call` is. If the visitor's sign-in doesn't cover the act, the host's page signs them out and `os.onChange` hears it. Then the ask is refused locked with `sign in`.
 
@@ -127,10 +136,11 @@ A refused ask rejects with an `Error` with these fields:
 | Field | Value |
 | --- | --- |
 | `message` | What was refused, in words. |
+| `name` | The method's own error name when it refused with one, such as `AlreadyMember` or `LastConfigurer`, as its lexicon lists them. Otherwise `'Error'`. |
 | `locked` | `true` if the visitor may not have this now, and `false` otherwise. |
 | `reason` | `'sign in'` or `'not for you'` when `locked`, and `undefined` otherwise. |
 
-A page tests `locked` and `reason`. It shouldn't test `message`.
+A page tests `locked`, `reason` and `name`. It shouldn't test `message`.
 
 - `reason` is `'sign in'`. Nobody is signed in, or the visitor was just signed out. Show `<os-sign-in>` or a call to `os.signIn()`.
 - `reason` is `'not for you'`. The visitor is signed in but may not have this, such as a non-member asking for the members. Show what the page shows anyone.
