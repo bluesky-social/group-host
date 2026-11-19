@@ -36,7 +36,7 @@ export const oldestFirst = (records) => [...records].sort(older);
 export const newestFirst = (records) => [...records].sort((a, b) => older(b, a));
 
 /** The labels `group` put on records, from its own label records: a Map of the URI labelled to its values. */
-export function labelsOn(records, group, collection = 'com.atproto.label.label') {
+export function labelsOn(records, group, collection = 'com.atproto.label.record') {
   const on = new Map();
   for (const r of ofCollection(records, collection)) {
     if (r.repo !== group) continue;

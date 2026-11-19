@@ -140,8 +140,9 @@ for (const name of names) {
       const path = join(dir, f);
       return statSync(path).isDirectory() ? all(path) : f.endsWith('.json') ? [path] : [];
     });
-  // The site's space types, and the group host's (its members space).
-  const spaces = [join(root, 'lexicons'), join(groupHost, 'lexicons')]
+  // The group host's space types, the one its sites keep records in
+  // (fyi.opensocial.siteSpace) among them.
+  const spaces = [join(groupHost, 'lexicons')]
     .flatMap(all)
     .map((f) => JSON.parse(readFileSync(f, 'utf8')))
     .filter((doc) => doc.defs?.main?.type === 'space');

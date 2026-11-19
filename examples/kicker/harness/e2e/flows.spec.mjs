@@ -190,7 +190,7 @@ const asAlice = async (lxm, params) => {
 };
 /// The URI of the note on the board whose words begin `text`.
 const noteUri = async (text) => {
-  const space = `at://${world.place}/space/com.example.place.room/self`;
+  const space = `at://${world.place}/space/fyi.opensocial.siteSpace/room`;
   const collection = 'com.example.place.note';
   const { records } = await asAlice('fyi.opensocial.listSpaceRecords', { space, collection });
   return records.find((r) => r.value.text.startsWith(text)).uri;

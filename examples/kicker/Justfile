@@ -35,3 +35,10 @@ e2e *args: host site
 # The rooms as pictures in target/look, signed in (harness/look.mjs).
 look *args: host site
     node harness/look.mjs {{args}}
+
+# Kicker on a group host running for real, as OPENSOCIAL_AS (with
+# OPENSOCIAL_PASSWORD, at PDS_URL) makes it on OPENSOCIAL_HOST: the group
+# `handle` the first time, then the site as built (harness/publish.mjs).
+publish handle: site
+    cd {{repo}} && rustup run stable cargo build -p opensocial
+    node harness/publish.mjs {{handle}}

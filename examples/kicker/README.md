@@ -36,17 +36,20 @@ with what it held last time while it reads afresh.
 | Write | an event's poster, or a picture on a member's card | `os.upload`, to the visitor's own PDS, the record pointing to it |
 | Read | those pictures | `os.call('fyi.opensocial.getSpaceBlob')`, which the host reads from whoever uploaded it |
 | Act | a report of a note, or an appeal of one's own | `os.act('fyi.opensocial.createReport')`, into the group host's moderation queue |
-| Read | the moderators' labels on notes | the group's own `com.atproto.label.label` records in the same spaces, shown as the group defines each (`getGroup`'s `labels`) |
+| Read | the moderators' labels on notes | the group's own `com.atproto.label.record` records in the same spaces, shown as the group defines each (`getGroup`'s `labels`) |
 
-The site declares those reads, and its writes (each a space type and a
-collection), when it is published; the visitor's sign-in asks their PDS
-for exactly those, in this group's spaces alone. What each person may
-write is the spaces' to say:
+The site declares those reads, and its writes (each a space, by its type
+and key, and a collection), when it is published; the visitor's sign-in
+asks their PDS for exactly those, in this group's spaces alone. Both
+spaces are of the host's `fyi.opensocial.siteSpace` type, published with
+its lexicons, so the site publishes nothing for a PDS to read: its
+collections never need it. What each person may write is the spaces' to
+say:
 
-| Space                        | Holds                         | Who writes                      |
-| ---------------------------- | ----------------------------- | ------------------------------- |
-| `com.example.place.room`     | notes, answers, cards         | any member                      |
-| `com.example.place.calendar` | events, each with its picture | hosts and admins (`writableBy`) |
+| Space                               | Holds                         | Who writes                      |
+| ----------------------------------- | ----------------------------- | ------------------------------- |
+| `fyi.opensocial.siteSpace/room`     | notes, answers, cards         | any member                      |
+| `fyi.opensocial.siteSpace/calendar` | events, each with its picture | hosts and admins (`writableBy`) |
 
 Every member reads each. Moderation is the group host's own. A member
 reports a note from the site; a moderator decides in the group host's
@@ -84,6 +87,6 @@ group, its host role, its spaces, its site) and writes what each person
 wrote at their own PDS, each event with a two-ink poster that
 `harness/posters.mjs` draws as SVG and its host uploads. `harness/world.mjs`
 and `pds.mjs` are adapted from the group host's own harness, with the PDS
-told to resolve this site's space types as well as the host's; the https
+told to resolve the host's space types, the site's among them; the https
 front is the host's `harness/tls-proxy.mjs`. `just dev`, `just e2e` and
 `just look` build the host, its command and its console first (`just host`).

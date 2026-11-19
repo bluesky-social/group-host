@@ -21,6 +21,9 @@ import { portrait, poster } from './posters.mjs';
 import { groupHost, root, serviceAuth } from './world.mjs';
 
 const NS = 'com.example.place';
+/// The host's space type for a group's site: the room and the calendar are
+/// each a space of it, under their own key, so nothing needs publishing.
+const SITE_SPACE = 'fyi.opensocial.siteSpace';
 const DAY = 86_400_000;
 
 /// `days` from now, at `hour` UTC on the hour.
@@ -30,15 +33,104 @@ const at = (days, hour) => {
   return d.toISOString();
 };
 
-/// The kinds of record the site's pages write, each a space and a collection.
+/// The kinds of record the site's pages write, each a space, by its type
+/// and key, and a collection.
 export const WRITES = [
-  `${NS}.room:${NS}.note`,
-  `${NS}.room:${NS}.rsvp`,
-  `${NS}.room:${NS}.card`,
-  `${NS}.room:${NS}.topic`,
-  `${NS}.room:${NS}.reply`,
-  `${NS}.calendar:${NS}.event`
+  `${SITE_SPACE}/room:${NS}.note`,
+  `${SITE_SPACE}/room:${NS}.rsvp`,
+  `${SITE_SPACE}/room:${NS}.card`,
+  `${SITE_SPACE}/room:${NS}.topic`,
+  `${SITE_SPACE}/room:${NS}.reply`,
+  `${SITE_SPACE}/calendar:${NS}.event`
 ];
+
+/**
+ * Makes the place `handle`, as `run` (the `opensocial` command, as its
+ * founder) makes it: the group, joined by approval; its host role, which
+ * admins give; its room and calendar, each a space of the site's type
+ * under its own key, every member reading each, any member writing in the
+ * room and hosts and admins in the calendar; and its own label, which the
+ * site shows folded behind a warning.
+ */
+export function make(run, handle) {
+  run(
+    'group',
+    'create',
+    handle,
+    '--display-name',
+    'Kicker',
+    '--description',
+    'Skate till the streetlights. Thursday to Sunday at the lot, noon to dark.',
+    '--join-policy',
+    'approval'
+  );
+  run(
+    'role',
+    'set',
+    handle,
+    'host',
+    '--display-name',
+    'Host',
+    '--description',
+    'Hosts sessions and events.'
+  );
+  run('role', 'grant', handle, 'admin', '--assignable', 'host');
+  const read = (kind) => ({
+    role: 'member',
+    scopes: [`space:${SITE_SPACE}?skey=${kind}&action=read`]
+  });
+  for (const [kind, name, writableBy] of [
+    ['room', 'Room', null],
+    ['calendar', 'Calendar', ['host', 'admin']]
+  ]) {
+    const access = { grants: [read(kind)] };
+    if (writableBy) access.writableBy = writableBy.map((role) => ({ role }));
+    const args = ['--access', JSON.stringify(access), '--name', name, '--skey', kind];
+    run('space', 'create', handle, SITE_SPACE, ...args);
+  }
+  run(
+    'label',
+    'define',
+    handle,
+    'off-topic',
+    '--name',
+    'Off-topic',
+    '--description',
+    'Not about skating, the spots, or the people who skate them.',
+    '--severity',
+    'inform',
+    '--blurs',
+    'content',
+    '--default-setting',
+    'warn'
+  );
+}
+
+/**
+ * Publishes the site as built (site/dist, `npm run build` there) as the
+ * place `handle`'s, as `run` does it: every room's address answered by
+ * its index.html; reading the group, its members, and its room and
+ * calendar whole, reporting what members see, and writing each kind of
+ * record in the visitor's own repo.
+ */
+export function publish(run, handle) {
+  run(
+    'site',
+    'publish',
+    handle,
+    join(root, 'site/dist'),
+    '--fallback',
+    'index.html',
+    '--reads',
+    'getGroup,listMembers,getSpaceBlob',
+    '--spaces',
+    `${SITE_SPACE}/room,${SITE_SPACE}/calendar`,
+    '--acts',
+    'createReport',
+    '--writes',
+    WRITES.join(',')
+  );
+}
 
 /** Makes the place on `world`, with its site; its DID and handle. */
 export async function seed(world, { handleDomain = '.groups.test' } = {}) {
@@ -57,91 +149,13 @@ export async function seed(world, { handleDomain = '.groups.test' } = {}) {
       }
     });
   const handle = `kicker${handleDomain}`;
-  opensocial(
-    who.alice,
-    'group',
-    'create',
-    handle,
-    '--display-name',
-    'Kicker',
-    '--description',
-    'Skate till the streetlights. Thursday to Sunday at the lot, noon to dark.',
-    '--join-policy',
-    'approval'
-  );
+  const asAlice = (...args) => opensocial(who.alice, ...args);
+  make(asAlice, handle);
+  publish(asAlice, handle);
   const place = await fetch(`${host}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`)
     .then((r) => r.json())
     .then((r) => r.did);
-  const space = (kind) => `at://${place}/space/${NS}.${kind}/self`;
-
-  // The host role, which admins may give.
-  opensocial(
-    who.alice,
-    'role',
-    'set',
-    handle,
-    'host',
-    '--display-name',
-    'Host',
-    '--description',
-    'Hosts sessions and events.'
-  );
-  opensocial(who.alice, 'role', 'grant', handle, 'admin', '--assignable', 'host');
-
-  // Its spaces: every member reads each; any member writes in the room,
-  // hosts and admins in the calendar.
-  const read = (kind) => ({ role: 'member', scopes: [`space:${NS}.${kind}?action=read`] });
-  for (const [kind, name, writableBy] of [
-    ['room', 'Room', null],
-    ['calendar', 'Calendar', ['host', 'admin']]
-  ]) {
-    const access = { grants: [read(kind)] };
-    if (writableBy) access.writableBy = writableBy.map((role) => ({ role }));
-    const args = ['--access', JSON.stringify(access), '--name', name, '--skey', 'self'];
-    opensocial(who.alice, 'space', 'create', handle, `${NS}.${kind}`, ...args);
-  }
-
-  // Its own label, which the site shows folded behind a warning.
-  opensocial(
-    who.alice,
-    'label',
-    'define',
-    handle,
-    'off-topic',
-    '--name',
-    'Off-topic',
-    '--description',
-    'Not about skating, the spots, or the people who skate them.',
-    '--severity',
-    'inform',
-    '--blurs',
-    'content',
-    '--default-setting',
-    'warn'
-  );
-
-  // Its site: the app as built (site/dist, `npm run build` there), every
-  // room's address answered by its index.html; reading the group, its
-  // members, and its room and calendar whole (`os.records`), reporting
-  // what members see, and writing each kind of record in the visitor's
-  // own repo.
-  opensocial(
-    who.alice,
-    'site',
-    'publish',
-    handle,
-    join(root, 'site/dist'),
-    '--fallback',
-    'index.html',
-    '--reads',
-    'getGroup,listMembers,getSpaceBlob',
-    '--spaces',
-    `${NS}.room,${NS}.calendar`,
-    '--acts',
-    'createReport',
-    '--writes',
-    WRITES.join(',')
-  );
+  const space = (kind) => `at://${place}/space/${SITE_SPACE}/${kind}`;
 
   // Who is in it: bob, carol and dan let in, bob a host; erin asking.
   const ask = async (account) => {

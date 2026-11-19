@@ -18,9 +18,10 @@ repository it sits in. `README.md` says how it works.
   layers under `site/src/lib` (`node harness/layers.mjs`); the rooms
   (`site/src/rooms`) fill the template. Sentence case; an empty list says
   what is empty with `Empty.svelte`. Look with `just look` before pushing.
-- The space types and records are `lexicons/com/example/place`. A new
-  space type is published to the reference PDS by `harness/pds.mjs`,
-  which a PDS needs to grant a scope for it.
+- The site keeps its records in the host's `fyi.opensocial.siteSpace`
+  type, a space under each key (`room`, `calendar`), so it publishes no
+  space type of its own. Its records are `lexicons/com/example/place`,
+  which no PDS needs to read: a write's permission names its collection.
 - The group host is this repository, built by `just host` before each
   world; `harness/bootstrap.sh` builds the spaces alpha at the commit the
   host's `harness/alpha.sh` names.

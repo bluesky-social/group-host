@@ -11,6 +11,12 @@ import { stamped } from './views.js';
 /** The place's records, by collection, each in one of its spaces. */
 export const NS = 'com.example.place';
 
+/**
+ * The host's space type for a group's site: the room and the calendar are
+ * each a space of it, under their own key (harness/seed.mjs makes them).
+ */
+const SITE_SPACE = 'fyi.opensocial.siteSpace';
+
 /** The host's `os`, which the page around the site answers. */
 const os = () => window.os;
 
@@ -26,7 +32,7 @@ export const keyOf = (uri) => uri.split('/').at(-1);
 export async function context() {
   const group = await os().group();
   const me = await os().me();
-  const space = (kind) => `at://${group.did}/space/${NS}.${kind}/self`;
+  const space = (kind) => `at://${group.did}/space/${SITE_SPACE}/${kind}`;
   const base = {
     group,
     me,
@@ -106,7 +112,7 @@ export const handleOf = (ctx, did) => ctx.members.get(did)?.handle ?? did;
 // ---- moderation, the group host's: reports in, labels out ----
 
 /** The group's labels: its own records of this, in the space of what each is on. */
-export const LABEL = 'com.atproto.label.label';
+export const LABEL = 'com.atproto.label.record';
 
 /** atproto's own labels, which every group applies: each hides, and says no more. */
 const BUILT_IN = {

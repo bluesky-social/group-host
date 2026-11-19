@@ -33,7 +33,7 @@ const NOTE = 'com.example.place.note';
 const TOPIC = 'com.example.place.topic';
 const REPLY = 'com.example.place.reply';
 const RSVP = 'com.example.place.rsvp';
-const LABEL = 'com.atproto.label.label';
+const LABEL = 'com.atproto.label.record';
 const C = { topic: TOPIC, reply: REPLY };
 
 test('notes newest first, ties by record key', () => {
