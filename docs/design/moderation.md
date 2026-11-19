@@ -39,14 +39,14 @@ Details:
 
 - `mod.read` is granted by `rpc:fyi.opensocial.listSubjects`,
   `mod.resolve` by `rpc:fyi.opensocial.resolveSubject`, and `label` by
-  `space:*?collection=com.atproto.label.label`, or any `space:*` scope
+  `space:*?collection=com.atproto.label.record`, or any `space:*` scope
   covering that collection.
 - No caller at all gets `401 AuthMissing`.
 
 ## Labels
 
 A label is a moderation tag on a record or an account. Here it's a
-`com.atproto.label.label` record that the group writes, the same way it
+`com.atproto.label.record` record that the group writes, the same way it
 writes any record of its own. That means `com.atproto.space.createRecord`
 and the rest, with a token for the group ([signing in](signing-in.md)).
 It holds the subject's `uri` (an account's DID, or a record's URI),

@@ -990,7 +990,7 @@
     },
     "labelEvent": {
       "type": "object",
-      "description": "A label record (com.atproto.label.label) was written as the group, or deleted, which takes it back.",
+      "description": "A label record (com.atproto.label.record) was written as the group, or deleted, which takes it back.",
       "required": [
         "uri",
         "val"

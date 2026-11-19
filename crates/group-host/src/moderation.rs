@@ -1,6 +1,6 @@
 //! Moderation, a group's own: reports in, labels out, a queue between.
 //!
-//! - **Labels** are `com.atproto.label.label` records the group writes,
+//! - **Labels** are `com.atproto.label.record` records the group writes,
 //!   as any record of its own, beside their subject: a record's in the
 //!   space it is in, an account's, or a member's public record's, in the
 //!   members space by custom. Whoever reads the content reads its labels.

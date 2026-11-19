@@ -562,7 +562,7 @@ async fn labels_as_the_group_beside_what_it_labels() {
     make_member(&h, &group, &bob.did).await;
     let (_, tokens) = connect(&h, &alice, &group).await;
     let access = tokens["access_token"].as_str().unwrap();
-    let label = "com.atproto.label.label";
+    let label = "com.atproto.label.record";
     // An account's, in the members space.
     let got = tool(
         &h,

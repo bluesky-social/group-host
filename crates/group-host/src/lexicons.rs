@@ -121,7 +121,7 @@ pub const FILES: &[&str] = &[
     lexicon!("upstream/com/atproto/admin/defs"),
     lexicon!("upstream/com/atproto/identity/resolveHandle"),
     lexicon!("upstream/com/atproto/label/defs"),
-    lexicon!("upstream/com/atproto/label/label"),
+    lexicon!("upstream/com/atproto/label/record"),
     lexicon!("upstream/com/atproto/managedspace/checkAccess"),
     lexicon!("upstream/com/atproto/managedspace/policy"),
     lexicon!("upstream/com/atproto/moderation/defs"),

@@ -305,14 +305,18 @@ const loosened = (before, after, path) => {
 };
 
 // Schemas taken out on purpose, each named here as it goes, which a
-// change may remove: what is said of each is why.
+// change may remove, and a space type's collections may drop: what is
+// said of each is why.
 // - com.atproto.moderation.createReport: reports come to the group's own
 //   fyi.opensocial.createReport, as the opensocial proposal has them.
 // - com.atproto.managedspace.checkUserAccess: the space alpha of November
 //   13, 2026 replaced it with com.atproto.managedspace.checkAccess.
+// - com.atproto.label.label: atproto names the label record
+//   com.atproto.label.record, as the opensocial proposal does.
 const RETIRED = new Set([
   'com.atproto.moderation.createReport',
-  'com.atproto.managedspace.checkUserAccess'
+  'com.atproto.managedspace.checkUserAccess',
+  'com.atproto.label.label'
 ]);
 
 // None of ours is published yet, so nothing out there was written to it.
@@ -375,7 +379,7 @@ if (base) {
       // lexicon lists, so taking one out takes writes from those logins.
       if (def.type === 'space')
         for (const c of def.collections ?? [])
-          if (!(after.defs?.[name]?.collections ?? []).includes(c))
+          if (!RETIRED.has(c) && !(after.defs?.[name]?.collections ?? []).includes(c))
             say(`${at}.collections`, `${c} was taken out`);
     }
   }

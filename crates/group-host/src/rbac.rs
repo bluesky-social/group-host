@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const NS: &str = "fyi.opensocial";
 /// A label, as a record the group writes beside its subject.
-pub const LABEL: &str = "com.atproto.label.label";
+pub const LABEL: &str = "com.atproto.label.record";
 /// Anyone signed in, as an audience.
 pub const PUBLIC: &str = "public";
 

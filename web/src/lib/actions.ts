@@ -39,7 +39,7 @@ const members = (write: string) =>
 export const SCOPES: Record<(typeof KNOWN)[number], string> = {
   'mod.read': rpc('listSubjects'),
   'mod.resolve': rpc('resolveSubject'),
-  label: 'space:*?collection=com.atproto.label.label',
+  label: 'space:*?collection=com.atproto.label.record',
   invite: 'space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite',
   admit: members('create'),
   eject: members('delete'),

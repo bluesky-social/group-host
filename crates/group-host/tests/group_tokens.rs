@@ -13,7 +13,7 @@ use serde_json::{Value as Json, json};
 
 const CALENDAR: &str = "com.example.calendar";
 const EVENT: &str = "com.example.event";
-const LABEL: &str = "com.atproto.label.label";
+const LABEL: &str = "com.atproto.label.record";
 const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {

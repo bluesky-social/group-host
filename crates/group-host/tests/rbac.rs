@@ -162,7 +162,7 @@ fn answers_each_action_by_its_scope() {
     assert_eq!(star.len(), 5);
     // Labels, written in any of the group's spaces, label.
     assert_eq!(
-        of_scope("space:*?collection=com.atproto.label.label"),
+        of_scope("space:*?collection=com.atproto.label.record"),
         ["label"]
     );
     // Memberships written in the members space admit, give roles and

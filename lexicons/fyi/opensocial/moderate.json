@@ -14,7 +14,7 @@
           "spaceType": "fyi.opensocial.meta",
           "authority": "self",
           "skey": "self",
-          "collection": ["com.atproto.label.label"],
+          "collection": ["com.atproto.label.record"],
           "action": ["read", "create", "update", "delete"]
         },
         {
@@ -23,7 +23,7 @@
           "spaceType": "fyi.opensocial.members",
           "authority": "self",
           "skey": "self",
-          "collection": ["com.atproto.label.label"],
+          "collection": ["com.atproto.label.record"],
           "action": ["read", "create", "update", "delete"]
         },
         {

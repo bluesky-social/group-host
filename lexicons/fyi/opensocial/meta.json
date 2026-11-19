@@ -11,7 +11,7 @@
         "fyi.opensocial.profile",
         "fyi.opensocial.rule",
         "fyi.opensocial.labeler",
-        "com.atproto.label.label",
+        "com.atproto.label.record",
         "fyi.opensocial.access"
       ]
     }

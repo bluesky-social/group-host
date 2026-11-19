@@ -1359,7 +1359,7 @@ const RULES: [(&str, &str); 2] = [
 const MODERATES: [&str; 3] = [
     "rpc:fyi.opensocial.listSubjects?aud=*",
     "rpc:fyi.opensocial.resolveSubject?aud=*",
-    "space:*?collection=com.atproto.label.label",
+    "space:*?collection=com.atproto.label.record",
 ];
 
 /// Makes `group` a moderator role, as the group: the role, its grant, and

@@ -499,7 +499,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "mod_label",
         &["subject", "val"],
-        "Labels a subject as the group, with a label record (com.atproto.label.label) beside \
+        "Labels a subject as the group, with a label record (com.atproto.label.record) beside \
          it: a record's in its space, an account's in the members space. With undo, takes the \
          label back by deleting it.",
         Made::Label,
@@ -917,7 +917,7 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
 }
 
 /// The label record's collection.
-pub const LABEL: &str = "com.atproto.label.label";
+pub const LABEL: &str = "com.atproto.label.record";
 
 /// The space of `group`'s a label on `subject` goes in: a record's own,
 /// an account's the members space. None for a record in no space of the

@@ -14,7 +14,7 @@ use group_host::store::Store;
 use serde_json::{Value as Json, json};
 
 const CALENDAR: &str = "com.example.calendar";
-const LABEL: &str = "com.atproto.label.label";
+const LABEL: &str = "com.atproto.label.record";
 const ACCOUNT: &str = "fyi.opensocial.defs#accountSubject";
 const RECORD: &str = "fyi.opensocial.defs#recordSubject";
 const CID: &str = "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm";

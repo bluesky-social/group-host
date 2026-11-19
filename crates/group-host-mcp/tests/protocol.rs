@@ -177,7 +177,7 @@ fn makes_each_schema_from_the_lexicons() {
     assert_eq!(fields["undo"]["type"], "boolean");
     assert_eq!(label.input_schema["required"], json!(["subject", "val"]));
     assert_eq!(label.args, ["subject", "val"]);
-    assert!(label.description.contains("com.atproto.label.label"));
+    assert!(label.description.contains("com.atproto.label.record"));
     let resolve = &tool("mod_resolve").input_schema["properties"];
     assert_eq!(resolve["subject"]["type"], "string");
     assert_eq!(resolve["cid"]["format"], "cid");

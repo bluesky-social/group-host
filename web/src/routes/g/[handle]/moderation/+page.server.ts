@@ -126,7 +126,7 @@ function authorOf(key: string): Did {
   return (parts[1] === 'space' ? parts[4] : parts[0]) as Did;
 }
 
-const LABEL = 'com.atproto.label.label';
+const LABEL = 'com.atproto.label.record';
 
 /** What a form names a label's subject by: an account's DID, or a record's URI and version. */
 const subjectOf = (form: FormData) =>

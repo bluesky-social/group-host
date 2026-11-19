@@ -398,7 +398,7 @@ async fn writes_the_groups_rules_roles_and_profile() {
         label["uri"]
             .as_str()
             .unwrap()
-            .contains("/com.atproto.label.label/")
+            .contains("/com.atproto.label.record/")
     );
     ok(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
     let said_so = fails(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
