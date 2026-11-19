@@ -1,7 +1,8 @@
 // `os`: what a page of a group's site asks the page the host serves
 // around it, which holds the visitor's session. Each ask is a message to
-// it, answered by one naming the same id; a read nobody may make now is
-// refused with `locked` and a reason, "sign in" or "not for you".
+// it, answered by one naming the same id; a read or a write nobody may
+// make now is refused with `locked` and a reason, "sign in" or "not for
+// you".
 //
 // <os-sign-in> is a button for signing in and out, in the page's own
 // markup, so the page's own CSS styles it: "Sign in" while nobody is,
@@ -36,8 +37,30 @@
     group: () => ask('group'),
     /** Who is looking: `{signedIn, did, handle}`. */
     me: () => ask('me'),
-    /** One of the host's methods the site reads, as whoever is looking. */
+    /**
+     * One of the host's methods the site reads, as whoever is looking: its
+     * JSON, or a `Blob` for one that answers a file (`getSpaceBlob`), to
+     * show with `URL.createObjectURL`.
+     */
     call: (method, params = {}) => ask('call', { method, params }),
+    /**
+     * Uploads `file`, a picture (a `File` or `Blob` of an `image/` type), to
+     * the visitor's own PDS, for a record the site writes to point to.
+     * Answers its reference, `{$type: 'blob', ref, mimeType, size}`, which
+     * the record holds; a site that declares no writes may not upload.
+     */
+    upload: (file) => ask('upload', { file }),
+    /**
+     * Writes `record` in the visitor's own repo, in `space` (one of the
+     * group's, `at://<group>/space/<type>/<skey>`), as the site declared it
+     * may: in `collection`, at `rkey` if given. Answers its `uri` and `cid`.
+     */
+    create: (space, collection, record, { rkey } = {}) =>
+      ask('create', { space, collection, record, ...(rkey ? { rkey } : {}) }),
+    /** Writes `record` at `rkey`, in place of what is there, as `create` does. */
+    put: (space, collection, rkey, record) => ask('put', { space, collection, rkey, record }),
+    /** Deletes the visitor's own record at `rkey`, as `create` writes it. */
+    delete: (space, collection, rkey) => ask('delete', { space, collection, rkey }),
     /**
      * Opens the host's sign-in dialog, its handle filled in with `hint` if
      * given, for the visitor to confirm. Signed in, the page loads again.

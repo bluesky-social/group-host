@@ -4,8 +4,9 @@ A group can have a website: a front page that says who it is, or as many
 pages as it likes. The host serves it at the group's address,
 `https://<address>/`, as static files, the way they were published. It has
 no templates, no build step and no rendering on the server. A site that
-names `reads` may also show the group as each visitor may see it, once
-they sign in on it, through a page the host serves around its own
+names `reads` may also show the group as each visitor may see it, and one
+that names `writes` may write in the group's spaces as each visitor may,
+once they sign in on it, through a page the host serves around its own
 ([live data](#live-data)).
 
 ## What a site is
@@ -29,7 +30,9 @@ It may also name two of those files:
 And it may name `reads`, up to 20 of the host's methods its pages may
 ask as whoever signs in on it: `fyi.opensocial.getGroup`, `listMembers`,
 `listSpaceRecords`, `getSpaceBlob`, `getActor` and `getViewer`, and no
-others.
+others. And `writes`, up to 20 kinds of record its pages may write in that
+person's own repo, each a type of the group's spaces and a collection
+there, such as `fyi.opensocial.acceptance` in `fyi.opensocial.members`.
 
 A site has 1 to 2000 files. Each publish replaces the record whole, and
 deleting the record takes the site down. A blob only the old record held
@@ -52,10 +55,10 @@ to its site while it has one, and its settings have a Site page, which
 says where the site is, how many files it has and when it was published,
 and publishes a folder chosen in the browser, or deletes the site, asked
 to be sure of. Publishing takes a `404.html` at the folder's top as
-`notFound`, and keeps `fallback` and `reads` under Advanced, ticked and
+`notFound`, and keeps `fallback`, `reads` and `writes` under Advanced,
 filled as the site has them. The `opensocial site publish` command reads a folder
 and sends its files, with `--reads` naming methods by NSID or by their
-last part; `site delete` takes the site down. Both leave out files whose
+last part, and `--writes` each write as `<space>:<collection>`; `site delete` takes the site down. Both leave out files whose
 names start with a dot, send each file as text if it is UTF-8 and as
 bytes otherwise, and take the folder's own name off each path. An AI app
 connected over MCP publishes with `site_publish`, writing each file as
@@ -174,14 +177,15 @@ from any app.
 
 A page in the sandbox has no session, so it can show only what it was
 published with. A group often wants more on its site: its rules, who is
-in it, what members post. All of that is the group's to show only to
-those its roles allow, so it can't be published into the page for
-everyone. Instead, each visitor signs in on the site, and the page asks
-the host as them.
+in it, what members post, and a way for members to post there too. All
+of that is the group's to show only to those its roles allow, so it
+can't be published into the page for everyone, and what a member writes
+is theirs, in their own repo. Instead, each visitor signs in on the site,
+and the page asks the host, and writes at the visitor's own PDS, as them.
 
 ### The page around a site
 
-A site that names `reads` is served differently. Each page of it is the
+A site that names `reads` or `writes` is served differently. Each page of it is the
 host's own page, which holds the visitor's session and shows the
 site's page in a sandboxed frame beneath it, filling the window. The
 site's files are under `/_site/` there, sandboxed as above, and a file
@@ -201,9 +205,12 @@ client of its own, a public one whose client id is
 `https://<address>/client-metadata.json`, and whose callback is
 `/_os/callback` there; behind a proxy that names the host it was asked
 as `X-Forwarded-Host`, as Caddy does, both are at that name instead. Its
-scope is `atproto` and, for each of the site's
-`reads` and `getViewer`, `rpc:<method>?aud=<the host's service DID>#opensocial`:
-it can ask the host those methods and nothing else. The session is kept
+scope is `atproto`; for each of the site's `reads` and `getViewer`,
+`rpc:<method>?aud=<the host's service DID>#opensocial`; and for each of
+its `writes`, `space:<type>?authority=<the group>&collection=<collection>`
+with every action. It can ask the host those methods, and write those
+records in the visitor's own repo in this group's spaces of those types,
+and nothing else. The session is kept
 in the browser at the address's origin, and goes to the visitor's PDS
 alone; the site's frame never holds it.
 
@@ -220,7 +227,11 @@ the host's page, which answers it:
 | --- | --- |
 | `os.group()` | `{did, handle}` of the group whose site it is |
 | `os.me()` | `{signedIn, did, handle}` of who is looking |
-| `os.call(method, params)` | the method's answer, asked as the visitor |
+| `os.call(method, params)` | the method's answer, asked as the visitor: its JSON, or a `Blob` for one that answers a file (`getSpaceBlob`) |
+| `os.upload(file)` | the blob reference of `file`, a picture, uploaded to the visitor's own PDS for a record the site writes to point to |
+| `os.create(space, collection, record, {rkey})` | the `uri` and `cid` of `record` written in the visitor's own repo in `space`, one of the group's (`at://<group>/space/<type>/<skey>`) |
+| `os.put(space, collection, rkey, record)` | the same, at `rkey`, in place of what is there |
+| `os.delete(space, collection, rkey)` | the visitor's record at `rkey` deleted |
 | `os.signIn({hint})` | opens the sign-in dialog, `hint` filled in as the handle |
 | `os.signOut()` | signs the visitor out |
 | `os.onChange(fn)` | calls `fn` with `os.me()`'s answer whenever it changes |
@@ -229,13 +240,28 @@ the host's page, which answers it:
 styles style: "Sign in" while nobody is, the visitor's handle and "Sign
 out" once someone is.
 
-`os.call` is refused for a method the site does not name in `reads`.
-Asked while nobody is signed in, it is refused with `locked` and the
-reason `sign in`; when the host refuses the visitor (401 or 403), with
-`locked` and `not for you`. A page shows what it may, and asks the
-visitor to sign in for the rest. The call goes through the visitor's PDS
-to the host, as any app's call does ([signing in](signing-in.md)), and
-the host answers it as it answers that person anywhere else.
+`os.call` is refused for a method the site does not name in `reads`, and a
+write for a collection, or a space, its `writes` do not name, or a space
+of another's. Asked while nobody is signed in, either is refused with
+`locked` and the reason `sign in`; when the host or the visitor's PDS
+refuses the visitor (401 or 403), with `locked` and `not for you`. A page
+shows what it may, and asks the visitor to sign in for the rest. A read
+goes through the visitor's PDS to the host, as any app's call does
+([signing in](signing-in.md)), and the host answers it as it answers that
+person anywhere else. A write is made at the visitor's PDS as any app's
+write in a space is, and the space's access record still says whether
+they may write there ([spaces](spaces.md)): `writes` asks no more of the
+visitor than the group lets them do. The host hears of it as of any
+member's write, so it is in the next `listSpaceRecords`. A sign-in from
+before the site named a write, which the PDS refuses for want of scope,
+is forgotten, refused with `sign in`, so that signing in again grants it.
+
+A site that names `writes` may also upload pictures: its sign-in asks the
+visitor's PDS for `blob:image/*` too, and `os.upload` takes only a file of
+an `image/` type. The picture is the visitor's, in their own repo; a record
+in a space that points to it makes it the space's, and anyone who reads
+the space reads it with `getSpaceBlob`, which the site names in `reads` to
+show it. A site with no `writes` uploads nothing.
 
 ### Signing in
 

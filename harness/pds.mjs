@@ -7,7 +7,7 @@
 //
 // GROUP_HOST_DEV_ENV names a built dev-env package to run instead of the npm
 // one: an atproto checkout's packages/dev-env on the spaces alpha, as CI
-// builds it (.knotless/workflows/test.yml). The alpha's PDS migrates an
+// builds it (harness/alpha.sh). The alpha's PDS migrates an
 // account's database each time it opens it; here only the first time.
 //
 // The console is an OAuth client, which the PDS reaches only over https at a
@@ -120,6 +120,47 @@ for (const name of names) {
   if (!res.ok) throw new Error(`createAccount ${name}: ${await res.text()}`);
   const { did, handle } = await res.json();
   accounts.push({ handle, did, password });
+}
+
+// The space types the host keeps, published as lexicons from an account
+// of their own, which the PDS is told to resolve every lexicon from (as
+// PDS_LEXICON_AUTHORITY_DID would tell it): the PDS grants a `space:`
+// scope, as a site that writes asks for, only for a space whose
+// declaration it can read.
+{
+  const { readdirSync, statSync } = await import('node:fs');
+  const all = (dir) =>
+    readdirSync(dir).flatMap((f) => {
+      const path = join(dir, f);
+      return statSync(path).isDirectory() ? all(path) : f.endsWith('.json') ? [path] : [];
+    });
+  const spaces = all(join(root, 'lexicons'))
+    .map((f) => JSON.parse(readFileSync(f, 'utf8')))
+    .filter((doc) => doc.defs?.main?.type === 'space');
+  const made = await fetch(`${net.pds.url}/xrpc/com.atproto.server.createAccount`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'lexicons@test.com',
+      handle: 'lexicons.test',
+      password: 'password'
+    })
+  }).then((r) => r.json());
+  for (const doc of spaces) {
+    const res = await fetch(`${net.pds.url}/xrpc/com.atproto.repo.createRecord`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${made.accessJwt}` },
+      body: JSON.stringify({
+        repo: made.did,
+        collection: 'com.atproto.lexicon.schema',
+        rkey: doc.id,
+        validate: false,
+        record: { $type: 'com.atproto.lexicon.schema', ...doc }
+      })
+    });
+    if (!res.ok) throw new Error(`publishing ${doc.id}: ${await res.text()}`);
+  }
+  net.pds.ctx.cfg.lexicon.didAuthority = made.did;
 }
 
 // The codes the PDS mails to let an account's identity move (an account

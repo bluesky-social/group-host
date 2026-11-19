@@ -646,6 +646,64 @@ async fn a_site_reads_only_what_the_host_lets_a_page_read() {
     );
 }
 
+#[tokio::test]
+async fn a_site_that_writes_asks_its_visitor_for_those_writes_alone() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let files = json!([{"path": "index.html", "text": "<p>the board</p>"}]);
+    let board = "com.example.board";
+    let writes = json!([
+        {"space": board, "collection": "com.example.note"},
+        {"space": format!("{NS}.members"), "collection": format!("{NS}.acceptance")},
+    ]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "writes": writes}),
+    )
+    .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+
+    // Writing, though it reads nothing, its pages are served in the page
+    // that holds a session, which is told what they may write.
+    let shell = page(&h, "/").await;
+    assert!(
+        shell.body.contains("data-src=\"/_site/\""),
+        "{}",
+        shell.body
+    );
+    let (_, config) = shell_of(&shell);
+    assert_eq!(config["writes"], writes);
+    assert_eq!(config["reads"], json!([]));
+
+    // Its OAuth client asks the visitor's PDS for each write, in this
+    // group's spaces of that type and in that collection alone, and to
+    // upload pictures for those records to point to, beside asking the
+    // host who they are.
+    let client = page(&h, "/client-metadata.json").await;
+    let doc: Json = serde_json::from_str(&client.body).unwrap();
+    let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
+    let space = |kind: &str, collection: &str| {
+        format!(
+            "space:{kind}?authority={did}&collection={collection}&action=create&action=update&action=delete"
+        )
+    };
+    let wanted = [
+        "atproto".to_string(),
+        format!("rpc:{NS}.getViewer?aud=did%3Aweb%3Ahost.test%23opensocial"),
+        space(board, "com.example.note"),
+        space(&format!("{NS}.members"), &format!("{NS}.acceptance")),
+        "blob:image/*".to_string(),
+    ];
+    assert_eq!(scope, wanted);
+
+    // The record says so, for any app that reads it.
+    let kept = h.host.store.record(&did, SITE, "self").unwrap().unwrap();
+    let site = atproto::drisl::decode(&kept.value).unwrap().to_json();
+    assert_eq!(site["writes"], writes);
+}
+
 #[test]
 fn a_page_previews_as_its_own_head_says_and_never_as_markup() {
     let preview = |html: &str| group_host::site_head::preview(html, "riders.test");

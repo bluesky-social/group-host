@@ -39,7 +39,13 @@
               "type": "array",
               "maxLength": 20,
               "items": { "type": "ref", "ref": "fyi.opensocial.site#read" },
-              "description": "The host's methods the site's pages may ask, as whoever is looking and signed in; none, and the site is its files alone."
+              "description": "The host's methods the site's pages may ask, as whoever is looking and signed in; none, and no writes, and the site is its files alone."
+            },
+            "writes": {
+              "type": "array",
+              "maxLength": 20,
+              "items": { "type": "ref", "ref": "fyi.opensocial.site#write" },
+              "description": "The records the site's pages may write, as whoever is looking and signed in, in their own repo in the group's spaces."
             }
           }
         }

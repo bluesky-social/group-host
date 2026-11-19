@@ -667,9 +667,11 @@ test("a site's page reaches the console without the session of whoever opens it"
   await expect(page.getByText('Nothing published yet')).toBeVisible();
 });
 
-test('a site showing its members to whoever signs in on it', async () => {
+test('a site showing its members to whoever signs in on it, and writing for them', async () => {
   // A front page that lists the members to those who may see them, with
-  // the kit's sign-in button, and a page under it.
+  // the kit's sign-in button, a page under it, and a button taking up the
+  // visitor's place: their acceptance, written in their own repo in the
+  // members space.
   const dir = mkdtempSync(join(tmpdir(), 'e2e-site-'));
   mkdirSync(join(dir, 'rides'));
   writeFileSync(
@@ -679,16 +681,51 @@ test('a site showing its members to whoever signs in on it', async () => {
 <os-sign-in></os-sign-in>
 <a href="rides/">Rides</a>
 <ul id="members"></ul>
+<p id="place"></p>
+<button id="accept" type="button">Take up your place</button>
+<button id="upload" type="button">Upload a picture</button>
+<p id="uploaded"></p>
 <script>
   const list = document.getElementById('members');
+  const place = document.getElementById('place');
   const line = (text) => Object.assign(document.createElement('li'), { textContent: text });
   const draw = async () => {
     const { did } = await os.group();
     try {
       const { members } = await os.call('fyi.opensocial.listMembers', { group: did });
       list.replaceChildren(...members.map((m) => line('@' + m.actor.handle)));
+      const { viewer } = (await os.call('fyi.opensocial.getGroup', { group: did })).group;
+      place.textContent = viewer?.accepted ? 'Your place is taken up.' : '';
+      return viewer?.accepted;
     } catch (e) {
       list.replaceChildren(line(e.locked ? 'Members only.' : e.message));
+    }
+  };
+  document.getElementById('accept').onclick = async () => {
+    const { did } = await os.group();
+    const space = 'at://' + did + '/space/fyi.opensocial.members/self';
+    const record = { $type: 'fyi.opensocial.acceptance', createdAt: new Date().toISOString() };
+    try {
+      await os.put(space, 'fyi.opensocial.acceptance', 'self', record);
+    } catch (e) {
+      place.textContent = 'Not written: ' + e.message;
+      return;
+    }
+    // The host hears of it from her PDS a moment after.
+    for (let i = 0; i < 40 && !(await draw()); i++) await new Promise((r) => setTimeout(r, 250));
+  };
+  // A one-pixel PNG, uploaded to her own PDS for a record to point to.
+  document.getElementById('upload').onclick = async () => {
+    const png = Uint8Array.from(
+      atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='),
+      (c) => c.charCodeAt(0)
+    );
+    const out = document.getElementById('uploaded');
+    try {
+      const blob = await os.upload(new Blob([png], { type: 'image/png' }));
+      out.textContent = 'Uploaded ' + blob.mimeType + ', ' + blob.size + ' bytes';
+    } catch (e) {
+      out.textContent = 'Not uploaded: ' + e.message;
     }
   };
   os.onChange(draw);
@@ -699,18 +736,22 @@ test('a site showing its members to whoever signs in on it', async () => {
     join(dir, 'rides/index.html'),
     '<!doctype html><title>Rides</title><script src="/_os/kit.js"></script><h1>Saturday rides</h1>'
   );
+  const writes = 'fyi.opensocial.members:fyi.opensocial.acceptance';
   await page.goto(url('/g/riders.groups.test/settings/site'));
   await page.getByRole('button', { name: 'Publish a site' }).click();
   const publishing = page.getByRole('dialog', { name: 'Publish a site' });
   await publishing.getByLabel('Folder').setInputFiles(dir);
   await publishing.getByText('Advanced').click();
   await publishing.getByLabel('Who the members are').check();
+  await publishing.getByLabel("The group's profile and rules").check();
+  await publishing.getByLabel('Kinds of record, one per line').fill(writes);
   await publishing.getByRole('button', { name: 'Publish' }).click();
   await expect(publishing).toBeHidden();
   // Published again, the dialog has it as the site does, Advanced open.
   await page.getByRole('button', { name: 'Publish a site' }).click();
   await expect(publishing.getByLabel('Who the members are')).toBeChecked();
-  await expect(publishing.getByLabel("The group's profile and rules")).not.toBeChecked();
+  await expect(publishing.getByLabel("People's profiles")).not.toBeChecked();
+  await expect(publishing.getByLabel('Kinds of record, one per line')).toHaveValue(writes);
   await publishing.getByRole('button', { name: 'Cancel' }).click();
 
   // Signed out, the page shows what it may, and the tab its title.
@@ -728,6 +769,20 @@ test('a site showing its members to whoever signs in on it', async () => {
   await page.waitForURL((u) => u.origin === new URL(world.ridersSite).origin);
   await expect(site.getByRole('listitem').filter({ hasText: '@alice.test' })).toBeVisible();
   await expect(site.getByRole('button', { name: 'Sign out' })).toBeVisible();
+
+  // She takes up her place from the site: written in her own repo in
+  // the members space, at her PDS, as her sign-in there let it. A PDS
+  // that does not speak the space alpha writes in no space.
+  if (world.spaces) {
+    await expect(site.getByText('Your place is taken up.')).toBeHidden();
+    await site.getByRole('button', { name: 'Take up your place' }).click();
+    await expect(site.getByText('Your place is taken up.')).toBeVisible();
+  }
+
+  // She uploads a picture to her own PDS, which a record the site writes
+  // could point to, as her sign-in there let it.
+  await site.getByRole('button', { name: 'Upload a picture' }).click();
+  await expect(site.getByText('Uploaded image/png, 70 bytes')).toBeVisible();
 
   // Its page under it is in the address bar and the tab, so a reload
   // opens it, signed in still.

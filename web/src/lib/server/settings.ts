@@ -495,12 +495,25 @@ const all = {
     const notFound = files.some((f) => f.path === '404.html') ? { notFound: '404.html' } : {};
     const fallback = text(form, 'fallback') ? { fallback: text(form, 'fallback') } : {};
     const reads = form.getAll('reads').map((method) => ({ method: String(method) }));
+    // One per line, `<space>:<collection>`.
+    const lines = text(form, 'writes')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const writes = lines.map((line) => line.split(':').map((p) => p.trim()));
+    if (writes.some((w) => w.length !== 2 || !w[0] || !w[1]))
+      return fail(400, {
+        failed: 'Write each line as a type of space and a kind of record, with a colon between.'
+      });
     return act(event, 'fyi.opensocial.putSite', {
       group,
       files,
       ...notFound,
       ...fallback,
-      ...(reads.length ? { reads } : {})
+      ...(reads.length ? { reads } : {}),
+      ...(writes.length
+        ? { writes: writes.map(([space, collection]) => ({ space, collection })) }
+        : {})
     });
   },
   unsite: async (event) => {

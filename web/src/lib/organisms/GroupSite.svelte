@@ -9,9 +9,9 @@
    * A group's website: where it is served, how many files it has and
    * when it was published, to open or delete (asked to be sure of); and
    * the dialog publishing a folder in place of it, opened by a button
-   * whose `popovertarget` is `publish-site`, a page for every address and
-   * what of the group's its pages may show under Advanced, as the site
-   * has them now.
+   * whose `popovertarget` is `publish-site`, a page for every address,
+   * what of the group's its pages may show, and what they may write for
+   * whoever signs in, under Advanced, as the site has them now.
    * `address`, the name it is served at.
    */
   let { address, site }: { address: string; site: Site | null } = $props();
@@ -74,7 +74,7 @@
     /></label
   >
   <input type="hidden" name="paths" value={paths} />
-  <details class="more" open={!!(site?.reads.length || site?.fallback)}>
+  <details class="more" open={!!(site?.reads.length || site?.writes.length || site?.fallback)}>
     <summary>Advanced</summary>
     <label class="field"
       ><span
@@ -104,6 +104,24 @@
           />
           {words}</label
         >{/each}
+    </fieldset>
+    <fieldset class="choices">
+      <legend>Let pages write in the group's spaces</legend>
+      <p class="mute">
+        Pages written to make these can make them for people who sign in, in their own account, as
+        far as the group lets each person write.
+      </p>
+      <label class="field"
+        ><span>Kinds of record, one per line <span class="optional">(optional)</span></span>
+        <textarea
+          name="writes"
+          rows="3"
+          class="mono"
+          spellcheck="false"
+          placeholder="fyi.opensocial.members:fyi.opensocial.acceptance"
+          >{site?.writes.map((w) => `${w.space}:${w.collection}`).join('\n') ?? ''}</textarea
+        ></label
+      >
     </fieldset>
   </details>
 </FormDialog>

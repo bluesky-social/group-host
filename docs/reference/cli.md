@@ -89,7 +89,7 @@ an MCP client acts in one group.
 
 | Command | What it does |
 | --- | --- |
-| `site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]` | publishes the files under `<dir>`, but those whose names start with a dot, as the group's website at its address, in place of the one there: each as text if it is UTF-8, else as bytes. `--reads` names, comma-separated, the host's methods its pages may ask as whoever signs in on it, each by NSID or by its last part (`getGroup,listMembers`) ([live data](../design/sites.md#live-data)) |
+| `site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>] [--writes <space:collection,…>]` | publishes the files under `<dir>`, but those whose names start with a dot, as the group's website at its address, in place of the one there: each as text if it is UTF-8, else as bytes. `--reads` names, comma-separated, the host's methods its pages may ask as whoever signs in on it, each by NSID or by its last part (`getGroup,listMembers`); `--writes`, comma-separated, the records they may write in that person's own repo, each a type of the group's spaces and a collection there (`fyi.opensocial.members:fyi.opensocial.acceptance`) ([live data](../design/sites.md#live-data)) |
 | `site delete <group>` | takes the group's website down |
 | `site domain <group> [--undo]` | serves the group's website at its handle's own domain once that domain reaches this host, its address and `www.` redirecting there; with `--undo`, at its address alone again ([on its own domain](../design/sites.md#on-its-own-domain)) |
 

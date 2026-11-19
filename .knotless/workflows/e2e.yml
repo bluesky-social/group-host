@@ -9,9 +9,11 @@
 # do it together. Each flow that fails leaves the page as it was then
 # among the check's outputs, as a picture.
 #
-# Node, the packages, Chromium, the libraries it needs and the build are
-# kept between runs, as main's runs leave them: nothing is fetched again
-# until what it is made from changes.
+# The world runs the reference PDS on the space alpha harness/alpha.sh
+# builds, as the tests do, so that a site's writes in a space are made
+# here. Node, the packages, Chromium, the libraries it needs, the alpha
+# and the build are kept between runs, as main's runs leave them: nothing
+# is fetched again until what it is made from changes.
 image: rust:1.98
 # The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
 runners: [runner.knotless.dev]
@@ -22,10 +24,11 @@ on:
   push: {refs: [refs/heads/main]}
   pull:
     base: [refs/heads/main, refs/heads/feature/*]
-    paths: [web/**, lexicons/**, crates/**, Cargo.toml, Cargo.lock, harness/e2e/**, docs/guides/**, harness/look/**, harness/shots.mjs, harness/world.mjs, harness/pds.mjs, harness/tls-proxy.mjs, harness/package.json, harness/package-lock.json, .knotless/workflows/e2e.yml, .knotless/uses.lock]
-cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/node, /opt/browsers, /opt/chromium-debs, web/node_modules, harness/node_modules]
+    paths: [web/**, lexicons/**, crates/**, Cargo.toml, Cargo.lock, harness/e2e/**, docs/guides/**, harness/look/**, harness/shots.mjs, harness/world.mjs, harness/pds.mjs, harness/alpha.sh, harness/tls-proxy.mjs, harness/package.json, harness/package-lock.json, .knotless/workflows/e2e.yml, .knotless/uses.lock]
+cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/node, /opt/atproto, /opt/browsers, /opt/chromium-debs, web/node_modules, harness/node_modules]
 env:
   PLAYWRIGHT_BROWSERS_PATH: /opt/browsers
+  GROUP_HOST_DEV_ENV: /opt/atproto/packages/dev-env
 steps:
   - uses: chadtmiller.com/steps/node@1
     with: {version: 24.22.1}
@@ -55,12 +58,8 @@ steps:
         echo "$want" > $debs/.want
       fi
       dpkg -i $debs/*.deb > /dev/null
-  - name: sqlite
-    run: |
-      # The stock PDS's SQLite module, which the install above skips building.
-      export PATH=/opt/node/bin:$PATH
-      dir="$(dirname "$(node -p "require.resolve('better-sqlite3/package.json', { paths: ['harness'] })")")"
-      [ -f "$dir/build/Release/better_sqlite3.node" ] || (cd "$dir" && npm run install)
+  - name: spaces alpha
+    run: sh harness/alpha.sh
   - name: build
     run: |
       export PATH=/opt/node/bin:$PATH

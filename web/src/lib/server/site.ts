@@ -8,8 +8,8 @@ const SITE = 'fyi.opensocial.site';
 
 /**
  * A site as the pages show it: where it is, how many files it has, when
- * it was published, the page every address goes to if any, and the
- * host's methods its pages read.
+ * it was published, the page every address goes to if any, the host's
+ * methods its pages read, and what they write for whoever signs in.
  */
 export type Site = {
   url: string;
@@ -17,6 +17,7 @@ export type Site = {
   publishedAt: string;
   fallback?: string;
   reads: string[];
+  writes: { space: string; collection: string }[];
 };
 
 type Load = { fetch: typeof fetch; url: URL };
@@ -39,6 +40,7 @@ export async function siteOf(event: Load, group: string, address: string): Promi
     files: answer.value.files?.length ?? 0,
     publishedAt: answer.value.createdAt,
     fallback: answer.value.fallback,
-    reads: (answer.value.reads ?? []).map((r: { method: string }) => r.method)
+    reads: (answer.value.reads ?? []).map((r: { method: string }) => r.method),
+    writes: answer.value.writes ?? []
   };
 }

@@ -38,7 +38,13 @@
             "type": "array",
             "maxLength": 20,
             "items": { "type": "ref", "ref": "#read" },
-            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none is served as its files alone."
+            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none, and no writes, is served as its files alone."
+          },
+          "writes": {
+            "type": "array",
+            "maxLength": 20,
+            "items": { "type": "ref", "ref": "#write" },
+            "description": "The records the site's pages may write, as whoever is looking and signed in, in their own repo in the group's spaces, through the page the host serves around them: each asked of the visitor's PDS when they sign in. What a space lets each visitor write is still its access record's to say."
           }
         }
       }
@@ -83,6 +89,23 @@
             "fyi.opensocial.getViewer"
           ],
           "description": "The method's NSID: one of the host's reads, as `knownValues` lists them."
+        }
+      }
+    },
+    "write": {
+      "type": "object",
+      "description": "A kind of record a site's pages may write in the visitor's own repo, in the group's spaces of one type.",
+      "required": ["space", "collection"],
+      "properties": {
+        "space": {
+          "type": "string",
+          "format": "nsid",
+          "description": "The type of the group's spaces it is written in, such as fyi.opensocial.members."
+        },
+        "collection": {
+          "type": "string",
+          "format": "nsid",
+          "description": "The record's collection, such as fyi.opensocial.acceptance."
         }
       }
     }

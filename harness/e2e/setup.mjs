@@ -16,6 +16,12 @@ export default async function setup() {
     front
   });
   const { net } = w;
+  // Asked for the alpha (as CI asks), the flows that write in a space run
+  // on it, never skipped for a build that turns out to speak none.
+  if (process.env.GROUP_HOST_DEV_ENV && !net.spaces) {
+    w.stop();
+    throw new Error(`GROUP_HOST_DEV_ENV names no space alpha: ${process.env.GROUP_HOST_DEV_ENV}`);
+  }
   const hikers = await siteFront(
     net,
     new URL(w.host).port,
@@ -33,6 +39,9 @@ export default async function setup() {
     host: w.host,
     did: w.did,
     pds: net.pds,
+    // Whether the PDS speaks the space alpha (GROUP_HOST_DEV_ENV): a
+    // member's own write in a space needs it.
+    spaces: net.spaces,
     mail: net.mail,
     accounts: net.accounts,
     riders: w.riders,

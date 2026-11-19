@@ -946,6 +946,40 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
         json!([{"method": "fyi.opensocial.getGroup"}, {"method": "fyi.opensocial.listMembers"}]);
     assert_eq!(reads, &wanted);
 
+    // Writes, each a type of the group's spaces and a collection there.
+    let args = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--writes",
+        "com.example.board:com.example.note, fyi.opensocial.members:fyi.opensocial.acceptance",
+    ];
+    ok(&alice, &args).await;
+    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
+    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
+    let wanted = json!([
+        {"space": "com.example.board", "collection": "com.example.note"},
+        {"space": "fyi.opensocial.members", "collection": "fyi.opensocial.acceptance"},
+    ]);
+    assert_eq!(&site.to_json()["writes"], &wanted);
+    let unsaid = fails(
+        &alice,
+        &[
+            "site",
+            "publish",
+            group,
+            folder,
+            "--writes",
+            "com.example.note",
+        ],
+    )
+    .await;
+    assert!(
+        unsaid.contains("a write is <space>:<collection>"),
+        "{unsaid}"
+    );
+
     let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
     assert!(missing.contains("reading /no/such/folder"), "{missing}");
 

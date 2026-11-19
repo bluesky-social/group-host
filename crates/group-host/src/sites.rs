@@ -100,6 +100,20 @@ fn reads_of(site: &Value) -> Vec<&str> {
     all.filter_map(|r| r["method"].as_str()).collect()
 }
 
+/// What a site's `writes` name: each a type of the group's spaces, and a
+/// collection its pages may write there in the visitor's own repo.
+fn writes_of(site: &Value) -> Vec<(&str, &str)> {
+    let all = site["writes"].as_array().into_iter().flatten();
+    let each = all.map(|w| (w["space"].as_str(), w["collection"].as_str()));
+    each.filter_map(|(space, collection)| Some((space?, collection?)))
+        .collect()
+}
+
+/// Whether a site asks for its visitor's session: to read, or to write.
+fn is_live(site: &Value) -> bool {
+    !reads_of(site).is_empty() || !writes_of(site).is_empty()
+}
+
 /// Refuses a site whose `reads` name a method that is none of [`READS`].
 fn reads(site: &Value) -> Result<(), XrpcError> {
     match reads_of(site).into_iter().find(|m| !READS.contains(m)) {
@@ -461,7 +475,7 @@ pub async fn serve(State(host): State<Arc<Host>>, req: Request, next: Next) -> R
     // The name the browser asked, as a proxy in front says it if it says,
     // else as the request does: the site's OAuth client is named for it.
     let asked = text(HeaderName::from_static("x-forwarded-host"));
-    match host.live_site(&did).filter(|s| !reads_of(s).is_empty()) {
+    match host.live_site(&did).filter(is_live) {
         Some(site) => {
             let origin = format!("https://{}", asked.or(named).unwrap_or_default());
             live(&host, &did, &handle, &site, &origin, asking)
@@ -495,9 +509,8 @@ fn live(
     origin: &str,
     mut asking: Asking,
 ) -> Response {
-    let reads = reads_of(site);
     match asking.path.as_str() {
-        "client-metadata.json" => client_metadata(host, handle, origin, &reads),
+        "client-metadata.json" => client_metadata(host, did, handle, origin, site),
         "_os/kit.js" => script(KIT.as_bytes().to_vec()),
         "_os/shell.js" => {
             let built = host.config.site_shell.as_ref().map(|d| d.join("shell.js"));
@@ -524,9 +537,12 @@ fn script(bytes: Vec<u8>) -> Response {
     (StatusCode::OK, kind, bytes).into_response()
 }
 
-/// The site's OAuth client document, at its address `origin`: `atproto`,
-/// and leave to ask each of `reads`, and `getViewer`, of the host.
-fn client_metadata(host: &Host, handle: &str, origin: &str, reads: &[&str]) -> Response {
+/// The site's OAuth client document, at its address `origin`: `atproto`;
+/// leave to ask each of its `reads`, and `getViewer`, of the host; and to
+/// make each of its `writes` in the visitor's own repo, in the group
+/// `did`'s spaces of that type alone, with pictures they upload for those
+/// records to point to.
+fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Value) -> Response {
     let aud = format!("{}#opensocial", host.config.service_did);
     let aud = reqwest::Url::parse_with_params("https://x/", &[("aud", aud)])
         .expect("a URL")
@@ -535,8 +551,19 @@ fn client_metadata(host: &Host, handle: &str, origin: &str, reads: &[&str]) -> R
         .to_string();
     let mut scope = vec!["atproto".to_string()];
     let viewer = "fyi.opensocial.getViewer";
+    let reads = reads_of(site);
     for method in reads.iter().chain([&viewer]).collect::<BTreeSet<_>>() {
         scope.push(format!("rpc:{method}?{aud}"));
+    }
+    let writes = "action=create&action=update&action=delete";
+    let written = writes_of(site).into_iter().collect::<BTreeSet<_>>();
+    for (kind, collection) in &written {
+        scope.push(format!(
+            "space:{kind}?authority={did}&collection={collection}&{writes}"
+        ));
+    }
+    if !written.is_empty() {
+        scope.push("blob:image/*".to_string());
     }
     let doc = json!({
         "client_id": format!("{origin}/client-metadata.json"),
@@ -560,15 +587,20 @@ fn client_metadata(host: &Host, handle: &str, origin: &str, reads: &[&str]) -> R
 
 /// The page around a site's pages at `path`: the group's page there in a
 /// sandboxed frame, and what the host's script needs to sign its visitor
-/// in and ask `reads` as them.
+/// in, ask `reads` and make `writes` as them.
 fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Response {
     let reads = reads_of(site);
     let (status, html) = host.page_at(did, site, path);
     let head = site_head::preview(html.as_deref().unwrap_or_default(), handle);
+    let writes: Vec<Value> = writes_of(site)
+        .into_iter()
+        .map(|(space, collection)| json!({"space": space, "collection": collection}))
+        .collect();
     let config = json!({
         "group": did,
         "handle": handle,
         "reads": reads,
+        "writes": writes,
         "aud": format!("{}#opensocial", host.config.service_did),
         "handleResolver": host.config.site_handle_resolver,
         "plc": host.config.plc_url,
@@ -655,7 +687,7 @@ pub async fn put_site(
     let group = configuring(&host, &headers, &body, "putSite").await?;
     host.active(&group)?;
     let mut site = json!({"$type": SITE, "files": [], "createdAt": iso(now_millis())});
-    for key in ["fallback", "notFound", "reads"] {
+    for key in ["fallback", "notFound", "reads", "writes"] {
         if let Some(given) = body.get(key) {
             site[key] = given.clone();
         }

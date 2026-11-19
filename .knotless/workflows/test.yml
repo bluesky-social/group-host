@@ -3,7 +3,7 @@
 # is counted as it runs, so it is told to stop rather than killed.
 #
 # The tests that reach the network run against the reference PDS and PLC
-# (harness/pds.mjs), on the space alpha built at ATPROTO_COMMIT. Node,
+# (harness/pds.mjs), on the space alpha harness/alpha.sh builds. Node,
 # the harness's packages, the alpha's build, cargo-llvm-cov and the build
 # are kept between runs; each is made again only when what it is made from
 # changes.
@@ -17,13 +17,6 @@ on:
   push: {refs: [refs/heads/main]}
   pull: {base: [refs/heads/main, refs/heads/feature/*]}
 cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/tools, /opt/node, /opt/atproto, harness/node_modules]
-env:
-  # The space alpha the tests run against: permissioned-data-alpha as of
-  # November 13, 2026, the build @atproto/space 0.0.0-spaces-alpha-20261113224550
-  # was published from.
-  ATPROTO_COMMIT: 83d473dec69bbf19fe95fcbbb20a39842779db82
-  # Bumped when the steps that build the alpha change, to build it again.
-  ALPHA_BUILD: "2"
 steps:
   - uses: chadtmiller.com/steps/node@1
     with: {version: 24.22.1}
@@ -33,31 +26,14 @@ steps:
   - uses: chadtmiller.com/steps/cargo-llvm-cov@1
     with: {version: 0.9.1}
   - name: spaces alpha
-    run: |
-      [ "$(cat /opt/atproto/.built 2>/dev/null)" = "$ATPROTO_COMMIT $ALPHA_BUILD" ] && exit 0
-      export PATH=/opt/node/bin:$PATH COREPACK_ENABLE_DOWNLOAD_PROMPT=0 COREPACK_HOME=/opt/atproto/.corepack
-      find /opt/atproto -mindepth 1 -delete
-      cd /opt/atproto
-      git init -q . && git fetch -q --depth 1 https://github.com/bluesky-social/atproto.git "$ATPROTO_COMMIT" && git checkout -q FETCH_HEAD
-      mkdir .bin && corepack enable --install-directory /opt/atproto/.bin
-      export PATH=/opt/atproto/.bin:$PATH
-      pnpm install --frozen-lockfile --ignore-scripts
-      pnpm run build:tooling --force
-      pnpm --filter '@atproto/dev-env^...' --filter @atproto/dev-env run --if-present prebuild
-      pnpm exec tsc --build packages/dev-env/tsconfig.build.json
-      # The PDS serves its OAuth sign-in pages from this bundle, and will
-      # not start without it.
-      pnpm --filter @atproto/oauth-provider-ui run build:ui
-      echo "$ATPROTO_COMMIT $ALPHA_BUILD" > /opt/atproto/.built
+    run: sh harness/alpha.sh
   - name: sqlite
     run: |
-      # SQLite's native module for the alpha's PDS, which the install above
-      # skips building, and the harness's own for the stock PDS.
+      # SQLite's native module for the stock PDS, which the install above
+      # skips building.
       export PATH=/opt/node/bin:$PATH
-      for from in /opt/atproto/packages/pds harness; do
-        dir="$(dirname "$(node -p "require.resolve('better-sqlite3/package.json', { paths: ['$from'] })")")"
-        [ -f "$dir/build/Release/better_sqlite3.node" ] || (cd "$dir" && npm run install)
-      done
+      dir="$(dirname "$(node -p "require.resolve('better-sqlite3/package.json', { paths: ['harness'] })")")"
+      [ -f "$dir/build/Release/better_sqlite3.node" ] || (cd "$dir" && npm run install)
   - name: test
     run: |
       export PATH=/opt/node/bin:/opt/tools:$PATH GROUP_HOST_DEV_ENV=/opt/atproto/packages/dev-env

@@ -3,7 +3,9 @@
 // the group's address, holding the visitor's session. The site's page,
 // sandboxed in its frame, is all a visitor sees; it asks this page, by
 // `os` (crates/group-host/src/site_kit.js), for a read the site declared,
-// made as the visitor through their PDS, and to sign them in or out.
+// made as the visitor through their PDS, for a write it declared, made in
+// the visitor's own repo in one of the group's spaces, and to sign them in
+// or out.
 //
 // Signing in is the console's own dialog, with its typeahead, asking only
 // for a handle: a page may suggest one, but where a visitor is sent is
@@ -21,6 +23,7 @@ type Config = {
   group: string;
   handle: string;
   reads: string[];
+  writes: { space: string; collection: string }[];
   aud: string;
   handleResolver: string;
   plc: string;
@@ -37,6 +40,11 @@ type Message = {
   hint?: string;
   path?: string;
   title?: string;
+  space?: string;
+  collection?: string;
+  rkey?: string;
+  record?: object;
+  file?: unknown;
 };
 
 const config: Config = JSON.parse(document.getElementById('os-config')?.textContent ?? '{}');
@@ -100,7 +108,10 @@ class Refused extends Error {
   }
 }
 
-/** A read of the host's, as the visitor, through their PDS. */
+/**
+ * A read of the host's, as the visitor, through their PDS: its JSON, or,
+ * for a method that answers a file (`getSpaceBlob`), the file as a `Blob`.
+ */
 async function ask(method: string, params: object) {
   if (!session) throw new Refused('sign in', 401);
   const query = new URLSearchParams();
@@ -108,9 +119,88 @@ async function ask(method: string, params: object) {
   const res = await session.fetchHandler(`/xrpc/${method}?${query}`, {
     headers: { 'atproto-proxy': config.aud }
   });
+  const json = res.headers.get('content-type')?.startsWith('application/json');
+  if (res.ok && !json) return await res.blob();
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Refused(body?.message ?? res.statusText, res.status);
   return body;
+}
+
+/**
+ * Uploads `file`, a picture, to the visitor's own PDS, for a record the
+ * site writes to point to: a site that declares no writes may not, nor
+ * upload anything but a picture. Answers the blob's reference.
+ */
+async function upload(file: unknown) {
+  if (!config.writes.length) throw new Error('this site declares no writes');
+  if (!(file instanceof Blob) || !file.type.startsWith('image/'))
+    throw new Error('only a picture may be uploaded');
+  if (!session) throw new Refused('sign in', 401);
+  const res = await session.fetchHandler('/xrpc/com.atproto.repo.uploadBlob', {
+    method: 'POST',
+    headers: { 'content-type': file.type },
+    body: file
+  });
+  const said = await res.json().catch(() => null);
+  if (res.ok) return said.blob;
+  return await unwritten(res, said);
+}
+
+/** The procedure each write is, at the visitor's PDS. */
+const WRITES: Record<string, string> = {
+  create: 'com.atproto.space.createRecord',
+  put: 'com.atproto.space.putRecord',
+  delete: 'com.atproto.space.deleteRecord'
+};
+
+/**
+ * Whether the site declared writes of `collection` in `space`: one of the
+ * group's spaces (`at://<group>/space/<type>/<skey>`) of a type it names
+ * with that collection.
+ */
+function declared(space: string, collection: string) {
+  const [authority, kw, type, skey, more] = space.replace(/^at:\/\//, '').split('/');
+  if (!space.startsWith('at://') || authority !== config.group || kw !== 'space') return false;
+  if (!skey || more !== undefined) return false;
+  return config.writes.some((w) => w.space === type && w.collection === collection);
+}
+
+/** A write in the visitor's own repo, in one of the group's spaces, at their PDS. */
+async function write(type: string, m: Message) {
+  if (!session) throw new Refused('sign in', 401);
+  const { space, collection, rkey, record } = m;
+  const body = {
+    repo: session.sub,
+    space,
+    collection,
+    ...(rkey ? { rkey } : {}),
+    ...(record ? { record } : {})
+  };
+  const res = await session.fetchHandler(`/xrpc/${WRITES[type]}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const said = await res.json().catch(() => null);
+  if (res.ok) return said ?? {};
+  return await unwritten(res, said);
+}
+
+/**
+ * A write or an upload the visitor's PDS refused, thrown. A sign-in from
+ * before the site wrote this, refused for want of scope, is forgotten, so
+ * signing in again grants it.
+ */
+async function unwritten(res: Response, said: { error?: string; message?: string } | null) {
+  const scope = `${said?.error ?? ''} ${said?.message ?? ''}`.toLowerCase().includes('scope');
+  if (scope && (res.status === 401 || res.status === 403)) {
+    await session?.signOut().catch(() => {});
+    session = null;
+    viewer = {};
+    changed();
+    throw new Refused('sign in', 401);
+  }
+  throw new Refused(said?.message ?? res.statusText, res.status);
 }
 
 // Who is signed in, by their handle; a session whose server can't be
@@ -184,6 +274,19 @@ function follow({ path, title }: Message) {
   document.title = (typeof title === 'string' && title.trim().slice(0, 200)) || config.handle;
 }
 
+/**
+ * What the frame is told of a read or a write refused: locked, with why,
+ * where it was refused for who is looking (no one, or not them).
+ */
+function refusal(err: unknown) {
+  const locked = err instanceof Refused && (err.status === 401 || err.status === 403);
+  const reason = err instanceof Error && err.message === 'sign in' ? 'sign in' : 'not for you';
+  return {
+    error: err instanceof Error ? err.message : String(err),
+    ...(locked ? { locked: true, reason } : {})
+  };
+}
+
 addEventListener('message', async (e) => {
   if (e.source !== frame.contentWindow) return;
   const m: Message = e.data;
@@ -212,13 +315,30 @@ addEventListener('message', async (e) => {
       try {
         return reply({ value: await ask(method, m.params ?? {}) });
       } catch (err) {
-        const locked = err instanceof Refused && (err.status === 401 || err.status === 403);
-        return reply({
-          error: err instanceof Error ? err.message : String(err),
-          ...(locked ? { locked: true, reason: 'not for you' } : {})
-        });
+        return reply(refusal(err));
       }
     }
+    case 'create':
+    case 'put':
+    case 'delete': {
+      const [space, collection] = [String(m.space), String(m.collection)];
+      if (!declared(space, collection))
+        return reply({
+          error: `${collection} in ${space} is none of the writes this site declares`
+        });
+      if (!session) return reply({ error: 'sign in', locked: true, reason: 'sign in' });
+      try {
+        return reply({ value: await write(String(m.type), m) });
+      } catch (err) {
+        return reply(refusal(err));
+      }
+    }
+    case 'upload':
+      try {
+        return reply({ value: await upload(m.file) });
+      } catch (err) {
+        return reply(refusal(err));
+      }
   }
 });
 
