@@ -225,6 +225,40 @@ async fn a_write_waits_on_its_authority_no_longer_than_the_timeout() {
 }
 
 #[tokio::test]
+async fn lets_a_page_anywhere_read_a_space() {
+    let h = start(&[], false).await;
+    for nsid in [
+        "com.atproto.space.authorizeSpaceSync",
+        "com.atproto.space.listWriters",
+        "com.atproto.space.getRepo",
+        "com.atproto.space.listRepoOps",
+    ] {
+        let res = h
+            .http
+            .request(reqwest::Method::OPTIONS, format!("{}/xrpc/{nsid}", h.url))
+            .header("origin", "https://hall.groups.test")
+            .header("access-control-request-method", "GET")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 204, "{nsid}");
+        assert_eq!(res.headers()["access-control-allow-origin"], "*");
+        let allowed = res.headers()["access-control-allow-headers"]
+            .to_str()
+            .unwrap();
+        for name in [
+            "authorization",
+            "atproto-space-audience",
+            "signature-input",
+            "signature",
+            "accept-signature",
+        ] {
+            assert!(allowed.split(", ").any(|a| a == name), "{allowed}");
+        }
+    }
+}
+
+#[tokio::test]
 async fn serves_a_repo_to_a_syncer_vouched_for() {
     let f = fixture().await;
     let writes: Vec<Write> = ["a", "b", "c"]
@@ -272,6 +306,7 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
         repo.headers["access-control-expose-headers"],
         "atproto-space-commit, signature-input, signature"
     );
+    assert_eq!(repo.headers["access-control-allow-origin"], "*");
     // Checked under another secret, the MAC does not hold.
     let (_, other) = signed(&f.syncer, &f.group, &f.kem, COMMIT_MAC);
     assert!(other.commit(&repo).is_err());

@@ -5,10 +5,11 @@ pages as it likes. The host serves it at the group's address,
 `https://<address>/`, as static files, the way they were published. It has
 no templates, no build step and no rendering on the server. A site that
 names `reads` may also show the group as each visitor may see it, one
-that names `acts` may act for each visitor, such as reporting what they
-see, and one that names `writes` may write in the group's spaces as each
-visitor may, once they sign in on it, through a page the host serves
-around its own ([live data](#live-data)).
+that names `spaces` may read the group's spaces whole as each visitor
+may, one that names `acts` may act for each visitor, such as reporting
+what they see, and one that names `writes` may write in the group's
+spaces as each visitor may, once they sign in on it, through a page the
+host serves around its own ([live data](#live-data)).
 
 ## What a site is
 
@@ -33,7 +34,9 @@ ask as whoever signs in on it: `fyi.opensocial.getGroup`, `listMembers`,
 `listSpaceRecords`, `getSpaceBlob`, `getActor` and `getViewer`, and no
 others. And `acts`, up to 20 of the host's procedures its pages may ask
 as that person, each acting for them alone: for now
-`fyi.opensocial.createReport` only. And `writes`, up to 20 kinds of
+`fyi.opensocial.createReport` only. And `spaces`, up to 20 types of the
+group's spaces its pages may read whole as that person, such as
+`com.example.place.room`. And `writes`, up to 20 kinds of
 record its pages may write in that person's own repo, each a type of the
 group's spaces and a collection there, such as `fyi.opensocial.acceptance`
 in `fyi.opensocial.members`.
@@ -59,10 +62,11 @@ to its site while it has one, and its settings have a Site page, which
 says where the site is, how many files it has and when it was published,
 and publishes a folder chosen in the browser, or deletes the site, asked
 to be sure of. Publishing takes a `404.html` at the folder's top as
-`notFound`, and keeps `fallback`, `reads` and `writes` under Advanced,
-filled as the site has them. The `opensocial site publish` command reads a folder
+`notFound`, and keeps `fallback`, `reads`, `spaces`, `acts` and `writes`
+under Advanced, filled as the site has them. The `opensocial site publish` command reads a folder
 and sends its files, with `--reads` and `--acts` naming methods by NSID or
-by their last part, and `--writes` each write as `<space>:<collection>`;
+by their last part, `--spaces` space types by NSID, and `--writes` each
+write as `<space>:<collection>`;
 `site delete` takes the site down. Both leave out files whose
 names start with a dot, send each file as text if it is UTF-8 and as
 bytes otherwise, and take the folder's own name off each path. An AI app
@@ -74,8 +78,9 @@ An app signed in as the group may also write the record itself, with
 that write to the same rules: the record is kept at `self`, the member who
 approved the app must hold `group.configure`, every path must be one a
 file may be at and none given twice, every file must name a blob,
-`fallback` and `notFound` must name files of the site, and `reads` and
-`acts` must name only the methods above. A refused site is `InvalidSite`.
+`fallback` and `notFound` must name files of the site, `reads` and
+`acts` must name only the methods above, and `spaces` no type twice. A
+refused site is `InvalidSite`.
 
 A path is `/`-separated, with no leading `/`, and no empty, `.` or `..`
 segment, backslash or control character.
@@ -190,7 +195,7 @@ and the page asks the host, and writes at the visitor's own PDS, as them.
 
 ### The page around a site
 
-A site that names `reads`, `acts` or `writes` is served differently. Each page of it is the
+A site that names `reads`, `spaces`, `acts` or `writes` is served differently. Each page of it is the
 host's own page, which holds the visitor's session and shows the
 site's page in a sandboxed frame beneath it, filling the window. The
 site's files are under `/_site/` there, sandboxed as above, and a file
@@ -211,10 +216,12 @@ client of its own, a public one whose client id is
 `/_os/callback` there; behind a proxy that names the host it was asked
 as `X-Forwarded-Host`, as Caddy does, both are at that name instead. Its
 scope is `atproto`; for each of the site's `reads` and `acts`, and
-`getViewer`, `rpc:<method>?aud=<the host's service DID>#opensocial`; and for each of
-its `writes`, `space:<type>?authority=<the group>&collection=<collection>`
-with every action. It can ask the host those methods, and write those
-records in the visitor's own repo in this group's spaces of those types,
+`getViewer`, `rpc:<method>?aud=<the host's service DID>#opensocial`; for
+each of its `spaces`, `space:<type>?authority=<the group>&action=read`;
+and for each of its `writes`,
+`space:<type>?authority=<the group>&collection=<collection>` with every
+action. It can ask the host those methods, read this group's spaces of
+those types, and write those records in the visitor's own repo in them,
 and nothing else. The session is kept
 in the browser at the address's origin, and goes to the visitor's PDS
 alone; the site's frame never holds it.
@@ -235,10 +242,14 @@ gives each ask's parameters, answers and refusals, and an example page:
 | `os.me()` | `{signedIn, did, handle}` of who is looking |
 | `os.call(method, params)` | the method's answer, asked as the visitor: its JSON, or a `Blob` for one that answers a file (`getSpaceBlob`) |
 | `os.act(method, input)` | the procedure's answer, `input` its JSON, asked as the visitor: `createReport`'s `id` and `createdAt` |
+| `os.space(uri)` | one of the group's spaces (`at://<group>/space/<type>/<skey>`), with the SDK's `GroupSpace` methods below, the same object for the same `uri` |
+| `space.sync()` | `{failed}`, once the records the page holds of a space of a type the site names in `spaces` are brought up to date as the visitor may read them; `failed` the writers whose PDS did not answer |
+| `space.records({collections})` | at once, every record held, each `{uri, repo, collection, rkey, cid, value}`; those of `collections` alone if given |
+| `space.onChange(fn)` | calls `fn` with every record held after each sync that changes them |
+| `space.create(collection, value, {rkey})` | the `uri` and `cid` of `value` written in the visitor's own repo in the space |
+| `space.put(collection, value, {rkey})` | the same, at `rkey`, in place of what is there |
+| `space.delete(collection, {rkey})` | the visitor's record at `rkey` deleted |
 | `os.upload(file)` | the blob reference of `file`, a picture, uploaded to the visitor's own PDS for a record the site writes to point to |
-| `os.create(space, collection, record, {rkey})` | the `uri` and `cid` of `record` written in the visitor's own repo in `space`, one of the group's (`at://<group>/space/<type>/<skey>`) |
-| `os.put(space, collection, rkey, record)` | the same, at `rkey`, in place of what is there |
-| `os.delete(space, collection, rkey)` | the visitor's record at `rkey` deleted |
 | `os.signIn({hint})` | opens the sign-in dialog, `hint` filled in as the handle |
 | `os.signOut()` | signs the visitor out |
 | `os.onChange(fn)` | calls `fn` with `os.me()`'s answer when it changes in place, as on signing out; signing in loads the page again |
@@ -271,6 +282,19 @@ an `image/` type. The picture is the visitor's, in their own repo; a record
 in a space that points to it makes it the space's, and anyone who reads
 the space reads it with `getSpaceBlob`, which the site names in `reads` to
 show it. A site with no `writes` uploads nothing.
+
+A page that lists, counts or threads what members wrote reads the space
+whole with `os.space`, and works those out itself. The host's page reads
+each writer's repo in the space from their own PDS, with the visitor's
+credential from the space's authority, as any app reading a space does,
+and checks each against its commit. So the host keeps no copy of a
+space for the page to ask, and the access record decides what each
+visitor reads, as it decides at every repo. What it read is kept in the
+browser, at the address's origin, so a later read, on this visit or the
+next, fetches only what changed. That fits a group whose spaces hold a
+few thousand records: past that, the first read of each visit grows
+slow, and a group wants an index of its own beside the host. The host's
+page does this with [the SDK](../reference/sdk.md).
 
 An act, like a read, goes through the visitor's PDS to the host, and the
 host takes it as it takes the same from that person anywhere else: a

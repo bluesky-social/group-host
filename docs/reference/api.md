@@ -127,16 +127,16 @@ A group's website ([sites](../design/sites.md)).
 
 | Method | What it does |
 | --- | --- |
-| `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there, with the host's methods its pages may read (`reads`), the procedures they may ask (`acts`), and the records they may write in whoever signs in's own repo in the group's spaces (`writes`), all as that person; takes a body as large as `BLOB_UPLOAD_LIMIT` |
+| `POST fyi.opensocial.putSite` | publishes a group's site whole from the files given, each as text or bytes, in place of the one there, with the host's methods its pages may read (`reads`), the procedures they may ask (`acts`), the group's space types they may read whole (`spaces`), and the records they may write in whoever signs in's own repo in the group's spaces (`writes`), all as that person; takes a body as large as `BLOB_UPLOAD_LIMIT` |
 | `POST fyi.opensocial.deleteSite` | takes a group's site down |
 | `POST fyi.opensocial.putSiteDomain` | serves a group's site at its handle's own domain, once that domain answers as this host; its address and `www.` under the domain redirect there |
 | `POST fyi.opensocial.deleteSiteDomain` | serves a group's site at its address alone again |
 | `GET /tls/ask?domain=<domain>` | 200 if the proxy in front may get a certificate for `domain`: a group's own domain, or `www.` under it, while the group is on; else 404 |
-| `GET`, `HEAD` `https://<address>/<path>` | a file of the site of the group whose address the request's `Host` names, sandboxed; the host keeps `/.well-known/` and `/xrpc/` there for itself. For a site that names `reads`, `acts` or `writes`, a page is the host's page around the site's, holding the visitor's session, with the site's page's title and preview tags and the status it would have |
-| `GET https://<address>/_site/<path>` | for a site that names `reads`, `acts` or `writes`, the file the frame shows, sandboxed, as above |
-| `GET https://<address>/client-metadata.json` | for a site that names `reads`, `acts` or `writes`, its OAuth client's metadata: a public client asking `atproto`, an `rpc:` scope for each read, each act and `getViewer`, for each write a `space:` scope of its type, with `authority` the group, its collection, and every action, and with any write `blob:image/*`, named for the request's `X-Forwarded-Host` if a proxy sends one, else its `Host` |
-| `GET https://<address>/_os/kit.js` | for a site that names `reads`, `acts` or `writes`, the script its pages load for `os` ([the site kit](site-kit.md)) |
-| `GET https://<address>/_os/shell.js` | for a site that names `reads`, `acts` or `writes`, the host's page's script, from `SITE_SHELL_DIR`; 404 without it |
+| `GET`, `HEAD` `https://<address>/<path>` | a file of the site of the group whose address the request's `Host` names, sandboxed; the host keeps `/.well-known/` and `/xrpc/` there for itself. For a site that names `reads`, `spaces`, `acts` or `writes`, a page is the host's page around the site's, holding the visitor's session, with the site's page's title and preview tags and the status it would have |
+| `GET https://<address>/_site/<path>` | for a site that names `reads`, `spaces`, `acts` or `writes`, the file the frame shows, sandboxed, as above |
+| `GET https://<address>/client-metadata.json` | for a site that names `reads`, `spaces`, `acts` or `writes`, its OAuth client's metadata: a public client asking `atproto`, an `rpc:` scope for each read, each act and `getViewer`, for each space type a `space:` scope to read it, with `authority` the group, for each write a `space:` scope of its type, with `authority` the group, its collection, and every action, and with any write `blob:image/*`, named for the request's `X-Forwarded-Host` if a proxy sends one, else its `Host` |
+| `GET https://<address>/_os/kit.js` | for a site that names `reads`, `spaces`, `acts` or `writes`, the script its pages load for `os` ([the site kit](site-kit.md)) |
+| `GET https://<address>/_os/shell.js` | for a site that names `reads`, `spaces`, `acts` or `writes`, the host's page's script, from `SITE_SHELL_DIR`; 404 without it |
 
 As the spaces' authority and the PDS of the group's own repo in each, the
 host answers the space alpha's methods:
@@ -291,6 +291,9 @@ A switched-off group's public repo answers `RepoDeactivated`, and
 
 ## From a browser
 
-The OAuth routes, the `/mcp` routes, and the methods an app calls with a
-token (the writes, the sessions, `provisionGroup`, `getGroupAuth`) answer
-any origin. The rest are for the console, at its own origin.
+The OAuth routes, the `/mcp` routes, the methods an app calls with a
+token (the writes, the sessions, `provisionGroup`, `getGroupAuth`), and
+those a space is read by (`authorizeSpaceSync` and `listWriters` of its
+authority, and the reads of a repo in it, `getRepo`, `listRepoOps` and the
+rest, which `@opensocial/sdk` makes in a site's page) answer any origin.
+The rest are for the console, at its own origin.

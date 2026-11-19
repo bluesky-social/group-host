@@ -103,7 +103,7 @@ its icon.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's website whole, from `files`, each `{path, text}` or `{path, bytes}`, with `fallback` and `not_found` naming files of them, `reads` the host's methods its pages may ask as whoever signs in, `acts` the procedures they may ask as that person, and `writes` the records they may write in that person's own repo, each `{space, collection}`; the command reads the files from a folder |
+| `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's website whole, from `files`, each `{path, text}` or `{path, bytes}`, with `fallback` and `not_found` naming files of them, `reads` the host's methods its pages may ask as whoever signs in, `acts` the procedures they may ask as that person, `spaces` the group's space types they may read whole, each `{space}`, and `writes` the records they may write in that person's own repo, each `{space, collection}`; the command reads the files from a folder |
 | `site_delete` | `site delete` | `fyi.opensocial.deleteSite` | takes the group's website down |
 | `site_domain` | `site domain` | `fyi.opensocial.putSiteDomain` | serves the group's website at its handle's own domain once it reaches this host; with `undo`, `fyi.opensocial.deleteSiteDomain`, at its address alone again |
 

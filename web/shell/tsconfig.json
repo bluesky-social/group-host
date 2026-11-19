@@ -7,7 +7,9 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["shell.ts", "env.d.ts"]
+  "include": ["shell.ts", "kit.js", "protocol.ts", "env.d.ts"]
 }

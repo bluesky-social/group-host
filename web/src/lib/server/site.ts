@@ -9,7 +9,8 @@ const SITE = 'fyi.opensocial.site';
 /**
  * A site as the pages show it: where it is, how many files it has, when
  * it was published, the page every address goes to if any, the host's
- * methods its pages read, and what they write for whoever signs in.
+ * methods its pages read and its procedures they ask, the space types
+ * they read whole, and what they write for whoever signs in.
  */
 export type Site = {
   url: string;
@@ -17,6 +18,8 @@ export type Site = {
   publishedAt: string;
   fallback?: string;
   reads: string[];
+  acts: string[];
+  spaces: string[];
   writes: { space: string; collection: string }[];
 };
 
@@ -41,6 +44,8 @@ export async function siteOf(event: Load, group: string, address: string): Promi
     publishedAt: answer.value.createdAt,
     fallback: answer.value.fallback,
     reads: (answer.value.reads ?? []).map((r: { method: string }) => r.method),
+    acts: (answer.value.acts ?? []).map((a: { method: string }) => a.method),
+    spaces: (answer.value.spaces ?? []).map((s: { space: string }) => s.space),
     writes: answer.value.writes ?? []
   };
 }

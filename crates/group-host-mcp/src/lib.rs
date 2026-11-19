@@ -397,11 +397,12 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
          already is used again. Its pages run sandboxed, each in an origin of its own, with no \
          cookies or storage. A site that names `reads`, methods of the host's such as \
          fyi.opensocial.listMembers, `acts`, procedures of the host's such as \
-         fyi.opensocial.createReport, or `writes`, records of a collection in a type of the \
-         group's spaces, is served in a page of the host's that signs its visitor in: its pages \
-         ask those reads as whoever is looking, with `os.call` from `/_os/kit.js`, those acts \
-         with `os.act`, and make those writes in that person's own repo, with `os.create`, \
-         `os.put` and `os.delete`.",
+         fyi.opensocial.createReport, `spaces`, types of the group's spaces, or `writes`, \
+         records of a collection in a type of the group's spaces, is served in a page of the \
+         host's that signs its visitor in: its pages ask those reads as whoever is looking, \
+         with `os.call` from `/_os/kit.js`, those acts with `os.act`, and open those spaces \
+         with `os.space`, to sync and read them whole and make those writes in that person's \
+         own repo.",
         Made::Method("putSite", None),
     ),
     (

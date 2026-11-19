@@ -11,6 +11,10 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig({
   root: here,
   plugins: [svelte({ compilerOptions: { runes: true } })],
+  // @opensocial/sdk is linked from packages/sdk, with packages of its own:
+  // one copy of lex here, so that its errors are the classes this page
+  // tells apart.
+  resolve: { dedupe: ['@atproto/lex', '@atproto/lex-space'] },
   build: {
     outDir: '../build-shell',
     emptyOutDir: true,

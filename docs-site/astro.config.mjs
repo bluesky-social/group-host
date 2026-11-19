@@ -78,6 +78,7 @@ export default defineConfig({
             page('HTTP and XRPC API', 'reference/api'),
             page('MCP tools', 'reference/mcp'),
             page('The site kit', 'reference/site-kit'),
+            page('The SDK', 'reference/sdk'),
             page('Commands', 'reference/cli'),
             page('Configuration', 'reference/config')
           ]

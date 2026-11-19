@@ -66,6 +66,10 @@ right, and come before the code they test.
 - `web/`: the console, a SvelteKit app. Its TypeScript types are made from
   the lexicons by @atproto/lex (`npm run lex`, which `dev`, `build` and
   `check` run first) into `web/src/lib/lexicons`, not kept in git.
+- `packages/sdk`: `@opensocial/sdk`, for apps on group hosts: lex-space for
+  a group's spaces and the host's own methods, in lex-space's style. The
+  host's page around a site (`web/shell`) uses it. Its lexicon types are
+  made by `npm run lex` into `packages/sdk/src/lexicons`, not kept in git.
 - `docs-site/`: the docs as a site, made from `docs/` as it is, and
   deployed with `just docs-deploy` (`docs/development.md`).
 - `harness/`: the checks beside the tests, and the console's flows end to

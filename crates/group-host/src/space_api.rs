@@ -17,8 +17,9 @@ use atproto::space::{
 use atproto::space_auth::{self, CLOCK_SKEW, CREDENTIAL_MAX_AGE, Expect, Kind, TokenError};
 use atproto::{Cid, drisl};
 use axum::Json;
-use axum::extract::{Query, State};
-use axum::http::{HeaderMap, HeaderName, StatusCode, header};
+use axum::extract::{Query, Request, State};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -151,6 +152,31 @@ fn mac(headers: &HeaderMap, account: &Account, profile: &'static str) -> Result<
         profile,
         secret,
     })
+}
+
+/// Lets a page anywhere read a space as its member, as lex-space does in a
+/// browser: a request carries a space credential and its signature, and no
+/// cookies, so any origin may. Each answer with a MAC exposes its headers
+/// itself ([`private`]).
+pub async fn cors(req: Request, next: Next) -> Response {
+    let mut res = if req.method() == Method::OPTIONS {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        next.run(req).await
+    };
+    let headers = res.headers_mut();
+    for (k, v) in [
+        (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+        (header::ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS"),
+        (
+            header::ACCESS_CONTROL_ALLOW_HEADERS,
+            "content-type, authorization, atproto-space-audience, signature-input, signature, accept-signature",
+        ),
+        (header::ACCESS_CONTROL_MAX_AGE, "600"),
+    ] {
+        headers.insert(k, HeaderValue::from_static(v));
+    }
+    res
 }
 
 /// An answer for one reader: not kept by a shared cache, and varying with

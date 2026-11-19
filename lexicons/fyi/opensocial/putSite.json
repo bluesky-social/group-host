@@ -45,7 +45,13 @@
               "type": "array",
               "maxLength": 20,
               "items": { "type": "ref", "ref": "fyi.opensocial.site#read" },
-              "description": "The host's methods the site's pages may ask, as whoever is looking and signed in; none, no acts and no writes, and the site is its files alone."
+              "description": "The host's methods the site's pages may ask, as whoever is looking and signed in; none, no acts, no spaces and no writes, and the site is its files alone."
+            },
+            "spaces": {
+              "type": "array",
+              "maxLength": 20,
+              "items": { "type": "ref", "ref": "fyi.opensocial.site#space" },
+              "description": "The types of the group's spaces the site's pages may read whole, as whoever is looking and signed in, through the site kit's records ask."
             },
             "writes": {
               "type": "array",
@@ -59,7 +65,7 @@
       "errors": [
         {
           "name": "InvalidSite",
-          "description": "A site the host would not serve: a file at a path no file may be at, or at one another has; a file giving both its text and its bytes, or neither; a fallback or notFound that is none of the files; or a read, or an act, that is none of the methods a site's pages may ask."
+          "description": "A site the host would not serve: a file at a path no file may be at, or at one another has; a file giving both its text and its bytes, or neither; a fallback or notFound that is none of the files; a read, or an act, that is none of the methods a site's pages may ask; or a space type named twice, or none named."
         }
       ],
       "output": {

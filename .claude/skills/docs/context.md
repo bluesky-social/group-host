@@ -55,7 +55,7 @@ for more.
 Design: `README.md` (overview), `spaces.md`, `groups.md`,
 `membership.md`, `signing-in.md`, `moderation.md`, `mcp.md`,
 `recovery.md`, `moving.md`. Reference: `../reference/api.md`, `mcp.md`,
-`site-kit.md`, `cli.md`, `config.md`. `../development.md`. Link to them rather than
+`site-kit.md`, `sdk.md`, `cli.md`, `config.md`. `../development.md`. Link to them rather than
 restating them.
 
 A method is named in code, never linked by hand: the docs site links it

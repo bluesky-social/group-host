@@ -11,3 +11,5 @@ web/src/lib/lexicons
 docs-site/node_modules
 docs-site/dist
 docs-site/.astro
+packages/sdk/node_modules
+packages/sdk/src/lexicons

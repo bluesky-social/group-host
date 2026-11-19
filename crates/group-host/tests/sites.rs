@@ -349,6 +349,23 @@ async fn an_app_writes_the_site_as_the_group_only_if_its_member_configures_it() 
             .await;
         assert_eq!(said.error(), (400, "InvalidSite"));
     }
+    // Its spaces each a type, named once.
+    for spaces in [
+        json!([{"space": "a.b.c"}, {"space": "a.b.c"}]),
+        json!([{"space": ""}]),
+    ] {
+        let mut record = site("index.html");
+        record["spaces"] = spaces;
+        let said = app
+            .call(
+                &h,
+                "com.atproto.repo.putRecord",
+                token,
+                Some(&put("self", record)),
+            )
+            .await;
+        assert_eq!(said.error(), (400, "InvalidSite"));
+    }
     assert_eq!(page(&h, "/").await.body, "hi");
     let gone = json!({"repo": did, "collection": SITE, "rkey": "self"});
     let said = app
@@ -700,6 +717,69 @@ async fn a_site_acts_as_its_visitor_only_as_the_host_lets_a_page() {
     let kept = h.host.store.record(&did, SITE, "self").unwrap().unwrap();
     let site = atproto::drisl::decode(&kept.value).unwrap().to_json();
     assert_eq!(site["acts"], acts);
+}
+
+#[tokio::test]
+async fn a_site_reads_the_groups_spaces_whole_as_its_visitor() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let files = json!([{"path": "index.html", "text": "<p>the board</p>"}]);
+
+    // A type named twice is refused; one naming none is no NSID, refused
+    // by the lexicon before the host looks.
+    let board = json!({"space": "com.example.board"});
+    let refused = [
+        (json!([board, board]), "InvalidSite"),
+        (json!([{"space": ""}]), "InvalidRequest"),
+    ];
+    for (spaces, wanted) in refused {
+        let said = call(
+            &h,
+            &alice,
+            "putSite",
+            json!({"group": did, "files": files, "spaces": spaces}),
+        )
+        .await;
+        assert_eq!(error(&said), (400, wanted), "{spaces}");
+    }
+
+    // Reading spaces alone, its pages are served in the page that holds a
+    // session, which is told which spaces they read.
+    let members = format!("{NS}.members");
+    let spaces = json!([board, {"space": members}]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "spaces": spaces}),
+    )
+    .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+    let shell = page(&h, "/").await;
+    assert!(
+        shell.body.contains("data-src=\"/_site/\""),
+        "{}",
+        shell.body
+    );
+    let (_, config) = shell_of(&shell);
+    assert_eq!(config["spaces"], json!(["com.example.board", members]));
+
+    // Its OAuth client asks to read each, with the group as authority.
+    let client = page(&h, "/client-metadata.json").await;
+    let doc: Json = serde_json::from_str(&client.body).unwrap();
+    let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
+    let wanted = [
+        "atproto".to_string(),
+        format!("rpc:{NS}.getViewer?aud=did%3Aweb%3Ahost.test%23opensocial"),
+        format!("space:com.example.board?authority={did}&action=read"),
+        format!("space:{members}?authority={did}&action=read"),
+    ];
+    assert_eq!(scope, wanted);
+
+    // The record says so, for any app that reads it.
+    let kept = h.host.store.record(&did, SITE, "self").unwrap().unwrap();
+    let site = atproto::drisl::decode(&kept.value).unwrap().to_json();
+    assert_eq!(site["spaces"], spaces);
 }
 
 #[tokio::test]

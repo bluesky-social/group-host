@@ -193,42 +193,12 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             get(api::resolve_handle),
         )
         .route(
-            "/xrpc/com.atproto.space.getRecord",
-            get(space_api::get_record),
-        )
-        .route(
-            "/xrpc/com.atproto.space.listRecords",
-            get(space_api::list_records),
-        )
-        .route("/xrpc/com.atproto.space.getRepo", get(space_api::get_repo))
-        .route(
-            "/xrpc/com.atproto.space.getLatestCommit",
-            get(space_api::get_latest_commit),
-        )
-        .route(
-            "/xrpc/com.atproto.space.listRepoOps",
-            get(space_api::list_repo_ops),
-        )
-        .route("/xrpc/com.atproto.space.getBlob", get(space_api::get_blob))
-        .route(
-            "/xrpc/com.atproto.space.listBlobs",
-            get(space_api::list_blobs),
-        )
-        .route(
             "/xrpc/com.atproto.space.notifyCredentialsRevoked",
             post(space_api::notify_credentials_revoked),
         )
         .route(
-            "/xrpc/com.atproto.space.authorizeSpaceSync",
-            post(authority_api::authorize_space_sync),
-        )
-        .route(
             "/xrpc/com.atproto.space.notifyRepoUpdate",
             post(authority_api::notify_repo_update),
-        )
-        .route(
-            "/xrpc/com.atproto.space.listWriters",
-            get(authority_api::list_writers),
         )
         .route(
             "/xrpc/fyi.opensocial.createGroup",
@@ -460,6 +430,7 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
         .route("/console/logout", post(console_login::logout))
         .merge(token_routes())
         .merge(oauth_routes())
+        .merge(space_routes())
         .route(
             "/xrpc/fyi.opensocial.putSite",
             post(sites::put_site).layer(axum::extract::DefaultBodyLimit::max(site_limit)),
@@ -523,6 +494,44 @@ fn oauth_routes() -> Router<Arc<Host>> {
             post(mcp::revoke_connected_app),
         )
         .layer(axum::middleware::from_fn(oauth::cors))
+}
+
+/// What a space's member reads it by, from its authority and from each
+/// writer's repo here: open to any origin, as lex-space reads a space in
+/// a browser (the page around a group's site).
+fn space_routes() -> Router<Arc<Host>> {
+    Router::new()
+        .route(
+            "/xrpc/com.atproto.space.getRecord",
+            get(space_api::get_record),
+        )
+        .route(
+            "/xrpc/com.atproto.space.listRecords",
+            get(space_api::list_records),
+        )
+        .route("/xrpc/com.atproto.space.getRepo", get(space_api::get_repo))
+        .route(
+            "/xrpc/com.atproto.space.getLatestCommit",
+            get(space_api::get_latest_commit),
+        )
+        .route(
+            "/xrpc/com.atproto.space.listRepoOps",
+            get(space_api::list_repo_ops),
+        )
+        .route("/xrpc/com.atproto.space.getBlob", get(space_api::get_blob))
+        .route(
+            "/xrpc/com.atproto.space.listBlobs",
+            get(space_api::list_blobs),
+        )
+        .route(
+            "/xrpc/com.atproto.space.authorizeSpaceSync",
+            post(authority_api::authorize_space_sync),
+        )
+        .route(
+            "/xrpc/com.atproto.space.listWriters",
+            get(authority_api::list_writers),
+        )
+        .layer(axum::middleware::from_fn(space_api::cors))
 }
 
 /// The methods an app calls with a token, as the group: open to any

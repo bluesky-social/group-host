@@ -706,10 +706,10 @@ test('a site showing its members to whoever signs in on it, and writing for them
   };
   document.getElementById('accept').onclick = async () => {
     const { did } = await os.group();
-    const space = 'at://' + did + '/space/fyi.opensocial.members/self';
-    const record = { $type: 'fyi.opensocial.acceptance', createdAt: new Date().toISOString() };
+    const members = os.space('at://' + did + '/space/fyi.opensocial.members/self');
+    const value = { createdAt: new Date().toISOString() };
     try {
-      await os.put(space, 'fyi.opensocial.acceptance', 'self', record);
+      await members.put('fyi.opensocial.acceptance', value, { rkey: 'self' });
     } catch (e) {
       place.textContent = 'Not written: ' + e.message;
       return;

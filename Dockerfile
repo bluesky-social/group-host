@@ -27,13 +27,20 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && cp target/deploy/group-host target/deploy/opensocial /
 
 # The console, its types made from the lexicons beside it, and the page
-# the host serves around a site that asks for live data (web/shell).
+# the host serves around a site that asks for live data (web/shell),
+# which builds on the SDK beside it (packages/sdk, its types made from the
+# same lexicons).
 FROM node:24.22.1-bookworm-slim AS console
+WORKDIR /packages/sdk
+COPY packages/sdk/package.json packages/sdk/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY packages/sdk/ ./
+COPY lexicons/ /lexicons/
+RUN npm run lex
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
-COPY lexicons/ /lexicons/
 RUN npm run build
 
 # adapter-node bundles what the console imports, so it needs no

@@ -6,11 +6,13 @@ cargo := "env PATH='" + toolchain + ":" + env_var('PATH') + "' rustup run stable
 ignore := "(tests/|harness/)"
 # oxfmt, from the console's packages, and what it formats.
 oxfmt := "web/node_modules/.bin/oxfmt"
-js := "web harness docs-site"
+js := "web packages/sdk harness docs-site"
 
-# Install the web pages' packages, the harness's (the reference PDS the
-# tests reach the network through), and coverage tools.
+# Install the web pages' packages, the SDK's they build on, the harness's
+# (the reference PDS the tests reach the network through), and coverage
+# tools.
 setup:
+    cd packages/sdk && npm ci --no-audit --no-fund
     cd web && npm install --no-audit --no-fund
     cd harness && npm ci --no-audit --no-fund
     rustup component add llvm-tools-preview --toolchain stable
@@ -56,10 +58,12 @@ lint:
     {{cargo}} clippy --workspace --all-targets -- -D warnings
     node harness/layers.mjs
     node harness/dialogs.mjs
+    cd packages/sdk && npm run check
     cd web && npm run check
 
-# Formats the Rust (rustfmt) and the console's, the harness's and the docs
-# site's code (oxfmt, by .oxfmtrc.json), as `lint` and the checks expect.
+# Formats the Rust (rustfmt) and the console's, the SDK's, the harness's
+# and the docs site's code (oxfmt, by .oxfmtrc.json), as `lint` and the
+# checks expect.
 fmt:
     {{cargo}} fmt --all
     {{oxfmt}} {{js}}

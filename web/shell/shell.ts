@@ -2,8 +2,10 @@
 // (crates/group-host/src/sites.rs): an atproto OAuth client of its own at
 // the group's address, holding the visitor's session. The site's page,
 // sandboxed in its frame, is all a visitor sees; it asks this page, by
-// `os` (crates/group-host/src/site_kit.js), for a read the site declared,
-// made as the visitor through their PDS, for a write it declared, made in
+// `os` (kit.js beside it, the messages in protocol.ts), for a read the site declared,
+// made as the visitor through their PDS, for the records of one of the
+// group's spaces of a type it declared, read whole as the visitor from
+// each writer's repo (@opensocial/sdk), for a write it declared, made in
 // the visitor's own repo in one of the group's spaces, and to sign them in
 // or out.
 //
@@ -12,12 +14,22 @@
 // what they see and confirm here. Their password is only ever typed at
 // their own PDS.
 
-import { BrowserOAuthClient, type OAuthSession } from '@atproto/oauth-client-browser';
+import { type NsidString, XrpcResponseError, l } from '@atproto/lex';
+import {
+  BrowserOAuthClient,
+  type OAuthSession,
+  TokenInvalidError,
+  TokenRefreshError,
+  TokenRevokedError,
+  createDidResolver
+} from '@atproto/oauth-client-browser';
+import { GroupSpace } from '@opensocial/sdk';
 import { mount } from 'svelte';
 import consoleStyles from '../src/app.css?inline';
 import { SIGN_IN } from '../src/lib/signIn.ts';
 import SiteSignIn from './SiteSignIn.svelte';
 import { signing } from './signing.svelte.ts';
+import type { Ask, Push, Refusal, Reply, Synced, Tell, Written } from './protocol.ts';
 
 type Config = {
   group: string;
@@ -25,28 +37,13 @@ type Config = {
   reads: string[];
   acts: string[];
   writes: { space: string; collection: string }[];
+  spaces: string[];
   aud: string;
   handleResolver: string;
   plc: string;
   allowHttp: boolean;
   signUpAt: string;
   console: string;
-};
-type Message = {
-  os?: number;
-  type?: string;
-  id?: number;
-  method?: string;
-  params?: object;
-  hint?: string;
-  path?: string;
-  title?: string;
-  space?: string;
-  collection?: string;
-  rkey?: string;
-  record?: object;
-  file?: unknown;
-  input?: object;
 };
 
 const config: Config = JSON.parse(document.getElementById('os-config')?.textContent ?? '{}');
@@ -165,60 +162,212 @@ async function upload(file: unknown) {
 }
 
 /** The procedure each write is, at the visitor's PDS. */
-const WRITES: Record<string, string> = {
+const WRITES = {
   create: 'com.atproto.space.createRecord',
   put: 'com.atproto.space.putRecord',
   delete: 'com.atproto.space.deleteRecord'
 };
 
 /**
+ * One of the group's spaces, `at://<group>/space/<type>/<skey>`, by its
+ * type and key; nothing for any other URI.
+ */
+function groupSpace(space: string) {
+  const [authority, kw, type, skey, more] = space.replace(/^at:\/\//, '').split('/');
+  if (!space.startsWith('at://') || authority !== config.group || kw !== 'space') return;
+  if (!type || !skey || more !== undefined) return;
+  return { type, skey };
+}
+
+/**
  * Whether the site declared writes of `collection` in `space`: one of the
- * group's spaces (`at://<group>/space/<type>/<skey>`) of a type it names
- * with that collection.
+ * group's spaces of a type it names with that collection.
  */
 function declared(space: string, collection: string) {
-  const [authority, kw, type, skey, more] = space.replace(/^at:\/\//, '').split('/');
-  if (!space.startsWith('at://') || authority !== config.group || kw !== 'space') return false;
-  if (!skey || more !== undefined) return false;
+  const type = groupSpace(space)?.type;
   return config.writes.some((w) => w.space === type && w.collection === collection);
 }
 
-/** A write in the visitor's own repo, in one of the group's spaces, at their PDS. */
-async function write(type: string, m: Message) {
+/** A write the frame asks, its space and collection checked against the site's declaration. */
+type Write = Extract<Ask, { type: 'create' | 'put' | 'delete' }>;
+
+/**
+ * A write in the visitor's own repo, in one of the group's spaces, at their
+ * PDS: a record `value` of `collection`, its `$type`. Answers the record's
+ * `uri` and `cid`, or nothing for a delete.
+ */
+async function write(m: Write): Promise<Written | undefined> {
   if (!session) throw new Refused('sign in', 401);
-  const { space, collection, rkey, record } = m;
+  const { space, collection } = m;
+  const rkey = 'rkey' in m && m.rkey ? String(m.rkey) : undefined;
+  const value = 'value' in m ? m.value : undefined;
+  if (m.type !== 'delete' && (!value || typeof value !== 'object' || Array.isArray(value)))
+    throw new Error('a record is an object');
   const body = {
     repo: session.sub,
     space,
     collection,
     ...(rkey ? { rkey } : {}),
-    ...(record ? { record } : {})
+    ...(value ? { record: { ...value, $type: collection } } : {})
   };
-  const res = await session.fetchHandler(`/xrpc/${WRITES[type]}`, {
+  const res = await session.fetchHandler(`/xrpc/${WRITES[m.type]}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
   });
   const said = await res.json().catch(() => null);
-  if (res.ok) return said ?? {};
-  return await unwritten(res, said);
+  if (!res.ok) return await unwritten(res, said);
+  return m.type === 'delete' ? undefined : { uri: said?.uri, cid: said?.cid };
 }
+
+/** Whether a refusal of the visitor's PDS is for want of scope. */
+const unscoped = (status: number, error?: string, message?: string) =>
+  (status === 401 || status === 403) &&
+  `${error ?? ''} ${message ?? ''}`.toLowerCase().includes('scope');
 
 /**
  * A write or an upload the visitor's PDS refused, thrown. A sign-in from
  * before the site wrote this, refused for want of scope, is forgotten, so
  * signing in again grants it.
  */
-async function unwritten(res: Response, said: { error?: string; message?: string } | null) {
-  const scope = `${said?.error ?? ''} ${said?.message ?? ''}`.toLowerCase().includes('scope');
-  if (scope && (res.status === 401 || res.status === 403)) {
-    await session?.signOut().catch(() => {});
-    session = null;
-    viewer = {};
-    changed();
+async function unwritten(
+  res: Response,
+  said: { error?: string; message?: string } | null
+): Promise<never> {
+  if (unscoped(res.status, said?.error, said?.message)) {
+    await drop();
     throw new Refused('sign in', 401);
   }
   throw new Refused(said?.message ?? res.statusText, res.status);
+}
+
+/**
+ * Forgets the visitor's session, and the spaces read as them, so that the
+ * frame shows nobody signed in.
+ */
+async function drop() {
+  await session?.signOut().catch(() => {});
+  session = null;
+  viewer = {};
+  spaces.clear();
+  changed();
+}
+
+/**
+ * The records the visitor reads, kept in this address's IndexedDB by the
+ * key GroupSpace names them by (the member's DID, then the space's URI),
+ * so that a member's next visit reads on from where this one stopped. It
+ * only saves reading again: a browser that keeps nothing reads in full.
+ */
+const KEPT = 'spaces';
+let keeping: Promise<IDBDatabase> | undefined;
+const kept = () =>
+  (keeping ??= new Promise((resolve, reject) => {
+    const open = indexedDB.open('os-spaces', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore(KEPT);
+    open.onsuccess = () => resolve(open.result);
+    open.onerror = () => reject(open.error);
+  }));
+
+/** One request of the kept records, in a transaction of its own. */
+async function keep<T>(mode: IDBTransactionMode, ask: (s: IDBObjectStore) => IDBRequest<T>) {
+  const request = ask((await kept()).transaction(KEPT, mode).objectStore(KEPT));
+  return await new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+const store: GroupSpace.Store = {
+  get: (key) =>
+    keep('readonly', (s) => s.get(key) as IDBRequest<string | undefined>).catch((err) => {
+      console.warn('reading kept records failed', err);
+      return undefined;
+    }),
+  put: (key, value) =>
+    keep('readwrite', (s) => s.put(value, key)).then(
+      () => {},
+      (err) => console.warn('keeping records failed', err)
+    )
+};
+
+/** Resolves the group's DID to its host, on the PLC the host names. */
+const didResolver = createDidResolver({ plcDirectoryUrl: config.plc });
+
+/** A space of the group's, of a type this page knows only by its NSID. */
+type Read = GroupSpace<l.Space<NsidString, 'any', readonly []>>;
+
+/**
+ * The group's spaces the frame has read, by URI, each as the visitor, for
+ * the page's life: each read reads on from the last, and tells the frame
+ * when it changes the records.
+ */
+const spaces = new Map<string, Read>();
+
+/**
+ * One of the group's spaces, of `type` and key `skey`, brought up to date
+ * as the visitor reads it: every record held, and the writers whose host
+ * failed, whose records last read are kept.
+ */
+async function sync(uri: string, type: string, skey: string): Promise<Synced> {
+  if (!session) throw new Refused('sign in', 401);
+  let space = spaces.get(uri);
+  if (!space) {
+    const opened = GroupSpace.open(
+      l.space('any', type as NsidString, []),
+      { authority: config.group as `did:${string}:${string}`, skey },
+      { agent: session, store, didResolver }
+    );
+    opened.onChange((records) => {
+      if (spaces.get(uri) !== opened) return;
+      const told: Push = { os: 1, type: 'records', space: uri, records };
+      frame.contentWindow?.postMessage(told, '*');
+    });
+    spaces.set(uri, (space = opened));
+  }
+  let failed;
+  try {
+    ({ failed } = await space.sync());
+  } catch (err) {
+    return await unread(err);
+  }
+  for (const { repo, error } of failed) console.warn(`reading ${repo} in ${uri} failed`, error);
+  return {
+    failed: failed.map(({ repo, error }) => ({
+      repo,
+      error: error instanceof Error ? error.message : String(error)
+    })),
+    records: space.records()
+  };
+}
+
+/** The errors an error was caused by, it first. */
+function* causes(err: unknown) {
+  for (let e = err; e !== undefined; e = e instanceof Error ? e.cause : undefined) yield e;
+}
+
+/**
+ * A read of a space that failed, thrown: refused for who is looking when
+ * the authority does not let the visitor in (`SpaceNotFound`, 401, 403).
+ * A session that ended, or one from before the site read this space,
+ * without its scope, is forgotten, so signing in again grants it.
+ */
+async function unread(err: unknown): Promise<never> {
+  const ended = [...causes(err)].some(
+    (e) =>
+      e instanceof TokenRefreshError ||
+      e instanceof TokenRevokedError ||
+      e instanceof TokenInvalidError ||
+      (e instanceof XrpcResponseError && (e.error === 'ExpiredToken' || e.error === 'InvalidToken'))
+  );
+  const said = err instanceof XrpcResponseError ? err : undefined;
+  if (ended || (said && unscoped(said.status, said.error, said.message))) {
+    await drop();
+    throw new Refused('sign in', 401);
+  }
+  if (said?.error === 'SpaceNotFound') throw new Refused(said.message || 'SpaceNotFound', 403);
+  if (said && (said.status === 401 || said.status === 403)) throw new Refused(said.message, 403);
+  throw err;
 }
 
 // Who is signed in, by their handle; a session whose server can't be
@@ -244,7 +393,10 @@ const ready = restore().then(async (start) => (await look(), start));
 const me = () => ({ signedIn: !!session, did: session?.sub, handle: viewer.handle });
 
 /** Tells the page who is looking now. */
-const changed = () => frame.contentWindow?.postMessage({ os: 1, type: 'changed', me: me() }, '*');
+const changed = () => {
+  const told: Push = { os: 1, type: 'changed', me: me() };
+  frame.contentWindow?.postMessage(told, '*');
+};
 
 // The sign-in dialog: a handle, or making an account, then off to the
 // visitor's own server, coming back to the page it was opened on.
@@ -286,7 +438,7 @@ function openSignIn(hint?: string) {
  * reload or a copied link opens. The frame's own history entries already
  * make Back go back through it.
  */
-function follow({ path, title }: Message) {
+function follow({ path, title }: Extract<Tell, { type: 'at' }>) {
   if (typeof path !== 'string' || !path.startsWith('/_site/')) return;
   history.replaceState(null, '', path.slice('/_site'.length));
   document.title = (typeof title === 'string' && title.trim().slice(0, 200)) || config.handle;
@@ -296,7 +448,7 @@ function follow({ path, title }: Message) {
  * What the frame is told of a read or a write refused: locked, with why,
  * where it was refused for who is looking (no one, or not them).
  */
-function refusal(err: unknown) {
+function refusal(err: unknown): Refusal {
   const locked = err instanceof Refused && (err.status === 401 || err.status === 403);
   const reason = err instanceof Error && err.message === 'sign in' ? 'sign in' : 'not for you';
   return {
@@ -307,20 +459,27 @@ function refusal(err: unknown) {
 
 addEventListener('message', async (e) => {
   if (e.source !== frame.contentWindow) return;
-  const m: Message = e.data;
+  const m: Ask | Tell = e.data;
   if (!m || m.os !== 1) return;
   if (m.type === 'at') return follow(m);
   await ready;
-  const reply = (body: object) =>
-    frame.contentWindow?.postMessage({ os: 1, type: 'reply', id: m.id, ...body }, '*');
+  if (m.type === 'signIn') return openSignIn(m.hint);
+  if (m.type === 'signOut') {
+    // What was kept of the spaces read as them, forgotten with them.
+    const did = session?.sub;
+    await drop();
+    if (did)
+      await keep('readwrite', (s) => s.delete(IDBKeyRange.bound(`${did} `, `${did} \uffff`))).catch(
+        (err) => console.warn('forgetting kept records failed', err)
+      );
+    return;
+  }
+  const reply = (body: { value: unknown } | Refusal) => {
+    const told: Reply = { os: 1, type: 'reply', id: m.id, ...body };
+    frame.contentWindow?.postMessage(told, '*');
+  };
+  const locked: Refusal = { error: 'sign in', locked: true, reason: 'sign in' };
   switch (m.type) {
-    case 'signIn':
-      return openSignIn(m.hint);
-    case 'signOut':
-      await session?.signOut().catch(() => {});
-      session = null;
-      viewer = {};
-      return changed();
     case 'group':
       return reply({
         value: { did: config.group, handle: config.handle, console: config.console }
@@ -331,7 +490,7 @@ addEventListener('message', async (e) => {
       const method = String(m.method);
       if (!config.reads.includes(method))
         return reply({ error: `${method} is none of the reads this site declares` });
-      if (!session) return reply({ error: 'sign in', locked: true, reason: 'sign in' });
+      if (!session) return reply(locked);
       try {
         return reply({ value: await ask(method, m.params ?? {}) });
       } catch (err) {
@@ -342,9 +501,21 @@ addEventListener('message', async (e) => {
       const method = String(m.method);
       if (!config.acts.includes(method))
         return reply({ error: `${method} is none of the acts this site declares` });
-      if (!session) return reply({ error: 'sign in', locked: true, reason: 'sign in' });
+      if (!session) return reply(locked);
       try {
         return reply({ value: await act(method, m.input ?? {}) });
+      } catch (err) {
+        return reply(refusal(err));
+      }
+    }
+    case 'sync': {
+      const space = String(m.space);
+      const ref = groupSpace(space);
+      if (!ref || !config.spaces.includes(ref.type))
+        return reply({ error: `${space} is none of the spaces this site declares` });
+      if (!session) return reply(locked);
+      try {
+        return reply({ value: await sync(space, ref.type, ref.skey) });
       } catch (err) {
         return reply(refusal(err));
       }
@@ -357,9 +528,9 @@ addEventListener('message', async (e) => {
         return reply({
           error: `${collection} in ${space} is none of the writes this site declares`
         });
-      if (!session) return reply({ error: 'sign in', locked: true, reason: 'sign in' });
+      if (!session) return reply(locked);
       try {
-        return reply({ value: await write(String(m.type), m) });
+        return reply({ value: await write({ ...m, space, collection }) });
       } catch (err) {
         return reply(refusal(err));
       }

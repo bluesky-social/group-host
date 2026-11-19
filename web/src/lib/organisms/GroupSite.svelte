@@ -24,6 +24,8 @@
     ['fyi.opensocial.getSpaceBlob', 'Pictures and files in those posts'],
     ['fyi.opensocial.getActor', "People's profiles"]
   ];
+  // What a site's pages may do for whoever signs in, in the reader's words.
+  const acts = [['fyi.opensocial.createReport', 'Report posts and members to moderators']];
   // Each file's path under the folder chosen, as the browser gives them,
   // in the files' order: a form sends each file by its name alone.
   let paths = $state('[]');
@@ -74,7 +76,16 @@
     /></label
   >
   <input type="hidden" name="paths" value={paths} />
-  <details class="more" open={!!(site?.reads.length || site?.writes.length || site?.fallback)}>
+  <details
+    class="more"
+    open={!!(
+      site?.reads.length ||
+      site?.acts.length ||
+      site?.spaces.length ||
+      site?.writes.length ||
+      site?.fallback
+    )}
+  >
     <summary>Advanced</summary>
     <label class="field"
       ><span
@@ -101,6 +112,36 @@
             name="reads"
             value={method}
             checked={site?.reads.includes(method) ?? false}
+          />
+          {words}</label
+        >{/each}
+    </fieldset>
+    <fieldset class="choices">
+      <legend>Let pages show every post in a space</legend>
+      <p class="mute">
+        Pages that ask for these spaces see every post in them. People who sign in see only what the
+        group lets them see.
+      </p>
+      <label class="field"
+        ><span>Kinds of space, one per line <span class="optional">(optional)</span></span>
+        <textarea
+          name="spaces"
+          rows="2"
+          class="mono"
+          spellcheck="false"
+          placeholder="com.example.place.room">{site?.spaces.join('\n') ?? ''}</textarea
+        ></label
+      >
+    </fieldset>
+    <fieldset class="choices">
+      <legend>Let pages act for people who sign in</legend>
+      <p class="mute">Pages can do these for people who sign in, in their name.</p>
+      {#each acts as [method, words] (method)}<label
+          ><input
+            type="checkbox"
+            name="acts"
+            value={method}
+            checked={site?.acts.includes(method) ?? false}
           />
           {words}</label
         >{/each}

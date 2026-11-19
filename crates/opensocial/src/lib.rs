@@ -59,12 +59,13 @@ role
                          add to what a role may do, or with --undo take it away
 site
   site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]
-          [--acts <methods>] [--writes <space:collection,…>]
+          [--acts <methods>] [--spaces <type,…>] [--writes <space:collection,…>]
                          publish the files under <dir> as the group's website, at its
                          address, in place of the one there; with --reads, the host's
                          methods its pages may ask as whoever signs in on it; with
                          --acts, the host's procedures they may ask as that person, such
-                         as createReport; with
+                         as createReport; with --spaces, the types of the group's spaces
+                         they may read whole as that person, each by its NSID; with
                          --writes, the records they may write in that person's own repo,
                          each a type of the group's spaces and a collection there
   site delete <group>    take the group's website down
@@ -681,7 +682,8 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             Ok(stats_lines(&said))
         }
         ["site", "publish", rest @ ..] => {
-            let a = parse(rest, &["fallback", "not-found", "reads", "acts", "writes"])?;
+            let flags = ["fallback", "not-found", "reads", "acts", "spaces", "writes"];
+            let a = parse(rest, &flags)?;
             let [group, dir] = a.take()?;
             let mut given = json!({"files": site_files(std::path::Path::new(dir))?});
             for (flag, name) in [("fallback", "fallback"), ("not-found", "not_found")] {
@@ -699,6 +701,12 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
                     let methods = listed.split(',').map(str::trim).filter(|r| !r.is_empty());
                     given[key] = methods.map(|r| json!({"method": named(r)})).collect();
                 }
+            }
+            // Each a type of the group's spaces, by its NSID: not ours to
+            // name by its last part.
+            if let Some(listed) = a.flags.get("spaces") {
+                let kinds = listed.split(',').map(str::trim).filter(|s| !s.is_empty());
+                given["spaces"] = kinds.map(|s| json!({"space": s})).collect();
             }
             // Each a type of the group's spaces and a collection there.
             if let Some(writes) = a.flags.get("writes") {

@@ -47,7 +47,8 @@ accounts on their own PDSes, anywhere on the network.
 | `crates/group-host` | the server, over SQLite: accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries |
 | `crates/group-host-mcp` | the MCP tools, each the twin of an `opensocial` command, and what each call comes to, carried out by the host as the member who connected an MCP client and by the command as the person running it |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command ([commands](../reference/cli.md)) |
-| `web/` | the console, a SvelteKit app where people start and run groups and approve apps |
+| `web/` | the console, a SvelteKit app where people start and run groups and approve apps; and the page the host serves around a group's site, with the kit its pages load ([the site kit](../reference/site-kit.md)), and the messages between them (`web/shell`) |
+| `packages/sdk` | `@opensocial/sdk`, for apps on group hosts: a group's spaces read and written with atproto's lex-space, and the host's own methods, as a member ([the SDK](../reference/sdk.md)) |
 | `Dockerfile`, `deploy/` | one image of the host, the console and the command, and the compose file that runs it ([deploying](../deploying.md)) |
 | `lexicons/` | the schemas of the records and methods: every `fyi.opensocial.*` method's parameters and input are checked against its own before its handler runs, and a record of our own collections an app writes as a group before it is kept |
 

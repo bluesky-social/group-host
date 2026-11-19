@@ -1,6 +1,6 @@
 # The site kit
 
-The site kit is a script, `/_os/kit.js`, that lets a page of a group's site ask the host for the visitor's data: who they are, what the group's methods answer them, and records written in their own repo. Only a live site has it: one whose record names at least one of `reads`, `acts` or `writes`. Such a site's pages run in a sandboxed frame inside a page of the host's, which holds the visitor's session; [the design page on sites](../design/sites.md) says why.
+The site kit is a script, `/_os/kit.js`, that lets a page of a group's site ask the host for the visitor's data: who they are, what the group's methods answer them, every record of the group's spaces they may read, and records written in their own repo. Only a live site has it: one whose record names at least one of `reads`, `spaces`, `acts` or `writes`. Such a site's pages run in a sandboxed frame inside a page of the host's, which holds the visitor's session; [the design page on sites](../design/sites.md) says why.
 
 ## Loading it
 
@@ -15,11 +15,11 @@ It defines `window.os`, the object every ask below is a method of, and the custo
 
 As it loads, and on each `history.pushState`, `history.replaceState`, `popstate` and `hashchange`, the kit tells the host's page where the frame's page is and what it is called. The host's page puts that path in the address bar and the title on the tab, so a reload or a shared link opens the same page.
 
-On a site that names none of `reads`, `acts` or `writes`, the host serves the site's files alone, with no page around them, and `/_os/kit.js` is an ordinary path of the site: a 404 unless the site has a file there.
+On a site that names none of `reads`, `spaces`, `acts` or `writes`, the host serves the site's files alone, with no page around them, and `/_os/kit.js` is an ordinary path of the site: a 404 unless the site has a file there.
 
 ## What a site declares
 
-A site declares what its pages may ask in its `fyi.opensocial.site` record. Give the lists with `site publish --reads`, `--acts` and `--writes` ([commands](cli.md)), or as `reads`, `acts` and `writes` to `putSite` ([the API](api.md)). Each list holds at most 20 entries.
+A site declares what its pages may ask in its `fyi.opensocial.site` record. Give the lists with `site publish --reads`, `--spaces`, `--acts` and `--writes` ([commands](cli.md)), or as `reads`, `spaces`, `acts` and `writes` to `putSite` ([the API](api.md)). Each list holds at most 20 entries.
 
 `reads` is a list of `{method}`, each one of the host's methods `os.call` may ask:
 
@@ -30,19 +30,21 @@ A site declares what its pages may ask in its `fyi.opensocial.site` record. Give
 - `fyi.opensocial.getActor`
 - `fyi.opensocial.getViewer`
 
+`spaces` is a list of `{space}`, each a type of the group's spaces whose records a page may read whole with [`os.space`](#osspace), such as `com.example.place.room`. No type may be named twice.
+
 `acts` is a list of `{method}`, each a procedure `os.act` may ask. The only one is `fyi.opensocial.createReport`, reporting what the visitor sees ([moderation](../design/moderation.md)).
 
-`writes` is a list of `{space, collection}`: `space` a type of the group's spaces, `collection` an NSID. An entry lets `os.create`, `os.put` and `os.delete` write records of that collection in any of the group's spaces of that type. A site with at least one entry in `writes` may also `os.upload` pictures. Whether a given visitor may write in a given space is still for that space's access record to say.
+`writes` is a list of `{space, collection}`: `space` a type of the group's spaces, `collection` an NSID. An entry lets a space's `create`, `put` and `delete` ([`os.space`](#osspace)) write records of that collection in any of the group's spaces of that type. A site with at least one entry in `writes` may also `os.upload` pictures. Whether a given visitor may write in a given space is still for that space's access record to say.
 
-On the command line, `--reads` and `--acts` take NSIDs or their last parts, comma-separated (`--reads getGroup,listMembers`, `--acts createReport`), and `--writes` takes `space:collection` pairs (`--writes fyi.opensocial.members:fyi.opensocial.acceptance`). A read or an act that is none of those above is refused with `InvalidSite`.
+On the command line, `--reads` and `--acts` take NSIDs or their last parts, comma-separated (`--reads getGroup,listMembers`, `--acts createReport`), `--spaces` takes space types by NSID (`--spaces com.example.place.room,com.example.place.calendar`), and `--writes` takes `space:collection` pairs (`--writes fyi.opensocial.members:fyi.opensocial.acceptance`). A read or an act that is none of those above is refused with `InvalidSite`.
 
-When a visitor signs in, the host's page asks their PDS for permission to each declared read and act, `fyi.opensocial.getViewer`, each declared write, and uploads of `image/*` if the site declares any writes.
+When a visitor signs in, the host's page asks their PDS for permission to each declared read and act, `fyi.opensocial.getViewer`, reading each declared space type in this group, each declared write, and uploads of `image/*` if the site declares any writes.
 
-`os.group`, `os.me`, `os.signIn`, `os.signOut` and `os.onChange` need no declaration beyond the site being live.
+`os.group`, `os.me`, `os.space`, `os.signIn`, `os.signOut` and `os.onChange` need no declaration beyond the site being live; what a space's methods may do is declared as above.
 
 ## The asks
 
-Every ask but `os.signIn`, `os.signOut` and `os.onChange` returns a Promise. It is answered once the host's page has restored the visitor's session, and a refusal rejects it with an `Error` ([refusals](#refusals)).
+Every ask but `os.space`, `os.signIn`, `os.signOut`, `os.onChange`, and a space's `records` and `onChange`, returns a Promise. It is answered once the host's page has restored the visitor's session, and a refusal rejects it with an `Error` ([refusals](#refusals)).
 
 ### os.group
 
@@ -64,25 +66,43 @@ It is refused, unlocked, if `method` is none of the site's `reads`; locked with 
 
 It is refused as `os.call` is. If the visitor's sign-in does not cover the act, the host's page signs them out, `os.onChange` hears it, and the ask is refused locked with `sign in`.
 
+### os.space
+
+`os.space(uri)` opens one of this group's spaces, `at://<group DID>/space/<type>/<skey>`, as [the SDK](sdk.md)'s `GroupSpace` does: the page syncs its records and holds them, and writes the visitor's own records in it. It answers the same object each time the page asks for the same `uri`, and makes no request until one of its methods does. Its `uri` is the space's URI.
+
+#### space.sync
+
+`space.sync()` brings the records the page holds of the space up to date, and answers `{failed}`. The host's page reads the records itself, in the visitor's browser: every writer's repo in the space, from that writer's own PDS, each checked against the commit it comes to. It keeps what it read for as long as the page is open, and in the browser between visits, so the first sync reads every writer's repo in full and each later one fetches only what changed. `failed` lists, as `{repo, error}`, the writers whose PDS did not answer: they keep the records last read from them, and are read again at the next sync.
+
+It is refused, unlocked, if `uri` is none of this group's spaces or of a type the site does not name in `spaces`; locked with `sign in` if nobody is signed in; and locked with `not for you` if the space's access record does not let the visitor read it.
+
+#### space.records
+
+`space.records({collections} = {})` answers, at once, the records the page holds, as `{uri, repo, collection, rkey, cid, value}` objects: `uri` the record's address in the space, `repo` its writer's DID, `value` the record as JSON. With `collections`, an array of NSIDs, it answers those collections' records alone. Before the first sync it answers none. Their order is not defined; a page sorts them as it shows them.
+
+#### space.onChange
+
+`space.onChange(fn)` calls `fn(records)`, with every record the page holds, after each sync that changes them, the page's first sync included. It returns a function that stops the calls.
+
+#### space.create
+
+`space.create(collection, value, {rkey} = {})` writes `value`, a record of `collection` (its `$type`), in the visitor's own repo in the space, at `rkey` if given. It answers `{uri, cid}`. What the page holds does not change until its next sync.
+
+It is refused, unlocked, unless the space is one of this group's and some entry of `writes` has its type and `collection`, or if `value` is not an object; then locked with `sign in` if nobody is signed in. Refusals from the PDS are as for `os.act`: a sign-in that does not cover the write is signed out and refused with `sign in`.
+
+#### space.put
+
+`space.put(collection, value, {rkey})` writes `value` at `rkey`, in place of what is there. Otherwise it is as `space.create`.
+
+#### space.delete
+
+`space.delete(collection, {rkey})` deletes the visitor's own record at `rkey`, and answers nothing. Otherwise it is as `space.create`.
+
 ### os.upload
 
 `os.upload(file)` uploads a picture, a `File` or `Blob` whose `type` starts with `image/`, to the visitor's own PDS, for a record the site writes to point to. It answers the blob's reference, `{$type: 'blob', ref, mimeType, size}`, for the record to hold. The size limit is the visitor's PDS's.
 
 It is refused, unlocked, if the site declares no `writes`, or if `file` is not a picture; then locked with `sign in` if nobody is signed in. Refusals from the PDS are as for `os.act`.
-
-### os.create
-
-`os.create(space, collection, record, {rkey} = {})` writes `record` in the visitor's own repo, in `space`, in `collection`, at `rkey` if given. `space` is one of this group's spaces, `at://<group DID>/space/<type>/<skey>`. It answers what the PDS answers, `{uri, cid}`.
-
-It is refused, unlocked, unless `space` is one of this group's spaces and some entry of `writes` has its type and `collection`; then locked with `sign in` if nobody is signed in. Refusals from the PDS are as for `os.act`: a sign-in that does not cover the write is signed out and refused with `sign in`.
-
-### os.put
-
-`os.put(space, collection, rkey, record)` writes `record` at `rkey`, in place of what is there. Otherwise it is as `os.create`.
-
-### os.delete
-
-`os.delete(space, collection, rkey)` deletes the visitor's own record at `rkey`. It answers what the PDS answers, or `{}`. Otherwise it is as `os.create`.
 
 ### os.signIn
 
@@ -164,9 +184,9 @@ A page that lists the members to those who may see them, and lets a member take 
   };
   document.getElementById('accept').onclick = async () => {
     const { did } = await os.group();
-    const space = 'at://' + did + '/space/fyi.opensocial.members/self';
-    const record = { $type: 'fyi.opensocial.acceptance', createdAt: new Date().toISOString() };
-    await os.put(space, 'fyi.opensocial.acceptance', 'self', record);
+    const members = os.space('at://' + did + '/space/fyi.opensocial.members/self');
+    const value = { createdAt: new Date().toISOString() };
+    await members.put('fyi.opensocial.acceptance', value, { rkey: 'self' });
   };
   os.onChange(draw);
   draw();

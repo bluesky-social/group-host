@@ -71,8 +71,8 @@ fn blob_of(file: &Value) -> Option<atproto::Cid> {
 }
 
 /// Refuses a site the host would not serve: one whose paths [`paths`]
-/// refuses, a file naming no blob, or a read or an act that is none of
-/// [`READS`] or [`ACTS`].
+/// refuses, a file naming no blob, a read or an act that is none of
+/// [`READS`] or [`ACTS`], or `spaces` [`spaces`] refuses.
 pub fn check(site: &Value) -> Result<(), XrpcError> {
     paths(site)?;
     for file in site["files"].as_array().into_iter().flatten() {
@@ -81,7 +81,8 @@ pub fn check(site: &Value) -> Result<(), XrpcError> {
             return Err(refused(format!("{path} names no blob")));
         }
     }
-    methods(site)
+    methods(site)?;
+    spaces(site)
 }
 
 /// The host's methods a site's pages may ask, as whoever is looking and
@@ -124,9 +125,37 @@ fn writes_of(site: &Value) -> Vec<(&str, &str)> {
         .collect()
 }
 
-/// Whether a site asks for its visitor's session: to read, act or write.
+/// The space types a site's `spaces` name: those its pages read whole,
+/// as the visitor.
+fn spaces_of(site: &Value) -> Vec<&str> {
+    let all = site["spaces"].as_array().into_iter().flatten();
+    all.map(|s| s["space"].as_str().unwrap_or_default())
+        .collect()
+}
+
+/// Whether a site asks for its visitor's session: to read, act, read
+/// spaces or write.
 fn is_live(site: &Value) -> bool {
-    !reads_of(site).is_empty() || !acts_of(site).is_empty() || !writes_of(site).is_empty()
+    !reads_of(site).is_empty()
+        || !acts_of(site).is_empty()
+        || !spaces_of(site).is_empty()
+        || !writes_of(site).is_empty()
+}
+
+/// Refuses a site whose `spaces` name no type, or one type twice.
+fn spaces(site: &Value) -> Result<(), XrpcError> {
+    let mut seen = BTreeSet::new();
+    for kind in spaces_of(site) {
+        if kind.is_empty() {
+            return Err(refused("a site's space names no type".to_string()));
+        }
+        if !seen.insert(kind) {
+            return Err(refused(format!(
+                "{kind} is named twice in the site's spaces"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Refuses a site whose `reads` or `acts` name a method that is none of
@@ -507,8 +536,9 @@ pub async fn serve(State(host): State<Arc<Host>>, req: Request, next: Next) -> R
     }
 }
 
-/// The script a site's page runs to ask the page around it, `os`.
-const KIT: &str = include_str!("site_kit.js");
+/// The script a site's page runs to ask the page around it, `os`: kept
+/// beside that page's own (`web/shell`), with the messages between them.
+const KIT: &str = include_str!("../../../web/shell/kit.js");
 
 /// What the page around a site's pages allows itself: its own script, and
 /// calls to any PDS its visitor signs in at.
@@ -559,7 +589,8 @@ fn script(bytes: Vec<u8>) -> Response {
 
 /// The site's OAuth client document, at its address `origin`: `atproto`;
 /// leave to ask each of its `reads` and `acts`, and `getViewer`, of the
-/// host; and to make each of its `writes` in the visitor's own repo, in the group
+/// host; to read each of its `spaces` whole, in the group `did`'s spaces
+/// of that type; and to make each of its `writes` in the visitor's own repo, in the group
 /// `did`'s spaces of that type alone, with pictures they upload for those
 /// records to point to.
 fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Value) -> Response {
@@ -574,6 +605,9 @@ fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Va
     let asked = reads_of(site).into_iter().chain(acts_of(site));
     for method in asked.chain([viewer]).collect::<BTreeSet<_>>() {
         scope.push(format!("rpc:{method}?{aud}"));
+    }
+    for kind in spaces_of(site).into_iter().collect::<BTreeSet<_>>() {
+        scope.push(format!("space:{kind}?authority={did}&action=read"));
     }
     let writes = "action=create&action=update&action=delete";
     let written = writes_of(site).into_iter().collect::<BTreeSet<_>>();
@@ -607,7 +641,7 @@ fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Va
 
 /// The page around a site's pages at `path`: the group's page there in a
 /// sandboxed frame, and what the host's script needs to sign its visitor
-/// in, ask `reads` and `acts`, and make `writes` as them.
+/// in, ask `reads` and `acts`, read `spaces` and make `writes` as them.
 fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Response {
     let (reads, acts) = (reads_of(site), acts_of(site));
     let (status, html) = host.page_at(did, site, path);
@@ -621,6 +655,7 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
         "handle": handle,
         "reads": reads,
         "acts": acts,
+        "spaces": spaces_of(site),
         "writes": writes,
         "aud": format!("{}#opensocial", host.config.service_did),
         "handleResolver": host.config.site_handle_resolver,
@@ -708,12 +743,13 @@ pub async fn put_site(
     let group = configuring(&host, &headers, &body, "putSite").await?;
     host.active(&group)?;
     let mut site = json!({"$type": SITE, "files": [], "createdAt": iso(now_millis())});
-    for key in ["fallback", "notFound", "reads", "acts", "writes"] {
+    for key in ["fallback", "notFound", "reads", "acts", "spaces", "writes"] {
         if let Some(given) = body.get(key) {
             site[key] = given.clone();
         }
     }
     methods(&site)?;
+    spaces(&site)?;
     let given = body["files"].as_array().expect("its lexicon requires it");
     let names: Vec<Value> = given.iter().map(|f| json!({"path": f["path"]})).collect();
     paths(&json!({"files": names, "fallback": site["fallback"], "notFound": site["notFound"]}))?;

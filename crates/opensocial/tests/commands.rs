@@ -980,6 +980,21 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
         "{unsaid}"
     );
 
+    // Spaces, each a type by its NSID, read whole by the site's pages.
+    let args = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--spaces",
+        "com.example.board, fyi.opensocial.members",
+    ];
+    ok(&alice, &args).await;
+    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
+    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
+    let wanted = json!([{"space": "com.example.board"}, {"space": "fyi.opensocial.members"}]);
+    assert_eq!(&site.to_json()["spaces"], &wanted);
+
     let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
     assert!(missing.contains("reading /no/such/folder"), "{missing}");
 

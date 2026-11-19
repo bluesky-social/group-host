@@ -44,7 +44,13 @@
             "type": "array",
             "maxLength": 20,
             "items": { "type": "ref", "ref": "#read" },
-            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none, no acts and no writes, is served as its files alone."
+            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none, no acts, no spaces and no writes, is served as its files alone."
+          },
+          "spaces": {
+            "type": "array",
+            "maxLength": 20,
+            "items": { "type": "ref", "ref": "#space" },
+            "description": "The types of the group's spaces the site's pages may read whole, as whoever is looking and signed in, through the site kit's records ask: each asked of the visitor when they sign in. What each visitor may read in a space is still its access record's to say."
           },
           "writes": {
             "type": "array",
@@ -88,6 +94,18 @@
           "format": "nsid",
           "knownValues": ["fyi.opensocial.createReport"],
           "description": "The procedure's NSID, as `knownValues` lists those a site may ask."
+        }
+      }
+    },
+    "space": {
+      "type": "object",
+      "description": "A type of the group's spaces a site's pages may read whole, as the visitor.",
+      "required": ["space"],
+      "properties": {
+        "space": {
+          "type": "string",
+          "format": "nsid",
+          "description": "The space type's NSID."
         }
       }
     },
