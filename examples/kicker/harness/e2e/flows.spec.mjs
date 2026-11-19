@@ -4,8 +4,10 @@
 // repo in the place's spaces, and read back through the host.
 
 import { test, expect } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { portrait, poster } from '../posters.mjs';
-import { serviceAuth } from '../world.mjs';
+import { groupHost, serviceAuth } from '../world.mjs';
 
 const world = JSON.parse(process.env.E2E_WORLD);
 const who = Object.fromEntries(world.accounts.map((a) => [a.handle.split('.')[0], a]));
@@ -42,11 +44,28 @@ test('signed out, the place shows its landing, and the way in', async ({ page })
   await expect(page).toHaveTitle('Board');
 });
 
-test('someone asking to join is not let in yet', async ({ page }) => {
-  const site = await signIn(page, 'erin');
-  await expect(site.getByText('Not a member yet')).toBeVisible();
+test('someone asks to join, cancels, asks again, and is let in', async ({ page }) => {
+  let site = await signIn(page, 'erin');
+  await expect(site.getByText('Your request is waiting')).toBeVisible();
   await expect(site.getByText('@erin.test')).toBeVisible();
   await expect(site.getByRole('link', { name: 'Events' })).toHaveCount(0);
+  // Cancelled, and asked again, with a note.
+  await site.getByRole('button', { name: 'Cancel request' }).click();
+  await expect(site.getByText('Not a member yet')).toBeVisible();
+  await site.getByRole('button', { name: 'Ask to join' }).click();
+  const asking = site.getByRole('dialog', { name: 'Ask to join' });
+  await asking.getByLabel('Note').fill('I skate the lot most Thursdays.');
+  await asking.getByRole('button', { name: 'Send request' }).click();
+  await expect(asking).toBeHidden();
+  await expect(site.getByText('Your request is waiting')).toBeVisible();
+  // Alice has it in the host's queue, with the note, and lets her in.
+  const { requests } = await asAlice('fyi.opensocial.listJoinRequests', {});
+  const erins = requests.find((r) => r.member === who.erin.did);
+  expect(erins?.message).toBe('I skate the lot most Thursdays.');
+  opensocial('alice', 'member', 'assign', 'kicker.groups.test', who.erin.did, 'member');
+  await page.reload();
+  site = page.frameLocator('#os-page');
+  await expect(site.getByRole('link', { name: 'Events' })).toBeVisible();
 });
 
 test('a member pins a note, answers an event and writes her card', async ({ page }) => {
@@ -188,6 +207,19 @@ const asAlice = async (lxm, params) => {
   });
   return await res.json();
 };
+/// The `opensocial` command, as `name`.
+const opensocial = (name, ...args) =>
+  execFileSync(join(groupHost, 'target/debug/opensocial'), args, {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OPENSOCIAL_HOST: world.host,
+      PDS_URL: world.pds,
+      OPENSOCIAL_HOST_DID: world.hostDid,
+      OPENSOCIAL_AS: who[name].handle,
+      OPENSOCIAL_PASSWORD: who[name].password
+    }
+  });
 /// The URI of the note on the board whose words begin `text`.
 const noteUri = async (text) => {
   const space = `at://${world.place}/space/fyi.opensocial.siteSpace/room`;
@@ -258,4 +290,27 @@ test('its author appeals, and a moderator reviews it in the console', async ({ p
   // A moderator sees what is hidden from members, and that it is.
   const ink = site.locator('li.note', { hasText: 'Cheap bearings' });
   await expect(ink).toContainText('Hidden from members by the moderators.');
+});
+
+test('a member leaves from her own row, and the last admin is told how', async ({ page }) => {
+  let site = await signIn(page, 'erin');
+  await site.getByRole('link', { name: 'People' }).click();
+  await expect(site.getByRole('button', { name: 'Leave' })).toHaveCount(1);
+  const mine = site.locator('.rows li', { hasText: '@erin.test' });
+  await mine.getByRole('button', { name: 'Leave' }).click();
+  const leaving = site.getByRole('dialog', { name: 'Leave this group?' });
+  await leaving.getByRole('button', { name: 'Leave' }).click();
+  await expect(site.getByText('Not a member yet')).toBeVisible();
+  await expect(site.getByRole('button', { name: 'Ask to join' })).toBeVisible();
+
+  // Alice is its one admin: refused, and told what to do first.
+  await site.getByRole('button', { name: 'Sign out' }).click();
+  await expect(site.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  site = await signIn(page, 'alice');
+  await site.getByRole('link', { name: 'People' }).click();
+  const hers = site.locator('.rows li', { hasText: '@alice.test' });
+  await hers.getByRole('button', { name: 'Leave' }).click();
+  const refused = site.getByRole('dialog', { name: 'Leave this group?' });
+  await refused.getByRole('button', { name: 'Leave' }).click();
+  await expect(refused.getByText(/You're the last admin\./)).toBeVisible();
 });

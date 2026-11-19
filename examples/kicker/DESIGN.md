@@ -33,7 +33,7 @@ Taken whole, they read as costume.
 - **Ink and paper:** white paper, near-black ink. Quiet ink for what is
   said about a thing (who, when), and a rule colour for the lines between
   things.
-- **Danger:** what was called off, and deleting.
+- **Danger:** what was called off, deleting, and leaving the place.
 
 In the dark, the paper and ink swap; the band and its yellow stay.
 

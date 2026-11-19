@@ -15,7 +15,7 @@ The site has four rooms:
   under what it answers.
 - **People.** Every member, with their roles, and the card each writes:
   who they are, what they can help with, and a picture of them, if they
-  put one on it.
+  put one on it. A member leaves from their own row.
 
 ## How it works
 
@@ -36,6 +36,7 @@ with what it held last time while it reads afresh.
 | Write | an event's poster, or a picture on a member's card | `os.upload`, to the visitor's own PDS, the record pointing to it |
 | Read | those pictures | `os.call('fyi.opensocial.getSpaceBlob')`, which the host reads from whoever uploaded it |
 | Act | a report of a note, or an appeal of one's own | `os.act('fyi.opensocial.createReport')`, into the group host's moderation queue |
+| Join | joining, asking to with a note, cancelling the request, and leaving | `os.act` with `requestJoin`, `cancelJoinRequest` and `leaveGroup`, each of this group alone, as the host's page sets it |
 | Read | the moderators' labels on notes | the group's own `com.atproto.label.record` records in the same spaces, shown as the group defines each (`getGroup`'s `labels`) |
 
 The site declares those reads, and its writes (each a space, by its type
@@ -61,8 +62,13 @@ Review, opens the note in the console.
 
 Anyone else, signed out or not let in yet, sees the club's landing: its
 name as the masthead, its line, its (made-up) address and hours, and the
-way in. That page asks the host nothing, so what it says is published
-with the site, in `site/src/lib/about.js`.
+way in. That much asks the host nothing, so what it says is published
+with the site, in `site/src/lib/about.js`. Signed in, the way in follows
+the club's join policy, which is `approval`: "Ask to join", with a note
+for the admin. Then it says "Your request is waiting", with "Cancel
+request", until an admin approves it in the console. Under `open` it
+would be "Join", and under `invite`, "Join" for whoever has an invite
+waiting.
 
 ## Running it
 

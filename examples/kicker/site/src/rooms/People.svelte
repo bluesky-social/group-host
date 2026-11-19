@@ -3,12 +3,13 @@
   import CardDialog from '../lib/organisms/CardDialog.svelte';
   import PeopleList from '../lib/organisms/PeopleList.svelte';
   import { follow, keep, kept } from '../lib/kept.svelte.js';
-  import { NS, picture, put, upload } from '../lib/place.js';
+  import { NS, leave, picture, put, upload } from '../lib/place.js';
   import { cardsByWriter, recordAt } from '../lib/views.js';
   /**
    * People: every member, those who run the place first, each with their
-   * roles and the card they keep in its room, their picture with it; and
-   * editing the viewer's own.
+   * roles and the card they keep in its room, their picture with it;
+   * editing the viewer's own, and leaving, after which the place is read
+   * again (`ctx.reread`) and shows them its landing.
    */
   let { ctx } = $props();
   let failed = $state('');
@@ -54,4 +55,12 @@
   {#snippet act()}{#if kept.room}<CardDialog card={cards.get(ctx.me.did)} {save} />{/if}{/snippet}
 </RoomHead>
 {#if failed}<p class="failed">{failed}</p>{/if}
-<PeopleList {people} />
+<PeopleList
+  {people}
+  me={ctx.me.did}
+  name={ctx.place?.displayName ?? ctx.group.handle}
+  leave={async () => {
+    await leave();
+    await ctx.reread();
+  }}
+/>

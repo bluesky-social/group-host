@@ -1,7 +1,12 @@
 <script>
   import MemberRow from '../molecules/MemberRow.svelte';
-  /** The place's members, those who run it first, each with their card and picture (`people`). */
-  let { people } = $props();
+  import LeaveDialog from './LeaveDialog.svelte';
+  /**
+   * The place's members, those who run it first, each with their card and
+   * picture (`people`); on the viewer's own row (`me`, their DID), leaving
+   * the place (`name`) by `leave`.
+   */
+  let { people, me, name, leave } = $props();
 </script>
 
 <ul class="rows people">
@@ -10,5 +15,6 @@
       roles={p.roles}
       card={p.card}
       avatar={p.avatar}
-    />{/each}
+      >{#snippet act()}{#if p.did === me}<LeaveDialog {name} {leave} />{/if}{/snippet}</MemberRow
+    >{/each}
 </ul>

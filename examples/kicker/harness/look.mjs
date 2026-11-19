@@ -47,6 +47,26 @@ try {
     await page.getByRole('button', { name: /^(accept|authorize|allow)$/i }).click();
     await page.waitForURL((u) => u.origin === new URL(site.url).origin);
     await frame.getByRole('button', { name: 'Sign out' }).waitFor();
+    const shoot = async (shot) => {
+      await page.waitForTimeout(300);
+      const file = join(out, `${shot}-as-${name}-${view}.png`);
+      await page.screenshot({ path: file });
+      console.log(file);
+    };
+    // Someone not let in yet (erin): waiting, then asking, its dialog
+    // open, then waiting again as they started.
+    if (await frame.getByText('Your request is waiting').isVisible()) {
+      await shoot('waiting');
+      await frame.getByRole('button', { name: 'Cancel request' }).click();
+      await frame.getByRole('button', { name: 'Ask to join' }).waitFor();
+      await shoot('asking');
+      await frame.getByRole('button', { name: 'Ask to join' }).click();
+      await frame.locator('dialog[open]').waitFor();
+      await shoot('ask-dialog');
+      await frame.getByRole('button', { name: 'Send request' }).click();
+      await frame.getByText('Your request is waiting').waitFor();
+      continue;
+    }
     // Each room whole, then a discussion opened from its list.
     const whole = async (file, ready) => {
       await ready();
@@ -71,10 +91,11 @@ try {
     await whole(join(out, `thread-as-${name}-${view}.png`), () =>
       frame.locator('li.reply').first().waitFor()
     );
-    // The dialogs, as seen: an event opened, and pinning a note.
+    // The dialogs, as seen: an event opened, pinning a note, and leaving.
     for (const [path, open, shot] of [
       ['events/', () => frame.locator('li', { hasText: 'Curb jam' }).getByRole('button'), 'event'],
-      ['', () => frame.getByRole('button', { name: 'Pin a note' }), 'pin']
+      ['', () => frame.getByRole('button', { name: 'Pin a note' }), 'pin'],
+      ['people/', () => frame.getByRole('button', { name: 'Leave' }), 'leave']
     ]) {
       await page.goto(`${site.url}/${path}`);
       await frame.locator('h1').waitFor();

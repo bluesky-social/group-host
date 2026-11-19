@@ -126,7 +126,7 @@ export function publish(run, handle) {
     '--spaces',
     `${SITE_SPACE}/room,${SITE_SPACE}/calendar`,
     '--acts',
-    'createReport',
+    'createReport,requestJoin,cancelJoinRequest,leaveGroup',
     '--writes',
     WRITES.join(',')
   );

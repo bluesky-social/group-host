@@ -25,9 +25,10 @@ export const keyOf = (uri) => uri.split('/').at(-1);
 
 /**
  * The place, who is looking, and its members: `members` a Map of DID to
- * `{handle, roles}`, `viewer` their standing (`member`), and `space(kind)`
- * the URI of the place's space of that kind. Signed out, or turned away
- * by the host, only the place and who is looking.
+ * `{handle, roles}`, `viewer` their standing (`member`, and `request`
+ * while they ask to join), and `space(kind)` the URI of the place's space
+ * of that kind. Signed out, or turned away by the host, only the place
+ * and who is looking; signed in but not a member, their standing too.
  */
 export async function context() {
   const group = await os().group();
@@ -43,15 +44,18 @@ export async function context() {
   };
   if (!me.signedIn) return base;
   try {
-    const [{ group: place }, { members }] = await Promise.all([
-      os().call('fyi.opensocial.getGroup', { group: group.did }),
-      os().call('fyi.opensocial.listMembers', { group: group.did, limit: 100 })
-    ]);
+    const { group: place } = await os().call('fyi.opensocial.getGroup', { group: group.did });
+    const standing = { ...base, place, viewer: place.viewer ?? null };
+    if (!place.viewer?.member) return standing;
+    const { members } = await os().call('fyi.opensocial.listMembers', {
+      group: group.did,
+      limit: 100
+    });
     const roles = (m) => m.roles.map((r) => r.role);
     const byDid = new Map(
       members.map((m) => [m.actor.did, { handle: m.actor.handle, roles: roles(m) }])
     );
-    return { ...base, place, members: byDid, viewer: place.viewer };
+    return { ...standing, members: byDid };
   } catch (e) {
     if (e.locked) return base;
     throw e;
@@ -162,6 +166,20 @@ export const report = (ctx, record, reasonType, { reason, rule } = {}) =>
 /** Appeals what the moderators did to the visitor's own `record`, in their words. */
 export const appeal = (ctx, record, reason) =>
   report(ctx, record, 'com.atproto.moderation.defs#reasonAppeal', { reason });
+
+/**
+ * Joins the place, or asks to, as its join policy says, with `message`
+ * for the admin who reads it. An invite waiting for the visitor lets them
+ * in under any policy. The host's page asks it of this place, as it does
+ * every act.
+ */
+export const join = (message) => os().act('fyi.opensocial.requestJoin', message ? { message } : {});
+
+/** Cancels the visitor's request to join, while it waits. */
+export const cancelRequest = () => os().act('fyi.opensocial.cancelJoinRequest');
+
+/** Takes the visitor out of the place. Refused, `LastConfigurer`, for its last admin. */
+export const leave = () => os().act('fyi.opensocial.leaveGroup');
 
 /** The rules a report may cite: each its title and the URI of its record. */
 export const rulesOf = (ctx) =>
