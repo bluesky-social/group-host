@@ -73,22 +73,25 @@ export const load: PageServerLoad = async (event) => {
       };
     })
   );
-  // Someone looked up: the row they have, or who they are and what the
-  // queue holds of them, on whichever status they are.
-  const review = event.url.searchParams.get('review');
+  // Someone or something looked up: the row it has, or who it is and what
+  // the queue holds of it, on whichever status it is. An account by its
+  // DID; a record by its URI, its author the account in it.
+  const sought = event.url.searchParams.get('review');
   let found: Subject | null = null;
-  if (review?.startsWith('did:') && !listed.some((s) => s.key === review)) {
-    const did = review as Did;
+  const known = sought?.startsWith('did:') || sought?.startsWith('at://');
+  const review = known ? (sought as `${string}:${string}`) : null;
+  if (review && !listed.some((s) => s.key === review)) {
+    const did = authorOf(review);
     const actor = await xrpc<typeof getActor.main>(
       event,
       'fyi.opensocial.getActor',
       { actor: did },
       true
     );
-    const events = await history(event, group, did);
+    const events = await history(event, group, review);
     const reports = events.filter((e) => e.event.$type?.endsWith('#reportEvent')).length;
     found = {
-      key: did,
+      key: review,
       actor: actor ?? { did },
       status: events.length ? 'in the queue' : undefined,
       reportCount: reports,
@@ -111,6 +114,17 @@ export const load: PageServerLoad = async (event) => {
     reasons: REASONS
   };
 };
+
+/**
+ * Whose `key` is: an account itself; a record in a space, the repo it is
+ * in (`at://<group>/space/<type>/<skey>/<repo>/…`); else a public record's
+ * authority.
+ */
+function authorOf(key: string): Did {
+  if (key.startsWith('did:')) return key as Did;
+  const parts = key.slice('at://'.length).split('/');
+  return (parts[1] === 'space' ? parts[4] : parts[0]) as Did;
+}
 
 const LABEL = 'com.atproto.label.label';
 

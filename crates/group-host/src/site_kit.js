@@ -33,7 +33,10 @@
     });
   const tell = (type, body = {}) => parent.postMessage({ os: 1, type, ...body }, '*');
   const os = {
-    /** The group whose site this is: `{did, handle}`. */
+    /**
+     * The group whose site this is: `{did, handle, console}`, `console`
+     * the address of the host's console, where its members manage it.
+     */
     group: () => ask('group'),
     /** Who is looking: `{signedIn, did, handle}`. */
     me: () => ask('me'),
@@ -43,6 +46,12 @@
      * show with `URL.createObjectURL`.
      */
     call: (method, params = {}) => ask('call', { method, params }),
+    /**
+     * One of the host's procedures the site acts by, as whoever is looking:
+     * `input` its JSON, answered with what the method answers. Such as
+     * `fyi.opensocial.createReport`, reporting what they see.
+     */
+    act: (method, input = {}) => ask('act', { method, input }),
     /**
      * Uploads `file`, a picture (a `File` or `Blob` of an `image/` type), to
      * the visitor's own PDS, for a record the site writes to point to.

@@ -23,6 +23,7 @@ type Config = {
   group: string;
   handle: string;
   reads: string[];
+  acts: string[];
   writes: { space: string; collection: string }[];
   aud: string;
   handleResolver: string;
@@ -45,6 +46,7 @@ type Message = {
   rkey?: string;
   record?: object;
   file?: unknown;
+  input?: object;
 };
 
 const config: Config = JSON.parse(document.getElementById('os-config')?.textContent ?? '{}');
@@ -124,6 +126,22 @@ async function ask(method: string, params: object) {
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Refused(body?.message ?? res.statusText, res.status);
   return body;
+}
+
+/**
+ * One of the host's procedures, as the visitor, through their PDS: `input`
+ * its JSON, and its answer. Refused for want of scope, as a write is.
+ */
+async function act(method: string, input: object) {
+  if (!session) throw new Refused('sign in', 401);
+  const res = await session.fetchHandler(`/xrpc/${method}`, {
+    method: 'POST',
+    headers: { 'atproto-proxy': config.aud, 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  const said = await res.json().catch(() => null);
+  if (res.ok) return said ?? {};
+  return await unwritten(res, said);
 }
 
 /**
@@ -304,7 +322,9 @@ addEventListener('message', async (e) => {
       viewer = {};
       return changed();
     case 'group':
-      return reply({ value: { did: config.group, handle: config.handle } });
+      return reply({
+        value: { did: config.group, handle: config.handle, console: config.console }
+      });
     case 'me':
       return reply({ value: me() });
     case 'call': {
@@ -314,6 +334,17 @@ addEventListener('message', async (e) => {
       if (!session) return reply({ error: 'sign in', locked: true, reason: 'sign in' });
       try {
         return reply({ value: await ask(method, m.params ?? {}) });
+      } catch (err) {
+        return reply(refusal(err));
+      }
+    }
+    case 'act': {
+      const method = String(m.method);
+      if (!config.acts.includes(method))
+        return reply({ error: `${method} is none of the acts this site declares` });
+      if (!session) return reply({ error: 'sign in', locked: true, reason: 'sign in' });
+      try {
+        return reply({ value: await act(method, m.input ?? {}) });
       } catch (err) {
         return reply(refusal(err));
       }

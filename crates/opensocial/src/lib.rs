@@ -59,10 +59,12 @@ role
                          add to what a role may do, or with --undo take it away
 site
   site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]
-          [--writes <space:collection,…>]
+          [--acts <methods>] [--writes <space:collection,…>]
                          publish the files under <dir> as the group's website, at its
                          address, in place of the one there; with --reads, the host's
                          methods its pages may ask as whoever signs in on it; with
+                         --acts, the host's procedures they may ask as that person, such
+                         as createReport; with
                          --writes, the records they may write in that person's own repo,
                          each a type of the group's spaces and a collection there
   site delete <group>    take the group's website down
@@ -679,7 +681,7 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             Ok(stats_lines(&said))
         }
         ["site", "publish", rest @ ..] => {
-            let a = parse(rest, &["fallback", "not-found", "reads", "writes"])?;
+            let a = parse(rest, &["fallback", "not-found", "reads", "acts", "writes"])?;
             let [group, dir] = a.take()?;
             let mut given = json!({"files": site_files(std::path::Path::new(dir))?});
             for (flag, name) in [("fallback", "fallback"), ("not-found", "not_found")] {
@@ -688,13 +690,15 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
                 }
             }
             // Each method by its NSID, or its name alone, as one of ours.
-            if let Some(reads) = a.flags.get("reads") {
-                let methods = reads.split(',').map(str::trim).filter(|r| !r.is_empty());
-                let named = |r: &str| match r.contains('.') {
-                    true => r.to_string(),
-                    false => m(r),
-                };
-                given["reads"] = methods.map(|r| json!({"method": named(r)})).collect();
+            let named = |r: &str| match r.contains('.') {
+                true => r.to_string(),
+                false => m(r),
+            };
+            for key in ["reads", "acts"] {
+                if let Some(listed) = a.flags.get(key) {
+                    let methods = listed.split(',').map(str::trim).filter(|r| !r.is_empty());
+                    given[key] = methods.map(|r| json!({"method": named(r)})).collect();
+                }
             }
             // Each a type of the group's spaces and a collection there.
             if let Some(writes) = a.flags.get("writes") {

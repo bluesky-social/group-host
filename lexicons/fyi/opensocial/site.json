@@ -34,11 +34,17 @@
             "format": "datetime",
             "description": "When this version of the site was published."
           },
+          "acts": {
+            "type": "array",
+            "maxLength": 20,
+            "items": { "type": "ref", "ref": "#act" },
+            "description": "The host's procedures the site's pages may ask, as whoever is looking and signed in, each acting for that person alone and checked as the host checks it from anywhere, such as reporting what they see."
+          },
           "reads": {
             "type": "array",
             "maxLength": 20,
             "items": { "type": "ref", "ref": "#read" },
-            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none, and no writes, is served as its files alone."
+            "description": "The host's methods the site's pages may ask, as whoever is looking and signed in, through the page the host serves around them. A site with none, no acts and no writes, is served as its files alone."
           },
           "writes": {
             "type": "array",
@@ -69,6 +75,19 @@
           "minLength": 1,
           "maxLength": 255,
           "description": "The `Content-Type` it is served with, such as `text/html; charset=utf-8`; without it, the type its path's extension names."
+        }
+      }
+    },
+    "act": {
+      "type": "object",
+      "description": "One of the host's procedures a site's pages may ask, as the visitor.",
+      "required": ["method"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "format": "nsid",
+          "knownValues": ["fyi.opensocial.createReport"],
+          "description": "The procedure's NSID, as `knownValues` lists those a site may ask."
         }
       }
     },

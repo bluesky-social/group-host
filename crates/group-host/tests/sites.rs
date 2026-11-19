@@ -647,6 +647,62 @@ async fn a_site_reads_only_what_the_host_lets_a_page_read() {
 }
 
 #[tokio::test]
+async fn a_site_acts_as_its_visitor_only_as_the_host_lets_a_page() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let files = json!([{"path": "index.html", "text": "<p>the board</p>"}]);
+
+    // A procedure that is no act a page may ask is refused, such as one
+    // that would make the visitor's group for them.
+    let acts = json!([{"method": format!("{NS}.createGroup")}]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "acts": acts}),
+    )
+    .await;
+    assert_eq!(error(&said), (400, "InvalidSite"));
+    let message = said.1["message"].as_str().unwrap();
+    assert!(
+        message.contains("createGroup is none of the acts"),
+        "{message}"
+    );
+
+    // Reporting, though it reads and writes nothing, has its pages served
+    // in the page that holds a session, which is told what they may do.
+    let acts = json!([{"method": format!("{NS}.createReport")}]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "acts": acts}),
+    )
+    .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+    let shell = page(&h, "/").await;
+    let (_, config) = shell_of(&shell);
+    assert_eq!(config["acts"], json!([format!("{NS}.createReport")]));
+
+    // Its OAuth client asks the host for that, as for a read.
+    let client = page(&h, "/client-metadata.json").await;
+    let doc: Json = serde_json::from_str(&client.body).unwrap();
+    let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
+    let aud = "aud=did%3Aweb%3Ahost.test%23opensocial";
+    let wanted = [
+        "atproto".to_string(),
+        format!("rpc:{NS}.createReport?{aud}"),
+        format!("rpc:{NS}.getViewer?{aud}"),
+    ];
+    assert_eq!(scope, wanted);
+
+    // The record says so, for any app that reads it.
+    let kept = h.host.store.record(&did, SITE, "self").unwrap().unwrap();
+    let site = atproto::drisl::decode(&kept.value).unwrap().to_json();
+    assert_eq!(site["acts"], acts);
+}
+
+#[tokio::test]
 async fn a_site_that_writes_asks_its_visitor_for_those_writes_alone() {
     let h = start(&[], false).await;
     let (did, [alice, ..]) = group(&h).await;

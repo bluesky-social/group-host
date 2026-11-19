@@ -71,7 +71,8 @@ fn blob_of(file: &Value) -> Option<atproto::Cid> {
 }
 
 /// Refuses a site the host would not serve: one whose paths [`paths`]
-/// refuses, a file naming no blob, or a read that is none of [`READS`].
+/// refuses, a file naming no blob, or a read or an act that is none of
+/// [`READS`] or [`ACTS`].
 pub fn check(site: &Value) -> Result<(), XrpcError> {
     paths(site)?;
     for file in site["files"].as_array().into_iter().flatten() {
@@ -80,7 +81,7 @@ pub fn check(site: &Value) -> Result<(), XrpcError> {
             return Err(refused(format!("{path} names no blob")));
         }
     }
-    reads(site)
+    methods(site)
 }
 
 /// The host's methods a site's pages may ask, as whoever is looking and
@@ -94,10 +95,24 @@ pub const READS: &[&str] = &[
     "fyi.opensocial.getViewer",
 ];
 
-/// The methods a site's `reads` name.
-fn reads_of(site: &Value) -> Vec<&str> {
-    let all = site["reads"].as_array().into_iter().flatten();
+/// The host's procedures a site's pages may ask, as whoever is looking and
+/// signed in: those that act for the visitor alone, and that the host
+/// checks as it checks the same from anywhere. Reporting what they see,
+/// or appealing what was done to them.
+pub const ACTS: &[&str] = &["fyi.opensocial.createReport"];
+
+/// The methods a site's `reads`, or its `acts`, name.
+fn named<'a>(site: &'a Value, key: &str) -> Vec<&'a str> {
+    let all = site[key].as_array().into_iter().flatten();
     all.filter_map(|r| r["method"].as_str()).collect()
+}
+
+fn reads_of(site: &Value) -> Vec<&str> {
+    named(site, "reads")
+}
+
+fn acts_of(site: &Value) -> Vec<&str> {
+    named(site, "acts")
 }
 
 /// What a site's `writes` name: each a type of the group's spaces, and a
@@ -109,16 +124,21 @@ fn writes_of(site: &Value) -> Vec<(&str, &str)> {
         .collect()
 }
 
-/// Whether a site asks for its visitor's session: to read, or to write.
+/// Whether a site asks for its visitor's session: to read, act or write.
 fn is_live(site: &Value) -> bool {
-    !reads_of(site).is_empty() || !writes_of(site).is_empty()
+    !reads_of(site).is_empty() || !acts_of(site).is_empty() || !writes_of(site).is_empty()
 }
 
-/// Refuses a site whose `reads` name a method that is none of [`READS`].
-fn reads(site: &Value) -> Result<(), XrpcError> {
-    match reads_of(site).into_iter().find(|m| !READS.contains(m)) {
+/// Refuses a site whose `reads` or `acts` name a method that is none of
+/// [`READS`] or [`ACTS`].
+fn methods(site: &Value) -> Result<(), XrpcError> {
+    if let Some(method) = reads_of(site).into_iter().find(|m| !READS.contains(m)) {
+        let said = format!("{method} is none of the methods a site's pages may ask");
+        return Err(refused(said));
+    }
+    match acts_of(site).into_iter().find(|m| !ACTS.contains(m)) {
         Some(method) => Err(refused(format!(
-            "{method} is none of the methods a site's pages may ask"
+            "{method} is none of the acts a site's pages may ask"
         ))),
         None => Ok(()),
     }
@@ -538,8 +558,8 @@ fn script(bytes: Vec<u8>) -> Response {
 }
 
 /// The site's OAuth client document, at its address `origin`: `atproto`;
-/// leave to ask each of its `reads`, and `getViewer`, of the host; and to
-/// make each of its `writes` in the visitor's own repo, in the group
+/// leave to ask each of its `reads` and `acts`, and `getViewer`, of the
+/// host; and to make each of its `writes` in the visitor's own repo, in the group
 /// `did`'s spaces of that type alone, with pictures they upload for those
 /// records to point to.
 fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Value) -> Response {
@@ -551,8 +571,8 @@ fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Va
         .to_string();
     let mut scope = vec!["atproto".to_string()];
     let viewer = "fyi.opensocial.getViewer";
-    let reads = reads_of(site);
-    for method in reads.iter().chain([&viewer]).collect::<BTreeSet<_>>() {
+    let asked = reads_of(site).into_iter().chain(acts_of(site));
+    for method in asked.chain([viewer]).collect::<BTreeSet<_>>() {
         scope.push(format!("rpc:{method}?{aud}"));
     }
     let writes = "action=create&action=update&action=delete";
@@ -587,9 +607,9 @@ fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Va
 
 /// The page around a site's pages at `path`: the group's page there in a
 /// sandboxed frame, and what the host's script needs to sign its visitor
-/// in, ask `reads` and make `writes` as them.
+/// in, ask `reads` and `acts`, and make `writes` as them.
 fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Response {
-    let reads = reads_of(site);
+    let (reads, acts) = (reads_of(site), acts_of(site));
     let (status, html) = host.page_at(did, site, path);
     let head = site_head::preview(html.as_deref().unwrap_or_default(), handle);
     let writes: Vec<Value> = writes_of(site)
@@ -600,6 +620,7 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
         "group": did,
         "handle": handle,
         "reads": reads,
+        "acts": acts,
         "writes": writes,
         "aud": format!("{}#opensocial", host.config.service_did),
         "handleResolver": host.config.site_handle_resolver,
@@ -687,12 +708,12 @@ pub async fn put_site(
     let group = configuring(&host, &headers, &body, "putSite").await?;
     host.active(&group)?;
     let mut site = json!({"$type": SITE, "files": [], "createdAt": iso(now_millis())});
-    for key in ["fallback", "notFound", "reads", "writes"] {
+    for key in ["fallback", "notFound", "reads", "acts", "writes"] {
         if let Some(given) = body.get(key) {
             site[key] = given.clone();
         }
     }
-    reads(&site)?;
+    methods(&site)?;
     let given = body["files"].as_array().expect("its lexicon requires it");
     let names: Vec<Value> = given.iter().map(|f| json!({"path": f["path"]})).collect();
     paths(&json!({"files": names, "fallback": site["fallback"], "notFound": site["notFound"]}))?;
