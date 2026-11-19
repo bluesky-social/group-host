@@ -1,7 +1,7 @@
 # Starting a group
 
 This guide shows you how to start a group and get it ready for people
-to join. You give it a name and an address, say what it is for, and add
+to join. You give it a name and an address, say what it's for, and add
 a picture and a link.
 
 A group is an account of its own, with its own handle, but nobody signs
@@ -24,16 +24,16 @@ You need an account in the Atmosphere, Bluesky's network, such as
 
 3. Type your handle into **Handle**. Accounts that match show under it as
    you type. Pick yours, or press **Sign in**. The row of icons shows apps
-   in the Atmosphere; any of their accounts works here.
+   in the Atmosphere, and any of their accounts works here.
 4. Your browser goes to the place your account lives. Sign in there, and
    approve the console.
 5. You come back signed in. Your handle shows at the top right, and the
    page is headed **Your groups**.
 
-Signing in tells the console who you are, and nothing more: your
+Signing in tells the console who you are and nothing more. Your
 password stays with your account. [Signing in](../design/signing-in.md)
-says how it works. With no account yet, **Create one** at the foot of the
-dialog makes one.
+says how it works. If you don't have an account yet, **Create one** at
+the foot of the dialog makes one.
 
 ## Where do I start a group?
 
@@ -80,16 +80,16 @@ group's settings.
    who are invited**.
 
 Who can see the group is set later, in its settings, on the card **Who
-sees it** at the foot of **Profile**. At first it is **Anyone, and it can
+sees it** at the foot of **Profile**. At first it's **Anyone, and it can
 be found**. The other choice keeps it for members, and others see just
-its handle. How people join can be changed in settings too.
+its handle. You can change how people join in settings too.
 
 ## Start the group
 
 1. Press **Start the group**. If **Name** is empty, the browser asks for
    it first.
 2. The group's page opens. Its card says **You're a member with the
-   admin role**: a role is a name given to members, and admin lets you
+   admin role**. A role is a name given to members, and admin lets you
    run the group. The card has the buttons **Moderation** and
    **Settings**. Under it, **Asking to join** lists the people waiting to
    be let in, none yet, and **Members** has you as its one member, with
@@ -164,7 +164,7 @@ up to five, shown on its card in the order they were added.
 <!-- look /g/bookclub.groups.test --as alice --element '.group-card' -->
 ![Book club's card: a purple banner, a round blue avatar, Book club and bookclub.groups.test, the words We read one book a month and meet to talk it over, the tags novels and reading, a link Our chat, and You're a member with the admin role](shots/starting-card-done.png)
 
-Someone signed in who is not a member sees the same card, without your
+Someone signed in who isn't a member sees the same card, without your
 standing, **Moderation** or **Settings**. Under it is the way to join
 you chose. With people asking to join, they can write in **Note** and
 press **Send request**, and the request shows in

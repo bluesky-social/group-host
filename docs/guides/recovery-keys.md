@@ -14,9 +14,9 @@ You need:
 ## What is a recovery key, and why add one?
 
 A recovery key is a key you hold that can take the group back, or move
-it, without this host. Left alone, the group has one key, the host's.
-Then the host alone can change the group's identity, and nobody can move
-the group without it.
+it, without this host. Without one, the group has a single key, the
+host's. That means only the host can change the group's identity, and
+nobody can move the group without it.
 
 A recovery key ranks above the host's. Holding one lets you do two
 things:
@@ -43,7 +43,7 @@ goes.
    <!-- look /new --as erin --type '[name=displayName]=Choir' --press Shift --click 'button:has-text("Start the group")' -->
    ![Choir's page, with Moderation and Settings at the top right of its card, and erin.test listed as the one member, with the admin role](shots/recovery-start.png)
 
-2. Make a key in a terminal. The console does not make one for you. One
+2. Make a key in a terminal. The console doesn't make one for you. One
    way is goat, a command-line tool for the Atmosphere, from Bluesky.
    Get it from
    [github.com/bluesky-social/goat](https://github.com/bluesky-social/goat),
@@ -55,12 +55,12 @@ goes.
 
    It prints two keys, each under a line that names it. The one under
    "Secret Key" is the secret half, which you keep. The one under
-   "Public Key" starts `did:key:`. That is the public half, and it is
+   "Public Key" starts `did:key:`. That's the public half, and it's
    what the console asks for.
 
 3. Keep the secret key somewhere safe and offline, such as a password
-   manager you trust or paper in a drawer. It is what recovers the group,
-   and nobody can make it again if it is lost.
+   manager you trust or paper in a drawer. It's what recovers the group,
+   and nobody can make it again if it's lost.
 
 Never paste the secret half into the console, any app, or a chat. Only
 the public `did:key:` line goes in.
@@ -87,14 +87,14 @@ half starts `did:key:zDnae`.
    line that starts `did:key:z...`. The key in the pictures is only an
    example.
 5. Press **Add**. The dialog closes, and your key is listed above the
-   host's, with **Remove** beside it. It is listed as a steward's, with
-   the DID of whoever added it.
+   host's, with **Remove** beside it. The list marks it as a steward's,
+   with the DID of the person who added it.
 
    <!-- look /g/choir.groups.test/settings/recovery --as erin --click 'button[popovertarget=add-key]' --type '#add-key [name=key]=did:key:zDnaeiZqELJ9J1mFZEG4SvYFJgZfaPPkndev444K8kz8ypVhZ' --click '#add-key button[type=submit]' --element 'section.card' -->
    ![The Recovery keys card with two keys: the new one first, A steward's, added by a DID, with Remove, then the one marked This host](shots/recovery-added.png)
 
 Only people who can change the group's settings see this tab. In a new
-group that is the admin role; [rules and roles](rules-and-roles.md) says
+group that's the admin role, and [rules and roles](rules-and-roles.md) says
 how to give it to someone. A group can have four recovery keys at most,
 besides the host's, so several people who run it can each hold one.
 
@@ -108,7 +108,7 @@ field.
 
 It refuses a key in these cases:
 
-- The key is of a kind the console does not take. Make a P-256 or
+- The key is of a kind the console doesn't take. Make a P-256 or
   secp256k1 key and paste that.
 - The key is on the group already, as yours or as the host's.
 - Someone else changed the group's keys at the same moment. Press
@@ -136,7 +136,7 @@ host's changes or move the group with it. You can add it again later.
 
 ## From a terminal
 
-There is no command for recovery keys. You add, see and remove them in
+There's no command for recovery keys. You add, see and remove them in
 the console. The [CLI reference](../reference/cli.md) lists the commands
 there are.
 

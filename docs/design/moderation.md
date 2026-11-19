@@ -1,19 +1,19 @@
 # Moderation
 
 A group's members write in their own repos, on their own PDSes. The
-group cannot edit or delete what they wrote. So a group moderates by
+group can't edit or delete what they wrote. So a group moderates by
 writing its judgements beside the content, as records of its own, and by
 keeping a queue of what still needs a judgement. Reports come in, labels
 go out, and the queue sits between them.
 
 Every moderation method names a group hosted here, a group account with
-a members [space](spaces.md). A DID that is not one is refused with
+a members [space](spaces.md). The host refuses any other DID with
 `GroupNotFound`.
 
 ## Who moderates
 
-Moderating is a matter of roles, as everything a member does in a group
-is (see [membership](membership.md)). Three of the host's actions are
+Moderating comes down to roles, like everything else a member does in a
+group (see [membership](membership.md)). Three of the host's actions are
 about moderation:
 
 - `mod.read`: see the queue and a subject's history.
@@ -21,18 +21,19 @@ about moderation:
 - `label`: write a label, of any value, and delete one.
 
 A role holds an action through an OAuth scope in the group's permissions
-record, and a member holds the union of their roles' actions. There is
-no deny and no hierarchy. A new group's `admin` role holds every action,
-moderation included; its `member` role holds none. To make moderators, a
+record, and a member holds the union of their roles' actions. There's no
+deny and no hierarchy. A new group's `admin` role holds every action,
+moderation included. Its `member` role holds none. To make moderators, a
 group gives a role these actions and gives that role to people.
 
-Each method checks the caller's roles as they are at the moment of the
-call. The caller is whoever signed in, either through service auth from
+Each method checks the caller's roles at the moment of the call. The
+caller is the person who signed in, either through service auth from
 their PDS or through the console's session (see [signing
-in](signing-in.md)). A caller without the action is refused `403
-Forbidden`. An MCP client a member connects can read the queue, label and
-resolve as that member, within the same roles, with the `mod_*` tools,
-the twins of the `opensocial mod` commands (see [MCP](mcp.md)).
+in](signing-in.md)). The host refuses a caller without the action with
+`403 Forbidden`. An MCP client a member connects can read the queue,
+label and resolve as that member, within the same roles. It does that
+with the `mod_*` tools, which mirror the `opensocial mod` commands (see
+[MCP](mcp.md)).
 
 Details:
 
@@ -40,37 +41,37 @@ Details:
   `mod.resolve` by `rpc:fyi.opensocial.resolveSubject`, and `label` by
   `space:*?collection=com.atproto.label.label`, or any `space:*` scope
   covering that collection.
-- No caller at all is `401 AuthMissing`.
+- No caller at all gets `401 AuthMissing`.
 
 ## Labels
 
-A label is a moderation tag on a record or an account. Here it is a
-`com.atproto.label.label` record that the group writes, as it writes any
-record of its own: with `com.atproto.space.createRecord` and the rest,
-and a token for the group ([signing in](signing-in.md)). It holds the
-subject's `uri` (an account's DID, or a record's URI), optionally the
-`cid` of one version of a record, a value `val`, and `cts`, when it was
-made.
+A label is a moderation tag on a record or an account. Here it's a
+`com.atproto.label.label` record that the group writes, the same way it
+writes any record of its own. That means `com.atproto.space.createRecord`
+and the rest, with a token for the group ([signing in](signing-in.md)).
+It holds the subject's `uri` (an account's DID, or a record's URI),
+optionally the `cid` of one version of a record, a value `val`, and
+`cts`, when it was made.
 
 A label has to be readable by the people who see its subject, and only
 by them. So it goes where the subject lives. A record's label goes into
-the space the record is in, in the group's own repo there; an account's
-label goes into the group's members space. Whoever may read the space
+the space the record is in, in the group's own repo there. An account's
+label goes into the group's members space. Anyone who may read the space
 may read its labels.
 
 A member also writes in their own public repo, outside the group's
-spaces: a post an app such as a forum shows to the group's public
-community. Such a record is labelled where its author's labels go, in
-the members space, so a moderator can label one post rather than the
-member who wrote it. The host refuses a label whose `uri` is neither a
-DID nor a record in the space it is written in, nor, in the members
+spaces. An example is a post that an app such as a forum shows to the
+group's public community. Such a record is labelled where its author's
+labels go, in the members space, so a moderator can label one post
+instead of the member who wrote it. The host refuses a label whose `uri`
+isn't a DID or a record in the space it's written in. In the members
 space, a record in the public repo of someone who holds a role in the
-group.
+group is also allowed.
 
-A label is taken back by deleting it. The record is gone from the
-space, but the queue keeps that it was written, when, and by whom.
+You take a label back by deleting it. The record is gone from the space,
+but the queue keeps that it was written, when, and by whom.
 
-The host gives no value an effect of its own: it hides and removes
+The host gives no value an effect of its own, so it hides and removes
 nothing. An app that reads a space reads its labels with it, and decides
 what to show. The group says what its values mean in its labeler (see
 [reports](#reports)).
@@ -80,64 +81,65 @@ Details:
 - Writing or deleting a label needs `label`. It reaches every space of
   the group's, but in a space for chosen people only those of them who
   hold it. The token's scope must cover the write, as for any record.
-- The record is checked against its lexicon: a value is 128 bytes at
+- The record is checked against its lexicon. A value is 128 bytes at
   most, and `uri`, `val` and `cts` are required.
-- The host does not check that the subject exists or that a CID
-  matches.
+- The host doesn't check that the subject exists or that a CID matches.
 - Every label written, and every one deleted, is also an event in the
   queue.
 
 ## The queue
 
-A moderator needs to know what is waiting for a judgement and what was
-already done about it. The queue answers that. It is the host's own,
-kept in its database rather than published in the group's repo, and only
-those with `mod.read` see it.
+A moderator needs to know what's waiting for a judgement and what was
+already done about it. The queue answers that. It's the host's own, kept
+in its database instead of published in the group's repo, and only
+people with `mod.read` see it.
 
-A subject is an account, sent and answered as
-`fyi.opensocial.defs#accountSubject` with its `did`, or a record, as
-`fyi.opensocial.defs#recordSubject` with its `uri` and, optionally, the
-`cid` of one version. A record is one in a space, or one in a public
-repo, `at://<did>/<collection>/<rkey>`, its own subject apart from its
-author's account. The queue keeps a record as a whole, by its URI;
-the version a report or label names stays on that event. A subject has a
-status: `open`, `escalated` or `resolved`.
+A subject is either an account or a record. An account is sent and
+answered as `fyi.opensocial.defs#accountSubject` with its `did`. A
+record is sent as `fyi.opensocial.defs#recordSubject` with its `uri` and,
+optionally, the `cid` of one version. The record is one in a space, or
+one in a public repo, `at://<did>/<collection>/<rkey>`, and it's a
+subject of its own, separate from its author's account. The queue keeps
+a record as a whole, by its URI. The version a report or label names
+stays on that event. A subject has a status: `open`, `escalated` or
+`resolved`.
 
-Each subject in the queue comes with `actor`: the account it is, or whose
-record it is, by its DID and handle, so a moderator reads who it is about
-rather than a DID.
+Each subject in the queue comes with `actor`, the account it is or whose
+record it is, by its DID and handle. So a moderator reads who it's about
+instead of a DID.
 
-Its history is a list of events, each with an `id`, `createdAt`, who did
-it as `createdBy` and, by their DID and handle, as `creator`, the
-version of a record it is about as `cid` when it names one, and one of
-four kinds as `event`:
+Its history is a list of events. Each has an `id` and `createdAt`. It
+names who did it as `createdBy` and, by their DID and handle, as
+`creator`. It gives the version of a record it's about as `cid` when it
+names one, and one of four kinds as `event`:
 
 - `reportEvent`: someone reported it, with a `reasonType`, an optional
-  `reason` and the `rule` it cites, if any. An appeal is one, its
-  `reasonType` `com.atproto.moderation.defs#reasonAppeal`.
+  `reason` and the `rule` it cites, if any. An appeal is a report too,
+  with the `reasonType` `com.atproto.moderation.defs#reasonAppeal`.
 - `statusEvent`: a moderator set its `status`, with an optional `note`.
 - `labelEvent`: a label was written, by the label record's `uri` and its
-  `val`; or, with `deleted: true`, deleted, which takes it back.
-- `ejectEvent`: the member was removed from the group, their membership
-  deleted. It says nothing more.
+  `val`. With `deleted: true`, the label was deleted, which takes it
+  back.
+- `ejectEvent`: the member was removed from the group and their
+  membership deleted. It says nothing more.
 
-A subject enters the queue with its first report, label or ejection,
-opened.
+A subject enters the queue with its first report, label or ejection, and
+starts out open.
 
-`listSubjects` lists the subjects of one status, `open` unless asked,
+`listSubjects` lists the subjects of one status (`open` by default),
 latest changed first. Every event moves a subject to the top.
-`getSubjectHistory` answers a subject's events, oldest first, a page at a
-time, and with a `cid` only those about that version. A subject nothing
-has happened to has no events. `resolveSubject` sets a subject already in
-the queue `resolved` or `escalated`, with an optional note of 2,000
-characters at most. Setting the status a subject has keeps the note, so a
-note is added that way. It answers the subject as the queue now has it.
-Escalating is only a status, for a group to give its own meaning; no one
-is told.
+`getSubjectHistory` answers a subject's events, oldest first, a page at
+a time. With a `cid` it answers only those about that version. A subject
+nothing has happened to has no events. `resolveSubject` sets a subject
+already in the queue to `resolved` or `escalated`, with an optional note
+of 2,000 characters at most. Setting the status a subject already has
+keeps the note, so that's how you add a note. It answers the subject as
+the queue has it after the change. Escalating is only a status, for a
+group to give its own meaning, and no one is told.
 
 A resolved subject should come back when someone reports it again. A
-label is a moderator's own act, so it should not undo a resolution. So
-only a report reopens a resolved subject; a label or an ejection opens a
+label is a moderator's own act, so it shouldn't undo a resolution. So
+only a report reopens a resolved subject. A label or an ejection opens a
 subject nobody reported, and leaves a resolved one resolved. An
 escalated subject stays escalated through new reports.
 
@@ -145,31 +147,32 @@ Deleting a group deletes its queue.
 
 Details:
 
-- A subject that is neither a DID, a record in one of the group's
-  spaces, nor a record in a public repo is `InvalidSubject`. Resolving
-  one never in the queue is `SubjectNotFound`.
-- A page is 50 events or subjects unless `limit` says, 100 at most; the
-  `cursor` an answer gives asks for the next.
+- A subject that isn't a DID, a record in one of the group's spaces or
+  a record in a public repo fails with `InvalidSubject`. Resolving one
+  that was never in the queue fails with `SubjectNotFound`.
+- A page is 50 events or subjects unless `limit` says otherwise, and 100
+  at most. The `cursor` an answer gives asks for the next page.
 
 ## Reports
 
-A report comes from someone who can see what they report, so a group
-hears from the people its content reaches and not from strangers. A
-report arrives at `fyi.opensocial.createReport`, by service auth or the
+A report comes from someone who can see what they report. So a group
+hears from the people its content reaches, and strangers can't report.
+A report arrives at `fyi.opensocial.createReport`, by service auth or the
 console's session. It names the `group`, the subject, a `reasonType`,
 and optionally a `reason` and the `rule` it cites. It needs no role.
 
-The subject is an account that is a member of the group, a record in
-one of the group's spaces hosted here, or a record in the public repo of
-a member. The reporter must be able to read the space the subject is in:
-a record's own space, or for an account or a member's public record the
-members space, where its labels go. The report goes into the group's
-queue as a `reportEvent`, and is answered with its `id` and `createdAt`.
-Nobody is notified: the report waits in the queue for a moderator.
+The subject is an account that's a member of the group, a record in one
+of the group's spaces hosted here, or a record in the public repo of a
+member. The reporter must be able to read the space the subject is in.
+For a record that's its own space. For an account or a member's public
+record it's the members space, where its labels go. The report goes into
+the group's queue as a `reportEvent`, and the host answers with its `id`
+and `createdAt`. Nobody is notified, so the report waits in the queue
+for a moderator.
 
 The group's labeler, in its meta space, says what reports it takes. Each
-of its lists, when present, limits them: `reasonTypes` the reasons,
-`subjectTypes` the kinds of subject (`account`, `record`), and
+of its lists, when present, limits them. `reasonTypes` limits the
+reasons, `subjectTypes` the kinds of subject (`account`, `record`), and
 `subjectCollections` the collections a reported record may be in. A new
 group's labeler takes reports of accounts and records, for the common
 reasons and appeals, of any collection.
@@ -178,51 +181,54 @@ reasons and appeals, of any collection.
 
 Someone a group moderated should be able to answer it, and the
 moderators should hear it where they hear everything else. So an appeal
-is a report, its `reasonType` `com.atproto.moderation.defs#reasonAppeal`,
-filed by its subject: an account for itself, or a record's author for
-the record, the DID its URI is in. Anyone else appealing is refused
-`InvalidRequest`, saying only its subject may appeal. It goes into the
-queue as a `reportEvent` like any report, reopening a resolved subject,
-and keeps its reason, so a moderator reads it as an appeal.
+is a report with the `reasonType`
+`com.atproto.moderation.defs#reasonAppeal`, filed by its subject. That's
+an account for itself, or a record's author for the record (the DID its
+URI is in). The host refuses anyone else's appeal with `InvalidRequest`,
+saying only its subject may appeal. It goes into the queue as a
+`reportEvent` like any report and reopens a resolved subject. It keeps
+its reason, so a moderator reads it as an appeal.
 
-Whoever was put out of the group no longer holds a role, nor reads the
-members space, yet what was done to them is theirs to answer. So an
-appeal of a subject the queue already has, by any event (a report, a
-label, an ejection), is taken though its author is no longer a member
-and cannot read the space it is in. Any other appeal is held to the
-rules of any report. The labeler still decides: a group whose
-`reasonTypes` leave appeals out takes none.
+Someone put out of the group holds no role and can't read the members
+space, but what was done to them is still theirs to answer. So the host
+takes an appeal of a subject the queue already has, by any event (a
+report, a label, an ejection), even though its author isn't a member and
+can't read the space it's in. Any other appeal follows the rules of any
+report. The labeler still decides, so a group whose `reasonTypes` leave
+appeals out takes none.
 
 ## The group's own labels
 
-A label anyone can put on anything says nothing to an app that does not
+A label anyone can put on anything says nothing to an app that doesn't
 know what it means. So the group's labeler also lists the labels it
-applies, in `policies.labelValues`, and defines its own in
-`policies.labelValueDefinitions`, each as atproto defines one: its
-`identifier`, its name and what it means in `locales`, and how apps
+applies, in `policies.labelValues`. It defines its own in
+`policies.labelValueDefinitions`, each the way atproto defines one. That
+covers its `identifier`, its name and meaning in `locales`, and how apps
 should show what wears it (`severity`, `blurs`, `defaultSetting`,
 `adultOnly`). A new group applies `!hide` and `!takedown`, which atproto
 defines, and none of its own.
 
-`putLabelDefinition` defines one, or changes the one with that value, and
-adds it to the values the labeler applies. `deleteLabelDefinition` takes
-both away; labels already applied stay. Each asks `group.configure`, and
-writes the labeler as the group, as any change to its meta space is. A
-group's own label is lowercase letters and hyphens, as atproto has a
-labeler's own values, so atproto's are never redefined. `getGroup`
-answers the definitions as `labels`, to whoever may read the meta space.
+`putLabelDefinition` defines one, or changes the one with that value,
+and adds it to the values the labeler applies. `deleteLabelDefinition`
+takes both away, and labels already applied stay. Each needs
+`group.configure`, and writes the labeler as the group, like any change
+to its meta space. A group's own label is lowercase letters and hyphens,
+the way atproto has a labeler's own values, so atproto's are never
+redefined. `getGroup` answers the definitions as `labels`, to anyone who
+may read the meta space.
 
 Details:
 
-- A group not hosted here is `GroupNotFound`. A subject the reporter
-  cannot read, that is not in the group, a public record of someone not
-  a member, or of a kind or collection the labeler does not take, is
-  `InvalidSubject`; a reason it does not take, or an appeal by anyone but
-  its subject, is `InvalidRequest`. An appeal of a subject already in the
-  queue is taken though it is no longer in the group or readable by its
-  author. A member's public record is a `record`, of its collection.
+- A group not hosted here fails with `GroupNotFound`. A subject fails
+  with `InvalidSubject` if the reporter can't read it, if it isn't in
+  the group, if it's a public record of someone who isn't a member, or
+  if it's of a kind or collection the labeler doesn't take. A reason it
+  doesn't take fails with `InvalidRequest`, and so does an appeal by
+  anyone but its subject. The host takes an appeal of a subject already
+  in the queue even if it isn't in the group or readable by its author
+  anymore. A member's public record is a `record`, of its collection.
 - A `rule` must be a record's URI in the group's meta space.
-- The host does not check that the reported record exists or that its
-  CID matches.
+- The host doesn't check that the reported record exists or that its CID
+  matches.
 - Limits and the answer's fields are in [the API
   reference](../reference/api.md).

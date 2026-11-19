@@ -27,9 +27,9 @@ You need a group where you have the admin role. If you have none yet,
 
 By default only admins may create app passwords. A member may create
 them too if one of their roles may write every collection as the group.
-That permission is not among those in
-[Rules and roles](rules-and-roles.md), as the console cannot give it.
-It is given from a terminal, with `--scopes 'repo:*'` on
+That permission isn't among those in
+[Rules and roles](rules-and-roles.md), since the console can't give it.
+You give it from a terminal, with `--scopes 'repo:*'` on
 `opensocial role grant`. In **Settings**, such a member sees only the
 **App passwords** card, with the passwords they made.
 
@@ -47,10 +47,10 @@ It is given from a terminal, with `--scopes 'repo:*'` on
    This host answers no chat yet, so leave it unticked unless the app
    needs chat.
 4. Press **Create**.
-5. The password shows once, in a banner above the list. There is no Copy
+5. The password shows once, in a banner above the list. There's no Copy
    button, so select the password and copy it. Keep it somewhere safe.
-   The host does not keep it, and you won't see it again. The password
-   in the picture is an example; yours will differ.
+   The host doesn't keep it, and you won't see it again. The password
+   in the picture is an example, and yours will differ.
 
    <!-- look /g/nightshift.groups.test/settings/apps --as bob --click 'button[popovertarget=make-password]' --type '[name=name]=Phone' --click ':popover-open button:text-is("Create")' --element 'section:has(h2:text-is("App passwords"))' -->
    ![App passwords 1, with a banner: The app password "Phone" is followed by the password, Copy it now. You won't see it again. Below, a row Phone, By bob.test, with Revoke](shots/apps-made.png)
@@ -59,32 +59,32 @@ Anyone with the password can post as the group. Give it only to an app
 you trust. If it leaks, revoke it at once, as
 [How do I stop an app?](#how-do-i-stop-an-app) shows.
 
-The password stays yours. It does not expire, but it stops working if you
+The password stays yours. It doesn't expire, but it stops working if you
 lose the role that let you make it, or leave the group.
 
 ## What do I type into the other app?
 
 In the other app's sign-in, type these three things:
 
-- Server: the address of the console you are using, the one in your
+- Server: the address of the console you're using, the one in your
   browser's address bar. The console passes sign-ins on to the host. In
   the Bluesky app this is "Hosting provider", which you change from
   Bluesky Social to a custom one.
 - Username: the group's handle, such as "nightshift.groups.test".
 - Password: the app password you just copied.
 
-This is not your own handle or your own password. An app password signs
-an app in only as the group. A wrong password, or a handle that is not a
-group on this host, is turned down.
+This isn't your own handle or your own password. An app password signs
+an app in only as the group. The host turns down a wrong password, or a
+handle that isn't a group on this host.
 
 ## What can the app do as the group?
 
 The app can write the group's own records: post as the group, delete its
 posts, upload pictures, like and follow, and change the group's profile.
-It cannot write to anyone else's account, and it cannot see or change
+It can't write to anyone else's account, and it can't see or change
 what the group keeps only for its members.
 
-The host does not serve feeds. If you sign the Bluesky app in as the
+The host doesn't serve feeds. If you sign the Bluesky app in as the
 group, its timeline will look empty or broken. Posting still works. So
 the app is for posting as the group, as a bot or a script does.
 
@@ -104,7 +104,7 @@ the app is for posting as the group, as a bot or a script does.
    <!-- look /g/nightshift.groups.test/settings/apps --as bob --element 'section:has(h2:text-is("What apps did as the group"))' -->
    ![What apps did as the group: Phone deleted a post, Phone posted, Phone posted, each For bob.test with the date](shots/apps-activity.png)
 
-Only writes are listed, not reads. The list stays after you revoke an
+The list shows only writes, and no reads. It stays after you revoke an
 app or its password, so you can still see what it did.
 
 ## How do I stop an app?
@@ -133,7 +133,7 @@ You may revoke the passwords you made. An admin may revoke anyone's.
 
 ## From a terminal
 
-There is no command for app passwords or for the apps acting as the
+There's no command for app passwords or for the apps acting as the
 group. You make and revoke them in the console. The
 [CLI reference](../reference/cli.md) lists the commands there are.
 
@@ -142,7 +142,7 @@ keep the group's posts in order with [Moderating](moderating.md), or set
 up [Recovery keys](recovery-keys.md). [Signing in](../design/signing-in.md)
 explains how signing in works.
 
-Connecting an AI app is not the same as signing in as the group. An app
+Connecting an AI app isn't the same as signing in as the group. An app
 added under **Connect an AI app** on the group's page acts for you, with
 what your roles let you do, and needs no app password, as
 [AI apps](../design/mcp.md) explains.

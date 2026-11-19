@@ -47,12 +47,11 @@ what the walk's Odd section lists.
   walk's `[cli]` facts, linked to `../reference/cli.md`; then what to do
   next, as links to other guides.
 - Second person, present tense, the console's own words for everything
-  on it. Short sentences. Explain a word the reader may not know in a
-  clause, the first time.
-- Avoid the marks of machine writing: inflated significance, "not just
-  X but Y", reflexive groups of three, colon chains, em dashes, bold for
-  emphasis (bold is only for words on screen), summary sentences, and
-  the words delve, robust, seamless, simply, leverage, powerful.
+  on it. Explain a word the reader may not know in a clause, the first
+  time.
+- The voice is `.claude/skills/docs/voice.md`: read it before writing,
+  and run its mechanical pass over the page when done. Bold is only for
+  words on screen.
 - Links: only the paths the context file lists.
 - Length: about [n] lines.
 

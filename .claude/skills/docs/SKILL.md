@@ -27,6 +27,10 @@ also a site (`docs-site/`); a new page goes in its sidebar.
 The docs describe this host as it is. They never compare it with another
 implementation or say where an idea came from.
 
+Every page is written in one voice, set out in voice.md beside this
+file: plain sentences, contractions, the reader as "you", and a list of
+patterns to search for and remove. Read it before writing anything here.
+
 ## Which job
 
 - A small change to what a page says (a new method, a changed limit):
@@ -36,6 +40,9 @@ implementation or say where an idea came from.
 - A page to write or rewrite: all four steps.
 - An audit (are these pages still true?): steps 1 and 4 for each page,
   then fix what is wrong, or file an issue when the code is what's wrong.
+- A voice pass (does this page read well?): voice.md's mechanical pass
+  over the page as it stands, changing wording only, then `just docs`.
+  Its "What a voice pass must not change" is the check.
 
 ## 1. Facts
 

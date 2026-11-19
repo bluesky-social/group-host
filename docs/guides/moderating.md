@@ -15,7 +15,7 @@ Moderation happens on the group's Moderation page. A member sees the way
 there only when one of their roles lets them read the moderation queue.
 
 1. Open your group in the console. If you may moderate, its card has
-   **Moderation** at the top right, beside **Settings** if you are an
+   **Moderation** at the top right, beside **Settings** if you're an
    admin.
 
    <!-- look /g/gardens.groups.test --as dan --seed moderating --element .group-card -->
@@ -23,33 +23,34 @@ there only when one of their roles lets them read the moderation queue.
 
 2. Press **Moderation**. The page opens on its **Open** tab.
 
-A member without the role does not see the button, and if they open the
-page anyway it tells them there is nothing there for them. Each part of
-the page needs its own permission in a role. It takes `mod.read` to see
-the queue, `mod.resolve` to resolve or escalate, and `label` to label
+A member without the role doesn't see the button. If they open the page
+anyway, it tells them there's nothing there for them. Each part of the
+page needs its own permission in a role. It takes `mod.read` to see the
+queue, `mod.resolve` to resolve or escalate, and `label` to label
 someone or take an account down. You give these to a role as in
 [Rules and roles](rules-and-roles.md).
 
 ## How does something come to be reported?
 
 A report is a member flagging a post or an account to the group's
-moderators. Members report from the apps they use in the group, not from
-the console. Each report lands on this page, with the reason the member
-chose and what they wrote. A member can report an account only while it
-is in the group, and a post only in a part of the group they can read.
+moderators. Members report from the apps they use in the group, and
+they can't report from the console. Each report lands on this page,
+with the reason the member chose and what they wrote. A member can
+report an account only while it's in the group, and a post only in a
+part of the group they can read.
 
-Someone can also appeal what you did to them: their account, or a post
-of theirs. An appeal is a report whose reason is Appeal, and only the
-one it is about can send it. Someone you removed from the group can
-still appeal anything of theirs already on this page.
+Someone can also appeal what you did to them, to their account or to a
+post of theirs. An appeal is a report whose reason is Appeal, and only
+the person it's about can send it. Someone you removed from the group
+can still appeal anything of theirs that's already on this page.
 
 ## What is on the Moderation page?
 
 1. Look at the **Open** tab. Each row is one subject: an account, or a
    post that was reported, under the handle of the account that posted
-   it. Under the handle, whether it is an account or a post and when it
-   was reported, then the reasons members chose, then what the latest
-   report said.
+   it. Under the handle, the row shows whether it's an account or a post
+   and when it was reported. Then come the reasons members chose, and
+   what the latest report said.
 
    <!-- look /g/gardens.groups.test/moderation --as dan --element main -->
    ![The Moderation page on its Open tab, Subjects 2: maximilianaquinces.test's account reported for Spam and frank.test's post reported as Rude, each with Review](shots/moderating-queue.png)
@@ -65,12 +66,12 @@ The tabs sort subjects by where they are:
 - **Resolved**: dealt with. A new report on a resolved subject puts it
   back in **Open**.
 
-Nothing tells anyone when a subject moves. Whoever moderates looks at
-the tabs.
+Nothing tells anyone when a subject moves, so moderators check the tabs
+themselves.
 
 ## How do I pass a report on?
 
-When a report is not yours to decide, escalate it.
+When a report isn't yours to decide, escalate it.
 
 1. Press **Review** on the post's row. The dialog **Review** opens, with
    everything you can do about the post and its history.
@@ -82,7 +83,8 @@ When a report is not yours to decide, escalate it.
    <!-- look /g/gardens.groups.test/moderation --as frank --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --type ':popover-open [name=note]=Third time this month; over to the admins.' --click ':popover-open button[value=escalated]' --element main -->
    ![The Open tab after escalating, Subjects 1: only the account reported for spam is left](shots/moderating-escalate-sent.png)
 
-The post now waits on the **Escalated** tab, your note in its history.
+The post now waits on the **Escalated** tab, with your note in its
+history.
 
 ## How do I give the group labels of its own?
 
@@ -106,18 +108,19 @@ configures the group, as an admin's does.
    <!-- look /g/gardens.groups.test/settings/labels --as dan --click 'button[popovertarget=create-label]' --type '#create-label [name=name]=Off-topic' --type '#create-label [name=label]=off-topic' --type '#create-label [name=description]=Not about gardens, seeds or swaps.' --click '#create-label button[type=submit]' --element 'section:has(.label-rows)' -->
    ![The Labels card, Labels 1: Off-topic, off-topic, Not about gardens, seeds or swaps. Apps show it with a warning., with Delete](shots/moderating-defined.png)
 
-Creating one with a value already in use changes that label. Deleting a label stops moderators
-choosing it; what already wears it keeps it.
+Creating a label with a value that's already in use changes that label.
+Deleting a label stops moderators choosing it, but anything that already
+wears it keeps it.
 
 ## How do I label an account?
 
 A label is a tag the group puts on an account, such as "spam". Apps that
-follow the group's labels decide what to do with it. Any word is yours to
-choose, but two mean more: `!takedown` and `!hide`, which the next part
-shows.
+follow the group's labels decide what to do with it. You can choose any
+word, but two mean more: `!takedown` and `!hide`. The next part shows
+them.
 
-1. Press **Review** on the account's row. The group's own labels are
-   offered by name, to add with a press.
+1. Press **Review** on the account's row. The dialog offers the group's
+   own labels by name, so you can add one with a press.
 2. Or, under **Add a label**, type another, such as "spam".
 
    <!-- look /g/gardens.groups.test/moderation --as dan --click 'li.subject:has(> .row-main .who:text-is("maximilianaquinces.test")) > .row-actions button' --type ':popover-open input[name=val]:not([type=hidden])=spam' --element ':popover-open' -->
@@ -132,9 +135,9 @@ shows.
 Press the × to take a label back. Once the group has used a label, the
 dialog offers it to add with one press, under the field.
 
-A post is labelled the same way, from its own Review, when the report
-named the version of the post it was about. If it didn't, its Review says
-so, and you label it from a terminal, as the last part shows.
+You label a post the same way, from its own Review, when the report named
+the version of the post it was about. If it didn't, its Review says so,
+and you label it from a terminal, as the last part shows.
 
 ## How do I take an account down?
 
@@ -163,21 +166,21 @@ You can label, take down or report anyone in the group, reported or not.
 
 1. Under **Find an account**, at the top of the queue, type their
    handle, such as "frank.test".
-2. Press **Review** beside it. Their Review opens. If nobody has reported them, it
-   says **Not in the queue**, and in place of a decision it offers
-   **Report this account**.
+2. Press **Review** beside it. Their Review opens. If nobody has
+   reported them, it says **Not in the queue**, and in place of a
+   decision it offers **Report this account**.
 
    <!-- look /g/gardens.groups.test/moderation --as dan --type '#find-handle=frank.test' --click 'form.find button[type=submit]' --element ':popover-open' -->
    ![The Review dialog for frank.test, Account, Not in the queue, with Labels, Take down and Report this account](shots/moderating-found.png)
 
 To put them in the queue for you or another moderator to decide, press
-**Report this account**, choose why, and send the report. They go into the **Open**
-tab with your report, as a member's report would.
+**Report this account**, choose why, and send the report. They go into
+the **Open** tab with your report, as a member's report would.
 
 ## How do I remove someone from the group?
 
-Removing takes away their membership. It does not hide what they posted;
-a takedown does that.
+Removing takes away their membership. It doesn't hide what they posted.
+A takedown does that.
 
 1. Press **← Garden share** at the top of the page to go back to the
    group's page. In your group, the link shows your group's name.
@@ -194,8 +197,8 @@ a takedown does that.
    ![The Members card's heading, Members 2, with Invite someone](shots/moderating-removed.png)
 
 They lose access to what only members see, and their history on the
-Moderation page notes that they were removed. Removing does not block them:
-they can ask to join again.
+Moderation page notes that they were removed. Removing doesn't block
+them, so they can ask to join again.
 
 ## How do I resolve a report?
 

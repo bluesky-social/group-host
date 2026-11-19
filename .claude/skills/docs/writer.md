@@ -32,19 +32,11 @@ implementation, or say where an idea came from.
   exists by the time they meet it. Put the lowest-level details in a
   short plain list headed "Details" at the end of their section.
 - Define before use.
-- Plain technical prose: present tense, active voice, one idea per
-  sentence, exact names in backticks, short paragraphs. A list only for
-  truly parallel items, a table only for tabular data.
+- A list only for truly parallel items, a table only for tabular data.
 - Don't number the problems and refer back to them; let the structure
   make the connection.
-- Avoid the marks of machine writing:
-  - inflated significance ("plays a crucial role", "serves as")
-  - "not just X but Y", and reflexive groups of three
-  - trailing "-ing" commentary
-  - bold-headed bullet lists (`- **Thing.** text`)
-  - bold for emphasis, em dashes, title case in headings
-  - slogans, and summary sentences that repeat the paragraph above
-  - the words delve, robust, seamless, leverage, comprehensive, powerful
+- The voice is `.claude/skills/docs/voice.md`: read it before writing,
+  and run its mechanical pass over the page when done.
 - No diagrams.
 - Links: only the paths the context file lists.
 - Length: about [n] lines. Command syntax and flags belong in

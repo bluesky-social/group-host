@@ -21,10 +21,10 @@ The examples use Riders, a group with alice, bob and carol in it.
    says so.
 
 The rules show on the group's page, under its name, in the order on this
-tab. Everyone sees them there: members, and people who are not in the
+tab. Everyone sees them there, members and people who aren't in the
 group yet. Only those whose roles let them change the group's settings
-see **Settings**. Anyone else who opens the settings is told "Nothing
-here is yours to change".
+see **Settings**. If anyone else opens the settings, the page tells them
+"Nothing here is yours to change".
 
 ## How do I add a rule?
 
@@ -40,13 +40,13 @@ here is yours to change".
 4. Press **Add**. The dialog closes and the rule shows last in the list,
    with its number.
 
-Each new rule goes at the end. The console cannot edit a rule or move
+Each new rule goes at the end. The console can't edit a rule or move
 one. To change a rule or its place, delete it and add it again.
 
 ## How do I delete a rule?
 
-Say you added "Wait at the top" and "No headphones" as well, and no
-longer want the last one.
+Say you added "Wait at the top" and "No headphones" as well, and now
+you don't want the last one.
 
 1. Press **Delete** beside the rule. The console asks **Delete this
    rule?** and says the rule will no longer be one of the group's rules,
@@ -79,8 +79,8 @@ each. They show by their short names:
 
 | Permission | What it lets a member do |
 | --- | --- |
-| `mod.read` | See what is waiting for moderation. They get **Moderation** on the group's page. |
-| `mod.resolve` | Settle what is waiting for moderation. |
+| `mod.read` | See what's waiting for moderation. They get **Moderation** on the group's page. |
+| `mod.resolve` | Settle what's waiting for moderation. |
 | `label` | Put a label on a post or an account, a takedown too, anywhere in the group. |
 | `invite` | Invite people. They get **Invite someone**. |
 | `admit` | Let in people who ask to join. They get **Asking to join**. |
@@ -117,7 +117,7 @@ a role that admits people needs Member on its list.
    ![Roles 3: Admin, Member, and Ride leader ride-leader with admit, invite and mod.read, and Delete](shots/rules-role-made.png)
 
 You can give a role only permissions your own roles have. The console
-cannot edit a role. To change one, take it off everyone who holds it,
+can't edit a role. To change one, take it off everyone who holds it,
 delete it, and create it again.
 
 ## How do I give a role to a member?
@@ -132,7 +132,7 @@ You give roles on the group's page, a member at a time.
 
    Press **Change roles**. A dialog opens, with the roles you can give
    under **Roles you can give**. The dialog lists roles by their keys,
-   such as ride-leader, not by their names.
+   such as ride-leader. It doesn't show their names.
 2. Tick the role, here "ride-leader". Leave member ticked. Everyone
    keeps it, and the host turns down a change that leaves it off.
 
@@ -146,9 +146,9 @@ You give roles on the group's page, a member at a time.
    ![bob.test's row in the members list, tagged ride-leader, with the ⋯ menu at its end](shots/rules-given.png)
 
 Now bob sees **Moderation**, **Asking to join** and **Invite someone**
-on the group's page, and the group's card says they are a member with
-the ride-leader role. They get no ⋯ menu on anyone's row, as the role
-can neither change roles nor remove members.
+on the group's page, and the group's card says they're a member with
+the ride-leader role. They get no ⋯ menu on anyone's row, since the role
+can't change roles or remove members.
 
 ## How do I take a role off, or delete it?
 
@@ -187,7 +187,7 @@ The [`opensocial` command](../reference/cli.md) does each of these:
   <role,role…>`, naming all the roles they keep, `member` among them.
 - Delete a role: `opensocial role delete <group> <role>`.
 
-An AI app connected to the group has the same as
+An AI app connected to the group has the same acts as
 [tools](../reference/mcp.md): `rule_set`, `rule_delete`, `role_set`,
 `role_grant`, `member_assign` and `role_delete`.
 

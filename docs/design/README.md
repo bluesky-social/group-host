@@ -1,10 +1,10 @@
 # Design
 
-A person on atproto has a PDS: the server that keeps their repo, signs
-their commits, and lets apps sign in as them. A group needs the same, and
-more. It has no one person behind it, so what it may do has to be decided
-by its members' roles. Much of what it keeps is private, so someone has to
-decide who reads it. This host does both for every group it holds.
+A person on atproto has a PDS. That's the server that keeps their repo,
+signs their commits, and lets apps sign in as them. A group needs the
+same, and more. There's no one person behind it, so its members' roles
+decide what it may do. Much of what it keeps is private, so someone has
+to decide who reads it. This host does both for every group it holds.
 
 It implements the opensocial proposal
 (https://tangled.org/opensocial.group/proposal). Members keep their own
@@ -14,22 +14,22 @@ accounts on their own PDSes, anywhere on the network.
 
 - Its PDS. Each group is an account here, with its own `did:plc`, public
   repo and files ([groups](groups.md)).
-- The authority for its spaces, the private record stores where the group
-  and its members write. The host decides who reads and writes, gives
-  readers credentials, and keeps an index of what was written
-  ([spaces](spaces.md)).
+- The authority for its spaces. A space is a private record store where
+  the group and its members write. The host decides who reads and
+  writes, gives readers credentials, and keeps an index of what was
+  written ([spaces](spaces.md)).
 - Its OAuth server. A member signs an app in as the group, and the app
-  gets what that member's roles allow, checked again at every write
-  ([signing in](signing-in.md)).
-- An MCP server, where a member connects an AI app to act for them in
-  one group, its tools the twins of the `opensocial` commands
+  gets what that member's roles allow. The host checks it again at every
+  write ([signing in](signing-in.md)).
+- An MCP server. A member connects an AI app here to act for them in
+  one group, and its tools are the twins of the `opensocial` commands
   ([MCP](mcp.md)).
 
 ## Where things live
 
 | What | Where |
 | --- | --- |
-| The group's identity | its DID document, in the PLC directory, changed with the host's rotation key and any recovery keys ([recovery](recovery.md)) |
+| The group's identity | its DID document in the PLC directory, changed with the host's rotation key and any recovery keys ([recovery](recovery.md)) |
 | Its public records and files | its repo here |
 | Its website | a record in its repo here, served at its address ([sites](sites.md)) |
 | Its profile, rules and labeler | its `meta` space, in the group's repo there |
@@ -37,20 +37,20 @@ accounts on their own PDSes, anywhere on the network.
 | What members write in its spaces | each member's own repo in the space, on their own PDS |
 | Invites | the invitee's inbox, a space of their own on their PDS ([membership](membership.md)) |
 | Join requests, the moderation queue, tokens, the index | the host's database |
-| What it logged, and how it is used | files beside its database, for its operators ([deploying](../deploying.md#checking-it-is-up)) |
+| What it logged, and how it's used | files beside its database, for its operators ([deploying](../deploying.md#checking-it-is-up)) |
 
 ## The pieces
 
 | Crate or directory | What it is |
 | --- | --- |
-| `atproto`, from [its own repository](https://knotless.dev/chadtmiller.com/atproto) | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE, lexicon data validation, and the space alpha's set hash, commits, MACs, STAR archives and tokens, checked against atproto's interop test vectors and its reference implementation, and published to that repository's Cargo registry |
-| `crates/group-host` | the server, over SQLite: accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries |
-| `crates/group-host-mcp` | the MCP tools, each the twin of an `opensocial` command, and what each call comes to, carried out by the host as the member who connected an MCP client and by the command as the person running it |
+| `atproto`, from [its own repository](https://knotless.dev/chadtmiller.com/atproto) | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE, lexicon data validation, and the space alpha's set hash, commits, MACs, STAR archives and tokens. It's checked against atproto's interop test vectors and its reference implementation, and published to that repository's Cargo registry. |
+| `crates/group-host` | the server, over SQLite. It holds accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries. |
+| `crates/group-host-mcp` | the MCP tools, each the twin of an `opensocial` command, and what each call comes to. The host carries a call out as the member who connected an MCP client, and the command carries it out as the person running it. |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command ([commands](../reference/cli.md)) |
-| `web/` | the console, a SvelteKit app where people start and run groups and approve apps; and the page the host serves around a group's site, with the kit its pages load ([the site kit](../reference/site-kit.md)), and the messages between them (`web/shell`) |
+| `web/` | the console, a SvelteKit app where people start and run groups and approve apps. It's also the page the host serves around a group's site, with the kit its pages load ([the site kit](../reference/site-kit.md)) and the messages between them (`web/shell`). |
 | `packages/sdk` | `@opensocial/sdk`, for apps on group hosts: a group's spaces read and written with atproto's lex-space, and the host's own methods, as a member ([the SDK](../reference/sdk.md)) |
 | `Dockerfile`, `deploy/` | one image of the host, the console and the command, and the compose file that runs it ([deploying](../deploying.md)) |
-| `lexicons/` | the schemas of the records and methods: every `fyi.opensocial.*` method's parameters and input are checked against its own before its handler runs, and a record of our own collections an app writes as a group before it is kept |
+| `lexicons/` | the schemas of the records and methods. The host checks every `fyi.opensocial.*` method's parameters and input against its schema before the handler runs. It also checks a record of our own collections that an app writes as a group before it keeps it. |
 
 ## The pages
 
@@ -64,7 +64,7 @@ accounts on their own PDSes, anywhere on the network.
 - [Moderation](moderation.md): labels, the queue, reports and appeals.
 - [Sites](sites.md): a group's website, published whole and served
   sandboxed at its address or on its own domain, and the live data a
-  visitor sees once signed in on it.
+  visitor sees once they sign in on it.
 - [MCP](mcp.md): connecting an AI app to a group, and its tools.
 - [Recovery](recovery.md): keys that let a group's stewards hold its
   identity.
