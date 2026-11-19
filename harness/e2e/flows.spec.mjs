@@ -11,6 +11,7 @@ import {
   McpClient,
   approve,
   didKey,
+  hydrating,
   joins,
   signIn,
   signInDialog,
@@ -30,6 +31,8 @@ let bob;
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage();
   bob = await (await browser.newContext()).newPage();
+  hydrating(page);
+  hydrating(bob);
   await suggests(page.context());
   await suggests(bob.context());
 });

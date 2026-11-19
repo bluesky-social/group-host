@@ -10,6 +10,19 @@ export const world = JSON.parse(process.env.E2E_WORLD);
 export const who = Object.fromEntries(world.accounts.map((a) => [a.handle.split('.')[0], a]));
 export const url = (path) => world.base + path;
 
+/// Has `page.goto` to a console page wait until the page answers in the
+/// browser (`data-hydrated`, which its root layout sets), so that what a
+/// flow types or picks then is not put back as the page hydrates.
+export const hydrating = (page) => {
+  const go = page.goto.bind(page);
+  page.goto = async (to, options) => {
+    const res = await go(to, options);
+    if (new URL(page.url()).origin === new URL(world.base).origin)
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    return res;
+  };
+};
+
 /// Signs in as `name` on the PDS's own page `page` has come to, and
 /// approves what was asked.
 export const approve = async (page, name) => {

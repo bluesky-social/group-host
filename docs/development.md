@@ -79,8 +79,11 @@ as the console, as it does a deployment's group addresses; each front
 passes the name asked on as `X-Forwarded-Host`, which a site's OAuth
 client is named for (the PDS refuses a client under `.test`). Chromium
 comes with `cd harness && npx playwright install chromium`, and is told
-that every name under `group-host.internal` is this machine. A failed
-flow leaves its trace and a picture under `target/e2e/results`.
+that every name under `group-host.internal` is this machine. Each flow's
+page waits, after going to a console page, until it has hydrated (the
+root layout sets `data-hydrated` on `<html>`), as a field filled before
+then is put back as it does. A failed flow leaves its trace and a
+picture under `target/e2e/results`.
 
 ## Looking at the console
 
