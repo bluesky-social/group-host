@@ -976,9 +976,25 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
     )
     .await;
     assert!(
-        unsaid.contains("a write is <space>:<collection>"),
+        unsaid.contains("a write is <type>:<collection> or <type>/<key>:<collection>"),
         "{unsaid}"
     );
+    // A write in just the one space of a type, by its key.
+    let args = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--writes",
+        "fyi.opensocial.siteSpace/board:com.example.note",
+    ];
+    ok(&alice, &args).await;
+    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
+    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
+    let wanted = json!([
+        {"space": "fyi.opensocial.siteSpace", "key": "board", "collection": "com.example.note"},
+    ]);
+    assert_eq!(&site.to_json()["writes"], &wanted);
 
     // Spaces, each a type by its NSID, read whole by the site's pages.
     let args = [
@@ -994,6 +1010,36 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
     let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
     let wanted = json!([{"space": "com.example.board"}, {"space": "fyi.opensocial.members"}]);
     assert_eq!(&site.to_json()["spaces"], &wanted);
+    // Or just the one space of a type, by its key.
+    let args = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--spaces",
+        "fyi.opensocial.siteSpace/board, fyi.opensocial.siteSpace/calendar",
+    ];
+    ok(&alice, &args).await;
+    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
+    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
+    let wanted = json!([
+        {"space": "fyi.opensocial.siteSpace", "key": "board"},
+        {"space": "fyi.opensocial.siteSpace", "key": "calendar"},
+    ]);
+    assert_eq!(&site.to_json()["spaces"], &wanted);
+    let keyless = [
+        "site",
+        "publish",
+        group,
+        folder,
+        "--spaces",
+        "fyi.opensocial.siteSpace/",
+    ];
+    let keyless = fails(&alice, &keyless).await;
+    assert!(
+        keyless.contains("a space is <type> or <type>/<key>"),
+        "{keyless}"
+    );
 
     let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
     assert!(missing.contains("reading /no/such/folder"), "{missing}");

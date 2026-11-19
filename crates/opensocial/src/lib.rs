@@ -59,7 +59,8 @@ role
                          add to what a role may do, or with --undo take it away
 site
   site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]
-          [--acts <methods>] [--spaces <type,…>] [--writes <space:collection,…>]
+          [--acts <methods>] [--spaces <type[/key],…>]
+          [--writes <type[/key]:collection,…>]
                          publish the files under <dir> as the group's website, at its
                          address, in place of the one there; with --reads, the host's
                          methods its pages may ask as whoever signs in on it; with
@@ -67,7 +68,8 @@ site
                          as createReport; with --spaces, the types of the group's spaces
                          they may read whole as that person, each by its NSID; with
                          --writes, the records they may write in that person's own repo,
-                         each a type of the group's spaces and a collection there
+                         each a type of the group's spaces and a collection there; a type
+                         with /<key> after it names just the one space of it by that key
   site delete <group>    take the group's website down
   site domain <group> [--undo]
                          serve the website at the group's own domain, its handle, once
@@ -702,20 +704,40 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
                     given[key] = methods.map(|r| json!({"method": named(r)})).collect();
                 }
             }
-            // Each a type of the group's spaces, by its NSID: not ours to
-            // name by its last part.
+            // A space is a type of the group's spaces, by its NSID, not ours
+            // to name by its last part, and with /<key> after it, just the one
+            // space of that type by that key.
+            let space = |s: &str| {
+                let (kind, key) = match s.split_once('/') {
+                    Some((kind, key)) => (kind.trim(), Some(key.trim())),
+                    None => (s.trim(), None),
+                };
+                if kind.is_empty() || key == Some("") {
+                    bail!("{s}: a space is <type> or <type>/<key>");
+                }
+                let mut named = json!({"space": kind});
+                if let Some(key) = key {
+                    named["key"] = key.into();
+                }
+                Ok(named)
+            };
             if let Some(listed) = a.flags.get("spaces") {
-                let kinds = listed.split(',').map(str::trim).filter(|s| !s.is_empty());
-                given["spaces"] = kinds.map(|s| json!({"space": s})).collect();
+                let each = listed.split(',').map(str::trim).filter(|s| !s.is_empty());
+                let spaces: Vec<Value> = each.map(space).collect::<Result<_>>()?;
+                given["spaces"] = spaces.into();
             }
-            // Each a type of the group's spaces and a collection there.
+            // Each a space, as above, and a collection there.
             if let Some(writes) = a.flags.get("writes") {
                 let each = writes.split(',').map(str::trim).filter(|w| !w.is_empty());
                 let write = |w: &str| match w.split_once(':') {
-                    Some((space, collection)) => {
-                        Ok(json!({"space": space.trim(), "collection": collection.trim()}))
+                    Some((named, collection)) => {
+                        let mut write = space(named)?;
+                        write["collection"] = collection.trim().into();
+                        Ok(write)
                     }
-                    None => Err(anyhow!("{w}: a write is <space>:<collection>")),
+                    None => Err(anyhow!(
+                        "{w}: a write is <type>:<collection> or <type>/<key>:<collection>"
+                    )),
                 };
                 let writes: Vec<Value> = each.map(write).collect::<Result<_>>()?;
                 given["writes"] = writes.into();

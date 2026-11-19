@@ -34,6 +34,12 @@ ends one with `fyi.opensocial.deleteSpace`, listed or not. Nobody makes
 or deletes meta and members this way. Only the chosen people a space is
 for can change it ([groups](groups.md)).
 
+A space's type is any NSID, but a member's PDS grants an app a type only
+once it can read that type's published schema. For a group's site, the
+host publishes one, `fyi.opensocial.siteSpace`. It lists no collections,
+and a group makes one space of it per part of its site under its own key,
+such as `board` or `calendar` ([sites](sites.md#a-space-for-a-site)).
+
 ## Who writes where
 
 The group's own repo in a space holds what the group writes as itself. A

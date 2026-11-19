@@ -496,18 +496,29 @@ const all = {
     const fallback = text(form, 'fallback') ? { fallback: text(form, 'fallback') } : {};
     const reads = form.getAll('reads').map((method) => ({ method: String(method) }));
     const acts = form.getAll('acts').map((method) => ({ method: String(method) }));
-    // Each one per line: a type of space; a write as `<space>:<collection>`.
+    // Each one per line: a space as `<type>` or `<type>/<key>`; a write as
+    // that and `:<collection>`.
     const [spaceLines, writeLines] = ['spaces', 'writes'].map((key) =>
       text(form, key)
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean)
     );
-    const spaces = [...new Set(spaceLines)].map((space) => ({ space }));
-    const writes = writeLines.map((line) => line.split(':').map((p) => p.trim()));
-    if (writes.some((w) => w.length !== 2 || !w[0] || !w[1]))
+    const spaces = [...new Set(spaceLines)].map(spaceOf);
+    if (spaces.some((s) => !s))
       return fail(400, {
-        failed: 'Write each line as a type of space and a kind of record, with a colon between.'
+        failed: 'Write each line as a type of space, with /key after it to pick one space.'
+      });
+    const writes = writeLines.map((line) => {
+      const at = line.indexOf(':');
+      const space = at < 0 ? undefined : spaceOf(line.slice(0, at));
+      const collection = line.slice(at + 1).trim();
+      return space && collection ? { ...space, collection } : undefined;
+    });
+    if (writes.some((w) => !w))
+      return fail(400, {
+        failed:
+          'Write each line as a type of space, with /key after it to pick one space, and a kind of record, with a colon between.'
       });
     return act(event, 'fyi.opensocial.putSite', {
       group,
@@ -517,9 +528,7 @@ const all = {
       ...(reads.length ? { reads } : {}),
       ...(acts.length ? { acts } : {}),
       ...(spaces.length ? { spaces } : {}),
-      ...(writes.length
-        ? { writes: writes.map(([space, collection]) => ({ space, collection })) }
-        : {})
+      ...(writes.length ? { writes } : {})
     });
   },
   unsite: async (event) => {
@@ -588,6 +597,15 @@ async function siteFiles(form: FormData) {
     }
   }
   return files;
+}
+
+/** A space as typed, `<type>` or `<type>/<key>`; nothing when either part is empty. */
+function spaceOf(line: string): { space: string; key?: string } | undefined {
+  const at = line.indexOf('/');
+  const space = (at < 0 ? line : line.slice(0, at)).trim();
+  const key = at < 0 ? undefined : line.slice(at + 1).trim();
+  if (!space || key === '') return;
+  return key === undefined ? { space } : { space, key };
 }
 
 /** The writes named, as a page's actions. */

@@ -37,12 +37,14 @@ call as the visitor who signs in on it. Those are
 
 It may name `acts`, up to 20 of the host's procedures its pages may call
 as that person, each acting for them alone. For now that's
-`fyi.opensocial.createReport` only. It may name `spaces`, up to 20 types
-of the group's spaces its pages may read whole as that person, such as
-`com.example.place.room`. And it may name `writes`, up to 20 kinds of
-record its pages may write in that person's own repo. Each is a type of
-the group's spaces and a collection there, such as
-`fyi.opensocial.acceptance` in `fyi.opensocial.members`.
+`fyi.opensocial.createReport` only. It may name `spaces`, up to 20 of
+the group's spaces its pages may read whole as that person. Each is a
+type, such as `fyi.opensocial.siteSpace`, and may give a `key` to name
+one space of that type, such as `board`. Without a key, it's every space
+of the type. And it may name `writes`, up to 20 kinds of record its
+pages may write in that person's own repo. Each is a type of the group's
+spaces, a key if it's for one space of them, and a collection there,
+such as `com.example.note` in `fyi.opensocial.siteSpace` under `board`.
 
 A site has 1 to 2000 files. Each publish replaces the record whole, and
 deleting the record takes the site down. A blob only the old record held
@@ -70,8 +72,9 @@ the folder's top as `notFound`. It keeps `fallback`, `reads`, `spaces`,
 
 The `opensocial site publish` command reads a folder and sends its
 files. `--reads` and `--acts` name methods by NSID or by their last
-part, `--spaces` names space types by NSID, and `--writes` names each
-write as `<space>:<collection>`. `site delete` takes the site down. Both
+part, `--spaces` names each space as `<type>` or `<type>/<key>`, and
+`--writes` names each write as `<type>:<collection>` or
+`<type>/<key>:<collection>`. `site delete` takes the site down. Both
 leave out files whose names start with a dot. They send each file as
 text if it's UTF-8 and as bytes otherwise, and they take the folder's
 own name off each path. An AI app
@@ -84,11 +87,43 @@ that write to the same rules. The record is kept at `self`, and the
 member who approved the app must hold `group.configure`. Every path must
 be one a file may be at, with none given twice, and every file must name
 a blob. `fallback` and `notFound` must name files of the site. `reads`
-and `acts` must name only the methods above, and `spaces` may name no
-type twice. A site that breaks a rule fails with `InvalidSite`.
+and `acts` must name only the methods above. Each of `spaces` must name
+a type, and may name no type and key twice. Naming a type whole and also
+by one of its keys is allowed. A site that breaks a rule fails with
+`InvalidSite`.
 
 A path is `/`-separated, with no leading `/`, and no empty, `.` or `..`
 segment, backslash or control character.
+
+## A space for a site
+
+A member's PDS grants a site permission to a space type only once it can
+read that type's schema, published under a DNS lexicon authority. A site
+with space types of its own would need a domain, a `_lexicon` TXT record
+and its schemas published there before anyone could sign in to it.
+
+So the host publishes one space type with its own lexicons,
+`fyi.opensocial.siteSpace`, for a site to keep its members' records in.
+It lists no collections, and a group makes one space of it for each part
+of its site, under a key of its own, such as `board` or `calendar`. The
+site names those spaces by key in `spaces` and `writes`, so each sign-in
+asks for those spaces only, not every space of the type. The collections
+written there never need publishing either: a write permission names
+its collection, and a PDS doesn't look collections up.
+
+A group makes such a space with `space create`, as any other:
+
+```sh
+opensocial space create <group> fyi.opensocial.siteSpace --skey board \
+  --name Board --access '{"grants": [{"role": "member", "scopes": ["space:fyi.opensocial.siteSpace?action=read"]}]}'
+```
+
+Then the site names it:
+
+```sh
+opensocial site publish <group> <dir> --spaces fyi.opensocial.siteSpace/board \
+  --writes fyi.opensocial.siteSpace/board:com.example.note
+```
 
 ## Serving
 
@@ -240,16 +275,23 @@ Its scope is `atproto`, plus these:
 
 - for each of the site's `reads` and `acts`, and `getViewer`,
   `rpc:<method>?aud=<the host's service DID>#opensocial`.
-- for each of its `spaces`, `space:<type>?authority=<the group>&action=read`.
+- for each of its `spaces`,
+  `space:<type>?authority=<the group>&skey=<key>&action=read`.
 - for each of its `writes`,
-  `space:<type>?authority=<the group>&collection=<collection>` with
-  every action.
+  `space:<type>?authority=<the group>&skey=<key>&collection=<collection>&action=create&action=update&action=delete`.
+- `blob:image/*`, if it has any `writes`.
 
-So it can call those methods on the host, read this group's spaces of
-those types, and write those records in the visitor's own repo in them.
+An entry without a key leaves out `&skey=<key>`, and its scope covers
+every space of the type. So the site can call those methods on the
+host, read those of this group's spaces, and write those records in the
+visitor's own repo in them.
 It can't do anything else. The session is kept in the browser at the
 address's origin and goes only to the visitor's PDS. The site's frame
 never holds it.
+
+The visitor's PDS must support spaces for them to sign in to a site
+that names `spaces` or `writes`, since it must grant the `space:`
+scopes. bsky.social doesn't yet.
 
 As the visitor moves through the site, the host's page puts the frame's
 page in the address bar and its title on the tab. So a reload or a
@@ -268,7 +310,7 @@ gives each ask's parameters, answers and refusals, and an example page:
 | `os.call(method, params)` | the method's answer, asked as the visitor. That's its JSON, or a `Blob` for a method that answers with a file (`getSpaceBlob`) |
 | `os.act(method, input)` | the procedure's answer, asked as the visitor with `input` as its JSON. For `createReport` that's its `id` and `createdAt` |
 | `os.space(uri)` | one of the group's spaces (`at://<group>/space/<type>/<skey>`), with the SDK's `GroupSpace` methods below. The same `uri` gives the same object |
-| `space.sync()` | `{failed}`, once the page's records of a space are up to date as the visitor may read them. The space's type must be one the site names in `spaces`. `failed` lists the writers whose PDS didn't answer |
+| `space.sync()` | `{failed}`, once the page's records of a space are up to date as the visitor may read them. The site must name the space in `spaces`, by its type alone or by its type and key. `failed` lists the writers whose PDS didn't answer |
 | `space.records({collections})` | every record held, right away, each as `{uri, repo, collection, rkey, cid, value}`. Given `collections`, only those collections' records |
 | `space.onChange(fn)` | calls `fn` with every record held after each sync that changes them |
 | `space.create(collection, value, {rkey})` | the `uri` and `cid` of `value`, written in the visitor's own repo in the space |

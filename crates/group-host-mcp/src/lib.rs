@@ -398,7 +398,8 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
          cookies or storage. A site that names `reads`, methods of the host's such as \
          fyi.opensocial.listMembers, `acts`, procedures of the host's such as \
          fyi.opensocial.createReport, `spaces`, types of the group's spaces, or `writes`, \
-         records of a collection in a type of the group's spaces, is served in a page of the \
+         records of a collection in a type of the group's spaces, each type alone for every \
+         space of it or with a `key` for just the one space of it by that key, is served in a page of the \
          host's that signs its visitor in: its pages ask those reads as whoever is looking, \
          with `os.call` from `/_os/kit.js`, those acts with `os.act`, and open those spaces \
          with `os.space`, to sync and read them whole and make those writes in that person's \

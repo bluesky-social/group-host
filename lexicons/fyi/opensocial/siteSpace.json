@@ -1,0 +1,13 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.siteSpace",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "any",
+      "name": "Group: site",
+      "description": "Where a group's site keeps what its members write, in kinds of record the site names: a board, a calendar, each a space of this type under its own key. Published once, so a site needs no space type of its own to be granted.",
+      "collections": []
+    }
+  }
+}

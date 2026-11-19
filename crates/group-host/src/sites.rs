@@ -116,21 +116,41 @@ fn acts_of(site: &Value) -> Vec<&str> {
     named(site, "acts")
 }
 
-/// What a site's `writes` name: each a type of the group's spaces, and a
-/// collection its pages may write there in the visitor's own repo.
-fn writes_of(site: &Value) -> Vec<(&str, &str)> {
+/// What a site's `writes` name: each a type of the group's spaces, one
+/// space of it by key or all of them, and a collection its pages may write
+/// there in the visitor's own repo.
+fn writes_of(site: &Value) -> Vec<(&str, Option<&str>, &str)> {
     let all = site["writes"].as_array().into_iter().flatten();
-    let each = all.map(|w| (w["space"].as_str(), w["collection"].as_str()));
-    each.filter_map(|(space, collection)| Some((space?, collection?)))
+    let each = all.map(|w| {
+        (
+            w["space"].as_str(),
+            w["key"].as_str(),
+            w["collection"].as_str(),
+        )
+    });
+    each.filter_map(|(space, key, collection)| Some((space?, key, collection?)))
         .collect()
 }
 
-/// The space types a site's `spaces` name: those its pages read whole,
-/// as the visitor.
-fn spaces_of(site: &Value) -> Vec<&str> {
+/// The spaces a site's `spaces` name, each a type and one space of it by
+/// key or all of them: those its pages read whole, as the visitor.
+fn spaces_of(site: &Value) -> Vec<(&str, Option<&str>)> {
     let all = site["spaces"].as_array().into_iter().flatten();
-    all.map(|s| s["space"].as_str().unwrap_or_default())
+    all.map(|s| (s["space"].as_str().unwrap_or_default(), s["key"].as_str()))
         .collect()
+}
+
+/// A space as a person types it: `<type>`, or `<type>/<key>` for one.
+fn space_name(kind: &str, key: Option<&str>) -> String {
+    match key {
+        Some(key) => format!("{kind}/{key}"),
+        None => kind.to_string(),
+    }
+}
+
+/// The `&skey=` part of a scope naming one space by key, empty for all.
+fn skey(key: Option<&str>) -> String {
+    key.map(|key| format!("&skey={key}")).unwrap_or_default()
 }
 
 /// Whether a site asks for its visitor's session: to read, act, read
@@ -142,16 +162,17 @@ fn is_live(site: &Value) -> bool {
         || !writes_of(site).is_empty()
 }
 
-/// Refuses a site whose `spaces` name no type, or one type twice.
+/// Refuses a site whose `spaces` name no type, or one space twice.
 fn spaces(site: &Value) -> Result<(), XrpcError> {
     let mut seen = BTreeSet::new();
-    for kind in spaces_of(site) {
+    for (kind, key) in spaces_of(site) {
         if kind.is_empty() {
             return Err(refused("a site's space names no type".to_string()));
         }
-        if !seen.insert(kind) {
+        if !seen.insert((kind, key)) {
+            let name = space_name(kind, key);
             return Err(refused(format!(
-                "{kind} is named twice in the site's spaces"
+                "{name} is named twice in the site's spaces"
             )));
         }
     }
@@ -606,14 +627,16 @@ fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Va
     for method in asked.chain([viewer]).collect::<BTreeSet<_>>() {
         scope.push(format!("rpc:{method}?{aud}"));
     }
-    for kind in spaces_of(site).into_iter().collect::<BTreeSet<_>>() {
-        scope.push(format!("space:{kind}?authority={did}&action=read"));
+    for (kind, key) in spaces_of(site).into_iter().collect::<BTreeSet<_>>() {
+        let skey = skey(key);
+        scope.push(format!("space:{kind}?authority={did}{skey}&action=read"));
     }
     let writes = "action=create&action=update&action=delete";
     let written = writes_of(site).into_iter().collect::<BTreeSet<_>>();
-    for (kind, collection) in &written {
+    for (kind, key, collection) in &written {
+        let skey = skey(*key);
         scope.push(format!(
-            "space:{kind}?authority={did}&collection={collection}&{writes}"
+            "space:{kind}?authority={did}{skey}&collection={collection}&{writes}"
         ));
     }
     if !written.is_empty() {
@@ -648,14 +671,30 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
     let head = site_head::preview(html.as_deref().unwrap_or_default(), handle);
     let writes: Vec<Value> = writes_of(site)
         .into_iter()
-        .map(|(space, collection)| json!({"space": space, "collection": collection}))
+        .map(|(space, key, collection)| {
+            let mut write = json!({"space": space, "collection": collection});
+            if let Some(key) = key {
+                write["key"] = json!(key);
+            }
+            write
+        })
+        .collect();
+    let spaces: Vec<Value> = spaces_of(site)
+        .into_iter()
+        .map(|(space, key)| {
+            let mut each = json!({"space": space});
+            if let Some(key) = key {
+                each["key"] = json!(key);
+            }
+            each
+        })
         .collect();
     let config = json!({
         "group": did,
         "handle": handle,
         "reads": reads,
         "acts": acts,
-        "spaces": spaces_of(site),
+        "spaces": spaces,
         "writes": writes,
         "aud": format!("{}#opensocial", host.config.service_did),
         "handleResolver": host.config.site_handle_resolver,

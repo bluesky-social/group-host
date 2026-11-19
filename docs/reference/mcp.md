@@ -110,7 +110,7 @@ profile already had keeps its icon.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's whole website from `files`, each `{path, text}` or `{path, bytes}`. `fallback` and `not_found` name files among them, and `reads` names the host's methods its pages may ask as whoever signs in. `acts` names the procedures they may ask as that person, and `spaces` the group's space types they may read whole, each `{space}`. `writes` names the records they may write in that person's own repo, each `{space, collection}`. The command reads the files from a folder |
+| `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's whole website from `files`, each `{path, text}` or `{path, bytes}`. `fallback` and `not_found` name files among them, and `reads` names the host's methods its pages may ask as whoever signs in. `acts` names the procedures they may ask as that person, and `spaces` the group's spaces they may read whole, each `{space, key}`, where `key` names one space of the type and without it it's every one (`{"space": "fyi.opensocial.siteSpace", "key": "board"}`). `writes` names the records they may write in that person's own repo, each `{space, key, collection}`, with `key` the same way. The command reads the files from a folder |
 | `site_delete` | `site delete` | `fyi.opensocial.deleteSite` | takes the group's website down |
 | `site_domain` | `site domain` | `fyi.opensocial.putSiteDomain` | serves the group's website at its handle's own domain once that domain reaches this host. With `undo`, `fyi.opensocial.deleteSiteDomain` serves it at its address alone again |
 

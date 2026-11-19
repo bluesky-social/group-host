@@ -36,8 +36,8 @@ type Config = {
   handle: string;
   reads: string[];
   acts: string[];
-  writes: { space: string; collection: string }[];
-  spaces: string[];
+  writes: { space: string; key?: string; collection: string }[];
+  spaces: { space: string; key?: string }[];
   aud: string;
   handleResolver: string;
   plc: string;
@@ -180,12 +180,20 @@ function groupSpace(space: string) {
 }
 
 /**
+ * Whether `ref` is a space `named` names: one of its type, and the one
+ * under its key when it names one.
+ */
+function names(named: { space: string; key?: string }, ref: { type: string; skey: string }) {
+  return named.space === ref.type && (named.key === undefined || named.key === ref.skey);
+}
+
+/**
  * Whether the site declared writes of `collection` in `space`: one of the
- * group's spaces of a type it names with that collection.
+ * group's spaces it names with that collection.
  */
 function declared(space: string, collection: string) {
-  const type = groupSpace(space)?.type;
-  return config.writes.some((w) => w.space === type && w.collection === collection);
+  const ref = groupSpace(space);
+  return !!ref && config.writes.some((w) => names(w, ref) && w.collection === collection);
 }
 
 /** A write the frame asks, its space and collection checked against the site's declaration. */
@@ -511,7 +519,7 @@ addEventListener('message', async (e) => {
     case 'sync': {
       const space = String(m.space);
       const ref = groupSpace(space);
-      if (!ref || !config.spaces.includes(ref.type))
+      if (!ref || !config.spaces.some((s) => names(s, ref)))
         return reply({ error: `${space} is none of the spaces this site declares` });
       if (!session) return reply(locked);
       try {

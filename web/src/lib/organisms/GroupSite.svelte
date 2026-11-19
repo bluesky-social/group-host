@@ -26,6 +26,9 @@
   ];
   // What a site's pages may do for whoever signs in, in the reader's words.
   const acts = [['fyi.opensocial.createReport', 'Report posts and members to moderators']];
+  // A space as a person types it: its type, and `/<key>` when it names one.
+  const spaceText = (s: { space: string; key?: string }) =>
+    s.key === undefined ? s.space : `${s.space}/${s.key}`;
   // Each file's path under the folder chosen, as the browser gives them,
   // in the files' order: a form sends each file by its name alone.
   let paths = $state('[]');
@@ -120,7 +123,7 @@
       <legend>Let pages show every post in a space</legend>
       <p class="mute">
         Pages that ask for these spaces see every post in them. People who sign in see only what the
-        group lets them see.
+        group lets them see. A key after a slash picks one space of the kind.
       </p>
       <label class="field"
         ><span>Kinds of space, one per line <span class="optional">(optional)</span></span>
@@ -129,7 +132,8 @@
           rows="2"
           class="mono"
           spellcheck="false"
-          placeholder="com.example.place.room">{site?.spaces.join('\n') ?? ''}</textarea
+          placeholder="fyi.opensocial.siteSpace/board"
+          >{site?.spaces.map(spaceText).join('\n') ?? ''}</textarea
         ></label
       >
     </fieldset>
@@ -159,8 +163,8 @@
           rows="3"
           class="mono"
           spellcheck="false"
-          placeholder="fyi.opensocial.members:fyi.opensocial.acceptance"
-          >{site?.writes.map((w) => `${w.space}:${w.collection}`).join('\n') ?? ''}</textarea
+          placeholder="fyi.opensocial.siteSpace/board:com.example.note"
+          >{site?.writes.map((w) => `${spaceText(w)}:${w.collection}`).join('\n') ?? ''}</textarea
         ></label
       >
     </fieldset>

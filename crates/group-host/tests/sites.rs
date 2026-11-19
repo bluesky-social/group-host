@@ -725,11 +725,13 @@ async fn a_site_reads_the_groups_spaces_whole_as_its_visitor() {
     let (did, [alice, ..]) = group(&h).await;
     let files = json!([{"path": "index.html", "text": "<p>the board</p>"}]);
 
-    // A type named twice is refused; one naming none is no NSID, refused
-    // by the lexicon before the host looks.
+    // A space named twice, whole or by its key, is refused; one naming
+    // none is no NSID, refused by the lexicon before the host looks.
     let board = json!({"space": "com.example.board"});
+    let pins = json!({"space": "com.example.board", "key": "pins"});
     let refused = [
         (json!([board, board]), "InvalidSite"),
+        (json!([pins, pins]), "InvalidSite"),
         (json!([{"space": ""}]), "InvalidRequest"),
     ];
     for (spaces, wanted) in refused {
@@ -744,9 +746,10 @@ async fn a_site_reads_the_groups_spaces_whole_as_its_visitor() {
     }
 
     // Reading spaces alone, its pages are served in the page that holds a
-    // session, which is told which spaces they read.
+    // session, which is told which spaces they read. A type named whole and
+    // one space of it by key is redundant, but no harm.
     let members = format!("{NS}.members");
-    let spaces = json!([board, {"space": members}]);
+    let spaces = json!([board, pins, {"space": members}]);
     let said = call(
         &h,
         &alice,
@@ -762,9 +765,10 @@ async fn a_site_reads_the_groups_spaces_whole_as_its_visitor() {
         shell.body
     );
     let (_, config) = shell_of(&shell);
-    assert_eq!(config["spaces"], json!(["com.example.board", members]));
+    assert_eq!(config["spaces"], spaces);
 
-    // Its OAuth client asks to read each, with the group as authority.
+    // Its OAuth client asks to read each, with the group as authority, and
+    // the one space alone where it names one by key.
     let client = page(&h, "/client-metadata.json").await;
     let doc: Json = serde_json::from_str(&client.body).unwrap();
     let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
@@ -772,6 +776,7 @@ async fn a_site_reads_the_groups_spaces_whole_as_its_visitor() {
         "atproto".to_string(),
         format!("rpc:{NS}.getViewer?aud=did%3Aweb%3Ahost.test%23opensocial"),
         format!("space:com.example.board?authority={did}&action=read"),
+        format!("space:com.example.board?authority={did}&skey=pins&action=read"),
         format!("space:{members}?authority={did}&action=read"),
     ];
     assert_eq!(scope, wanted);
@@ -790,6 +795,7 @@ async fn a_site_that_writes_asks_its_visitor_for_those_writes_alone() {
     let board = "com.example.board";
     let writes = json!([
         {"space": board, "collection": "com.example.note"},
+        {"space": board, "key": "pins", "collection": "com.example.note"},
         {"space": format!("{NS}.members"), "collection": format!("{NS}.acceptance")},
     ]);
     let said = call(
@@ -820,16 +826,17 @@ async fn a_site_that_writes_asks_its_visitor_for_those_writes_alone() {
     let client = page(&h, "/client-metadata.json").await;
     let doc: Json = serde_json::from_str(&client.body).unwrap();
     let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
-    let space = |kind: &str, collection: &str| {
+    let space = |kind: &str, skey: &str, collection: &str| {
         format!(
-            "space:{kind}?authority={did}&collection={collection}&action=create&action=update&action=delete"
+            "space:{kind}?authority={did}{skey}&collection={collection}&action=create&action=update&action=delete"
         )
     };
     let wanted = [
         "atproto".to_string(),
         format!("rpc:{NS}.getViewer?aud=did%3Aweb%3Ahost.test%23opensocial"),
-        space(board, "com.example.note"),
-        space(&format!("{NS}.members"), &format!("{NS}.acceptance")),
+        space(board, "", "com.example.note"),
+        space(board, "&skey=pins", "com.example.note"),
+        space(&format!("{NS}.members"), "", &format!("{NS}.acceptance")),
         "blob:image/*".to_string(),
     ];
     assert_eq!(scope, wanted);

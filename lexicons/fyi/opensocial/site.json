@@ -99,13 +99,18 @@
     },
     "space": {
       "type": "object",
-      "description": "A type of the group's spaces a site's pages may read whole, as the visitor.",
+      "description": "The group's spaces of a type a site's pages may read whole, as the visitor: every one of that type, or the one under `key`.",
       "required": ["space"],
       "properties": {
         "space": {
           "type": "string",
           "format": "nsid",
-          "description": "The space type's NSID."
+          "description": "The space type's NSID, such as fyi.opensocial.siteSpace."
+        },
+        "key": {
+          "type": "string",
+          "format": "record-key",
+          "description": "The one space of that type the pages may read, by its key, such as board; without it, every space of the type."
         }
       }
     },
@@ -131,13 +136,18 @@
     },
     "write": {
       "type": "object",
-      "description": "A kind of record a site's pages may write in the visitor's own repo, in the group's spaces of one type.",
+      "description": "A kind of record a site's pages may write in the visitor's own repo, in the group's spaces of one type: every one of that type, or the one under `key`.",
       "required": ["space", "collection"],
       "properties": {
         "space": {
           "type": "string",
           "format": "nsid",
-          "description": "The type of the group's spaces it is written in, such as fyi.opensocial.members."
+          "description": "The type of the group's spaces it is written in, such as fyi.opensocial.siteSpace."
+        },
+        "key": {
+          "type": "string",
+          "format": "record-key",
+          "description": "The one space of that type it is written in, by its key, such as board; without it, any space of the type."
         },
         "collection": {
           "type": "string",

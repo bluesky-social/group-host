@@ -30,15 +30,17 @@ A site declares what its pages may ask in its `fyi.opensocial.site` record. Give
 - `fyi.opensocial.getActor`
 - `fyi.opensocial.getViewer`
 
-`spaces` is a list of `{space}`. Each is a type of the group's spaces whose records a page may read whole with [`os.space`](#osspace), such as `com.example.place.room`. No type may be named twice.
+`spaces` is a list of `{space, key}`. `space` is a type of the group's spaces whose records a page may read whole with [`os.space`](#osspace), such as `fyi.opensocial.siteSpace`. `key`, if given, narrows the entry to the one space of that type with that key, such as `board`. Without it, the entry covers every space of the type. No pair of type and key may be named twice. A type named both whole and by a key is allowed.
 
 `acts` is a list of `{method}`, each a procedure `os.act` may ask. The only one is `fyi.opensocial.createReport`, which reports what the visitor sees ([moderation](../design/moderation.md)).
 
-`writes` is a list of `{space, collection}`, where `space` is a type of the group's spaces and `collection` is an NSID. An entry lets a space's `create`, `put` and `delete` ([`os.space`](#osspace)) write records of that collection in any of the group's spaces of that type. A site with at least one entry in `writes` may also `os.upload` pictures. The space's access record still decides whether a given visitor may write in a given space.
+`writes` is a list of `{space, key, collection}`, where `space` is a type of the group's spaces, `key` is optional, and `collection` is an NSID. An entry lets a space's `create`, `put` and `delete` ([`os.space`](#osspace)) write records of that collection in the group's space of that type with that key, or in any space of the type if it has no key. A site with at least one entry in `writes` may also `os.upload` pictures. The space's access record still decides whether a given visitor may write in a given space.
 
-On the command line, `--reads` and `--acts` take NSIDs or their last parts, comma-separated (`--reads getGroup,listMembers`, `--acts createReport`). `--spaces` takes space types by NSID (`--spaces com.example.place.room,com.example.place.calendar`), and `--writes` takes `space:collection` pairs (`--writes fyi.opensocial.members:fyi.opensocial.acceptance`). The host refuses a read or an act that's none of those above with `InvalidSite`.
+A site usually keeps what its members write in spaces of `fyi.opensocial.siteSpace`, one per part of the site under its own key ([sites](../design/sites.md#a-space-for-a-site)).
 
-When a visitor signs in, the host's page asks their PDS for permission to each declared read and act, and to `fyi.opensocial.getViewer`. It also asks to read each declared space type in this group, for each declared write, and for uploads of `image/*` if the site declares any writes.
+On the command line, `--reads` and `--acts` take NSIDs or their last parts, comma-separated (`--reads getGroup,listMembers`, `--acts createReport`). `--spaces` takes spaces as `<type>` or `<type>/<key>` (`--spaces fyi.opensocial.siteSpace/board,fyi.opensocial.siteSpace/calendar`), and `--writes` takes `<type>:<collection>` or `<type>/<key>:<collection>` (`--writes fyi.opensocial.siteSpace/board:com.example.note`). The host refuses a read or an act that's none of those above with `InvalidSite`.
+
+When a visitor signs in, the host's page asks their PDS for permission to each declared read and act, and to `fyi.opensocial.getViewer`. It also asks to read each declared space in this group, for each declared write, and for uploads of `image/*` if the site declares any writes. Their PDS must support spaces to grant the space permissions.
 
 `os.group`, `os.me`, `os.space`, `os.signIn`, `os.signOut` and `os.onChange` need no declaration beyond the site being live. What a space's methods may do is declared as above.
 
@@ -74,7 +76,7 @@ It's refused the same way `os.call` is. If the visitor's sign-in doesn't cover t
 
 `space.sync()` brings the records the page holds of the space up to date, and answers `{failed}`. The host's page reads the records itself, in the visitor's browser. It reads every writer's repo in the space from that writer's own PDS, and checks each against the commit it comes with. It keeps what it read for as long as the page is open, and in the browser between visits. So the first sync reads every writer's repo in full, and each later one fetches only what changed. `failed` lists the writers whose PDS didn't answer, as `{repo, error}`. They keep the records last read from them, and the next sync reads them again.
 
-It's refused, unlocked, if `uri` is none of this group's spaces or is of a type the site doesn't name in `spaces`. It's refused locked with `sign in` if nobody is signed in, and locked with `not for you` if the space's access record doesn't let the visitor read it.
+It's refused, unlocked, if `uri` is none of this group's spaces or no entry of `spaces` covers it: one with its type and either no key or its key. It's refused locked with `sign in` if nobody is signed in, and locked with `not for you` if the space's access record doesn't let the visitor read it.
 
 #### space.records
 
@@ -88,7 +90,7 @@ It's refused, unlocked, if `uri` is none of this group's spaces or is of a type 
 
 `space.create(collection, value, {rkey} = {})` writes `value`, a record of `collection` (its `$type`), in the visitor's own repo in the space, at `rkey` if given. It answers `{uri, cid}`. What the page holds doesn't change until its next sync.
 
-It's refused, unlocked, unless the space is one of this group's and some entry of `writes` has its type and `collection`. It's also refused unlocked if `value` isn't an object. After those checks, it's refused locked with `sign in` if nobody is signed in. Refusals from the PDS work as they do for `os.act`, so a sign-in that doesn't cover the write is signed out and refused with `sign in`.
+It's refused, unlocked, unless the space is one of this group's and some entry of `writes` has its type, `collection`, and either no key or the space's key. It's also refused unlocked if `value` isn't an object. After those checks, it's refused locked with `sign in` if nobody is signed in. Refusals from the PDS work as they do for `os.act`, so a sign-in that doesn't cover the write is signed out and refused with `sign in`.
 
 #### space.put
 
@@ -197,5 +199,5 @@ You publish it with:
 
 ```sh
 opensocial site publish <group> <dir> --reads getGroup,listMembers \
-  --writes fyi.opensocial.members:fyi.opensocial.acceptance
+  --writes fyi.opensocial.members/self:fyi.opensocial.acceptance
 ```

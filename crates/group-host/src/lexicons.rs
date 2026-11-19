@@ -114,6 +114,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/rule"),
     lexicon!("fyi/opensocial/searchActors"),
     lexicon!("fyi/opensocial/site"),
+    lexicon!("fyi/opensocial/siteSpace"),
     lexicon!("fyi/opensocial/space"),
     lexicon!("fyi/opensocial/startAccountMove"),
     lexicon!("fyi/opensocial/updateGroupHandle"),

@@ -19,8 +19,8 @@ export type Site = {
   fallback?: string;
   reads: string[];
   acts: string[];
-  spaces: string[];
-  writes: { space: string; collection: string }[];
+  spaces: { space: string; key?: string }[];
+  writes: { space: string; key?: string; collection: string }[];
 };
 
 type Load = { fetch: typeof fetch; url: URL };
@@ -45,7 +45,7 @@ export async function siteOf(event: Load, group: string, address: string): Promi
     fallback: answer.value.fallback,
     reads: (answer.value.reads ?? []).map((r: { method: string }) => r.method),
     acts: (answer.value.acts ?? []).map((a: { method: string }) => a.method),
-    spaces: (answer.value.spaces ?? []).map((s: { space: string }) => s.space),
+    spaces: answer.value.spaces ?? [],
     writes: answer.value.writes ?? []
   };
 }
