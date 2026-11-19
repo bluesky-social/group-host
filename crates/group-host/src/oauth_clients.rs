@@ -13,7 +13,6 @@ use reqwest::Url;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::time::Duration;
 
 pub const CLIENT_ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
@@ -206,8 +205,7 @@ pub(crate) async fn pinned_client(
     if !http_here && !addrs.iter().all(|a| public(a.ip())) {
         return Err(format!("{url} is not at a public address"));
     }
-    let pinned = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
+    let pinned = crate::client_builder()
         .redirect(reqwest::redirect::Policy::none())
         .resolve_to_addrs(host.trim_matches(['[', ']']), &addrs)
         .build()

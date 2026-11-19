@@ -140,9 +140,23 @@ impl Host {
 /// server that takes a request and never answers holds nothing up longer.
 pub const OUTGOING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// How long the host keeps a connection to another server open with no
+/// request on it: under the 5 s after which Node's HTTP server, which the
+/// reference PDS and PLC run on, closes an idle one. A request sent on a
+/// connection as its server closes it fails ("connection closed before
+/// message completed"), so the host drops one before that can happen.
+pub const IDLE_AT_MOST: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// What every client of the host's for other servers is built from.
+pub fn client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .timeout(OUTGOING_TIMEOUT)
+        .pool_idle_timeout(IDLE_AT_MOST)
+}
+
 /// A client for the host's requests to other servers.
 pub fn client() -> reqwest::Client {
-    let built = reqwest::Client::builder().timeout(OUTGOING_TIMEOUT).build();
+    let built = client_builder().build();
     built.expect("a client with a timeout builds")
 }
 

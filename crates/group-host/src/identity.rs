@@ -65,8 +65,7 @@ impl Resolver {
             did_web_scheme: did_web_scheme.to_string(),
             // A document or handle is at a host the caller names: one that
             // redirects is not followed elsewhere.
-            http: reqwest::Client::builder()
-                .timeout(crate::OUTGOING_TIMEOUT)
+            http: crate::client_builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("a client builds"),
