@@ -34,11 +34,10 @@
   // A place other than an address (a point on a map) is kept as it is
   // until a town or country is given in its place.
   const address = $derived(location?.$type === ADDRESS ? location : undefined);
-  // The town as typed, so the country is asked for once there is one.
-  let town = $state('');
-  $effect.pre(() => {
-    town = address?.locality ?? '';
-  });
+  // The town as typed, so the country is asked for once there is one: the
+  // saved one, drawn by the server, until typed over (even before the page
+  // hydrates), and the saved one again once a save changes it.
+  let town = $derived(address?.locality ?? '');
   // The languages chosen, kept here as they are added and taken off.
   let spoken = $state<string[]>([]);
   $effect.pre(() => {
@@ -68,7 +67,7 @@
     >
     <label class="field">
       Country
-      <select name="country" value={address?.country ?? ''} required={town.trim() !== ''}>
+      <select name="country" defaultValue={address?.country ?? ''} required={town.trim() !== ''}>
         <option value="">{town.trim() ? 'Choose a country' : 'No country'}</option>
         {#each COUNTRIES as c (c.code)}<option value={c.code}>{c.name}</option>{/each}
       </select>
@@ -101,7 +100,7 @@
   />
   <label class="field">
     How people join
-    <select name="joinPolicy" value={policy}>
+    <select name="joinPolicy" defaultValue={policy}>
       <option value="approval">An admin approves who joins</option>
       <option value="open">Anyone can join right away</option>
       <option value="invite">Only people who are invited</option>
