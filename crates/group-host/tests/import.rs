@@ -110,7 +110,7 @@ fn repo_of(did: &str, key: &Keypair, records: &[(&str, Vec<u8>)]) -> Vec<u8> {
         .map(|(p, r)| (p.to_string(), Cid::of_cbor(r)))
         .collect();
     let tree = Tree::build(&paths);
-    let commit = Commit::sign(did, tree.root(), "3lz", key);
+    let commit = Commit::sign(did, tree.root(), "3l5mz5mkbn22b", key);
     let mut blocks: Vec<(Cid, Vec<u8>)> = tree.blocks().into_iter().collect();
     blocks.extend(records.iter().map(|(_, r)| (Cid::of_cbor(r), r.clone())));
     blocks.push((commit.cid(), commit.to_bytes()));

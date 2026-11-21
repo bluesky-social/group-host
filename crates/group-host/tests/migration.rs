@@ -669,7 +669,7 @@ fn repo_of(did: &str, key: &Keypair) -> Vec<u8> {
         drisl::encode(&drisl::Value::from_json(&json!({"$type": "a.b.c", "x": 1})).unwrap());
     let cid = Cid::of_cbor(&record);
     let tree = Tree::build(&BTreeMap::from([("a.b.c/r".to_string(), cid)]));
-    let commit = Commit::sign(did, tree.root(), "3lz", key);
+    let commit = Commit::sign(did, tree.root(), "3l5mz5mkbn22b", key);
     let mut blocks: Vec<(Cid, Vec<u8>)> = tree.blocks().into_iter().collect();
     blocks.push((cid, record));
     blocks.push((commit.cid(), commit.to_bytes()));

@@ -303,16 +303,17 @@ pub(crate) fn create(path: &str, value: &[u8]) -> Option<Write> {
     })
 }
 
-/// The records of a repo's CAR, once its commit is `group`'s, signed by
-/// `key`, and its tree and records are whole.
+/// The records of a repo's CAR, once its commit is `group`'s, at a TID,
+/// signed by `key` (`atproto::Commit::verified`), and its tree and records
+/// are whole.
 pub(crate) fn repo_writes(
     bytes: &[u8],
     group: &str,
     key: &atproto::PublicKey,
 ) -> Option<Vec<Write>> {
     let repo = car::read(bytes).ok()?;
-    let commit = atproto::Commit::from_bytes(repo.blocks.get(repo.roots.first()?)?).ok()?;
-    (commit.did == group && commit.verify(key)).then_some(())?;
+    let root = repo.roots.first()?;
+    let commit = atproto::Commit::verified(repo.blocks.get(root)?, group, key).ok()?;
     let tree = Tree::read(commit.data, &repo.blocks).ok()?;
     let leaves = tree.leaves();
     leaves
