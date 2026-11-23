@@ -4,15 +4,20 @@
 - main:
   - heading "Start a group" [level=1]
   - text: Name
-  - textbox "Name": Book club
+  - textbox "Name":
+    - /placeholder: Riverside Book Club
+    - text: Book club
   - text: Its address
-  - textbox "Its address .groups.test": riders
+  - textbox "Its address .groups.test":
+    - /placeholder: riverside-book-club
+    - text: riders
   - text: .groups.test
   - paragraph:
     - text: riders.groups.test is taken.
     - button "Use riders-2.groups.test"
   - text: What it is for (optional)
-  - textbox "What it is for (optional)"
+  - textbox "What it is for (optional)":
+    - /placeholder: We meet monthly to talk about our favorite books 📚
   - text: How people join
   - combobox "How people join":
     - option "An admin approves who joins" [selected]

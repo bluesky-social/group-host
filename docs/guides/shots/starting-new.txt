@@ -4,13 +4,16 @@
 - main:
   - heading "Start a group" [level=1]
   - text: Name
-  - textbox "Name"
+  - textbox "Name":
+    - /placeholder: Riverside Book Club
   - text: Its address
-  - textbox "Its address .groups.test"
+  - textbox "Its address .groups.test":
+    - /placeholder: riverside-book-club
   - text: .groups.test
   - paragraph: This is the group's handle and web address. You can change it.
   - text: What it is for (optional)
-  - textbox "What it is for (optional)"
+  - textbox "What it is for (optional)":
+    - /placeholder: We meet monthly to talk about our favorite books 📚
   - text: How people join
   - combobox "How people join":
     - option "An admin approves who joins" [selected]

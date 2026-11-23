@@ -78,10 +78,12 @@ half starts `did:key:zDnae`.
    <!-- look /g/choir.groups.test/settings/recovery --as erin -->
    ![The Recovery keys tab of Choir's settings, with Add a recovery key at the top right of the card and one key listed, marked This host](shots/recovery-tab.png)
 
-3. Press **Add a recovery key**. A dialog opens with one field.
+3. Press **Add a recovery key**. A dialog opens with one field. Above
+   it, the dialog shows the goat command that makes a key, with
+   **Copy** beside it, in case you don't have one yet.
 
    <!-- look /g/choir.groups.test/settings/recovery --as erin --click 'button[popovertarget=add-key]' --element ':popover-open' -->
-   ![The Add a recovery key dialog, with an empty field labelled A key of yours, as a did:key, and the buttons Cancel and Add](shots/recovery-dialog.png)
+   ![The Add a recovery key dialog, with the command goat key generate and a Copy button, an empty field labelled A key of yours, as a did:key, and the buttons Cancel and Add](shots/recovery-dialog.png)
 
 4. In **A key of yours, as a did:key**, paste your own public key, the
    line that starts `did:key:z...`. The key in the pictures is only an

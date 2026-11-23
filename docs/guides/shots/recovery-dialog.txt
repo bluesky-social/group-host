@@ -2,6 +2,12 @@
   - heading "Add a recovery key" [level=2]
   - button "Close": ×
   - paragraph: A key you hold. With it you can recover the group, or move it, without this host.
+  - paragraph:
+    - text: No key yet? Make one in a terminal with
+    - link "goat":
+    - text: . Paste the public key it prints here, and keep the secret key somewhere safe.
+  - code: goat key generate
+  - button "Copy"
   - text: A key of yours, as a did:key
   - textbox "A key of yours, as a did:key":
     - /placeholder: did:key:z…

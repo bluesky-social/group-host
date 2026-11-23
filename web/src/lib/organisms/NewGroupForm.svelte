@@ -61,6 +61,7 @@
       name="displayName"
       required
       maxlength="64"
+      placeholder={m.new_group_form_name_placeholder()}
       bind:value={name}
       oninput={() => (label = edited ? label : labelOf(name))}
     />
@@ -72,6 +73,7 @@
         name="label"
         required
         maxlength="63"
+        placeholder={m.new_group_form_address_placeholder()}
         pattern="[a-z0-9][a-z0-9\-]*"
         bind:this={address}
         bind:value={label}
@@ -97,7 +99,10 @@
     ><span
       >{m.new_group_form_description()} <span class="optional">{m.common_optional()}</span></span
     >
-    <textarea name="description" maxlength="2000"></textarea></label
+    <textarea
+      name="description"
+      maxlength="2000"
+      placeholder={m.new_group_form_description_placeholder()}></textarea></label
   >
   <label class="field">
     {m.new_group_form_join()}

@@ -46,7 +46,7 @@ the foot of the dialog makes one.
    people join.
 
    <!-- look /new --as alice -->
-   ![The Start a group form: empty fields Name, Its address with .groups.test after it, and What it is for; How people join set to An admin approves who joins; the button Start the group](shots/starting-new.png)
+   ![The Start a group form: empty fields Name, Its address with .groups.test after it, and What it is for, each with a greyed example of a book club; How people join set to An admin approves who joins; the button Start the group](shots/starting-new.png)
 
 2. Type the group's name into **Name**, such as "Book club". It can be
    up to 64 characters.
