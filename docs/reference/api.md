@@ -19,6 +19,7 @@ any method may answer these:
 | `Forbidden` | the caller's roles lack the action (`missing <action>`) |
 | `GroupNotFound` | the DID isn't a group here |
 | `RepoDeactivated` | the group is switched off |
+| `RateLimitExceeded` | a 429: the caller has asked more than a [limit](../design/limits.md) allows in its window. `Retry-After` says in how many seconds to ask again, and `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` and `RateLimit-Policy` say which limit |
 | `InternalServerError` | the host's database, or a server it asked, failed |
 
 The atproto methods answer with atproto's own names (`RepoNotFound`,

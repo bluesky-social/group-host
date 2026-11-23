@@ -51,6 +51,10 @@ export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
     // global fetch does not send the page's cookies itself.
     const cookie = event.request.headers.get('cookie');
     if (cookie) asked.headers.set('cookie', cookie);
+    // Who asks, as the proxy in front named them: the host's limits count
+    // by it, not by the console.
+    const forwarded = event.request.headers.get('x-forwarded-for');
+    if (forwarded) asked.headers.set('x-forwarded-for', forwarded);
     return globalThis.fetch(asked);
   }
   return fetch(request);

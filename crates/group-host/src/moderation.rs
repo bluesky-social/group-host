@@ -659,6 +659,8 @@ pub async fn create_report(
     if !appealed && !reads.map_err(XrpcError::internal)? {
         return Err(invalid_subject("not in a space you can read"));
     }
+    // Counted once it goes in the queue: a refused one fills nothing.
+    host.spend(&crate::limits::REPORTS, &me, 1)?;
     let now = now_millis();
     let event = Event {
         kind: "report".into(),

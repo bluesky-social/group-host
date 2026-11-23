@@ -113,6 +113,7 @@ pub async fn update_group_handle(
     if before == handle {
         return Ok(Json(json!({ "handle": handle })));
     }
+    host.spend(&crate::limits::HANDLES, group, 1)?;
     if named(&host, group, &address, &handle).await.as_deref() != Some(group) {
         return Err(bad(
             "NotPointing",

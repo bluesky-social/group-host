@@ -64,6 +64,7 @@ Compose reads these and passes each to the host under the name the host knows:
 | `GROUP_HOST_LOG` | `RUST_LOG` | `info` |
 | `GROUP_HOST_ADMINS` | `HOST_ADMINS`, the operators who read its logs and stats | none |
 | `GROUP_HOST_LOGS_KEEP` | `LOGS_KEEP` | `500000` |
+| `GROUP_HOST_RATE_LIMITS` | `RATE_LIMITS`, `on` or `off` ([limits](design/limits.md)) | `on` |
 | `GROUP_HOST_DATA` | the directory mounted at `/data` | `/var/lib/group-host` |
 | `GROUP_HOST_PROXY_NETWORK` | the proxy's docker network | `group-host` |
 
@@ -81,6 +82,8 @@ docker compose up -d
 The console passes the host's paths on to it: `/console/`, `/xrpc/`, `/oauth/`, `/.well-known/` and `/img/`. It uses `fetch`, which can't carry a websocket. Relays read a PDS's repos through `com.atproto.sync.subscribeRepos`, which is a websocket, so it must reach the host directly. So the proxy splits by path. It sends `/xrpc/*`, `/oauth/*`, `/.well-known/*` and `/img/*` to `group-host:2600`, and everything else to `group-host-console:2601`. The console's pages and `/console/*` work through the console.
 
 Both containers sit behind the one domain. The host takes the console's address to be its own (`CONSOLE_URL` defaults to `PUBLIC_URL`), and this layout makes that true. PDSes and relays fetch the host's DID document at `/.well-known/did.json` and its OAuth metadata from that origin. The host's own DID is `did:web:<domain>` unless `SERVICE_DID` says otherwise.
+
+The host's [limits](design/limits.md) count each person by the address in `X-Forwarded-For`, which it reads only from a proxy on the machine or the private network, as the console and Caddy are here. Caddy sets it to the address it saw, and the console passes it on. If a CDN sits in front of Caddy, list the CDN's ranges in Caddy's `trusted_proxies`. Otherwise everyone it carries counts as one of its addresses.
 
 ## Giving groups their handles
 

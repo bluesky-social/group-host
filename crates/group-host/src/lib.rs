@@ -33,6 +33,7 @@ pub mod index;
 pub mod index_api;
 pub mod lexicons;
 pub mod lifecycle;
+pub mod limits;
 pub mod logs;
 pub mod mcp;
 pub mod member_writes;
@@ -101,6 +102,8 @@ pub struct Host {
     pub logs: Arc<logs::Logs>,
     /// How it is used, counted for its operators.
     pub stats: stats::Stats,
+    /// How much each caller has asked, against the limits.
+    pub limits: limits::Limiter,
 }
 
 impl Host {
@@ -115,6 +118,7 @@ impl Host {
         let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme);
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
+        let limits = limits::Limiter::new(config.rate_limits);
         Ok(Host {
             config,
             store,
@@ -132,6 +136,7 @@ impl Host {
             handles: Default::default(),
             logs: Arc::new(logs),
             stats,
+            limits,
         })
     }
 }
@@ -161,10 +166,11 @@ pub fn client() -> reqwest::Client {
 }
 
 /// The host's routes, each request logged and counted
-/// ([`observe`]).
+/// ([`observe`]), and spent from its client's limits ([`limits`]).
 pub fn router(host: Arc<Host>) -> Router {
     let observing = axum::middleware::from_fn_with_state(host.clone(), observe::observe);
-    routes(host).layer(observing)
+    let limiting = axum::middleware::from_fn_with_state(host.clone(), limits::by_address);
+    routes(host).layer(limiting).layer(observing)
 }
 
 /// The host's routes, as the MCP server calls them for a tool, within
@@ -715,7 +721,8 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });
-    let app = router(host.clone());
+    // Served knowing each request's address, which the limits count by.
+    let app = router(host.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>();
     axum::serve(listener, app)
         .with_graceful_shutdown(stopped())
         .await?;

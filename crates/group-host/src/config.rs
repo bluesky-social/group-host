@@ -83,6 +83,9 @@ pub struct Config {
     /// in front that the host can't reach at its public addresses). Unset,
     /// the domain itself, over https.
     pub site_check_at: Option<String>,
+    /// Whether it limits how much one caller asks, `RATE_LIMITS`: `on`,
+    /// unless `off` (`limits`).
+    pub rate_limits: bool,
 }
 
 /// The service that finds anyone on the network by what is typed.
@@ -181,6 +184,11 @@ impl Config {
             var("SITE_HANDLE_RESOLVER").unwrap_or_else(|| "https://bsky.social".into());
         let site_plc_url = var("SITE_PLC_URL").unwrap_or_else(|| plc_url.clone());
         let site_check_at = var("SITE_CHECK_AT").map(|u| u.trim_end_matches('/').to_string());
+        let rate_limits = match var("RATE_LIMITS").as_deref() {
+            None | Some("on") => true,
+            Some("off") => false,
+            Some(other) => bail!("RATE_LIMITS is on or off, not {other}"),
+        };
         Ok(Config {
             port,
             public_url,
@@ -204,6 +212,7 @@ impl Config {
             site_handle_resolver,
             site_plc_url,
             site_check_at,
+            rate_limits,
         })
     }
 

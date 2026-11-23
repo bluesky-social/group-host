@@ -125,7 +125,7 @@ pub async fn cors(req: HttpRequest, next: Next) -> Response {
         ),
         (
             header::ACCESS_CONTROL_EXPOSE_HEADERS,
-            "dpop-nonce, www-authenticate",
+            "dpop-nonce, www-authenticate, retry-after, ratelimit-limit, ratelimit-remaining, ratelimit-reset, ratelimit-policy",
         ),
         (header::ACCESS_CONTROL_MAX_AGE, "600"),
     ] {

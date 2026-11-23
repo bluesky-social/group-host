@@ -71,6 +71,7 @@ accounts on their own PDSes, anywhere on the network.
   identity.
 - [Moving](moving.md): a group to another host, an account here as a
   group, and the host changing its address.
+- [Limits](limits.md): how much one caller may ask, and how often.
 
 The reference lists every [route and method](../reference/api.md),
 [MCP tool](../reference/mcp.md), [command](../reference/cli.md) and

@@ -309,6 +309,7 @@ pub async fn create_record(
         rkey: rkey.clone(),
         value: body["record"].clone(),
     };
+    host.spend_writes(group, std::slice::from_ref(&write))?;
     let (swap_commit, _) = swaps(&body)?;
     let allow = |w: &[Write]| host.may_repo(&acting, w);
     let asked = Asked {
@@ -339,6 +340,7 @@ async fn put_or_delete(
     let acting = host.writer(headers, nsid, body)?;
     let group = &acting.grant.group;
     let write = one(body, delete)?;
+    host.spend_writes(group, std::slice::from_ref(&write))?;
     let (collection, rkey) = write.path();
     let (swap_commit, swap_record) = swaps(body)?;
     let allow = |w: &[Write]| host.may_repo(&acting, w);
@@ -395,6 +397,7 @@ pub async fn apply_writes(
     let acting = host.writer(&headers, "com.atproto.repo.applyWrites", &body)?;
     let group = &acting.grant.group;
     let writes = listed(&host, "repo", &body)?;
+    host.spend_writes(group, &writes)?;
     let (swap_commit, _) = swaps(&body)?;
     let allow = |w: &[Write]| host.may_repo(&acting, w);
     let asked = Asked {
@@ -431,6 +434,7 @@ pub async fn upload_blob(State(host): State<Arc<Host>>, headers: HeaderMap, body
     if !acting.permissions.blob(mime) {
         return Err(missing(format!("blob:{mime}")).into());
     }
+    host.spend(&[crate::limits::BLOBS], group, 1)?;
     let limit = host.config.blob_upload_limit;
     let bytes = crate::xrpc::read_body(body, limit, "BlobTooLarge").await?;
     let blob = host.upload_blob(group, &bytes, mime)?;
@@ -555,6 +559,7 @@ async fn space_writes(
     let (uri, space) = space_of(body)?;
     let writes = writes(host)?;
     let group = acting.grant.group.clone();
+    host.spend_writes(&group, &writes)?;
     // Someone's inbox, where the group writes invites, is theirs.
     if is_inbox(&space) {
         let made = host.write_invites(&acting, &space, writes).await?;

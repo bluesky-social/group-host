@@ -65,6 +65,7 @@ pub async fn request_join(
     Json(body): Json<Value>,
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{NS}.requestJoin")).await?;
+    host.spend(&crate::limits::JOINS, &me, 1)?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     host.active(group)?;

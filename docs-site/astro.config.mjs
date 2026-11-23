@@ -69,7 +69,8 @@ export default defineConfig({
             page('Sites', 'design/sites'),
             page('MCP', 'design/mcp'),
             page('Recovery', 'design/recovery'),
-            page('Moving', 'design/moving')
+            page('Moving', 'design/moving'),
+            page('Limits', 'design/limits')
           ]
         },
         {

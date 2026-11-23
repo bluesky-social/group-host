@@ -362,7 +362,9 @@ async fn start_on(
     let host = Arc::new(Host::open(config).unwrap());
     let url = format!("http://{}", listener.local_addr().unwrap());
     let router = group_host::router(host.clone());
-    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    // As the host serves itself: knowing each request's address.
+    let app = router.into_make_service_with_connect_info::<std::net::SocketAddr>();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     Running {
         host,
         url,

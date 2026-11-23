@@ -162,3 +162,12 @@ fn its_admins_and_how_many_lines_it_keeps() {
     let refused = config(&[("LOGS_KEEP", "many")]).unwrap_err();
     assert_eq!(refused.to_string(), "LOGS_KEEP is no number of lines: many");
 }
+
+#[test]
+fn rate_limits_are_on_unless_turned_off() {
+    assert!(config(&[]).unwrap().rate_limits);
+    assert!(config(&[("RATE_LIMITS", "on")]).unwrap().rate_limits);
+    assert!(!config(&[("RATE_LIMITS", "off")]).unwrap().rate_limits);
+    let refused = config(&[("RATE_LIMITS", "maybe")]).unwrap_err();
+    assert_eq!(refused.to_string(), "RATE_LIMITS is on or off, not maybe");
+}

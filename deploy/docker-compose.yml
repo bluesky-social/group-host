@@ -46,6 +46,7 @@ services:
       RUST_LOG: ${GROUP_HOST_LOG:-info}
       HOST_ADMINS: ${GROUP_HOST_ADMINS:-}
       LOGS_KEEP: ${GROUP_HOST_LOGS_KEEP:-500000}
+      RATE_LIMITS: ${GROUP_HOST_RATE_LIMITS:-on}
     volumes:
       # The database, blobs and keys: back it up (docs/deploying.md).
       # Owned by uid 1000, the node user the image runs as.

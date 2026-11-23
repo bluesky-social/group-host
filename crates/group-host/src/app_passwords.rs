@@ -17,6 +17,7 @@ use crate::Host;
 use crate::api::{Params, invalid, param};
 use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
+use crate::limits::{Client, SESSIONS, key};
 use crate::oauth_dpop::hmac;
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_store::{AppPassword, Grant, Tokens, app_password_client};
@@ -25,9 +26,9 @@ use crate::scopes::Permissions;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
-use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
+use axum::{Extension, Json};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -236,8 +237,13 @@ impl Host {
     }
 }
 
-/// Signs in to a group with one of its app passwords.
-pub async fn create_session(State(host): State<Arc<Host>>, Json(body): Json<Value>) -> Answer {
+/// Signs in to a group with one of its app passwords, as often as
+/// [`crate::limits::SESSIONS`] lets one handle from one address.
+pub async fn create_session(
+    State(host): State<Arc<Host>>,
+    client: Option<Extension<Client>>,
+    Json(body): Json<Value>,
+) -> Answer {
     let no = || refused("AuthenticationRequired", "Invalid identifier or password");
     let identifier = body["identifier"]
         .as_str()
@@ -246,6 +252,8 @@ pub async fn create_session(State(host): State<Arc<Host>>, Json(body): Json<Valu
         .as_str()
         .ok_or_else(|| invalid("password is required"))?;
     let identifier = identifier.trim().trim_start_matches('@').to_lowercase();
+    let from = client.map_or_else(String::new, |Extension(Client(ip))| key(ip));
+    host.spend(&SESSIONS, &format!("{identifier} {from}"), 1)?;
     let account = host
         .store
         .account(&identifier)

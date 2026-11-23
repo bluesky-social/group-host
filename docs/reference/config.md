@@ -5,7 +5,8 @@ It refuses to start, and says which variable is wrong, on a `PORT` that
 isn't a port, a `PUBLIC_URL` that isn't an `http` or `https` origin, a
 `HANDLE_DOMAIN` without a leading dot, a `DID_WEB_SCHEME` other than
 `https` or `http`, a `BLOB_UPLOAD_LIMIT` or `LOGS_KEEP` that isn't a
-number, or a `CONSOLE_URL` that isn't a URL.
+number, a `CONSOLE_URL` that isn't a URL, or a `RATE_LIMITS` other than
+`on` or `off`.
 It takes the others as given. In a comma-separated list, it trims each
 item of spaces and a trailing `/`.
 
@@ -34,6 +35,7 @@ item of spaces and a trailing `/`.
 | `RUST_LOG` | what it logs, as `tracing-subscriber`'s filter reads it. Lines are JSON, written to stdout and kept in `logs.sqlite` for its operators | `info` |
 | `HOST_ADMINS` | its operators, as comma-separated DIDs. These accounts may read its logs (`getLogs`) and how it's used (`getStats`) | none |
 | `LOGS_KEEP` | how many lines logged at info and below it keeps to read back. It keeps a warning or an error the full 30 days, which is the most it keeps any line | 500000 |
+| `RATE_LIMITS` | whether it limits how much one caller asks, `on` or `off` ([limits](../design/limits.md)). Turn it off only where every caller is yours, as on a test network where one address asks for everyone | `on` |
 
 It stops on SIGTERM or ctrl-c, and finishes the requests under way
 first.
