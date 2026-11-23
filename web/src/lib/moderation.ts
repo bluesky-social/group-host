@@ -3,6 +3,7 @@
 
 import { day } from '#lib/dates.ts';
 import { reason } from '#lib/reasons.ts';
+import { m } from '#lib/paraglide/messages.js';
 
 export type Actor = { did: string; handle?: string };
 export type Said = {
@@ -61,22 +62,25 @@ export const reports = (s: Subject) => s.events.filter((e) => kindOf(e) === 'rep
 
 /** What a subject is: an account, or a record by the last word of its collection. */
 export function what(key: string): string {
-  if (key.startsWith('did:')) return 'Account';
-  const kind = key.split('/').at(-2)?.split('.').at(-1) ?? 'record';
+  if (key.startsWith('did:')) return m.moderation_what_account();
+  const kind = key.split('/').at(-2)?.split('.').at(-1);
+  if (!kind) return m.moderation_what_record();
   return kind[0].toUpperCase() + kind.slice(1);
 }
 
 /** How often it was reported, and when last; or that the queue has never had it. */
 export function reported(s: Subject): string {
-  if (!s.status) return 'Not in the queue';
-  if (!s.reportCount) return 'Not reported';
-  const times =
-    s.reportCount === 1 ? 'once' : s.reportCount === 2 ? 'twice' : `${s.reportCount} times`;
+  if (!s.status) return m.moderation_not_in_queue();
+  if (!s.reportCount) return m.moderation_not_reported();
+  const count = s.reportCount;
   const last = reports(s).at(-1);
-  if (!last) return `Reported ${times}`;
-  return s.reportCount === 1
-    ? `Reported on ${day(last.createdAt)}`
-    : `Reported ${times}, last on ${day(last.createdAt)}`;
+  if (!last)
+    return count === 2 ? m.moderation_reported_twice() : m.moderation_reported_times({ count });
+  const on = day(last.createdAt);
+  if (count === 1) return m.moderation_reported_on({ day: on });
+  return count === 2
+    ? m.moderation_reported_twice_last({ day: on })
+    : m.moderation_reported_times_last({ count, day: on });
 }
 
 /** The reasons it was reported for, in words, each once. */
@@ -87,10 +91,14 @@ export const reasons = (s: Subject) => [
 /** What an event was, in a word or two. */
 export function title(e: Event): string {
   const kind = kindOf(e);
-  if (kind === 'reportEvent') return 'Reported';
-  if (kind === 'statusEvent') return e.event.status === 'escalated' ? 'Escalated' : 'Resolved';
-  if (kind === 'labelEvent') return e.event.deleted ? 'Label removed' : 'Labelled';
-  return 'Removed from the group';
+  if (kind === 'reportEvent') return m.moderation_title_reported();
+  if (kind === 'statusEvent')
+    return e.event.status === 'escalated'
+      ? m.moderation_title_escalated()
+      : m.moderation_title_resolved();
+  if (kind === 'labelEvent')
+    return e.event.deleted ? m.moderation_title_label_removed() : m.moderation_title_labelled();
+  return m.moderation_title_removed();
 }
 
 /**
@@ -103,7 +111,7 @@ export function detail(e: Event, rules: Record<string, string>): string {
   const kind = kindOf(e);
   const cited = (uri: string) => {
     const title = rules[uri.split('/').at(-1) ?? ''];
-    return title ? `Breaks “${title}”` : 'Breaks a rule';
+    return title ? m.moderation_breaks({ rule: title }) : m.moderation_breaks_a_rule();
   };
   const parts =
     kind === 'reportEvent'
@@ -111,5 +119,5 @@ export function detail(e: Event, rules: Record<string, string>): string {
       : kind === 'labelEvent'
         ? [said.val ?? '']
         : [said.note ?? ''];
-  return parts.filter(Boolean).join('. ');
+  return parts.filter(Boolean).join(m.moderation_detail_separator());
 }

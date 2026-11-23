@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Tag from '#lib/atoms/Tag.svelte';
+  import { intl } from '#lib/locale.ts';
   import { languageName, placeName, type Place } from '#lib/places.ts';
   /**
    * What a group says of itself in a few words: where it meets, whether
@@ -19,14 +21,22 @@
   } = $props();
   const place = $derived(placeName(location));
   const where = $derived(
-    place ? `Meets in ${place}${online ? ', and online' : ''}.` : online ? 'Meets online.' : ''
+    place
+      ? online
+        ? m.facts_meets_in_and_online({ place })
+        : m.facts_meets_in({ place })
+      : online
+        ? m.facts_meets_online()
+        : ''
   );
   const spoken = $derived(
-    new Intl.ListFormat('en', { type: 'conjunction' }).format(
+    new Intl.ListFormat(intl(), { type: 'conjunction' }).format(
       languages.map((l) => languageName(l.language))
     )
   );
-  const said = $derived([where, spoken && `Speaks ${spoken}.`].filter(Boolean).join(' '));
+  const said = $derived(
+    [where, spoken && m.facts_speaks({ languages: spoken })].filter(Boolean).join(' ')
+  );
 </script>
 
 {#if said}<p class="facts">{said}</p>{/if}

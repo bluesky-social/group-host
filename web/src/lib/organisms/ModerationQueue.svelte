@@ -15,6 +15,8 @@
     reports,
     what
   } from '#lib/moderation.ts';
+  import { localized, type LabelLocale } from '#lib/labels.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * A group's moderation queue of one status: each subject by whose it is,
    * what it is, when and why it was reported, the labels it wears and what
@@ -45,19 +47,28 @@
     reasons?: string[];
     found?: Subject | null;
     reviewing?: string | null;
-    defined?: { identifier: string; locales: { name: string }[] }[];
+    defined?: { identifier: string; locales: LabelLocale[] }[];
   } = $props();
   // What fills each status's list, said where it is empty.
-  const EMPTY: Record<string, string> = {
-    open: 'New reports show up here.',
-    escalated: 'What you escalate shows up here.',
-    resolved: 'What you resolve shows up here.'
+  const EMPTY: Record<string, { title: () => string; body: () => string }> = {
+    open: { title: m.moderation_queue_empty_open_title, body: m.moderation_queue_empty_open },
+    escalated: {
+      title: m.moderation_queue_empty_escalated_title,
+      body: m.moderation_queue_empty_escalated
+    },
+    resolved: {
+      title: m.moderation_queue_empty_resolved_title,
+      body: m.moderation_queue_empty_resolved
+    }
   };
   const acts = $derived(can.label || can.resolve);
   // The labels the group defines, by what they are called, then any other
   // it has used here, by their value.
   const choices = $derived([
-    ...defined.map((d) => ({ val: d.identifier, name: d.locales[0]?.name ?? d.identifier })),
+    ...defined.map((d) => ({
+      val: d.identifier,
+      name: localized(d.locales)?.name ?? d.identifier
+    })),
     ...labelsUsed(found ? [...subjects, found] : subjects)
       .filter((v) => !defined.some((d) => d.identifier === v))
       .map((v) => ({ val: v, name: v }))
@@ -97,7 +108,7 @@
           <span class="what">{what(s.key)} · {reported(s)}</span>
           {#if reasonsOf(s).length || wearing.length}<span class="tags"
               >{#each reasonsOf(s) as r (r)}<Tag text={r} />{/each}{#if wearing.length}<span
-                  class="what labelled">Labelled</span
+                  class="what labelled">{m.moderation_queue_labelled()}</span
                 >{/if}{#each wearing as val (val)}<span class="tag worn">{val}</span>{/each}</span
             >{/if}
         </span>
@@ -107,7 +118,8 @@
               class="quiet small"
               type="button"
               popovertarget={`review-${i}`}
-              aria-label={`Review ${s.actor.handle ?? s.actor.did}`}>Review</button
+              aria-label={m.moderation_queue_review_label({ who: s.actor.handle ?? s.actor.did })}
+              >{m.moderation_queue_review()}</button
             ></span
           >
           {@render review(s, `review-${i}`)}
@@ -118,6 +130,8 @@
     {/each}
   </ul>
 {:else}
-  <Empty title={`Nothing ${status}`}>{EMPTY[status] ?? 'Reports show up here.'}</Empty>
+  <Empty title={EMPTY[status]?.title() ?? m.moderation_queue_empty_title({ status })}
+    >{EMPTY[status]?.body() ?? m.moderation_queue_empty()}</Empty
+  >
 {/if}
 {#if found && acts}{@render review(found, 'review-found')}{/if}

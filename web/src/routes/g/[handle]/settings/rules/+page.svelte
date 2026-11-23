@@ -1,18 +1,21 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Section from '#lib/molecules/Section.svelte';
   import RulesEditor from '#lib/organisms/RulesEditor.svelte';
   let { data, form } = $props();
   const g = $derived(data.group);
 </script>
 
-<svelte:head><title>Rules · {g.displayName ?? g.handle} · opensocial</title></svelte:head>
+<svelte:head
+  ><title>{m.route_group_settings_rules_head({ group: g.displayName ?? g.handle })}</title
+  ></svelte:head
+>
 
 {#if form?.failed}<p class="danger">{form.failed}</p>{/if}
-<Section title="Rules" count={g.rules?.length ?? 0}>
+<Section title={m.route_group_settings_rules_title()} count={g.rules?.length ?? 0}>
   {#snippet actions()}<button class="quiet" type="button" popovertarget="add-rule"
-      >Add a rule</button
+      >{m.route_group_settings_rules_add()}</button
     >{/snippet}
-  {#snippet intro()}Rules everyone in the group agrees to. They show on the group's page in this
-    order.{/snippet}
+  {#snippet intro()}{m.route_group_settings_rules_intro()}{/snippet}
   <RulesEditor rules={g.rules} />
 </Section>

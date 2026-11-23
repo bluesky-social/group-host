@@ -2,6 +2,7 @@
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import { day } from '#lib/dates.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /** The AI apps the person connected to the group, to act as them there: each to disconnect, asked to be sure of. */
   type App = { clientId: string; name: string; connectedAt: string; usedAt: string };
   let { apps }: { apps: App[] } = $props();
@@ -13,28 +14,26 @@
       <li>
         <span class="row-main"
           ><strong>{a.name}</strong><span class="what"
-            >Connected {day(a.connectedAt)}, last used {day(a.usedAt)}</span
+            >{m.connected_apps_when({ connected: day(a.connectedAt), used: day(a.usedAt) })}</span
           ></span
         >
         <span class="row-actions"
           ><button class="quiet small" type="button" popovertarget={`disconnect-${i}`}
-            >Disconnect</button
+            >{m.connected_apps_disconnect()}</button
           ></span
         >
         <ConfirmDialog
           id={`disconnect-${i}`}
-          title="Disconnect this app?"
+          title={m.connected_apps_disconnect_title()}
           action="?/disconnect"
-          confirm="Disconnect"
+          confirm={m.connected_apps_disconnect()}
           fields={{ clientId: a.clientId }}
         >
-          {a.name} can no longer act for you here. You can connect it again later.
+          {m.connected_apps_disconnect_body({ app: a.name })}
         </ConfirmDialog>
       </li>
     {/each}
   </ul>
 {:else}
-  <Empty title="No AI app connected yet"
-    >Add the address above to an AI app, and it shows up here.</Empty
-  >
+  <Empty title={m.connected_apps_empty_title()}>{m.connected_apps_empty_body()}</Empty>
 {/if}

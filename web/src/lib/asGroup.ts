@@ -6,7 +6,7 @@
 
 import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto';
 import { fail, type ActionFailure } from '@sveltejs/kit';
-import type { LexErrorData } from '@atproto/lex';
+import { refused as said } from '#lib/errors.ts';
 
 type Load = { fetch: typeof fetch };
 
@@ -71,8 +71,7 @@ class Prover {
 
 /** Why the host refused, as a form says it. */
 async function refused(res: Response): Promise<Failed> {
-  const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
-  return fail(res.status, { failed: failure?.message ?? res.statusText });
+  return fail(res.status, { failed: await said(res) });
 }
 
 /** The group, acting in one of its spaces with a token for it. */

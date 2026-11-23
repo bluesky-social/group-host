@@ -6,6 +6,7 @@ import {
   ScopePermissionsTransition,
   SpacePermission
 } from '@atproto/oauth-scopes';
+import { m } from '#lib/paraglide/messages.js';
 
 /**
  * What an app asking for some scopes could do, said as an account's own
@@ -75,25 +76,26 @@ export function permissions(
   if (email)
     out.push({
       kind: 'email',
-      title: 'Email',
-      says:
-        email === 'manage'
-          ? "Read and update the group's email address"
-          : "Read the group's email address"
+      title: m.permissions_email_title(),
+      says: email === 'manage' ? m.permissions_email_manage() : m.permissions_email_read()
     });
   if (p.allowsIdentity({ attr: '*' }))
     out.push({
       kind: 'identity',
-      title: 'Identity',
-      says: "Manage the group's full identity, including its @handle"
+      title: m.permissions_identity_title(),
+      says: m.permissions_identity_full()
     });
   else if (p.allowsIdentity({ attr: 'handle' }))
-    out.push({ kind: 'identity', title: 'Identity', says: "Change the group's @handle" });
+    out.push({
+      kind: 'identity',
+      title: m.permissions_identity_title(),
+      says: m.permissions_identity_handle()
+    });
   if (p.allowsAccount({ attr: 'status', action: 'manage' }))
     out.push({
       kind: 'account',
-      title: 'Account',
-      says: 'Turn the group off for a while, and back on'
+      title: m.permissions_account_title(),
+      says: m.permissions_account_status()
     });
 
   const onlyBluesky = blueskyOnly(scopes, p);
@@ -112,19 +114,19 @@ export function permissions(
     const details = !broad && onlyBluesky;
     out.push({
       kind: 'bluesky',
-      title: 'Bluesky',
+      title: m.permissions_bluesky_title(),
       says:
         broad && bskyRpc
-          ? "Manage the group's profile, posts, likes and follows, and read its private preferences"
+          ? m.permissions_bluesky_broad_private()
           : broad
-            ? "Manage the group's profile, posts, likes and follows"
+            ? m.permissions_bluesky_broad()
             : bskyRepo && bskyRpc
-              ? "Use parts of the group's Bluesky account, and read its private preferences"
+              ? m.permissions_bluesky_parts_private()
               : bskyRepo
-                ? "Use parts of the group's Bluesky account"
-                : "Read the group's private Bluesky preferences",
+                ? m.permissions_bluesky_parts()
+                : m.permissions_bluesky_private(),
       ...(details && {
-        about: 'The app asks to do this on the Bluesky account:',
+        about: m.permissions_bluesky_about(),
         data: repoData(scopes),
         files: files(scopes, p),
         calls: calls(scopes)
@@ -132,7 +134,7 @@ export function permissions(
     });
   }
   if (p.hasTransitionChatBsky || scopes.some(chat))
-    out.push({ kind: 'chat', title: 'Chat', says: 'Read and send messages' });
+    out.push({ kind: 'chat', title: m.permissions_chat_title(), says: m.permissions_chat_says() });
 
   for (const s of new Set(scopes)) {
     const set = IncludeScope.fromString(s);
@@ -141,7 +143,7 @@ export function permissions(
     out.push({
       kind: 'set',
       title: label?.title ?? set.nsid,
-      says: label?.text ?? 'A set of permissions this host does not know'
+      says: label?.text ?? m.permissions_set_unknown()
     });
   }
 
@@ -156,33 +158,32 @@ export function permissions(
     if (all)
       out.push({
         kind: 'repository',
-        title: 'Repository',
-        says: "Create, update and delete any of the group's public data"
+        title: m.permissions_repository_title(),
+        says: m.permissions_repository_all()
       });
     else if (data.length)
       out.push({
         kind: 'repository',
-        title: 'Repository',
-        says: 'Publish changes',
-        about:
-          "The group's repository holds its public data, such as its posts. The app asks to make these changes to it:",
+        title: m.permissions_repository_title(),
+        says: m.permissions_repository_publish(),
+        about: m.permissions_repository_about(),
         data,
         files: files(scopes, p)
       });
     if (p.hasTransitionGeneric)
       out.push({
         kind: 'authenticate',
-        title: 'Authenticate',
-        says: 'Act as the group with any service'
+        title: m.permissions_authenticate_title(),
+        says: m.permissions_authenticate_any()
       });
     else {
       const c = calls(scopes);
       if (c.length)
         out.push({
           kind: 'authenticate',
-          title: 'Authenticate',
-          says: 'Act as the group with other services',
-          about: 'The app asks to call these methods as the group:',
+          title: m.permissions_authenticate_title(),
+          says: m.permissions_authenticate_other(),
+          about: m.permissions_authenticate_about(),
           calls: c
         });
     }
@@ -190,10 +191,9 @@ export function permissions(
     if (spaces.length)
       out.push({
         kind: 'spaces',
-        title: 'Spaces',
-        says: 'Use permissioned spaces',
-        about:
-          'Spaces, such as group chats and shared calendars, hold data only their members can see. The app asks for this access:',
+        title: m.permissions_spaces_title(),
+        says: m.permissions_spaces_says(),
+        about: m.permissions_spaces_about(),
         spaces
       });
   }
@@ -210,13 +210,8 @@ export function warnings(scopes: string[]): string[] {
       return sp?.spaceType === '*' && sp.authority === '*';
     })
   )
-    out.push(
-      'It asks for every space on the network. Only allow this for an app you trust completely.'
-    );
-  if (p.allowsIdentity({ attr: '*' }))
-    out.push(
-      'It asks for full control of the group’s identity, so it could break the group’s account or take it. Only allow this for an app you trust completely.'
-    );
+    out.push(m.permissions_warning_spaces());
+  if (p.allowsIdentity({ attr: '*' })) out.push(m.permissions_warning_identity());
   return out;
 }
 
@@ -323,9 +318,9 @@ function calls(scopes: string[]) {
 }
 
 function service(aud: string) {
-  if (aud === '*') return 'Any service';
-  if (aud.startsWith('did:web:api.bsky.app#')) return 'Bluesky';
-  if (aud.startsWith('did:web:api.bsky.chat#')) return 'Bluesky chat';
+  if (aud === '*') return m.permissions_service_any();
+  if (aud.startsWith('did:web:api.bsky.app#')) return m.permissions_service_bluesky();
+  if (aud.startsWith('did:web:api.bsky.chat#')) return m.permissions_service_bluesky_chat();
   if (aud.startsWith('did:web:') && aud.includes('#'))
     return aud.slice('did:web:'.length, aud.indexOf('#'));
   return aud;

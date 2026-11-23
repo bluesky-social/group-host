@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import type { Snippet } from 'svelte';
   import { enhance } from '$app/forms';
   import Dialog from '#lib/molecules/Dialog.svelte';
@@ -39,7 +40,8 @@
         {name}
         {value}
       />{/each}
-    <button class="quiet" type="button" popovertarget={id} popovertargetaction="hide">Cancel</button
+    <button class="quiet" type="button" popovertarget={id} popovertargetaction="hide"
+      >{m.common_cancel()}</button
     >
     <button class={danger ? 'danger' : undefined} type="submit">{confirm}</button>
   </form>

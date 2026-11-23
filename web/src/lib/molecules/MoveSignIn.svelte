@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import HandleInput from '#lib/molecules/HandleInput.svelte';
   /**
    * Signing in to an account to move here, at its own server: its handle,
@@ -10,7 +11,7 @@
 
 <form class="stack" method="get" action="/console/move/login">
   <input type="hidden" name="back" value={back} />
-  <HandleInput id="move-handle" label="The account to move" placeholder="riders.bsky.social" />
-  <p>You'll sign in to the account's server and let this host move it.</p>
-  <button type="submit">Sign in to it</button>
+  <HandleInput id="move-handle" label={m.move_sign_in_label()} placeholder="riders.bsky.social" />
+  <p>{m.move_sign_in_body()}</p>
+  <button type="submit">{m.move_sign_in_submit()}</button>
 </form>

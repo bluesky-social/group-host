@@ -127,6 +127,16 @@ than inventing.
 
 ## House rules
 
+**Messages.** Every word on a page is a message in
+`web/messages/en.json`, called as `m.<key>()` (keys start with the
+component's name: `invites_empty_title`), so the rules below are held
+there. A sentence is one message, with its parameters (`{group}`) and
+any component inside it as markup (`{#person/} loses access to
+{group}.`, drawn by `ParaglideMessage`), never pieces joined, as other
+languages order words their own way. A count is a plural message. A
+refusal from the host is said by its error's name (`#lib/errors.ts`).
+`node harness/strings.mjs` finds words written into markup.
+
 **Case.** Sentence case everywhere: buttons, links, headings, menu
 items, field labels, dialog titles, notes and errors ("Invite someone",
 "Asking to join", "Sign out"). Only the first word and proper nouns take

@@ -123,6 +123,34 @@ light and phone dark unless you ask otherwise. It tells you when a page
 is wider than the screen, naming the element that runs past its edge.
 Its options are at the top of `harness/look/look.mjs`.
 
+## The console's languages
+
+Every word the console shows is a message in `web/messages/en.json`,
+compiled by [Paraglide](https://paraglidejs.com) into functions under
+`web/src/lib/paraglide` (made as the console builds, and by `npm run
+i18n`, not kept in git). A page calls one as `m.invites_empty_title()`.
+`node harness/strings.mjs` fails on words written straight into a
+component. English is the only language so far.
+
+Each request's language is the one the `PARAGLIDE_LOCALE` cookie names,
+else the first of the browser's `Accept-Language` the console has, else
+English. The page's `<html lang>` and `dir` say it. Dates, lists, and
+countries' and languages' names follow it (`#lib/locale.ts`), and a
+label shows its name in it when the group gave one. Times stay in UTC,
+since the page is drawn on the server. The host's own error messages
+stay English, and the console says each by its name (`#lib/errors.ts`).
+A few names (`InvalidRequest`, `InvalidHandle`, `InvalidSite`,
+`InvalidArchive`, `UpstreamFailure`) cover several reasons the reader
+needs to tell apart, so for those the console shows the host's message.
+A language other than English needs the host to give each such reason
+a name of its own first.
+
+Adding a language takes three changes. Add it to `locales` in
+`web/project.inlang/settings.json`, add `web/messages/<language>.json`
+with every key `en.json` has, and add its `Intl` locale to `INTL` in
+`web/src/lib/locale.ts`. `web/src/app.css` lays pages out by left and
+right, so a right-to-left language needs that changed first.
+
 ## The guides' pictures
 
 A guide (`docs/guides/`) shows the console with pictures. `just look`
@@ -196,7 +224,9 @@ docs-deploy` after a change to the docs lands.
 That's `cargo fmt --check`, `oxfmt --check`, clippy with warnings
 denied, the console's component layers (`harness/layers.mjs`), a check
 that no dialog's title holds a name or anything typed
-(`harness/dialogs.mjs`), and svelte-check.
+(`harness/dialogs.mjs`), a check that no component writes words into
+its markup rather than saying a message (`harness/strings.mjs`), and
+svelte-check.
 
 `just fmt` formats everything the checks hold to a format. It formats
 the Rust with rustfmt, and the console, the harness and the docs site

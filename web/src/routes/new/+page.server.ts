@@ -4,6 +4,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { xrpc } from '#lib/data.ts';
 import { finished } from '#lib/handles.ts';
+import { refused } from '#lib/errors.ts';
 
 type Event = Parameters<PageServerLoad>[0];
 
@@ -40,10 +41,7 @@ export const actions: Actions = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input)
     });
-    if (!res.ok) {
-      const failure = await res.json().catch(() => null);
-      return fail(res.status, { failed: failure?.message ?? res.statusText });
-    }
+    if (!res.ok) return fail(res.status, { failed: await refused(res) });
     redirect(303, `/g/${input.handle}`);
   }
 };

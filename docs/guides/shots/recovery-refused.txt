@@ -6,6 +6,6 @@
   - textbox "A key of yours, as a did:key":
     - /placeholder: did:key:z…
     - text: did:key:<key>
-  - paragraph: not a did:key the directory takes (secp256k1 or P-256)
+  - paragraph: That isn’t a key this host takes. Use a did:key for secp256k1 or P-256.
   - button "Cancel"
   - button "Add"

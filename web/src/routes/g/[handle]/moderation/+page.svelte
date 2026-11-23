@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Empty from '#lib/molecules/Empty.svelte';
   import Section from '#lib/molecules/Section.svelte';
   import Tabs from '#lib/molecules/Tabs.svelte';
@@ -10,9 +11,15 @@
   const g = $derived(data.group);
   const at = $derived(`/g/${g.handle}/moderation`);
   const tabs = $derived(
-    ['open', 'escalated', 'resolved'].map((s) => ({
+    (
+      [
+        ['open', m.route_group_moderation_tab_open],
+        ['escalated', m.route_group_moderation_tab_escalated],
+        ['resolved', m.route_group_moderation_tab_resolved]
+      ] as const
+    ).map(([s, text]) => ({
       href: `${at}?status=${s}`,
-      text: s[0].toUpperCase() + s.slice(1)
+      text: text()
     }))
   );
   const can = $derived({
@@ -22,19 +29,24 @@
   const finds = $derived(!!data.subjects && can.label);
 </script>
 
-<svelte:head><title>Moderation · {g.displayName ?? g.handle} · opensocial</title></svelte:head>
+<svelte:head
+  ><title>{m.route_group_moderation_head({ group: g.displayName ?? g.handle })}</title></svelte:head
+>
 
-<Page title="Moderation" back={{ href: `/g/${g.handle}`, text: g.displayName ?? g.handle }}>
+<Page
+  title={m.route_group_moderation_title()}
+  back={{ href: `/g/${g.handle}`, text: g.displayName ?? g.handle }}
+>
   {#snippet nav()}
     {#if data.subjects}<Tabs
         {tabs}
         current={`${page.url.pathname}?status=${data.status}`}
-        label="The queue"
+        label={m.route_group_moderation_queue()}
       />{/if}
   {/snippet}
   {#if form?.failed}<p class="danger">{form.failed}</p>{/if}
   {#if data.subjects}
-    <Section title="Subjects" count={data.subjects.length}>
+    <Section title={m.route_group_moderation_subjects()} count={data.subjects.length}>
       {#if finds}<FindAccount />{/if}
       <ModerationQueue
         subjects={data.subjects}
@@ -49,8 +61,8 @@
       />
     </Section>
   {:else}
-    <Empty title="Nothing here is yours to see"
-      >Only people whose roles let them read the moderation queue can see it.</Empty
+    <Empty title={m.route_group_moderation_not_yours_title()}
+      >{m.route_group_moderation_not_yours_body()}</Empty
     >
   {/if}
 </Page>

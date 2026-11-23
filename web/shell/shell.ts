@@ -27,6 +27,7 @@ import { GroupSpace } from '@opensocial/sdk';
 import { mount } from 'svelte';
 import consoleStyles from '../src/app.css?inline';
 import { SIGN_IN } from '../src/lib/signIn.ts';
+import { m } from '../src/lib/paraglide/messages.js';
 import SiteSignIn from './SiteSignIn.svelte';
 import { signing } from './signing.svelte.ts';
 import type { Ask, Push, Refusal, Reply, Synced, Tell, Written } from './protocol.ts';
@@ -417,8 +418,8 @@ const go = (to: string, options: { prompt?: 'create' } = {}) => {
     .then((c) => c.signIn(to, { state: location.pathname + location.search, ...options }))
     .catch((err) => {
       signing.failed = options.prompt
-        ? `We couldn't reach ${new URL(to).host} to make an account. Try again in a moment.`
-        : `We couldn't find ${to}. Check your handle and try again.`;
+        ? m.shell_sign_up_unreachable({ host: new URL(to).host })
+        : m.shell_sign_in_not_found({ handle: to });
       console.warn(err);
     });
 };

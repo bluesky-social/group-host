@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
+  import { m } from '#lib/paraglide/messages.js';
   import Icon from '#lib/atoms/Icon.svelte';
   import Dialog from '#lib/molecules/Dialog.svelte';
   import type { ComponentProps } from 'svelte';
@@ -26,7 +28,7 @@
     spaces: 'users'
   };
   const detailed = (p: Permission) => !!(p.data?.length || p.calls?.length || p.spaces?.length);
-  const anywhere = (owner: string) => (owner === '*' ? 'the network' : owner);
+  const anywhere = (owner: string) => (owner === '*' ? m.permissions_the_network() : owner);
 </script>
 
 {#snippet nsid(name: string)}
@@ -37,14 +39,18 @@
 
 {#snippet ticks(data: Data[])}
   <table class="ticks">
-    <thead><tr><th>Data</th><th>Create</th><th>Update</th><th>Delete</th></tr></thead>
+    <thead
+      ><tr
+        ><th>{m.permissions_data()}</th><th>{m.common_create()}</th><th>{m.permissions_update()}</th
+        ><th>{m.common_delete()}</th></tr
+      ></thead
+    >
     <tbody>
       {#each data as d (d.collection)}
         <tr>
           <td
-            >{#if d.collection === '*'}<em class="mute">Any collection</em>{:else}{@render nsid(
-                d.collection
-              )}{/if}</td
+            >{#if d.collection === '*'}<em class="mute">{m.permissions_any_collection()}</em
+              >{:else}{@render nsid(d.collection)}{/if}</td
           >
           {#each [d.ticks.create, d.ticks.update, d.ticks.delete] as on, i (i)}
             <td
@@ -67,23 +73,24 @@
       </div>
       {#if detailed(p)}
         <div class="row-actions">
-          <button class="quiet" type="button" popovertarget="{id}-{i}">Details</button>
+          <button class="quiet" type="button" popovertarget="{id}-{i}"
+            >{m.permissions_details()}</button
+          >
         </div>
         <Dialog id="{id}-{i}" title={p.title}>
-          {#if withheld}<p>The app asked for this, and won't get it.</p>{/if}
+          {#if withheld}<p>{m.permissions_withheld()}</p>{/if}
           {#if p.about}<p class="mute">{p.about}</p>{/if}
           {#if p.data?.length}{@render ticks(p.data)}{/if}
-          {#if p.files}<p>The app could upload files too.</p>{/if}
+          {#if p.files}<p>{m.permissions_files()}</p>{/if}
           {#if p.calls?.length}
             <table class="ticks calls">
-              <thead><tr><th>Call</th><th>On</th></tr></thead>
+              <thead><tr><th>{m.permissions_call()}</th><th>{m.permissions_on()}</th></tr></thead>
               <tbody>
                 {#each p.calls as c (c.method + c.service)}
                   <tr
                     ><td
-                      >{#if c.method === '*'}<em class="mute">Any method</em>{:else}{@render nsid(
-                          c.method
-                        )}{/if}</td
+                      >{#if c.method === '*'}<em class="mute">{m.permissions_any_method()}</em
+                        >{:else}{@render nsid(c.method)}{/if}</td
                     ><td>{c.service}</td></tr
                   >
                 {/each}
@@ -92,20 +99,26 @@
           {/if}
           {#each p.spaces ?? [] as s (s.type + s.owner)}
             <div class="space-access">
+              {#snippet owner()}<strong>{anywhere(s.owner)}</strong>{/snippet}
               <p>
-                {#if s.type === '*'}All spaces on <strong>{anywhere(s.owner)}</strong
-                  >{:else}{@render nsid(s.type)} spaces on <strong>{anywhere(s.owner)}</strong>{/if}
+                {#if s.type === '*'}
+                  <ParaglideMessage message={m.permissions_all_spaces_on} {owner} />
+                {:else}
+                  <ParaglideMessage message={m.permissions_spaces_on} {owner}>
+                    {#snippet type()}{@render nsid(s.type)}{/snippet}
+                  </ParaglideMessage>
+                {/if}
               </p>
               {#if s.manage}<p class="mute small">
-                  Manage the spaces, too: create them, and add and remove members.
+                  {m.permissions_manage()}
                 </p>{/if}
-              {#if !s.read && s.readSelf}<p class="mute small">Read only its own data.</p>{/if}
+              {#if !s.read && s.readSelf}<p class="mute small">{m.permissions_read_self()}</p>{/if}
               {#if s.data.length}{@render ticks(s.data)}{:else if s.read && !s.manage}<p
                   class="mute small"
                 >
-                  Read only.
+                  {m.permissions_read_only()}
                 </p>{:else if !s.read && !s.readSelf && !s.manage}<p class="mute small">
-                  No access.
+                  {m.permissions_no_access()}
                 </p>{/if}
             </div>
           {/each}

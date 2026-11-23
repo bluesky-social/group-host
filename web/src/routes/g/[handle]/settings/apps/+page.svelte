@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Section from '#lib/molecules/Section.svelte';
   import AppPasswords from '#lib/organisms/AppPasswords.svelte';
   import GroupActivity from '#lib/organisms/GroupActivity.svelte';
@@ -7,25 +8,28 @@
   const g = $derived(data.group);
 </script>
 
-<svelte:head><title>Apps · {g.displayName ?? g.handle} · opensocial</title></svelte:head>
+<svelte:head
+  ><title>{m.route_group_settings_apps_head({ group: g.displayName ?? g.handle })}</title
+  ></svelte:head
+>
 
 {#if form?.failed}<p class="danger">{form.failed}</p>{/if}
 {#if data.tokens}
-  <Section title="Apps acting as the group" count={data.tokens.sessions.length}>
+  <Section title={m.route_group_settings_apps_acting()} count={data.tokens.sessions.length}>
     <GroupApps sessions={data.tokens.sessions} />
   </Section>
 {/if}
 {#if data.passwords}
-  <Section title="App passwords" count={data.passwords.length}>
+  <Section title={m.route_group_settings_apps_passwords()} count={data.passwords.length}>
     {#snippet actions()}<button class="quiet" type="button" popovertarget="make-password"
-        >Create an app password</button
+        >{m.route_group_settings_apps_create_password()}</button
       >{/snippet}
     <AppPasswords passwords={data.passwords} made={form?.made} />
   </Section>
 {/if}
 {#if data.tokens}
-  <Section title="What apps did as the group">
-    {#snippet intro()}Each write an app made while signed in as the group, newest first.{/snippet}
+  <Section title={m.route_group_settings_apps_activity()}>
+    {#snippet intro()}{m.route_group_settings_apps_activity_intro()}{/snippet}
     <GroupActivity activity={data.tokens.activity} />
   </Section>
 {/if}

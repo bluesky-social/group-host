@@ -9,6 +9,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { applyAsGroup, asGroup, membersOf } from '#lib/asGroup.ts';
 import { act, xrpc } from '#lib/data.ts';
 import type { Event as Happened, Subject } from '#lib/moderation.ts';
+import { m } from '#lib/paraglide/messages.js';
 
 type Handle = `${string}.${string}`;
 type Did = `did:${string}:${string}`;
@@ -164,7 +165,7 @@ export const actions: Actions = {
     const group = await groupOf(event);
     const form = await event.request.formData();
     const val = String(form.get('val') ?? '').trim();
-    if (!val) return fail(400, { failed: 'Choose or type a label.' });
+    if (!val) return fail(400, { failed: m.route_group_moderation_label_needed() });
     const subject = subjectOf(form);
     return asGroup(event, group, besideOf(group, subject.uri), 'com.atproto.space.createRecord', {
       collection: LABEL,
@@ -186,7 +187,7 @@ export const actions: Actions = {
     const rkeys = records
       .filter((r) => r.repo === group && (r.value as { val?: string }).val === val)
       .map((r) => r.uri.split('/').pop() ?? '');
-    if (!rkeys.length) return fail(400, { failed: `It no longer wears ${val}.` });
+    if (!rkeys.length) return fail(400, { failed: m.route_group_moderation_label_gone({ val }) });
     const writes = rkeys.map((rkey) => ({ action: 'delete' as const, collection: LABEL, rkey }));
     return applyAsGroup(event, group, space, writes);
   },
@@ -212,7 +213,8 @@ export const actions: Actions = {
     const found = await event.fetch(
       `/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
-    if (!found.ok) return fail(400, { failed: `We can't find ${handle}.` });
+    if (!found.ok)
+      return fail(400, { failed: m.route_group_moderation_find_not_found({ handle }) });
     const { did } = await found.json();
     redirect(303, `?review=${encodeURIComponent(did)}`);
   }

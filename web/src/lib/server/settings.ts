@@ -10,6 +10,9 @@ import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecover
 import { fail, redirect, type Action } from '@sveltejs/kit';
 import { FAVICONS } from '$app/env/private';
 import { act, xrpc, type Answer } from '#lib/data.ts';
+import { refusal, refused } from '#lib/errors.ts';
+import { m } from '#lib/paraglide/messages.js';
+import { getLocale } from '#lib/paraglide/runtime.js';
 import {
   applyAsGroup,
   membersOf,
@@ -127,7 +130,7 @@ async function iconOf(url: string) {
 function whereFrom(form: FormData, was?: Place): Place | string | undefined {
   const town = text(form, 'town');
   const country = text(form, 'country');
-  if (town && !country) return 'Choose the country the town is in.';
+  if (town && !country) return m.settings_country_needed();
   if (!country) return was && was.$type !== ADDRESS ? was : undefined;
   const { locality: _, ...kept } = was?.$type === ADDRESS ? was : {};
   return { ...kept, $type: ADDRESS, country, ...(town ? { locality: town } : {}) };
@@ -217,7 +220,7 @@ const all = {
     const slot = text(form, 'slot') === 'banner' ? 'banner' : 'avatar';
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0)
-      return fail(400, { failed: 'Choose a picture to upload.' });
+      return fail(400, { failed: m.settings_picture_needed() });
     const bytes = await file.arrayBuffer();
     return asMeta(event, group, async (session, profile) => {
       const up = await session.upload(bytes, file.type || 'application/octet-stream');
@@ -285,9 +288,9 @@ const all = {
           )
         ];
         if (topics.length > MAX_TOPICS)
-          return fail(400, { failed: `A group can list up to ${MAX_TOPICS} topics.` });
+          return fail(400, { failed: m.settings_topics_too_many({ count: MAX_TOPICS }) });
         if (topics.some((t) => [...segments.segment(t)].length > TOPIC_AT_MOST))
-          return fail(400, { failed: `Keep each topic to ${TOPIC_AT_MOST} characters.` });
+          return fail(400, { failed: m.settings_topic_too_long({ count: TOPIC_AT_MOST }) });
         if (topics.length) profile.topics = topics.map((topic) => ({ topic }));
         else delete profile.topics;
       }
@@ -316,9 +319,7 @@ const all = {
     return asMeta(event, group, async (session, now) => {
       const had = (now.links as object[] | undefined) ?? [];
       if (had.length >= MAX_LINKS)
-        return fail(400, {
-          failed: `A group can have up to ${MAX_LINKS} links. Remove one first.`
-        });
+        return fail(400, { failed: m.settings_links_too_many({ count: MAX_LINKS }) });
       const bytes = await iconOf(url);
       const up = bytes ? await session.upload(bytes, 'image/png') : null;
       const icon = up && 'blob' in up ? { icon: up.blob } : {};
@@ -429,7 +430,7 @@ const all = {
       })
     });
     const answer = await res.json().catch(() => null);
-    if (!res.ok) return fail(res.status, { failed: answer?.message ?? res.statusText });
+    if (!res.ok) return fail(res.status, { failed: refusal(answer, res.status) });
     return { made: { name: answer.name as string, password: answer.password as string } };
   },
   key: async (event) => {
@@ -472,6 +473,7 @@ const all = {
       group,
       label,
       name: text(form, 'name'),
+      lang: getLocale(),
       description: text(form, 'description'),
       severity: text(form, 'severity') || 'inform',
       blurs: text(form, 'blurs') || 'none',
@@ -488,8 +490,7 @@ const all = {
   site: async (event) => {
     const { group, form } = await asked(event);
     const files = await siteFiles(form);
-    if (!files.length)
-      return fail(400, { failed: 'Choose a folder with the pages of your site in it.' });
+    if (!files.length) return fail(400, { failed: m.settings_site_folder_needed() });
     // A 404.html at the top of the folder is its page for addresses not
     // found, as static hosts take it.
     const notFound = files.some((f) => f.path === '404.html') ? { notFound: '404.html' } : {};
@@ -505,21 +506,14 @@ const all = {
         .filter(Boolean)
     );
     const spaces = [...new Set(spaceLines)].map(spaceOf);
-    if (spaces.some((s) => !s))
-      return fail(400, {
-        failed: 'Write each line as a type of space, with /key after it to pick one space.'
-      });
+    if (spaces.some((s) => !s)) return fail(400, { failed: m.settings_site_spaces_bad() });
     const writes = writeLines.map((line) => {
       const at = line.indexOf(':');
       const space = at < 0 ? undefined : spaceOf(line.slice(0, at));
       const collection = line.slice(at + 1).trim();
       return space && collection ? { ...space, collection } : undefined;
     });
-    if (writes.some((w) => !w))
-      return fail(400, {
-        failed:
-          'Write each line as a type of space, with /key after it to pick one space, and a kind of record, with a colon between.'
-      });
+    if (writes.some((w) => !w)) return fail(400, { failed: m.settings_site_writes_bad() });
     return act(event, 'fyi.opensocial.putSite', {
       group,
       files,
@@ -543,14 +537,12 @@ const all = {
       body: JSON.stringify({ group })
     });
     if (res.ok) return;
-    const failure: { error?: string; message?: string } | null = await res.json().catch(() => null);
     const domain = text(form, 'domain');
-    const why: Record<string, string> = {
-      NotReaching: `${domain} doesn't reach this host yet. Check its DNS records, then try again in a few minutes.`,
-      NoOwnDomain: 'Give the group a handle on its own domain first.'
-    };
     return fail(res.status, {
-      failed: why[failure?.error ?? ''] ?? failure?.message ?? res.statusText
+      failed: await refused(res, {
+        NotReaching: () => m.settings_domain_not_reaching({ domain }),
+        NoOwnDomain: m.settings_domain_no_own
+      })
     });
   },
   undomain: async (event) => {
@@ -623,14 +615,12 @@ async function newHandle(event: Event, group: string, handle: string) {
     body: JSON.stringify({ group, handle })
   });
   if (res.ok) redirect(303, `/g/${handle}/settings`);
-  const failure: { error?: string; message?: string } | null = await res.json().catch(() => null);
-  const why: Record<string, string> = {
-    InvalidHandle: `${handle} isn't a domain.`,
-    NotPointing: `${handle} doesn't point to this group yet. Check its _atproto record, then try again in a few minutes.`,
-    HandleNotAvailable: `Another account here has ${handle} already.`
-  };
   return fail(res.status, {
-    failed: why[failure?.error ?? ''] ?? failure?.message ?? res.statusText
+    failed: await refused(res, {
+      InvalidHandle: () => m.settings_handle_invalid({ handle }),
+      NotPointing: () => m.settings_handle_not_pointing({ handle }),
+      HandleNotAvailable: () => m.settings_handle_taken({ handle })
+    })
   });
 }
 

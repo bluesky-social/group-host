@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * The way back to an app, once its request is answered: taken at once,
    * or by hand without the page's script. Never to a script or data URL,
@@ -12,7 +14,11 @@
 </script>
 
 {#if safe}
-  <p>Taking you back to the app… <a href={to}>Go back to the app</a></p>
+  <p>
+    <ParaglideMessage message={m.back_to_app_taking}>
+      {#snippet link({ children })}<a href={to}>{@render children?.()}</a>{/snippet}
+    </ParaglideMessage>
+  </p>
 {:else}
-  <p class="danger">The app asked to be sent back somewhere it may not be.</p>
+  <p class="danger">{m.back_to_app_unsafe()}</p>
 {/if}

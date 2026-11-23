@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import type { Snippet } from 'svelte';
   import { enhance } from '$app/forms';
   import Dialog from '#lib/molecules/Dialog.svelte';
@@ -45,7 +46,7 @@
     {#if failed}<p class="danger">{failed}</p>{/if}
     <div class="actions">
       <button class="quiet" type="button" popovertarget={id} popovertargetaction="hide"
-        >Cancel</button
+        >{m.common_cancel()}</button
       >
       <button type="submit">{submit}</button>
     </div>

@@ -961,8 +961,28 @@ async fn defines_the_groups_own_labels_for_one_who_configures_it() {
     let again = json!({"group": did, "label": "troll", "name": "Troll", "description": "Baits people.", "lang": "sl", "severity": "alert", "blurs": "content", "defaultSetting": "hide", "adultOnly": true});
     let (_, changed) = call(&h, &alice, "putLabelDefinition", again).await;
     assert_eq!(changed["adultOnly"], true);
-    assert_eq!(changed["locales"][0]["lang"], "sl");
+    assert_eq!(changed["severity"], "alert");
+    // It keeps its English name beside the Slovenian one.
+    assert_eq!(changed["locales"][0]["lang"], "en");
+    assert_eq!(changed["locales"][1]["lang"], "sl");
     assert_eq!(labels().await, json!([changed]));
+    // A French name joins them, and a new English one replaces only the
+    // English, in its place.
+    let fr = json!({"group": did, "label": "troll", "name": "Troll (fr)", "description": "Cherche la bagarre.", "lang": "fr"});
+    let (status, _) = call(&h, &alice, "putLabelDefinition", fr).await;
+    assert_eq!(status, 200);
+    let en = json!({"group": did, "label": "troll", "name": "Provoker", "description": "Stirs things up."});
+    let (status, changed) = call(&h, &alice, "putLabelDefinition", en).await;
+    assert_eq!(status, 200);
+    let fr = json!({"lang": "fr", "name": "Troll (fr)", "description": "Cherche la bagarre."});
+    assert_eq!(
+        changed["locales"],
+        json!([
+            {"lang": "en", "name": "Provoker", "description": "Stirs things up."},
+            {"lang": "sl", "name": "Troll", "description": "Baits people."},
+            fr,
+        ])
+    );
     let meta = meta_space(&did);
     let labeler = h
         .host
@@ -973,6 +993,10 @@ async fn defines_the_groups_own_labels_for_one_who_configures_it() {
         json!(["!hide", "!takedown", "troll"])
     );
     assert_eq!(labeler["subjectTypes"], json!(["account", "record"]));
+    assert_eq!(
+        labeler["policies"]["labelValueDefinitions"],
+        json!([changed])
+    );
     // atproto's own values, and anything else, are not the group's to define.
     for label in ["!hide", "Troll", "spam bot", ""] {
         let body = json!({"group": did, "label": label, "name": "x", "description": "x"});

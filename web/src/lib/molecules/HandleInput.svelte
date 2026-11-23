@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Avatar from '#lib/atoms/Avatar.svelte';
   import { type Actor, findActors } from '#lib/typeahead.ts';
   /**
@@ -114,7 +115,7 @@
   />
   {#if showing}
     <!-- Over what is under the field, rather than pushing it down. -->
-    <div id={list} class="drop-list" role="listbox" aria-label="Accounts">
+    <div id={list} class="drop-list" role="listbox" aria-label={m.handle_input_accounts()}>
       {#each found as a, i (a.did)}
         <div
           id="{list}-{i}"

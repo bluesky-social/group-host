@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import { tick } from 'svelte';
   /**
    * A field for choosing a few of many, labelled `label`: what is chosen,
@@ -60,13 +61,13 @@
   const showing = $derived(open && !full && found.length > 0);
   function pick(value: string) {
     chosen = [...chosen, value];
-    said = `${nameOf(value)} added.`;
+    said = m.pick_many_added({ name: nameOf(value) });
     typed = '';
     at = 0;
   }
   function drop(value: string) {
     chosen = chosen.filter((v) => v !== value);
-    said = `${nameOf(value)} removed.`;
+    said = m.pick_many_removed({ name: nameOf(value) });
     // The field, not the page's top, once the button pressed is gone.
     tick().then(() => field?.focus());
   }
@@ -100,19 +101,19 @@
 
 <div class="field" role="group" aria-labelledby="{id}-label">
   <label id="{id}-label" for={id}
-    >{label}{#if optional}{' '}<span class="optional">(optional)</span>{/if}</label
+    >{label}{#if optional}{' '}<span class="optional">{m.common_optional()}</span>{/if}</label
   >
   <div class="pick-many">
     <input type="hidden" {name} value="" />
     {#each chosen as value (value)}<input type="hidden" {name} {value} />{/each}
     {#if chosen.length}
-      <ul class="chosen" aria-label="Chosen">
+      <ul class="chosen" aria-label={m.pick_many_chosen()}>
         {#each chosen as value (value)}
           <li>
             <button
               class="chip"
               type="button"
-              aria-label="Remove {nameOf(value)}"
+              aria-label={m.pick_many_remove({ name: nameOf(value) })}
               onclick={() => drop(value)}>{nameOf(value)}<span aria-hidden="true">×</span></button
             >
           </li>
@@ -158,9 +159,7 @@
     {/if}
   </div>
   <span class="mute small" id="{id}-hint"
-    >{full
-      ? `That's ${most}, the most it can have. Remove one to add another.`
-      : `Choose up to ${most}.`}</span
+    >{full ? m.pick_many_full({ most }) : m.pick_many_up_to({ most })}</span
   >
   <span class="sr-only" aria-live="polite">{said}</span>
 </div>

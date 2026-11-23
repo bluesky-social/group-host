@@ -8,7 +8,8 @@
 //
 // Reads every component and page under web/src, and prints each dialog
 // (a tag whose name ends in Dialog) whose title is a template literal
-// with a `${…}` in it, or strings joined with `+`, as `file:line: title`,
+// with a `${…}` in it, strings joined with `+`, or a message given
+// parameters (`m.remove_title({ handle })`), as `file:line: title`,
 // failing if any. A title passed whole (`title={title}`, as ConfirmDialog
 // hands its own to Dialog, or a choice between fixed words) is let be:
 // what reaches it is the caller's, and checked where the caller writes it.
@@ -55,7 +56,10 @@ for (const file of files(src)) {
   for (const tag of text.matchAll(/<(\w*Dialog)\b[^<]*?\btitle=\{/g)) {
     const at = tag.index + tag[0].length;
     const title = expression(text, at);
-    const built = /`[^`]*\$\{/.test(title) || /['"`]\s*\+|\+\s*['"`]/.test(title);
+    const built =
+      /`[^`]*\$\{/.test(title) ||
+      /['"`]\s*\+|\+\s*['"`]/.test(title) ||
+      /\bm\.\w+\(\s*[^)\s]/.test(title);
     if (!built) continue;
     const line = text.slice(0, at).split('\n').length;
     problems.push(`${relative(root, file)}:${line}: <${tag[1]} title={${title}}>`);

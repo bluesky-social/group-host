@@ -2,7 +2,8 @@
 // schemas under lexicons/, which `npm run lex` makes into src/lib/lexicons.
 
 import { error, fail } from '@sveltejs/kit';
-import type { InferInput, InferMethodOutputBody, LexErrorData, Query } from '@atproto/lex';
+import type { InferInput, InferMethodOutputBody, Query } from '@atproto/lex';
+import { refusal, type Failure } from '#lib/errors.ts';
 
 type Load = { fetch: typeof fetch };
 
@@ -46,11 +47,11 @@ export async function xrpc<Q extends Query>(
   const query = searched(params);
   const res = await fetch(`/xrpc/${nsid}${query.size ? `?${query}` : ''}`);
   if (!res.ok) {
-    const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
+    const failure: Failure = await res.json().catch(() => null);
     // An XRPC method says a thing is not there by the name of its failure.
     const status = failure?.error?.endsWith('NotFound') ? 404 : res.status;
     if (status === 404 && missing) return null;
-    error(status, failure?.message ?? res.statusText);
+    error(status, refusal(failure, res.status));
   }
   return res.json();
 }
@@ -58,7 +59,7 @@ export async function xrpc<Q extends Query>(
 /**
  * What the XRPC procedure `nsid` answers for `input`, asked from the
  * server (a form's action), as the person signed in. A failure is the
- * page's, with the method's own words.
+ * page's, in the console's words for it (`#lib/errors.ts`).
  */
 export async function call<T>({ fetch }: Load, nsid: string, input: object): Promise<T> {
   const res = await fetch(`/xrpc/${nsid}`, {
@@ -67,8 +68,8 @@ export async function call<T>({ fetch }: Load, nsid: string, input: object): Pro
     body: JSON.stringify(input)
   });
   if (!res.ok) {
-    const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
-    error(res.status, failure?.message ?? res.statusText);
+    const failure: Failure = await res.json().catch(() => null);
+    error(res.status, refusal(failure, res.status));
   }
   return res.json();
 }
@@ -85,6 +86,6 @@ export async function act({ fetch }: Load, nsid: string, input: object) {
     body: JSON.stringify(input)
   });
   if (res.ok) return;
-  const failure: Partial<LexErrorData> | null = await res.json().catch(() => null);
-  return fail(res.status, { failed: failure?.message ?? res.statusText });
+  const failure: Failure = await res.json().catch(() => null);
+  return fail(res.status, { failed: refusal(failure, res.status) });
 }

@@ -1,16 +1,25 @@
 <script lang="ts">
   import FormDialog from '#lib/molecules/FormDialog.svelte';
   import HandleInput from '#lib/molecules/HandleInput.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /** Inviting someone to the group, by their handle, with a note if one likes: opened by a button whose `popovertarget` is `id`. */
   let { id }: { id: string } = $props();
 </script>
 
-<FormDialog {id} title="Invite someone" action="?/invite" submit="Send invite">
-  {#snippet intro()}They'll see it the next time they sign in, here or in any app that shows
-    invites.{/snippet}
-  <HandleInput id="{id}-handle" label="Their handle" placeholder="someone.bsky.social" />
+<FormDialog
+  {id}
+  title={m.invite_dialog_title()}
+  action="?/invite"
+  submit={m.invite_dialog_submit()}
+>
+  {#snippet intro()}{m.invite_dialog_intro()}{/snippet}
+  <HandleInput
+    id="{id}-handle"
+    label={m.invite_dialog_handle()}
+    placeholder="someone.bsky.social"
+  />
   <label class="field"
-    ><span>Note <span class="optional">(optional)</span></span>
+    ><span>{m.invite_dialog_note()} <span class="optional">{m.common_optional()}</span></span>
     <textarea name="message" rows="3" maxlength="2000"></textarea></label
   >
 </FormDialog>

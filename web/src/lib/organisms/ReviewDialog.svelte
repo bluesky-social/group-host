@@ -7,6 +7,8 @@
   import ReportDialog from '#lib/organisms/ReportDialog.svelte';
   import { inDialog, inOpenDialog } from '#lib/forms.ts';
   import { type Subject, TAKEDOWN, labelsOf, latestCid, reported, what } from '#lib/moderation.ts';
+  import { m } from '#lib/paraglide/messages.js';
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   /**
    * Everything a moderator does about one subject, in a dialog opened by a
    * button whose `popovertarget` is `id`: for an account, or a record
@@ -68,7 +70,7 @@
 
 <Dialog
   {id}
-  title="Review"
+  title={m.review_dialog_title()}
   {opened}
   onclose={() => {
     failed = null;
@@ -80,7 +82,7 @@
 
   {#if target && can.label}
     <div class="review-part">
-      <h3>Labels</h3>
+      <h3>{m.review_dialog_labels()}</h3>
       {#if wearing.length}
         <ul class="labels">
           {#each wearing as val (val)}
@@ -93,17 +95,19 @@
               >
                 {@render which()}
                 <input type="hidden" name="val" value={val} />
-                <button class="quiet small" type="submit" aria-label={`Remove the label ${val}`}
-                  >×</button
+                <button
+                  class="quiet small"
+                  type="submit"
+                  aria-label={m.review_dialog_remove_label({ label: val })}>×</button
                 >
               </form>
             </li>
           {/each}
         </ul>
       {:else}
-        <p class="mute">No labels yet.</p>
+        <p class="mute">{m.review_dialog_no_labels()}</p>
       {/if}
-      {#if toAdd.length}<p class="mute">Press one of the group's labels to add it.</p>{/if}
+      {#if toAdd.length}<p class="mute">{m.review_dialog_press_label()}</p>{/if}
       <form
         class="label-choices"
         method="post"
@@ -117,7 +121,7 @@
             type="submit"
             name="val"
             value={c.val}
-            aria-label={`Add the label ${c.val}`}>{c.name}</button
+            aria-label={m.review_dialog_add_label_named({ label: c.val })}>{c.name}</button
           >{/each}
       </form>
       <form
@@ -128,63 +132,62 @@
       >
         {@render which()}
         <label class="field"
-          >Add a label
+          >{m.review_dialog_add_label()}
           <input name="val" required maxlength="128" placeholder="off-topic" /></label
         >
-        <button class="quiet" type="submit">Add</button>
+        <button class="quiet" type="submit">{m.common_add()}</button>
       </form>
-      <p class="mute">Apps that follow the group's labels decide what each one does.</p>
+      <p class="mute">{m.review_dialog_labels_hint()}</p>
     </div>
     {#if !takenDown}
       <div class="review-part">
         <div class="row-form">
-          {#if account}<p class="mute">
-              Asks apps that follow the group's labels to hide everything this account posted. They
-              stay in the group.
-            </p>{:else}<p class="mute">
-              Asks apps that follow the group's labels to hide this. The rest of what they posted
-              stays.
+          {#if account}<p class="mute">{m.review_dialog_takedown_account_hint()}</p>{:else}<p
+              class="mute"
+            >
+              {m.review_dialog_takedown_hint()}
             </p>{/if}
           <button class="quiet small" type="button" popovertarget={`${id}-takedown`}
-            >Take down</button
+            >{m.review_dialog_takedown()}</button
           >
         </div>
         {#if account}
           <ConfirmDialog
             id={`${id}-takedown`}
-            title="Take this account down?"
+            title={m.review_dialog_takedown_account_title()}
             action="?/label"
-            confirm="Take down"
+            confirm={m.review_dialog_takedown()}
             danger={false}
             fields={{ ...target, val: '!takedown' }}
-            >Apps that follow the group's labels hide what <Person actor={s.actor} /> posted. Removing
-            the label undoes it.</ConfirmDialog
+            ><ParaglideMessage message={m.review_dialog_takedown_account_body}>
+              {#snippet person()}<Person actor={s.actor} />{/snippet}
+            </ParaglideMessage></ConfirmDialog
           >
         {:else}
           <ConfirmDialog
             id={`${id}-takedown`}
-            title="Take this down?"
+            title={m.review_dialog_takedown_record_title()}
             action="?/label"
-            confirm="Take down"
+            confirm={m.review_dialog_takedown()}
             danger={false}
             fields={{ ...target, val: '!takedown' }}
-            >Apps that follow the group's labels hide this {what(s.key).toLowerCase()} by <Person
-              actor={s.actor}
-            />. Removing the label undoes it.</ConfirmDialog
+            ><ParaglideMessage
+              message={m.review_dialog_takedown_record_body}
+              inputs={{ kind: what(s.key).toLowerCase() }}
+            >
+              {#snippet person()}<Person actor={s.actor} />{/snippet}
+            </ParaglideMessage></ConfirmDialog
           >
         {/if}
       </div>
     {/if}
   {:else if !target}
-    <p class="mute">
-      The queue doesn't know which version of this to label. Label it from a terminal, with
-      opensocial mod label and its CID.
-    </p>
+    <p class="mute">{m.review_dialog_no_version({ command: 'opensocial mod label' })}</p>
   {/if}
 
   {#if s.status && can.resolve}
     <div class="review-part">
-      <h3>Decision</h3>
+      <h3>{m.review_dialog_decision()}</h3>
       <form
         class="stack"
         method="post"
@@ -193,28 +196,27 @@
       >
         <input type="hidden" name="subject" value={s.key} />
         <label class="field"
-          ><span>Note <span class="optional">(optional)</span></span>
+          ><span>{m.review_dialog_note()} <span class="optional">{m.common_optional()}</span></span>
           <input name="note" maxlength="2000" /></label
         >
         <div class="actions">
           <button class="quiet" type="button" popovertarget={id} popovertargetaction="hide"
-            >Cancel</button
+            >{m.common_cancel()}</button
           >
-          <button class="quiet" type="submit" name="status" value="escalated">Escalate</button>
-          <button type="submit" name="status" value="resolved">Resolve</button>
+          <button class="quiet" type="submit" name="status" value="escalated"
+            >{m.review_dialog_escalate()}</button
+          >
+          <button type="submit" name="status" value="resolved">{m.review_dialog_resolve()}</button>
         </div>
       </form>
     </div>
   {:else if !s.status && account}
     <div class="review-part">
-      <h3>Decision</h3>
-      <p class="mute">
-        Nobody has reported them. Report them to put them in the queue, for you or another moderator
-        to decide.
-      </p>
+      <h3>{m.review_dialog_decision()}</h3>
+      <p class="mute">{m.review_dialog_unreported()}</p>
       <div class="actions">
         <button class="quiet" type="button" popovertarget={`${id}-report`}
-          >Report this account</button
+          >{m.review_dialog_report()}</button
         >
       </div>
       <ReportDialog id={`${id}-report`} actor={s.actor} {reasons} rules={ruleList} />

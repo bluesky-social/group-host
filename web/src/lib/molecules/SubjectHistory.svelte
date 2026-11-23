@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
+  import { m } from '#lib/paraglide/messages.js';
   import Person from '#lib/molecules/Person.svelte';
   import { when } from '#lib/dates.ts';
   import { type Event, detail, title } from '#lib/moderation.ts';
@@ -17,15 +19,16 @@
 
 {#if events.length}
   <details class="history" {open}>
-    <summary>History</summary>
+    <summary>{m.subject_history_title()}</summary>
     <ol class="events">
       {#each events as e (e.id)}
         {@const said = detail(e, rules)}
         <li>
           <span
-            ><strong>{title(e)}</strong>{#if e.creator}{' '}by <Person
-                actor={e.creator}
-              />{/if}</span
+            >{#if e.creator}<ParaglideMessage message={m.subject_history_by}>
+                {#snippet event()}<strong>{title(e)}</strong>{/snippet}
+                {#snippet person()}<Person actor={e.creator!} />{/snippet}
+              </ParaglideMessage>{:else}<strong>{title(e)}</strong>{/if}</span
           >
           <span class="what">{when(e.createdAt)}</span>
           {#if said}<span class="said">{said}</span>{/if}

@@ -728,7 +728,10 @@ impl Host {
 }
 
 /// Defines one of the group's own labels, or changes one it defines, in
-/// its labeler, the label among the values it applies.
+/// its labeler, the label among the values it applies. A change replaces
+/// how apps show it but only the name and description in the given
+/// language: the definition keeps its other languages, in their order,
+/// and a new language goes after them.
 pub async fn put_label_definition(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -742,17 +745,28 @@ pub async fn put_label_definition(
         return Err(invalid("label is lowercase letters and hyphens"));
     }
     let or = |key: &str, unless: &str| body[key].as_str().unwrap_or(unless).to_string();
+    let lang = or("lang", "en");
+    let labeler = host.labeler_of(group)?;
+    let mut locales: Vec<Value> = labeler["policies"]["labelValueDefinitions"]
+        .as_array()
+        .and_then(|ds| ds.iter().find(|d| d["identifier"] == label))
+        .and_then(|d| d["locales"].as_array().cloned())
+        .unwrap_or_default();
+    let locale = json!({"lang": lang, "name": body["name"], "description": body["description"]});
+    match locales.iter_mut().find(|l| l["lang"] == lang.as_str()) {
+        Some(same) => *same = locale,
+        None => locales.push(locale),
+    }
     let mut definition = json!({
         "identifier": label,
         "severity": or("severity", "inform"),
         "blurs": or("blurs", "none"),
         "defaultSetting": or("defaultSetting", "warn"),
-        "locales": [{"lang": or("lang", "en"), "name": body["name"], "description": body["description"]}],
+        "locales": locales,
     });
     if body["adultOnly"] == true {
         definition["adultOnly"] = json!(true);
     }
-    let labeler = host.labeler_of(group)?;
     let defined = definition.clone();
     let change = |values: &mut Vec<Value>, definitions: &mut Vec<Value>| {
         if !values.contains(&json!(label)) {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Avatar from '#lib/atoms/Avatar.svelte';
   import { SIGN_IN } from '#lib/signIn.ts';
   import { page } from '$app/state';
@@ -27,7 +28,6 @@
   const name = $derived(handle ? `@${handle}` : did);
   const named = (a: { did: string; handle?: string }) => (a.handle ? `@${a.handle}` : a.did);
   const here = $derived(`${page.url.pathname}${page.url.search}`);
-  const waiting = $derived(invites === 1 ? '1 invite waiting' : `${invites} invites waiting`);
   let menu: HTMLDetailsElement;
   function away(e: Event) {
     if (menu?.open && !menu.contains(e.target as Node)) menu.open = false;
@@ -44,18 +44,25 @@
 <svelte:document onclick={away} onkeydown={key} />
 
 <details class="user-menu" bind:this={menu}>
-  <summary aria-label={invites ? `${name}: your menu, ${waiting}` : `${name}: your menu`}>
+  <summary
+    aria-label={invites
+      ? m.user_menu_label_waiting({ name, count: invites })
+      : m.user_menu_label({ name })}
+  >
     <span class="waiting" class:dot={invites > 0}><Avatar name={handle ?? did} /></span><span
       class="handle mono">{name}</span
     >
   </summary>
   <div class="menu">
-    {#if accounts.length}<p class="menu-label">Switch account</p>{/if}
+    {#if accounts.length}<p class="menu-label">{m.user_menu_switch_account()}</p>{/if}
     {#each accounts as account (account.did)}
       <form method="post" action="/console/switch">
         <input type="hidden" name="did" value={account.did} />
         <input type="hidden" name="back" value={here} />
-        <button class="account" type="submit" aria-label={`Switch to ${named(account)}`}
+        <button
+          class="account"
+          type="submit"
+          aria-label={m.user_menu_switch_to({ account: named(account) })}
           ><Avatar name={account.handle ?? account.did} size="sm" /><span
             class="handle mono"
             title={named(account)}>{named(account)}</span
@@ -63,18 +70,20 @@
         >
       </form>
     {/each}
-    <button type="button" popovertarget={SIGN_IN} onclick={close}>Add account</button>
+    <button type="button" popovertarget={SIGN_IN} onclick={close}
+      >{m.user_menu_add_account()}</button
+    >
     <hr />
     <a href="/#invites" onclick={close}
-      >Invites{#if invites}<span class="badge">{invites}</span>{/if}</a
+      >{m.user_menu_invites()}{#if invites}<span class="badge">{invites}</span>{/if}</a
     >
-    <a href="/" onclick={close}>Your groups</a>
-    <a href="/new" onclick={close}>Start a group</a>
-    <a href="/move" onclick={close}>Move an account here</a>
+    <a href="/" onclick={close}>{m.user_menu_your_groups()}</a>
+    <a href="/new" onclick={close}>{m.user_menu_start_group()}</a>
+    <a href="/move" onclick={close}>{m.user_menu_move()}</a>
     <hr />
     <form method="post" action="/console/logout">
       <button class="quiet" type="submit"
-        >{accounts.length ? 'Sign out of this account' : 'Sign out'}</button
+        >{accounts.length ? m.user_menu_sign_out_this() : m.user_menu_sign_out()}</button
       >
     </form>
   </div>

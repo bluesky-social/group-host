@@ -1,6 +1,7 @@
 <script lang="ts">
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * The group's rotation keys, the highest ranked first: the stewards'
    * recovery keys, each to remove (asked to be sure of), and this
@@ -20,32 +21,34 @@
         <code class="key">{k.key}</code>
         <span class="what"
           >{k.holder === 'host'
-            ? 'This host'
-            : `A steward's${k.addedBy ? `, added by ${k.addedBy}` : ''}`}</span
+            ? m.recovery_keys_host()
+            : k.addedBy
+              ? m.recovery_keys_steward_added({ who: k.addedBy })
+              : m.recovery_keys_steward()}</span
         >
       </span>
       {#if k.holder === 'steward' && hostHolds}
         <span class="row-actions"
-          ><button class="quiet small" type="button" popovertarget={`unkey-${i}`}>Remove</button
+          ><button class="quiet small" type="button" popovertarget={`unkey-${i}`}
+            >{m.common_remove()}</button
           ></span
         >
         <ConfirmDialog
           id={`unkey-${i}`}
-          title="Remove this key?"
+          title={m.recovery_keys_remove_title()}
           action="?/unkey"
-          confirm="Remove"
+          confirm={m.common_remove()}
           fields={{ key: k.key }}
         >
-          The person who holds it can no longer use it to recover the group.
+          {m.recovery_keys_remove_body()}
         </ConfirmDialog>
       {/if}
     </li>
   {/each}
 </ol>
-<FormDialog id="add-key" title="Add a recovery key" action="?/key" submit="Add">
-  {#snippet intro()}A key you hold. With it you can recover the group, or move it, without this
-    host.{/snippet}
+<FormDialog id="add-key" title={m.recovery_keys_add_title()} action="?/key" submit={m.common_add()}>
+  {#snippet intro()}{m.recovery_keys_add_intro()}{/snippet}
   <label class="field"
-    >A key of yours, as a did:key <input name="key" required placeholder="did:key:z…" /></label
+    >{m.recovery_keys_key()} <input name="key" required placeholder="did:key:z…" /></label
   >
 </FormDialog>

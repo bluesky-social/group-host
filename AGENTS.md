@@ -136,6 +136,15 @@ host's own command, `group-host move-host`, stands alone.
 - A dialog's title is fixed words ("Remove this member?"), never a name,
   handle or anything typed, which can be any length; the body says which
   thing. `node harness/dialogs.mjs` checks it.
+- Every word a page shows is a message in `web/messages/en.json`, said
+  as `m.<key>()` from `#lib/paraglide/messages.js` (Paraglide, which
+  `npm run i18n` compiles), so another language is another file there;
+  `node harness/strings.mjs` finds words written into markup. A sentence
+  with a component in it is one message with markup, drawn by
+  `ParaglideMessage`. A refusal from the host is said by its error's name
+  (`#lib/errors.ts`), not by the host's English `message`, but for the
+  few names it gives several reasons for (`REASONED` there); dates, lists
+  and names follow the reader's language (`#lib/locale.ts`).
 - Sentence case everywhere; an empty list says what is empty in the
   reader's terms, and the way out (`Empty.svelte`).
 
@@ -196,8 +205,8 @@ pulls into it or into a `feature/` branch:
 
 - `check`: `cargo fmt --check` and clippy, warnings denied.
 - `test`: every test, under the 100% gate of lines and functions.
-- `web`: oxfmt's format, the component layers, dialogs' titles,
-  svelte-check (failing on any warning), and the build.
+- `web`: oxfmt's format, the component layers, dialogs' titles, words
+  as messages, svelte-check (failing on any warning), and the build.
 - `lexicons`: `just lex`.
 - `e2e`: `just e2e`, the console in Chromium over the reference PDS,
   then `just shots --check`: each guide's pictures drawn again, failing

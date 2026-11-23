@@ -4,6 +4,9 @@
   import GroupRow from '#lib/molecules/GroupRow.svelte';
   import Permissions from '#lib/molecules/Permissions.svelte';
   import { permissions, warnings, type Label } from '#lib/permissions.ts';
+  import { intl } from '#lib/locale.ts';
+  import { m } from '#lib/paraglide/messages.js';
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   type Group = {
     did: string;
     handle: string;
@@ -42,27 +45,38 @@
   // The request stays in the address the form is sent to, for the page
   // drawn after it.
   const action = (name: string) => `?request_uri=${encodeURIComponent(requestUri)}&/${name}`;
+  // A group's roles, listed as the reader lists things.
+  const roles = (g: Group) =>
+    new Intl.ListFormat(intl(), { type: 'unit', style: 'short' }).format(
+      g.roles.map((r) => r.role)
+    );
 </script>
 
 <div class="stack">
   {#if mcp}
     <p>
-      An AI app calling itself <strong>{name}</strong> wants to act as you in one of your groups.
+      <ParaglideMessage message={m.authorize_request_mcp_wants}>
+        {#snippet app()}<strong>{name}</strong>{/snippet}
+      </ParaglideMessage>
     </p>
     <p class="mute">
-      The app chose this name, and it isn't checked. It came from <span class="mono"
-        >{client.clientId}</span
-      >.
+      <ParaglideMessage message={m.authorize_request_mcp_unchecked}>
+        {#snippet origin()}<span class="mono">{client.clientId}</span>{/snippet}
+      </ParaglideMessage>
     </p>
   {:else}
     <div class="app-asks">
-      <p><strong>{name}</strong> wants to sign in as one of your groups.</p>
+      <p>
+        <ParaglideMessage message={m.authorize_request_wants}>
+          {#snippet app()}<strong>{name}</strong>{/snippet}
+        </ParaglideMessage>
+      </p>
       {#if requested.length}<button class="quiet small" type="button" popovertarget="asked"
-          >Technical details</button
+          >{m.authorize_request_details()}</button
         >{/if}
     </div>
-    <Dialog id="asked" title="Technical details">
-      <p class="mute">The app asks for these permissions (scopes):</p>
+    <Dialog id="asked" title={m.authorize_request_details()}>
+      <p class="mute">{m.authorize_request_scopes()}</p>
       <pre class="well scopes">{scopes(requested).join('\n')}</pre>
     </Dialog>
   {/if}
@@ -74,20 +88,20 @@
         <input type="hidden" name="group" value={g.did} />
         <GroupRow name={g.displayName ?? g.handle} handle={g.handle} />
         {#if g.roles.length && mcp}
-          <p>
-            It could do what your roles there let you do ({g.roles.map((r) => r.role).join(', ')}).
-          </p>
-          <button type="submit">Connect it to {g.displayName ?? g.handle}</button>
+          <p>{m.authorize_request_mcp_roles({ roles: roles(g) })}</p>
+          <button type="submit"
+            >{m.authorize_request_mcp_connect({ group: g.displayName ?? g.handle })}</button
+          >
         {:else if g.roles.length}
           {#if bare(g.granted)}
-            <p>The app would only know it's signed in as {g.displayName ?? g.handle}.</p>
+            <p>{m.authorize_request_bare({ group: g.displayName ?? g.handle })}</p>
           {:else}
             <Permissions id="granted-{n}" list={permissions(scopes(g.granted), labels, g)} />
           {/if}
           {#each warnings(scopes(g.granted)) as w (w)}<p class="danger">{w}</p>{/each}
           {#if g.withheld.length}
             <div class="stack withheld-part">
-              <h3>It would not get</h3>
+              <h3>{m.authorize_request_withheld()}</h3>
               <Permissions
                 id="withheld-{n}"
                 list={permissions(scopes(g.withheld), labels, g)}
@@ -95,21 +109,19 @@
               />
             </div>
           {/if}
-          <button type="submit">Sign it in as {g.displayName ?? g.handle}</button>
+          <button type="submit"
+            >{m.authorize_request_sign_in({ group: g.displayName ?? g.handle })}</button
+          >
         {:else}
-          <p class="mute">
-            You don't have a role in this group, so you can't sign an app in as it.
-          </p>
+          <p class="mute">{m.authorize_request_no_role()}</p>
         {/if}
       </form>
     {/each}
   {:else}
-    <Empty title="No group you can sign it in as"
-      >You don't have a role in any group on this host.</Empty
-    >
+    <Empty title={m.authorize_request_empty_title()}>{m.authorize_request_empty_body()}</Empty>
   {/if}
   <form method="post" action={action('decline')}>
     <input type="hidden" name="requestUri" value={requestUri} />
-    <button class="quiet" type="submit">Decline</button>
+    <button class="quiet" type="submit">{m.common_decline()}</button>
   </form>
 </div>

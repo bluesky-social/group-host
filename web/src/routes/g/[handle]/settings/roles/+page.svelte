@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Section from '#lib/molecules/Section.svelte';
   import RolesEditor from '#lib/organisms/RolesEditor.svelte';
   import { ACTIONS } from '#lib/actions.ts';
@@ -6,14 +7,16 @@
   const g = $derived(data.group);
 </script>
 
-<svelte:head><title>Roles · {g.displayName ?? g.handle} · opensocial</title></svelte:head>
+<svelte:head
+  ><title>{m.route_group_settings_roles_head({ group: g.displayName ?? g.handle })}</title
+  ></svelte:head
+>
 
 {#if form?.failed}<p class="danger">{form.failed}</p>{/if}
-<Section title="Roles" count={data.roles?.length ?? 0}>
+<Section title={m.route_group_settings_roles_title()} count={data.roles?.length ?? 0}>
   {#snippet actions()}<button class="quiet" type="button" popovertarget="define-role"
-      >Create a role</button
+      >{m.route_group_settings_roles_create()}</button
     >{/snippet}
-  {#snippet intro()}What people with each role can do. You give roles to members from the group's
-    page.{/snippet}
+  {#snippet intro()}{m.route_group_settings_roles_intro()}{/snippet}
   <RolesEditor roles={data.roles} bindings={data.bindings} actions={ACTIONS} />
 </Section>

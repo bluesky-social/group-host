@@ -3,6 +3,7 @@ import type * as getViewer from '#lib/lexicons/fyi/opensocial/getViewer.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import { call, xrpc } from '#lib/data.ts';
+import { m } from '#lib/paraglide/messages.js';
 
 /**
  * An app's request to sign in as a group, which the browser was sent here
@@ -11,7 +12,7 @@ import { call, xrpc } from '#lib/data.ts';
  */
 export const load: PageServerLoad = async (event) => {
   const requestUri = event.url.searchParams.get('request_uri');
-  if (!requestUri) error(400, 'This page is for an app signing in, and no app asked.');
+  if (!requestUri) error(400, m.route_authorize_no_request());
   const { actor } = await xrpc<typeof getViewer.main>(event, 'fyi.opensocial.getViewer', {});
   if (!actor) return { requestUri, request: null, expired: false };
   // Answered already (as when the page is drawn after its form), or

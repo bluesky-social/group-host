@@ -2,6 +2,7 @@
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * A group's rules, in order, each to delete (asked to be sure of);
    * and the dialog adding one, opened by a button whose `popovertarget`
@@ -23,30 +24,41 @@
             class="quiet small"
             type="button"
             popovertarget={`unrule-${i}`}
-            aria-label={`Delete “${r.title}”`}>Delete</button
+            aria-label={m.rules_editor_delete_label({ rule: r.title })}>{m.common_delete()}</button
           ></span
         >
         <ConfirmDialog
           id={`unrule-${i}`}
-          title="Delete this rule?"
+          title={m.rules_editor_delete_title()}
           action="?/unrule"
-          confirm="Delete"
+          confirm={m.common_delete()}
           fields={{ rkey: r.rkey }}
         >
-          “{r.title}” will no longer be one of the group's rules, here or in other apps.
+          {m.rules_editor_delete_body({ rule: r.title })}
         </ConfirmDialog>
       </li>
     {/each}
   </ul>
 {:else}
-  <Empty title="No rules yet">A rule says what everyone in the group agrees to.</Empty>
+  <Empty title={m.rules_editor_empty_title()}>{m.rules_editor_empty_body()}</Empty>
 {/if}
-<FormDialog id="add-rule" title="Add a rule" action="?/rule" submit="Add">
+<FormDialog
+  id="add-rule"
+  title={m.rules_editor_add_title()}
+  action="?/rule"
+  submit={m.common_add()}
+>
   <label class="field"
-    >Rule <input name="title" required maxlength="64" placeholder="Be kind" /></label
+    >{m.rules_editor_rule()}
+    <input
+      name="title"
+      required
+      maxlength="64"
+      placeholder={m.rules_editor_rule_placeholder()}
+    /></label
   >
   <label class="field"
-    ><span>What it means <span class="optional">(optional)</span></span>
+    ><span>{m.rules_editor_meaning()} <span class="optional">{m.common_optional()}</span></span>
     <textarea name="text" maxlength="1000"></textarea></label
   >
 </FormDialog>

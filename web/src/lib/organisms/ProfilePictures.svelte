@@ -3,6 +3,7 @@
   import { inPlace } from '#lib/forms.ts';
   import Avatar from '#lib/atoms/Avatar.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * A group's pictures, to change: its avatar, round beside its name, and
    * its banner, across the top of its page, each as it is now; a new one
@@ -16,17 +17,21 @@
   const slots = $derived([
     {
       slot: 'avatar',
-      name: 'Avatar',
+      name: m.profile_pictures_avatar(),
       src: avatar,
-      act: avatar ? 'Change the avatar' : 'Add the avatar',
-      verb: avatar ? 'Change' : 'Add'
+      act: avatar ? m.profile_pictures_change_avatar() : m.profile_pictures_add_avatar(),
+      verb: avatar ? m.profile_pictures_change() : m.common_add(),
+      remove: m.profile_pictures_remove_avatar(),
+      intro: m.profile_pictures_avatar_intro()
     },
     {
       slot: 'banner',
-      name: 'Banner',
+      name: m.profile_pictures_banner(),
       src: banner,
-      act: banner ? 'Change the banner' : 'Add the banner',
-      verb: banner ? 'Change' : 'Add'
+      act: banner ? m.profile_pictures_change_banner() : m.profile_pictures_add_banner(),
+      verb: banner ? m.profile_pictures_change() : m.common_add(),
+      remove: m.profile_pictures_remove_banner(),
+      intro: m.profile_pictures_banner_intro()
     }
   ]);
 </script>
@@ -42,7 +47,8 @@
         <span class="banner-thumb" aria-hidden="true"></span>
       {/if}
       <span class="row-main"
-        ><strong>{s.name}</strong>{#if !s.src}<span class="what">None yet</span>{/if}</span
+        ><strong>{s.name}</strong>{#if !s.src}<span class="what">{m.profile_pictures_none()}</span
+          >{/if}</span
       >
       <span class="row-actions">
         {#if s.src}
@@ -50,7 +56,7 @@
             <input type="hidden" name="slot" value={s.slot} /><button
               class="quiet small"
               type="submit"
-              aria-label={`Remove the ${s.slot}`}>Remove</button
+              aria-label={s.remove}>{m.common_remove()}</button
             >
           </form>
         {/if}
@@ -68,9 +74,7 @@
         submit={s.act}
         multipart
       >
-        {#snippet intro()}{s.slot === 'avatar'
-            ? 'A square picture, drawn round beside its name.'
-            : 'A wide picture, three times as wide as it is high, across the top of its page.'}{/snippet}
+        {#snippet intro()}{s.intro}{/snippet}
         <input type="hidden" name="slot" value={s.slot} />
         <label class="field"
           >{s.name}

@@ -1,11 +1,13 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   import ActionMenu from '#lib/molecules/ActionMenu.svelte';
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
   import MemberRow from '#lib/molecules/MemberRow.svelte';
   import Person from '#lib/molecules/Person.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   type Member = { actor: { did: string; handle?: string }; roles: { role: string }[] };
   /**
    * Who is in the group, `shown` at a time, found by part of their handle
@@ -32,7 +34,7 @@
     assignable?: string[];
     canEject?: boolean;
   } = $props();
-  const named = (m: Member) => m.actor.handle ?? m.actor.did;
+  const named = (member: Member) => member.actor.handle ?? member.actor.did;
   // Found again as it is typed, the field keeping its place; sent as a form without a script.
   function find(e: Event) {
     const typed = (e.currentTarget as HTMLInputElement).value.trim();
@@ -42,46 +44,55 @@
 
 <form class="find" method="get" role="search">
   <label class="field"
-    >Find a member <input
+    >{m.member_list_find()}
+    <input
       name="q"
       type="search"
       value={q}
       autocomplete="off"
-      placeholder="Part of their handle"
+      placeholder={m.member_list_find_placeholder()}
       oninput={find}
     /></label
   >
 </form>
 {#if members.length}
   <ul class="members">
-    {#each members as m, i (m.actor.did)}
+    {#each members as member, i (member.actor.did)}
       <li class="member">
-        <MemberRow actor={m.actor} roles={m.roles.map((r) => r.role)}>
-          {#if m.actor.did !== me}<ActionMenu
-              label={`More for ${named(m)}`}
+        <MemberRow actor={member.actor} roles={member.roles.map((r) => r.role)}>
+          {#if member.actor.did !== me}<ActionMenu
+              label={m.member_list_more({ member: named(member) })}
               actions={[
-                ...(assignable.length ? [{ text: 'Change roles', opens: `roles-${i}` }] : []),
-                ...(canEject ? [{ text: 'Remove from the group', opens: `eject-${i}` }] : [])
+                ...(assignable.length
+                  ? [{ text: m.member_list_change_roles(), opens: `roles-${i}` }]
+                  : []),
+                ...(canEject ? [{ text: m.member_list_remove(), opens: `eject-${i}` }] : [])
               ]}
             />{/if}
         </MemberRow>
-        {#if m.actor.did !== me && assignable.length}
-          <FormDialog id={`roles-${i}`} title="Change roles" action="?/roles" submit="Save">
-            {#snippet intro()}Choose the roles <Person actor={m.actor} /> holds. Everyone keeps the member
-              role.{/snippet}
-            <input type="hidden" name="did" value={m.actor.did} />
-            {#each m.roles.filter((r) => !assignable.includes(r.role)) as kept (kept.role)}
+        {#if member.actor.did !== me && assignable.length}
+          <FormDialog
+            id={`roles-${i}`}
+            title={m.member_list_change_roles()}
+            action="?/roles"
+            submit={m.common_save()}
+          >
+            {#snippet intro()}<ParaglideMessage message={m.member_list_roles_intro}>
+                {#snippet person()}<Person actor={member.actor} />{/snippet}
+              </ParaglideMessage>{/snippet}
+            <input type="hidden" name="did" value={member.actor.did} />
+            {#each member.roles.filter((r) => !assignable.includes(r.role)) as kept (kept.role)}
               <input type="hidden" name="role" value={kept.role} />
             {/each}
             <fieldset>
-              <legend>Roles you can give</legend>
+              <legend>{m.member_list_roles_legend()}</legend>
               {#each assignable as role (role)}
                 <label
                   ><input
                     type="checkbox"
                     name="role"
                     value={role}
-                    checked={m.roles.some((r) => r.role === role)}
+                    checked={member.roles.some((r) => r.role === role)}
                   />
                   {role}</label
                 >
@@ -89,15 +100,17 @@
             </fieldset>
           </FormDialog>
         {/if}
-        {#if m.actor.did !== me && canEject}
+        {#if member.actor.did !== me && canEject}
           <ConfirmDialog
             id={`eject-${i}`}
-            title="Remove this member?"
+            title={m.member_list_remove_title()}
             action="?/eject"
-            confirm="Remove"
-            fields={{ did: m.actor.did }}
+            confirm={m.common_remove()}
+            fields={{ did: member.actor.did }}
           >
-            <Person actor={m.actor} /> loses access to what only members see. They can ask to join again.
+            <ParaglideMessage message={m.member_list_remove_body}>
+              {#snippet person()}<Person actor={member.actor} />{/snippet}
+            </ParaglideMessage>
           </ConfirmDialog>
         {/if}
       </li>
@@ -107,12 +120,10 @@
     <form method="get" data-sveltekit-reset="false" data-sveltekit-replacestate>
       {#if q}<input type="hidden" name="q" value={q} />{/if}
       <input type="hidden" name="shown" value={shown + 5} />
-      <button class="quiet small" type="submit">Show more</button>
+      <button class="quiet small" type="submit">{m.common_show_more()}</button>
     </form>
   {/if}
 {:else}
   <!-- A group always holds someone: none shown is none found. -->
-  <Empty title="No member's handle has that in it"
-    >Try fewer letters, or clear the search to see everyone.</Empty
-  >
+  <Empty title={m.member_list_empty_title()}>{m.member_list_empty_body()}</Empty>
 {/if}

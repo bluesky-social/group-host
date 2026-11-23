@@ -3,7 +3,8 @@
   import PickMany from '#lib/molecules/PickMany.svelte';
   import SaveBar from '#lib/molecules/SaveBar.svelte';
   import { Saving } from '#lib/saving.svelte.ts';
-  import { ADDRESS, COUNTRIES, LANGUAGES, languageName, type Place } from '#lib/places.ts';
+  import { m } from '#lib/paraglide/messages.js';
+  import { ADDRESS, countries, languageName, offeredLanguages, type Place } from '#lib/places.ts';
   /**
    * A group's profile, to change: its name, its words, where it meets
    * and whether online, what it is about, the languages it uses, how
@@ -44,71 +45,73 @@
     spoken = languages.map((l) => l.language);
   });
   // Those offered, and any it has that are not, by name.
+  const offered = offeredLanguages();
   const choices = $derived([
-    ...LANGUAGES.map((l) => ({ value: l.tag, name: l.name })),
+    ...offered.map((l) => ({ value: l.tag, name: l.name })),
     ...languages
-      .filter((l) => !LANGUAGES.some((o) => o.tag === l.language))
+      .filter((l) => !offered.some((o) => o.tag === l.language))
       .map((l) => ({ value: l.language, name: languageName(l.language) }))
   ]);
 </script>
 
 <form class="stack" method="post" action="?/profile" use:enhance={saving.submit} use:saving.track>
   <label class="field"
-    >Name <input name="displayName" required maxlength="64" value={displayName ?? ''} /></label
+    >{m.profile_form_name()}
+    <input name="displayName" required maxlength="64" value={displayName ?? ''} /></label
   >
   <label class="field"
-    ><span>What it is for <span class="optional">(optional)</span></span>
+    ><span>{m.profile_form_description()} <span class="optional">{m.common_optional()}</span></span>
     <textarea name="description" maxlength="2000">{description ?? ''}</textarea></label
   >
   <div class="pair">
     <label class="field"
-      ><span>Town or city it meets in <span class="optional">(optional)</span></span>
+      ><span>{m.profile_form_town()} <span class="optional">{m.common_optional()}</span></span>
       <input name="town" maxlength="128" bind:value={town} /></label
     >
     <label class="field">
-      Country
+      {m.profile_form_country()}
       <select name="country" defaultValue={address?.country ?? ''} required={town.trim() !== ''}>
-        <option value="">{town.trim() ? 'Choose a country' : 'No country'}</option>
-        {#each COUNTRIES as c (c.code)}<option value={c.code}>{c.name}</option>{/each}
+        <option value=""
+          >{town.trim() ? m.profile_form_country_choose() : m.profile_form_country_none()}</option
+        >
+        {#each countries() as c (c.code)}<option value={c.code}>{c.name}</option>{/each}
       </select>
     </label>
   </div>
   <input type="hidden" name="online" value="" />
-  <label><input type="checkbox" name="online" checked={online} /> It meets online</label>
+  <label><input type="checkbox" name="online" checked={online} /> {m.profile_form_online()}</label>
   <label class="field">
-    <span>Topics <span class="optional">(optional)</span></span>
+    <span>{m.profile_form_topics()} <span class="optional">{m.common_optional()}</span></span>
     <input
       name="topics"
       maxlength="700"
       value={topics.map((t) => t.topic).join(', ')}
       aria-describedby="topics-hint"
     />
-    <span class="mute small" id="topics-hint"
-      >Separate up to ten with commas, like climbing, choir or renters' union.</span
-    >
+    <span class="mute small" id="topics-hint">{m.profile_form_topics_hint()}</span>
   </label>
   <PickMany
     id="languages"
-    label="Languages it uses"
+    label={m.profile_form_languages()}
     name="language"
     options={choices}
     bind:chosen={spoken}
     max={5}
-    most="five"
-    placeholder="Type a language"
+    most={m.profile_form_languages_most()}
+    placeholder={m.profile_form_languages_placeholder()}
     optional
   />
   <label class="field">
-    How people join
+    {m.profile_form_join()}
     <select name="joinPolicy" defaultValue={policy}>
-      <option value="approval">An admin approves who joins</option>
-      <option value="open">Anyone can join right away</option>
-      <option value="invite">Only people who are invited</option>
+      <option value="approval">{m.profile_form_join_approval()}</option>
+      <option value="open">{m.profile_form_join_open()}</option>
+      <option value="invite">{m.profile_form_join_invite()}</option>
     </select>
   </label>
   <label class="field"
-    ><span>Its own site <span class="optional">(optional)</span></span>
+    ><span>{m.profile_form_url()} <span class="optional">{m.common_optional()}</span></span>
     <input name="url" type="url" value={url ?? ''} /></label
   >
-  <SaveBar {saving} what="the profile" />
+  <SaveBar {saving} what={m.profile_form_saves()} />
 </form>

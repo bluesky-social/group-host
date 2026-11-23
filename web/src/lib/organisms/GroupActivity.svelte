@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   import Avatar from '#lib/atoms/Avatar.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import Person from '#lib/molecules/Person.svelte';
-  import { bare, byApp, did, doer, type Act } from '#lib/activity.ts';
+  import { bare, byApp, doer, line, type Act } from '#lib/activity.ts';
   import { when } from '#lib/dates.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * What apps wrote as the group, newest first: a row for each, as a
    * sentence (who did what), and under it, quieter, the member who
@@ -21,21 +23,22 @@
       <li>
         <Avatar name={bare(doer(a))} />
         <span class="row-main">
-          <span class="who">{doer(a)} {did(a)}</span>
+          <span class="who">{line(a)}</span>
           <span class="what"
-            >{#if byApp(a)}For <Person actor={a.actor ?? { did: a.member }} />{', '}{/if}{when(
-              a.at
-            )}</span
+            >{#if byApp(a)}<ParaglideMessage
+                message={m.group_activity_for}
+                inputs={{ when: when(a.at) }}
+              >
+                {#snippet person()}<Person actor={a.actor ?? { did: a.member }} />{/snippet}
+              </ParaglideMessage>{:else}{when(a.at)}{/if}</span
           >
         </span>
       </li>
     {/each}
   </ul>
   {#if writes.length > shown}<button class="quiet small" type="button" onclick={() => (shown += 10)}
-      >Show more</button
+      >{m.common_show_more()}</button
     >{/if}
 {:else}
-  <Empty title="No app has written anything yet"
-    >When an app signed in as the group writes something, it shows up here.</Empty
-  >
+  <Empty title={m.group_activity_empty_title()}>{m.group_activity_empty_body()}</Empty>
 {/if}

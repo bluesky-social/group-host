@@ -209,7 +209,9 @@ should show what wears it (`severity`, `blurs`, `defaultSetting`,
 defines, and none of its own.
 
 `putLabelDefinition` defines one, or changes the one with that value,
-and adds it to the values the labeler applies. `deleteLabelDefinition`
+and adds it to the values the labeler applies. A change replaces its
+name and meaning in one language and keeps the others, so naming a
+label in French leaves its English name. `deleteLabelDefinition`
 takes both away, and labels already applied stay. Each needs
 `group.configure`, and writes the labeler as the group, like any change
 to its meta space. A group's own label is lowercase letters and hyphens,

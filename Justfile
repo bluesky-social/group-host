@@ -58,6 +58,7 @@ lint:
     {{cargo}} clippy --workspace --all-targets -- -D warnings
     node harness/layers.mjs
     node harness/dialogs.mjs
+    node harness/strings.mjs
     cd packages/sdk && npm run check
     cd web && npm run check
 

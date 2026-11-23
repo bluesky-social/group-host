@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Define one of the group's own labels, or change one it defines: what it means and how apps should show it, in its labeler, with the label among the values it applies. Requires group.configure.",
+      "description": "Define one of the group's own labels, or change one it defines: what it means and how apps should show it, in its labeler, with the label among the values it applies. Changing one replaces how apps show it, and its name and description only in the given language: those in other languages stay. Requires group.configure.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -26,18 +26,18 @@
               "type": "string",
               "maxLength": 640,
               "maxGraphemes": 64,
-              "description": "What people see it called."
+              "description": "What people see it called, in its lang."
             },
             "description": {
               "type": "string",
               "maxLength": 20000,
               "maxGraphemes": 2000,
-              "description": "What it means, for people deciding how to see what wears it."
+              "description": "What it means, for people deciding how to see what wears it, in its lang."
             },
             "lang": {
               "type": "string",
               "format": "language",
-              "description": "The language of its name and description. en unless given."
+              "description": "The language of its name and description, which replace any it has in that language and leave the others. en unless given."
             },
             "severity": {
               "type": "string",

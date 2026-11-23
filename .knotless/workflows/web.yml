@@ -2,7 +2,8 @@
 # harness and the docs site are formatted as `just fmt` leaves them
 # (oxfmt), that each component uses only its own layer and those below
 # (harness/layers.mjs), that every dialog's title is its own fixed words
-# (harness/dialogs.mjs), the SDK's types and tests (packages/sdk, which the
+# (harness/dialogs.mjs), that every word a page shows is a message
+# (harness/strings.mjs), the SDK's types and tests (packages/sdk, which the
 # site shell builds on), and svelte-check, which fails on any warning. The
 # packages are kept between runs and installed again only when a lockfile
 # changes.
@@ -32,6 +33,8 @@ steps:
     run: node harness/layers.mjs
   - name: dialogs
     run: node harness/dialogs.mjs
+  - name: strings
+    run: node harness/strings.mjs
   - name: sdk check
     run: cd packages/sdk && npm run check
   - name: sdk test

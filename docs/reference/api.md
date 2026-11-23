@@ -218,7 +218,7 @@ Its tools are in [MCP tools](mcp.md).
 | `GET fyi.opensocial.listSubjects` | lists the moderation queue for one status, `open` by default |
 | `GET fyi.opensocial.getSubjectHistory` | lists a subject's events, oldest first, a page at a time. With a `cid`, it lists those about that version |
 | `POST fyi.opensocial.resolveSubject` | sets a subject `resolved` or `escalated`, with an optional note, and answers the subject |
-| `POST fyi.opensocial.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. It answers the definition, and `getGroup` answers them as `labels` |
+| `POST fyi.opensocial.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
 | `POST fyi.opensocial.deleteLabelDefinition` | stops defining one. Labels already applied stay |
 
 ## Operating the host

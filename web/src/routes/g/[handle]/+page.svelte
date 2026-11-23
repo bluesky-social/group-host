@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import ConnectAiApp from '#lib/organisms/ConnectAiApp.svelte';
   import ConnectedApps from '#lib/organisms/ConnectedApps.svelte';
   import GroupCard from '#lib/organisms/GroupCard.svelte';
@@ -31,17 +32,17 @@
         ]
       : []
   );
-  const joining: Record<string, string> = {
-    approval: 'Joining is by request.',
-    open: 'Anyone can join.',
-    invite: 'Joining is by invite.'
+  const joining: Record<string, () => string> = {
+    approval: m.route_group_joining_approval,
+    open: m.route_group_joining_open,
+    invite: m.route_group_joining_invite
   };
 </script>
 
-<svelte:head><title>{name} · opensocial</title></svelte:head>
+<svelte:head><title>{m.route_group_head({ group: name })}</title></svelte:head>
 
 {#if !data.viewer}
-  <Welcome title={g.handle} handle>Sign in to see this group.</Welcome>
+  <Welcome title={g.handle} handle>{m.route_group_welcome_body()}</Welcome>
 {:else}
   <GroupPage>
     {#snippet notice()}
@@ -63,23 +64,25 @@
       >
         {#snippet nav()}
           {#if data.site || (member && (data.settings || may.includes('mod.read')))}
-            <nav class="group-nav" aria-label="The group">
+            <nav class="group-nav" aria-label={m.route_group_nav()}>
               {#if member && may.includes('mod.read')}<a
                   class="button quiet small"
-                  href={`/g/${g.handle}/moderation`}>Moderation</a
+                  href={`/g/${g.handle}/moderation`}>{m.route_group_moderation()}</a
                 >{/if}
               {#if member && data.settings}<a
                   class="button quiet small"
-                  href={`/g/${g.handle}/settings`}>Settings</a
+                  href={`/g/${g.handle}/settings`}>{m.route_group_settings()}</a
                 >{/if}
-              {#if data.site}<a class="button quiet small" href={data.site.url}>Website</a>{/if}
+              {#if data.site}<a class="button quiet small" href={data.site.url}
+                  >{m.route_group_website()}</a
+                >{/if}
             </nav>
           {/if}
         {/snippet}
         {#if member}
           <Standing roles={g.viewer?.roles.map((r) => r.role) ?? []} />
         {:else if g.displayName}
-          <p class="mute small">{joining[g.joinPolicy ?? 'approval'] ?? joining.approval}</p>
+          <p class="mute small">{(joining[g.joinPolicy ?? 'approval'] ?? joining.approval)()}</p>
         {/if}
       </GroupCard>
     {/snippet}
@@ -97,15 +100,15 @@
         <JoinPanel {name} joined />
       {/if}
       {#if data.joinRequests}
-        <Section title="Asking to join" count={data.joinRequests.length}>
+        <Section title={m.route_group_asking()} count={data.joinRequests.length}>
           <JoinRequests requests={data.joinRequests} />
         </Section>
       {/if}
       {#if data.members}
-        <Section title="Members" count={g.memberCount}>
+        <Section title={m.route_group_members()} count={g.memberCount}>
           {#snippet actions()}
             {#if data.invites}<button class="quiet" type="button" popovertarget="invite"
-                >Invite someone</button
+                >{m.route_group_invite()}</button
               >{/if}
           {/snippet}
           <MemberList
@@ -122,18 +125,18 @@
       {#if data.invites}
         <InviteDialog id="invite" />
         {#if data.invites.length}
-          <Section title="Invites waiting" count={data.invites.length}>
+          <Section title={m.route_group_invites()} count={data.invites.length}>
             <Invites invites={data.invites} />
           </Section>
         {/if}
       {/if}
       {#if may.includes('group.configure')}
-        <Section title="Connect an AI app">
+        <Section title={m.route_group_connect_ai()}>
           <ConnectAiApp {name} mcp={data.mcp} />
           <ConnectedApps apps={data.apps ?? []} />
         </Section>
       {:else if data.apps?.length}
-        <Section title="Your AI apps">
+        <Section title={m.route_group_your_ai_apps()}>
           <ConnectedApps apps={data.apps} />
         </Section>
       {/if}

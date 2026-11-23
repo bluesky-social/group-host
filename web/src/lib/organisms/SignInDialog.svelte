@@ -2,6 +2,7 @@
   import Dialog from '#lib/molecules/Dialog.svelte';
   import HandleInput from '#lib/molecules/HandleInput.svelte';
   import { SIGN_IN } from '#lib/signIn.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * Signing in with an Atmosphere account, as oneself: the handle, sent to
    * the group host's `/console/login`, which goes to the account's own
@@ -70,7 +71,7 @@
   const icon = (app: string) => `${assets}/atmo/${app}.${app === 'spark' ? 'png' : 'jpg'}`;
 </script>
 
-<Dialog id={SIGN_IN} title="Sign in with your Atmosphere account">
+<Dialog id={SIGN_IN} title={m.sign_in_dialog_title()}>
   <div class="apps" aria-hidden="true">
     <div class="apps-run">
       {#each [...apps, ...apps] as app, i (i)}<img
@@ -84,14 +85,14 @@
   </div>
   <p class="what">
     <a href="https://atmosphereaccount.com/" target="_blank" rel="noopener noreferrer"
-      >What is an Atmosphere account?</a
+      >{m.sign_in_dialog_what()}</a
     >
   </p>
   <form class="stack" method="get" action="/console/login" onsubmit={submit}>
     <input type="hidden" name="back" value={back} />
     <HandleInput
       id="sign-in-handle"
-      label="Handle"
+      label={m.sign_in_dialog_handle()}
       autocomplete="username"
       placeholder={example}
       onpick={(f) => f.form?.requestSubmit()}
@@ -99,14 +100,15 @@
     {#if failed}<p class="danger">{failed}</p>{/if}
     <div class="actions">
       <button class="quiet" type="button" popovertarget={SIGN_IN} popovertargetaction="hide"
-        >Cancel</button
+        >{m.common_cancel()}</button
       >
-      <button type="submit">Sign in</button>
+      <button type="submit">{m.common_sign_in()}</button>
     </div>
   </form>
   <p class="create">
-    Don't have an account? {#if oncreate}<button class="link" type="button" onclick={oncreate}
-        >Create one</button
-      >{:else}<a href={create}>Create one</a>{/if}
+    {m.sign_in_dialog_no_account()}
+    {#if oncreate}<button class="link" type="button" onclick={oncreate}
+        >{m.sign_in_dialog_create()}</button
+      >{:else}<a href={create}>{m.sign_in_dialog_create()}</a>{/if}
   </p>
 </Dialog>

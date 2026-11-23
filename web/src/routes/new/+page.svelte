@@ -1,20 +1,26 @@
 <script lang="ts">
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
+  import { m } from '#lib/paraglide/messages.js';
   import NewGroupForm from '#lib/organisms/NewGroupForm.svelte';
   import SignIn from '#lib/molecules/SignIn.svelte';
   import Page from '#lib/templates/Page.svelte';
   let { data, form } = $props();
 </script>
 
-<svelte:head><title>Start a group · opensocial</title></svelte:head>
+<svelte:head><title>{m.route_new_head()}</title></svelte:head>
 
-<Page title="Start a group">
+<Page title={m.route_new_title()}>
   {#if !data.actor}
-    <p>Sign in first. You'll be the group's founder.</p>
+    <p>{m.route_new_sign_in_first()}</p>
     <p><SignIn /></p>
   {:else if !data.actor.canCreateGroup}
-    <p>This host starts groups only for the people it names.</p>
+    <p>{m.route_new_not_allowed()}</p>
   {:else}
     <NewGroupForm failed={form?.failed} domain={data.domain} />
-    <p>Or <a href="/move">move an account you already have</a> here, to become a group.</p>
+    <p>
+      <ParaglideMessage message={m.route_new_or_move}>
+        {#snippet link({ children })}<a href="/move">{@render children?.()}</a>{/snippet}
+      </ParaglideMessage>
+    </p>
   {/if}
 </Page>

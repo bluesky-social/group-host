@@ -2,6 +2,8 @@
 // sentence, from the parts the host gives (its operation, the record's
 // collection and key, and whom it is about), never as the log's own words.
 
+import { m } from '#lib/paraglide/messages.js';
+
 type Actor = { did: string; handle?: string };
 type Write = { operation: string; collection: string; rkey: string; space?: string };
 export type Act = {
@@ -22,14 +24,14 @@ export const app = (id: string) =>
   id.replace(/^https?:\/\//, '').replace(/\/client-metadata\.json$|\/$/, '');
 
 /** Someone, by their handle where it is known. */
-const named = (a?: Actor) => (a ? (a.handle ? `@${a.handle}` : a.did) : 'someone');
+const named = (a?: Actor) => (a ? (a.handle ? `@${a.handle}` : a.did) : m.activity_someone());
 
 /**
  * An app as a reader knows it: one signed in with an app password, by
  * the password's name; this console, as itself; any other by its address.
  */
 export function appName(id: string): string {
-  if (id === OWN) return 'This console';
+  if (id === OWN) return m.activity_this_console();
   const password = id.match(/^app-password:(.+)$/);
   return password ? password[1] : app(id);
 }
@@ -44,36 +46,65 @@ export const bare = (name: string) => name.replace(/^@/, '');
 /** Whether an app did it, for a member who let it in, rather than the member themselves. */
 export const byApp = (a: Act) => !!a.clientId && a.clientId !== OWN;
 
-/** What each operation is said as, of a record of each collection, given whom it is about. */
-const SAID: Record<string, (op: string, who: string) => string> = {
-  'fyi.opensocial.membership': (op, who) =>
-    ({ create: `added ${who}`, update: `changed ${who}'s roles`, delete: `removed ${who}` })[op] ??
-    '',
-  'fyi.opensocial.invite': (op, who) =>
+/** A sentence said of who did it (`doer`) and whom it is about (`who`). */
+type Say = (inputs: { doer: string; who: string }) => string;
+
+/** What each operation is said as, of a record of each collection. */
+const SAID: Record<string, (op: string) => Say | undefined> = {
+  'fyi.opensocial.membership': (op) =>
     ({
-      create: `invited ${who}`,
-      update: `changed ${who}'s invite`,
-      delete: `cancelled ${who}'s invite`
-    })[op] ?? '',
+      create: m.activity_membership_create,
+      update: m.activity_membership_update,
+      delete: m.activity_membership_delete
+    })[op],
+  'fyi.opensocial.invite': (op) =>
+    ({
+      create: m.activity_invite_create,
+      update: m.activity_invite_update,
+      delete: m.activity_invite_delete
+    })[op],
   'fyi.opensocial.rule': (op) =>
-    ({ create: 'added a rule', update: 'changed a rule', delete: 'deleted a rule' })[op] ?? '',
+    ({
+      create: m.activity_rule_create,
+      update: m.activity_rule_update,
+      delete: m.activity_rule_delete
+    })[op],
   'fyi.opensocial.role': (op) =>
-    ({ create: 'created a role', update: 'changed a role', delete: 'deleted a role' })[op] ?? '',
+    ({
+      create: m.activity_role_create,
+      update: m.activity_role_update,
+      delete: m.activity_role_delete
+    })[op],
   'fyi.opensocial.profile': (op) =>
-    op === 'delete' ? 'removed the profile' : 'changed the profile',
-  'fyi.opensocial.permissions': () => 'changed what roles can do',
-  'fyi.opensocial.access': () => 'changed who sees a space',
-  'com.atproto.label.record': (op) => (op === 'delete' ? 'removed a label' : 'added a label'),
+    op === 'delete' ? m.activity_profile_delete : m.activity_profile_change,
+  'fyi.opensocial.permissions': () => m.activity_permissions_change,
+  'fyi.opensocial.access': () => m.activity_access_change,
+  'com.atproto.label.record': (op) =>
+    op === 'delete' ? m.activity_label_delete : m.activity_label_create,
   'app.bsky.feed.post': (op) =>
-    ({ create: 'posted', update: 'edited a post', delete: 'deleted a post' })[op] ?? ''
+    ({
+      create: m.activity_post_create,
+      update: m.activity_post_update,
+      delete: m.activity_post_delete
+    })[op]
 };
 
-const DONE: Record<string, string> = { create: 'added', update: 'changed', delete: 'deleted' };
+/** A write to a collection said of no more than that. */
+const DONE: Record<string, (inputs: { doer: string; collection: string }) => string> = {
+  create: m.activity_record_create,
+  update: m.activity_record_update,
+  delete: m.activity_record_delete
+};
 
-/** What a write did, as the rest of a sentence after who did it ("changed the profile"). */
-export function did(a: Act): string {
+/** What was done, as a sentence: who did it, and what the write did ("@alice changed the profile"). */
+export function line(a: Act): string {
+  const who = doer(a);
   const w = a.write;
-  if (!w) return a.action;
-  const said = SAID[w.collection]?.(w.operation, named(a.subject));
-  return said || `${DONE[w.operation] ?? w.operation} a record of ${w.collection}`;
+  if (!w) return m.activity_action({ doer: who, action: a.action });
+  const said = SAID[w.collection]?.(w.operation);
+  if (said) return said({ doer: who, who: named(a.subject) });
+  const done = DONE[w.operation];
+  return done
+    ? done({ doer: who, collection: w.collection })
+    : m.activity_record_other({ doer: who, operation: w.operation, collection: w.collection });
 }

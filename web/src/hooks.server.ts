@@ -1,5 +1,24 @@
 import type { Handle, HandleFetch } from '@sveltejs/kit/hooks';
 import { GROUP_HOST } from '$app/env/private';
+import { getTextDirection } from '#lib/paraglide/runtime.js';
+import { paraglideMiddleware } from '#lib/paraglide/server.js';
+
+/**
+ * A page of the console's own, in the reader's language: Paraglide picks
+ * it (`project.inlang`, and the strategy in `vite.config.ts`) for every
+ * message said while drawing it, and the document says which, and which
+ * way it reads.
+ */
+const localized: Handle = ({ event, resolve }) =>
+  paraglideMiddleware(event.request, ({ request, locale }) =>
+    resolve(
+      { ...event, request },
+      {
+        transformPageChunk: ({ html }) =>
+          html.replace('%lang%', locale).replace('%dir%', getTextDirection(locale))
+      }
+    )
+  );
 
 /**
  * What is the group host's, asked of this site, is asked of the host,
@@ -12,7 +31,7 @@ import { GROUP_HOST } from '$app/env/private';
 const HOSTS = ['/console/', '/xrpc/', '/oauth/', '/.well-known/', '/img/'];
 
 export const handle: Handle = async ({ event, resolve }) => {
-  if (!HOSTS.some((p) => event.url.pathname.startsWith(p))) return resolve(event);
+  if (!HOSTS.some((p) => event.url.pathname.startsWith(p))) return localized({ event, resolve });
   const asked = new Request(`${GROUP_HOST}${event.url.pathname}${event.url.search}`, {
     method: event.request.method,
     headers: event.request.headers,

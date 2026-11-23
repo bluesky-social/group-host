@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import Empty from '#lib/molecules/Empty.svelte';
   import Tabs from '#lib/molecules/Tabs.svelte';
   import Page from '#lib/templates/Page.svelte';
@@ -11,30 +12,39 @@
   const tabs = $derived([
     ...(data.configures
       ? [
-          { href: at, text: 'Profile' },
-          { href: `${at}/site`, text: 'Site' },
-          { href: `${at}/rules`, text: 'Rules' },
-          { href: `${at}/labels`, text: 'Labels' },
-          { href: `${at}/roles`, text: 'Roles' }
+          { href: at, text: m.route_group_settings_tab_profile() },
+          { href: `${at}/site`, text: m.route_group_settings_tab_site() },
+          { href: `${at}/rules`, text: m.route_group_settings_tab_rules() },
+          { href: `${at}/labels`, text: m.route_group_settings_tab_labels() },
+          { href: `${at}/roles`, text: m.route_group_settings_tab_roles() }
         ]
       : []),
-    ...(data.configures || data.passwords ? [{ href: `${at}/apps`, text: 'Apps' }] : []),
-    ...(data.configures ? [{ href: `${at}/recovery`, text: 'Recovery keys' }] : [])
+    ...(data.configures || data.passwords
+      ? [{ href: `${at}/apps`, text: m.route_group_settings_tab_apps() }]
+      : []),
+    ...(data.configures
+      ? [{ href: `${at}/recovery`, text: m.route_group_settings_tab_recovery() }]
+      : [])
   ]);
   // A part of them that is theirs to change; any other is not, whatever its address.
   const theirs = $derived(tabs.some((t) => t.href === page.url.pathname.replace(/\/$/, '')));
 </script>
 
-<Page title="Settings" back={{ href: `/g/${g.handle}`, text: name }}>
+<Page title={m.route_group_settings_title()} back={{ href: `/g/${g.handle}`, text: name }}>
   {#snippet nav()}
-    {#if tabs.length > 1}<Tabs {tabs} current={page.url.pathname} label="Settings" />{/if}
+    {#if tabs.length > 1}<Tabs
+        {tabs}
+        current={page.url.pathname}
+        label={m.route_group_settings_tabs()}
+      />{/if}
   {/snippet}
   {#if theirs}
     {@render children()}
   {:else}
-    <Empty title="Nothing here is yours to change">
-      Only people who run {name} can change its settings.
-      {#snippet action()}<a class="button quiet" href={`/g/${g.handle}`}>Back to {name}</a
+    <Empty title={m.route_group_settings_not_yours_title()}>
+      {m.route_group_settings_not_yours_body({ group: name })}
+      {#snippet action()}<a class="button quiet" href={`/g/${g.handle}`}
+          >{m.route_group_settings_back({ group: name })}</a
         >{/snippet}
     </Empty>
   {/if}

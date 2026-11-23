@@ -2,6 +2,7 @@
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
   import Tag from '#lib/atoms/Tag.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * A group's roles: each, what it may do, to delete (asked to be sure
    * of); and the dialog creating a new one, opened by a button whose
@@ -23,7 +24,9 @@
     <li>
       <span class="row-main">
         <span><strong>{r.name ?? r.key}</strong> <span class="mute mono">{r.key}</span></span>
-        <span class="what">{may(r.key).length ? 'Can' : 'Nothing more than a member'}</span>
+        <span class="what"
+          >{may(r.key).length ? m.roles_editor_can() : m.roles_editor_nothing_more()}</span
+        >
         {#if may(r.key).length}<span class="tags"
             >{#each may(r.key) as a (a)}<Tag text={a} />{/each}</span
           >{/if}
@@ -34,28 +37,35 @@
             class="quiet small"
             type="button"
             popovertarget={`unrole-${i}`}
-            aria-label={`Delete ${r.name ?? r.key}`}>Delete</button
+            aria-label={m.roles_editor_delete_label({ role: r.name ?? r.key })}
+            >{m.common_delete()}</button
           ></span
         >
         <ConfirmDialog
           id={`unrole-${i}`}
-          title="Delete this role?"
+          title={m.roles_editor_delete_title()}
           action="?/unrole"
-          confirm="Delete"
+          confirm={m.common_delete()}
           fields={{ role: r.key }}
         >
-          People with this role lose what it lets them do. You can only delete a role nobody has.
+          {m.roles_editor_delete_body()}
         </ConfirmDialog>
       {/if}
     </li>
   {/each}
 </ul>
-<FormDialog id="define-role" title="Create a role" action="?/role" submit="Create" wide>
-  {#snippet intro()}Choose what people with this role can do, and which roles they can give. You
-    give roles to members from the group's page.{/snippet}
+<FormDialog
+  id="define-role"
+  title={m.roles_editor_create_title()}
+  action="?/role"
+  submit={m.common_create()}
+  wide
+>
+  {#snippet intro()}{m.roles_editor_create_intro()}{/snippet}
   <div class="pair">
     <label class="field"
-      >Its key <input
+      >{m.roles_editor_key()}
+      <input
         name="role"
         required
         pattern="[a-z0-9-]+"
@@ -64,19 +74,25 @@
       /></label
     >
     <label class="field"
-      >Its name <input name="name" required maxlength="64" placeholder="Moderator" /></label
+      >{m.roles_editor_name()}
+      <input
+        name="name"
+        required
+        maxlength="64"
+        placeholder={m.roles_editor_name_placeholder()}
+      /></label
     >
   </div>
   <fieldset>
-    <legend>It may</legend>
+    <legend>{m.roles_editor_may()}</legend>
     {#each actions as a (a)}<label><input type="checkbox" name="action" value={a} /> {a}</label
       >{/each}
   </fieldset>
   <fieldset>
-    <legend>People with it can give</legend>
+    <legend>{m.roles_editor_can_give()}</legend>
     {#each roles as r (r.key)}<label
         ><input type="checkbox" name="assignable" value={r.key} /> {r.name ?? r.key}</label
       >{/each}
   </fieldset>
-  <label><input type="checkbox" name="default" /> Every new member gets it</label>
+  <label><input type="checkbox" name="default" /> {m.roles_editor_default()}</label>
 </FormDialog>

@@ -2,6 +2,7 @@
   import Empty from '#lib/molecules/Empty.svelte';
   import GroupRow from '#lib/molecules/GroupRow.svelte';
   import { image } from '#lib/images.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /** The groups someone is in, a row each, or what it says when they are in none. */
   let {
     groups
@@ -20,5 +21,5 @@
       </li>{/each}
   </ul>
 {:else}
-  <Empty title="You are in no group here yet">Start one, or join one you are invited to.</Empty>
+  <Empty title={m.group_list_empty_title()}>{m.group_list_empty_body()}</Empty>
 {/if}

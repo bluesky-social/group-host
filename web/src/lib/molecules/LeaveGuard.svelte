@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import { beforeNavigate, goto } from '$app/navigation';
   import Dialog from '#lib/molecules/Dialog.svelte';
   import { anyUnsaved } from '#lib/saving.svelte.ts';
@@ -32,12 +33,12 @@
   }
 </script>
 
-<Dialog id="leave-unsaved" title="Leave without saving?" onclose={() => (going = null)}>
-  <p class="mute">You’ll lose the changes you haven’t saved.</p>
+<Dialog id="leave-unsaved" title={m.leave_guard_title()} onclose={() => (going = null)}>
+  <p class="mute">{m.leave_guard_body()}</p>
   <div class="actions">
     <button class="quiet" type="button" popovertarget="leave-unsaved" popovertargetaction="hide"
-      >Keep editing</button
+      >{m.leave_guard_keep()}</button
     >
-    <button class="danger" type="button" onclick={leave}>Leave</button>
+    <button class="danger" type="button" onclick={leave}>{m.leave_guard_leave()}</button>
   </div>
 </Dialog>

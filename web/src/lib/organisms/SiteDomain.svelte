@@ -3,6 +3,8 @@
   import Empty from '#lib/molecules/Empty.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
   import { inPlace } from '#lib/forms.ts';
+  import { m } from '#lib/paraglide/messages.js';
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   /**
    * Where a group's site is served, from its own domain's side: with no
    * `domain` of its own (its handle is its `address`), the way to take
@@ -22,9 +24,11 @@
 </script>
 
 {#if !domain}
-  <Empty title="No domain yet">
-    Change the group's handle to a domain you own. Then you can move its site there.
-    {#snippet action()}<a class="button quiet small" href={profile}>Change the handle</a>{/snippet}
+  <Empty title={m.site_domain_empty_title()}>
+    {m.site_domain_empty_body()}
+    {#snippet action()}<a class="button quiet small" href={profile}
+        >{m.site_domain_change_handle()}</a
+      >{/snippet}
   </Empty>
 {:else}
   <ul class="sites">
@@ -33,18 +37,24 @@
         <strong class="mono">{domain}</strong>
         {#if on}
           <span class="what"
-            >Your site is at <span class="mono">{domain}</span>.
-            <span class="mono">{address}</span> sends visitors there.</span
+            ><ParaglideMessage message={m.site_domain_on}>
+              {#snippet domainName()}<span class="mono">{domain}</span>{/snippet}
+              {#snippet addressName()}<span class="mono">{address}</span>{/snippet}
+            </ParaglideMessage></span
           >
         {:else}
-          <span class="what">Your site is at <span class="mono">{address}</span> for now.</span>
+          <span class="what"
+            ><ParaglideMessage message={m.site_domain_off}>
+              {#snippet addressName()}<span class="mono">{address}</span>{/snippet}
+            </ParaglideMessage></span
+          >
         {/if}
       </span>
       <span class="row-actions">
         {#if on}
           <form method="post" action="?/undomain" use:enhance={inPlace}>
-            <button class="quiet small" type="submit" aria-label="Move the site back to its address"
-              >Move back</button
+            <button class="quiet small" type="submit" aria-label={m.site_domain_move_back_label()}
+              >{m.site_domain_move_back()}</button
             >
           </form>
         {:else}
@@ -52,17 +62,24 @@
             class="quiet small"
             type="button"
             popovertarget="site-domain"
-            aria-label="Move the site to {domain}">Move</button
+            aria-label={m.site_domain_move_label({ domain })}>{m.site_domain_move()}</button
           >
         {/if}
       </span>
     </li>
   </ul>
-  <FormDialog id="site-domain" title="Move the site to your domain" action="?/domain" submit="Move">
-    {#snippet intro()}Add A and AAAA records for <span class="mono">{domain}</span> and
-      <span class="mono">www.{domain}</span>, with the same addresses as
-      <span class="mono">{host}</span>. Once they work, your site moves to
-      <span class="mono">{domain}</span>, and <span class="mono">{address}</span> sends visitors there.{/snippet}
+  <FormDialog
+    id="site-domain"
+    title={m.site_domain_move_title()}
+    action="?/domain"
+    submit={m.site_domain_move()}
+  >
+    {#snippet intro()}<ParaglideMessage message={m.site_domain_move_intro}>
+        {#snippet domainName()}<span class="mono">{domain}</span>{/snippet}
+        {#snippet wwwName()}<span class="mono">www.{domain}</span>{/snippet}
+        {#snippet hostName()}<span class="mono">{host}</span>{/snippet}
+        {#snippet addressName()}<span class="mono">{address}</span>{/snippet}
+      </ParaglideMessage>{/snippet}
     <input type="hidden" name="domain" value={domain} />
   </FormDialog>
 {/if}

@@ -1,6 +1,8 @@
 // Where a group meets and what it speaks, as a profile holds them (a
 // country's ISO 3166 code, a language's BCP 47 tag), named for a reader.
 
+import { intl, perLocale } from '#lib/locale.ts';
+
 /** Every country by its ISO 3166-1 alpha-2 code. */
 const COUNTRY_CODES = (
   'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ ' +
@@ -18,10 +20,11 @@ const LANGUAGE_TAGS = (
   'mt nb nl pa pl pt ro ru sk sl sq sr sv sw ta te th tr uk ur uz vi yo zh zu'
 ).split(' ');
 
-// Named in English on the server and in the browser alike, so a page
-// drawn on one reads the same once the other takes it over.
-const regions = new Intl.DisplayNames(['en'], { type: 'region' });
-const languages = new Intl.DisplayNames(['en'], { type: 'language' });
+// Named in the reader's language, as `#lib/locale.ts` picks it on the
+// server and in the browser alike, so a page drawn on one reads the same
+// once the other takes it over.
+const regions = perLocale((locale) => new Intl.DisplayNames([locale], { type: 'region' }));
+const languages = perLocale((locale) => new Intl.DisplayNames([locale], { type: 'language' }));
 
 const named = (names: Intl.DisplayNames, code: string) => {
   try {
@@ -32,22 +35,20 @@ const named = (names: Intl.DisplayNames, code: string) => {
 };
 
 /** A country's name, by its code; the code itself where it names none. */
-export const countryName = (code: string) => named(regions, code);
+export const countryName = (code: string) => named(regions(), code);
 
 /** A language's name, by its tag; the tag itself where it names none. */
-export const languageName = (tag: string) => named(languages, tag);
+export const languageName = (tag: string) => named(languages(), tag);
 
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, intl());
 
 /** Every country, by name. */
-export const COUNTRIES = COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort(
-  byName
-);
+export const countries = () =>
+  COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort(byName);
 
 /** The languages offered, by name. */
-export const LANGUAGES = LANGUAGE_TAGS.map((tag) => ({ tag, name: languageName(tag) })).sort(
-  byName
-);
+export const offeredLanguages = () =>
+  LANGUAGE_TAGS.map((tag) => ({ tag, name: languageName(tag) })).sort(byName);
 
 /** Where a profile says a group meets, as `community.lexicon.location` has it. */
 export type Place = {

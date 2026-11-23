@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import MoveSignIn from '#lib/molecules/MoveSignIn.svelte';
   import AccountMove from '#lib/organisms/AccountMove.svelte';
   import SignIn from '#lib/molecules/SignIn.svelte';
@@ -6,19 +7,16 @@
   let { data, form } = $props();
 </script>
 
-<svelte:head><title>Move an account here · opensocial</title></svelte:head>
+<svelte:head><title>{m.route_move_head()}</title></svelte:head>
 
-<Page title="Move an account here">
+<Page title={m.route_move_title()}>
   {#if !data.actor}
-    <p>Sign in first. You'll run the group it becomes.</p>
+    <p>{m.route_move_sign_in_first()}</p>
     <p><SignIn /></p>
   {:else if !data.actor.canCreateGroup}
-    <p>This host starts groups only for the people it names.</p>
+    <p>{m.route_move_not_allowed()}</p>
   {:else if !data.moving}
-    <p>
-      An account you already have, on any server, can move here to become a group you run. It keeps
-      its DID, so whoever follows it still does, and its spaces come with it.
-    </p>
+    <p>{m.route_move_intro()}</p>
     <MoveSignIn back="/move" />
   {:else}
     <AccountMove moving={data.moving} plan={data.plan} failed={form?.failed} />

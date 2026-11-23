@@ -5,12 +5,14 @@
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
+import { paraglide } from '../paraglide.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root: here,
-  plugins: [svelte({ compilerOptions: { runes: true } })],
+  // The console's messages, for the words the sign-in dialog says.
+  plugins: [paraglide(), svelte({ compilerOptions: { runes: true } })],
   // @opensocial/sdk is linked from packages/sdk, with packages of its own:
   // one copy of lex here, so that its errors are the classes this page
   // tells apart.

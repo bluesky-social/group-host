@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import AuthorizeRequest from '#lib/organisms/AuthorizeRequest.svelte';
   import BackToApp from '#lib/molecules/BackToApp.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
@@ -8,13 +9,13 @@
   let { data, form } = $props();
 </script>
 
-<svelte:head><title>Sign in an app · opensocial</title></svelte:head>
+<svelte:head><title>{m.route_authorize_head()}</title></svelte:head>
 
-<Page title="Sign in an app">
+<Page title={m.route_authorize_title()}>
   {#if form?.redirectUrl}
     <BackToApp to={form.redirectUrl} />
   {:else if data.expired}
-    <Empty title="This sign-in request has expired">Go back to the app and try again.</Empty>
+    <Empty title={m.route_authorize_expired_title()}>{m.route_authorize_expired_body()}</Empty>
   {:else if data.request}
     <AuthorizeRequest
       client={data.request.client}
@@ -25,7 +26,7 @@
       mcp={data.request.mcp ?? false}
     />
   {:else}
-    <p>An app wants to sign in as one of your groups. Sign in first.</p>
+    <p>{m.route_authorize_sign_in_first()}</p>
     <p><SignIn /></p>
   {/if}
 </Page>

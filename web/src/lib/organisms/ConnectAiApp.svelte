@@ -1,5 +1,6 @@
 <script lang="ts">
   import Copy from '#lib/atoms/Copy.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * How to have an AI app act for the person in the group, in three
    * numbered steps: add the address (`mcp`) to it, sign in here and
@@ -7,9 +8,9 @@
    */
   let { name, mcp }: { name: string; mcp: string } = $props();
   const asks = [
-    'Who is asking to join, and what did they say?',
-    'Invite dana.bsky.social',
-    'What is waiting in the moderation queue?'
+    m.connect_ai_app_ask_requests(),
+    m.connect_ai_app_ask_invite({ handle: 'dana.bsky.social' }),
+    m.connect_ai_app_ask_queue()
   ];
 </script>
 
@@ -17,21 +18,21 @@
   <li>
     <span class="ordinal">1</span>
     <div class="step">
-      <strong>Add this address to your AI app as a connector</strong>
+      <strong>{m.connect_ai_app_add()}</strong>
       <div class="copyable"><code>{mcp}</code><Copy text={mcp} /></div>
     </div>
   </li>
   <li>
     <span class="ordinal">2</span>
     <div class="step">
-      <strong>When it asks, sign in here and approve it</strong>
-      <span class="what">It acts for you in {name}, with what your roles let you do.</span>
+      <strong>{m.connect_ai_app_approve()}</strong>
+      <span class="what">{m.connect_ai_app_acts({ group: name })}</span>
     </div>
   </li>
   <li>
     <span class="ordinal">3</span>
     <div class="step">
-      <strong>Ask it things like</strong>
+      <strong>{m.connect_ai_app_ask()}</strong>
       <ul class="asks">
         {#each asks as ask (ask)}<li>{ask}</li>{/each}
       </ul>

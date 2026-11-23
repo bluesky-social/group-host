@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   /** A button that copies `text` for pasting elsewhere, and says so once it has. */
   let { text }: { text: string } = $props();
   let copied = $state(false);
@@ -8,4 +9,6 @@
   }
 </script>
 
-<button class="quiet" type="button" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+<button class="quiet" type="button" onclick={copy}
+  >{copied ? m.copy_copied() : m.copy_copy()}</button
+>

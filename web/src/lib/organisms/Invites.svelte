@@ -3,6 +3,7 @@
   import { inPlace } from '#lib/forms.ts';
   import Empty from '#lib/molecules/Empty.svelte';
   import MemberRow from '#lib/molecules/MemberRow.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /** The invites the group has sent that are still waiting, each to cancel. */
   let {
     invites
@@ -18,7 +19,7 @@
           <form method="post" action="?/uninvite" use:enhance={inPlace}>
             <input type="hidden" name="uri" value={i.uri} /><button
               class="quiet small"
-              type="submit">Cancel invite</button
+              type="submit">{m.invites_cancel()}</button
             >
           </form>
         </MemberRow>
@@ -26,7 +27,5 @@
     {/each}
   </ul>
 {:else}
-  <Empty title="No invites waiting"
-    >People you invite show up here until they join or decline.</Empty
-  >
+  <Empty title={m.invites_empty_title()}>{m.invites_empty_body()}</Empty>
 {/if}

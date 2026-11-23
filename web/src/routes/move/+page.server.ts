@@ -4,6 +4,7 @@ import type * as checkImport from '#lib/lexicons/fyi/opensocial/checkImport.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { act, xrpc } from '#lib/data.ts';
+import { refused } from '#lib/errors.ts';
 
 type Did = `did:${string}:${string}`;
 
@@ -41,10 +42,7 @@ export const actions: Actions = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ code: text(form, 'code') })
     });
-    if (!res.ok) {
-      const failure = await res.json().catch(() => null);
-      return fail(res.status, { failed: failure?.message ?? res.statusText });
-    }
+    if (!res.ok) return fail(res.status, { failed: await refused(res) });
     const done: { handle: string } = await res.json();
     redirect(303, `/g/${done.handle}`);
   },

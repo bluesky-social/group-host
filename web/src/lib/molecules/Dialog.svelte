@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import type { Snippet } from 'svelte';
   import { empty } from '#lib/forms.ts';
   /**
@@ -59,7 +60,7 @@
     type="button"
     popovertarget={id}
     popovertargetaction="hide"
-    aria-label="Close">×</button
+    aria-label={m.common_close()}>×</button
   >
   {@render children()}
 </div>

@@ -104,7 +104,7 @@ The dialog stays open, and the reason shows in a pink box under the
 field.
 
 <!-- look /g/choir.groups.test/settings/recovery --as erin --click 'button[popovertarget=add-key]' --type '#add-key [name=key]=did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK' --click '#add-key button[type=submit]' --element ':popover-open' -->
-![The Add a recovery key dialog with a key of another kind in the field and, under it, not a did:key the directory takes (secp256k1 or P-256)](shots/recovery-refused.png)
+![The Add a recovery key dialog with a key of another kind in the field and, under it, the reason: that isn’t a key this host takes, so use a did:key for secp256k1 or P-256](shots/recovery-refused.png)
 
 It refuses a key in these cases:
 

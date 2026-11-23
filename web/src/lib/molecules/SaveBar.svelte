@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import type { Saving } from '#lib/saving.svelte.ts';
   /**
    * A form's Save button, the end of a form that edits what is there in
@@ -12,16 +13,18 @@
   const said = $derived(
     {
       clean: '',
-      changed: 'Unsaved changes',
-      saving: 'Saving…',
-      saved: 'Saved',
+      changed: m.save_bar_changed(),
+      saving: m.save_bar_saving(),
+      saved: m.save_bar_saved(),
       failed: saving.why ?? ''
     }[saving.standing]
   );
 </script>
 
 <div class="save-bar">
-  <button class:quiet={!saving.changed} type="submit" aria-label="Save {what}">Save</button>
+  <button class:quiet={!saving.changed} type="submit" aria-label={m.save_bar_label({ what })}
+    >{m.common_save()}</button
+  >
   <span
     class="save-said"
     class:mute={saving.standing !== 'failed' && saving.standing !== 'saved'}

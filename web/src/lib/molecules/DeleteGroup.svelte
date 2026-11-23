@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   /**
    * Asking to be sure of deleting the group, opened by a button whose
@@ -7,7 +8,11 @@
    */
 </script>
 
-<ConfirmDialog id="delete-group" title="Delete this group?" action="?/delete" confirm="Delete">
-  This deletes the group and everything in it for good. Members keep what they posted on their own
-  accounts.
+<ConfirmDialog
+  id="delete-group"
+  title={m.delete_group_title()}
+  action="?/delete"
+  confirm={m.common_delete()}
+>
+  {m.delete_group_body()}
 </ConfirmDialog>

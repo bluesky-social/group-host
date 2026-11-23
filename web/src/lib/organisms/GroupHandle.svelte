@@ -2,6 +2,8 @@
   import Copy from '#lib/atoms/Copy.svelte';
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
+  import { m } from '#lib/paraglide/messages.js';
+  import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   /**
    * A group's handle: its address here, or a domain of its own, with
    * whether that domain points to it still (`pointing`), to go back from;
@@ -28,9 +30,9 @@
       <span class="what"
         >{own
           ? pointing === false
-            ? "This domain no longer points to the group. Fix its _atproto record, or go back to the group's address."
-            : "The group's own domain."
-          : 'The address this host gave it.'}</span
+            ? m.group_handle_not_pointing()
+            : m.group_handle_own()
+          : m.group_handle_given()}</span
       >
     </span>
     {#if own}
@@ -39,28 +41,35 @@
           class="quiet small"
           type="button"
           popovertarget="unhandle"
-          aria-label="Go back to the group's address">Go back</button
+          aria-label={m.group_handle_back_title()}>{m.group_handle_back()}</button
         ></span
       >
       <ConfirmDialog
         id="unhandle"
-        title="Go back to the group's address?"
+        title={m.group_handle_back_title()}
         action="?/unhandle"
-        confirm="Go back"
+        confirm={m.group_handle_back()}
         danger={false}
         fields={{ address }}
       >
-        The group's handle becomes <span class="mono">{address}</span> again in every app, and
-        <span class="mono">{handle}</span> stops being its handle.
+        <ParaglideMessage message={m.group_handle_back_body}>
+          {#snippet given()}<span class="mono">{address}</span>{/snippet}
+          {#snippet current()}<span class="mono">{handle}</span>{/snippet}
+        </ParaglideMessage>
       </ConfirmDialog>
     {/if}
   </li>
 </ul>
-<FormDialog id="use-domain" title="Use your own domain" action="?/handle" submit="Use">
-  {#snippet intro()}Type your domain, then add this record where you manage its DNS. New records can
-    take a few minutes to show up.{/snippet}
+<FormDialog
+  id="use-domain"
+  title={m.group_handle_domain_title()}
+  action="?/handle"
+  submit={m.group_handle_use()}
+>
+  {#snippet intro()}{m.group_handle_domain_intro()}{/snippet}
   <label class="field"
-    >Domain <input
+    >{m.group_handle_domain()}
+    <input
       name="domain"
       required
       maxlength="253"
@@ -69,17 +78,17 @@
     /></label
   >
   <dl class="record">
-    <dt>Type</dt>
+    <dt>{m.group_handle_record_type()}</dt>
     <dd><code>TXT</code></dd>
-    <dt>Name</dt>
+    <dt>{m.group_handle_record_name()}</dt>
     <dd>
       <code>_atproto.{domain.trim().toLowerCase()}</code>{#if !domain.trim()}<span class="mute"
-          >your domain</span
+          >{m.group_handle_your_domain()}</span
         >{/if}
     </dd>
   </dl>
   <div class="field">
-    <span>Value</span>
+    <span>{m.group_handle_record_value()}</span>
     <div class="copyable"><code>{record}</code><Copy text={record} /></div>
   </div>
 </FormDialog>

@@ -10,6 +10,7 @@ import { act, xrpc } from '#lib/data.ts';
 import { asGroup, membersOf } from '#lib/asGroup.ts';
 import { changes, switchedOffActions } from '#lib/server/settings.ts';
 import { siteOf } from '#lib/server/site.ts';
+import { m } from '#lib/paraglide/messages.js';
 
 type Handle = `${string}.${string}`;
 
@@ -181,7 +182,7 @@ export const actions: Actions = {
     const found = await event.fetch(
       `/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
-    if (!found.ok) return fail(400, { failed: `We can't find ${handle}.` });
+    if (!found.ok) return fail(400, { failed: m.route_group_invite_not_found({ handle }) });
     const { did } = await found.json();
     // Written as the group, in their own inbox, with the note if there is one.
     const message = String(form.get('message') ?? '').trim();

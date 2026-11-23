@@ -5,6 +5,7 @@
   import FormDialog from '#lib/molecules/FormDialog.svelte';
   import Address from '#lib/atoms/Address.svelte';
   import LinkIcon from '#lib/atoms/LinkIcon.svelte';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * Where else a group is, as its profile lists them, each by its site's
    * icon, to remove;
@@ -28,22 +29,35 @@
         >
         <form class="row-actions" method="post" action="?/unlink" use:enhance={inPlace}>
           <input type="hidden" name="index" value={i} />
-          <button class="quiet small" type="submit" aria-label={`Remove ${l.title ?? shown(l.url)}`}
-            >Remove</button
+          <button
+            class="quiet small"
+            type="submit"
+            aria-label={m.links_editor_remove_label({ link: l.title ?? shown(l.url) })}
+            >{m.common_remove()}</button
           >
         </form>
       </li>
     {/each}
   </ul>
 {:else}
-  <Empty title="No links yet">Other places to find the group, like its chat or website.</Empty>
+  <Empty title={m.links_editor_empty_title()}>{m.links_editor_empty_body()}</Empty>
 {/if}
-<FormDialog id="add-link" title="Add a link" action="?/link" submit="Add">
+<FormDialog
+  id="add-link"
+  title={m.links_editor_add_title()}
+  action="?/link"
+  submit={m.common_add()}
+>
   <label class="field"
-    >Its address <input name="url" type="url" required placeholder="https://" /></label
+    >{m.links_editor_address()}
+    <input name="url" type="url" required placeholder="https://" /></label
   >
   <label class="field"
-    ><span>Title <span class="optional">(optional)</span></span>
-    <input name="title" maxlength="64" placeholder="Our chat" /></label
+    ><span>{m.links_editor_link_title()} <span class="optional">{m.common_optional()}</span></span>
+    <input
+      name="title"
+      maxlength="64"
+      placeholder={m.links_editor_link_title_placeholder()}
+    /></label
   >
 </FormDialog>

@@ -630,6 +630,10 @@ test("a site's page reaches the console without the session of whoever opens it"
   await publishing.getByLabel('Folder').setInputFiles(dir);
   await publishing.getByRole('button', { name: 'Publish' }).click();
   await expect(publishing).toBeHidden();
+  // The page drawn again once published asks the host for what it shows
+  // (the viewer, their invites): settled first, so none of those is taken
+  // for the site's.
+  await page.waitForLoadState('networkidle');
 
   // Each request the browser sends the console, with its cookies, until
   // the one signing out.

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { inPlace } from '#lib/forms.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * How the person looking gets into the group, as its join policy says
    * and as they stand: in at once by an invite, whatever the policy,
@@ -27,43 +28,43 @@
 
 <section class="card stack join">
   {#if joined}
-    <h2>You're in</h2>
-    <p class="mute">Welcome to {name}.</p>
+    <h2>{m.join_panel_joined_title()}</h2>
+    <p class="mute">{m.join_panel_joined_body({ group: name })}</p>
   {:else if invited}
-    <h2>You're invited</h2>
-    <p class="mute">Someone in {name} invited you to join.</p>
+    <h2>{m.join_panel_invited_title()}</h2>
+    <p class="mute">{m.join_panel_invited_body({ group: name })}</p>
     <div class="choices">
       <form method="post" action="?/decline" use:enhance={inPlace}>
-        <button class="quiet" type="submit">Decline</button>
+        <button class="quiet" type="submit">{m.common_decline()}</button>
       </form>
       <form method="post" action="?/join" use:enhance={inPlace}>
-        <button type="submit">Join</button>
+        <button type="submit">{m.common_join()}</button>
       </form>
     </div>
   {:else if asked}
-    <h2>Your request is waiting</h2>
-    <p class="mute">You'll be a member once someone approves it.</p>
+    <h2>{m.join_panel_asked_title()}</h2>
+    <p class="mute">{m.join_panel_asked_body()}</p>
     <form method="post" action="?/cancel" use:enhance={inPlace}>
-      <button class="quiet" type="submit">Cancel request</button>
+      <button class="quiet" type="submit">{m.join_panel_cancel()}</button>
     </form>
   {:else if policy === 'open'}
-    <h2>Join {name}</h2>
-    <p class="mute">Anyone can join.</p>
+    <h2>{m.join_panel_open_title({ group: name })}</h2>
+    <p class="mute">{m.join_panel_open_body()}</p>
     <form method="post" action="?/join" use:enhance={inPlace}>
-      <button type="submit">Join</button>
+      <button type="submit">{m.common_join()}</button>
     </form>
   {:else if policy === 'invite'}
-    <h2>Joining is by invite</h2>
-    <p class="mute">Ask someone in {name} to invite you. Your invite will show up here.</p>
+    <h2>{m.join_panel_invite_title()}</h2>
+    <p class="mute">{m.join_panel_invite_body({ group: name })}</p>
   {:else}
-    <h2>Ask to join</h2>
-    <p class="mute">Someone in {name} reviews each request.</p>
+    <h2>{m.join_panel_ask_title()}</h2>
+    <p class="mute">{m.join_panel_ask_body({ group: name })}</p>
     <form class="stack" method="post" action="?/join" use:enhance={inPlace}>
       <label class="field"
-        ><span>Note <span class="optional">(optional)</span></span>
+        ><span>{m.join_panel_note()} <span class="optional">{m.common_optional()}</span></span>
         <textarea name="message" rows="3" maxlength="2000"></textarea></label
       >
-      <button type="submit">Send request</button>
+      <button type="submit">{m.join_panel_send()}</button>
     </form>
   {/if}
 </section>

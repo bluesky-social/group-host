@@ -2,6 +2,7 @@
 // links to, and what its settings publish and delete.
 
 import { error } from '@sveltejs/kit';
+import { refusal } from '#lib/errors.ts';
 
 /** The record of a group's site, at `self` in its public repo. */
 const SITE = 'fyi.opensocial.site';
@@ -36,7 +37,7 @@ export async function siteOf(event: Load, group: string, address: string): Promi
   const answer = await res.json().catch(() => null);
   if (!res.ok) {
     if (answer?.error === 'RecordNotFound') return null;
-    error(res.status, answer?.message ?? res.statusText);
+    error(res.status, refusal(answer, res.status));
   }
   return {
     url: `${event.url.protocol}//${address}/`,

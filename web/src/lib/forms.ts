@@ -5,6 +5,7 @@
 
 import type { enhance } from '$app/forms';
 import { tick } from 'svelte';
+import { m } from '#lib/paraglide/messages.js';
 
 /** What `use:enhance` is given: what a form does as it is sent. */
 type SubmitFunction = NonNullable<Parameters<typeof enhance>[1]>;
@@ -82,11 +83,11 @@ export function inDialog(id: string, failed: (why: string | null) => void): Subm
       done();
       if (result.type === 'failure') {
         const why = (result.data as { failed?: string } | undefined)?.failed;
-        failed(why ?? 'That didn’t work. Check what you entered.');
+        failed(why ?? m.forms_failed());
         return;
       }
       if (result.type === 'error') {
-        failed(result.error?.message ?? 'Something went wrong on the host.');
+        failed(result.error?.message ?? m.forms_host_failed());
         return;
       }
       // Closing it empties it (Dialog.svelte).
@@ -109,11 +110,11 @@ export function inOpenDialog(failed: (why: string | null) => void): SubmitFuncti
       done();
       if (result.type === 'failure') {
         const why = (result.data as { failed?: string } | undefined)?.failed;
-        failed(why ?? 'That didn’t work. Check what you entered.');
+        failed(why ?? m.forms_failed());
         return;
       }
       if (result.type === 'error') {
-        failed(result.error?.message ?? 'Something went wrong on the host.');
+        failed(result.error?.message ?? m.forms_host_failed());
         return;
       }
       await update({ reset: true });

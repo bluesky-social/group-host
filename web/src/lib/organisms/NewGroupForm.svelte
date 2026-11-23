@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { finished, labelOf } from '#lib/handles.ts';
+  import { m } from '#lib/paraglide/messages.js';
   /**
    * Starting a group: its name, and its address under the host's
    * `domain`, made from the name as it is typed until it is changed by
@@ -54,7 +55,7 @@
 <form class="stack" method="post">
   {#if failed}<p class="danger">{failed}</p>{/if}
   <label class="field">
-    Name
+    {m.new_group_form_name()}
     <input
       bind:this={named}
       name="displayName"
@@ -65,7 +66,7 @@
     />
   </label>
   <label class="field">
-    Its address
+    {m.new_group_form_address()}
     <span class="address">
       <input
         name="label"
@@ -81,28 +82,30 @@
   </label>
   {#if taken}
     <p class="danger">
-      {taken.label}{domain} is taken.
+      {m.new_group_form_taken({ address: taken.label + domain })}
       {#if taken.next}<button
           class="quiet"
           type="button"
           onclick={() => ((edited = true), (label = taken?.next ?? label))}
-          >Use {taken.next}{domain}</button
+          >{m.new_group_form_use({ address: taken.next + domain })}</button
         >{/if}
     </p>
   {:else}
-    <p class="mute small">This is the group's handle and web address. You can change it.</p>
+    <p class="mute small">{m.new_group_form_address_hint()}</p>
   {/if}
   <label class="field"
-    ><span>What it is for <span class="optional">(optional)</span></span>
+    ><span
+      >{m.new_group_form_description()} <span class="optional">{m.common_optional()}</span></span
+    >
     <textarea name="description" maxlength="2000"></textarea></label
   >
   <label class="field">
-    How people join
+    {m.new_group_form_join()}
     <select name="joinPolicy">
-      <option value="approval">An admin approves who joins</option>
-      <option value="open">Anyone can join right away</option>
-      <option value="invite">Only people who are invited</option>
+      <option value="approval">{m.new_group_form_join_approval()}</option>
+      <option value="open">{m.new_group_form_join_open()}</option>
+      <option value="invite">{m.new_group_form_join_invite()}</option>
     </select>
   </label>
-  <button type="submit">Start the group</button>
+  <button type="submit">{m.new_group_form_start()}</button>
 </form>

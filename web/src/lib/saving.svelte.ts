@@ -6,6 +6,7 @@
 import type { enhance } from '$app/forms';
 import { hold } from '#lib/forms.ts';
 import { tick } from 'svelte';
+import { m } from '#lib/paraglide/messages.js';
 import { SvelteSet } from 'svelte/reactivity';
 
 type SubmitFunction = NonNullable<Parameters<typeof enhance>[1]>;
@@ -78,7 +79,7 @@ export class Saving {
           result.type === 'failure'
             ? (result.data as { failed?: string } | undefined)?.failed
             : result.error?.message;
-        this.why = why ?? 'That didn’t save. Check what you entered.';
+        this.why = why ?? m.saving_failed();
         this.standing = 'failed';
         return;
       }

@@ -1,5 +1,6 @@
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { paraglide } from './paraglide.ts';
 import { defineConfig } from 'vite';
 
 /** The group host, which `vite dev` hands what it answers itself. */
@@ -21,6 +22,7 @@ export default defineConfig({
     proxy: { '^/xrpc/': host, '^/oauth/': host, '^/\\.well-known/': host, '^/img/': host }
   },
   plugins: [
+    paraglide(),
     sveltekit({
       compilerOptions: { runes: true },
       adapter: adapter(),
