@@ -36,7 +36,7 @@ export default async ({ world, opensocial, ask, page, who, exists }) => {
   for (const action of ['mod.read', 'mod.resolve', 'label'])
     await dialog.getByRole('checkbox', { name: action, exact: true }).check();
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await p.getByRole('button', { name: 'Delete Moderator' }).waitFor();
+  await p.locator('.roles > li strong', { hasText: 'Moderator' }).waitFor();
   await p.context().close();
   for (const name of ['frank', 'maximilianaquinces']) {
     await ask(name, g);

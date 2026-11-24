@@ -10,6 +10,14 @@
   - textbox "Its name":
     - /placeholder: Moderator
     - text: Ride leader
+  - group "Running the group":
+    - text: Running the group
+    - checkbox "Profile and rules Change the group's profile and rules."
+    - text: Profile and rules Change the group's profile and rules.
+    - checkbox "Moderation Approve, invite, label and remove members, change their roles, and review reports."
+    - text: Moderation Approve, invite, label and remove members, change their roles, and review reports.
+    - checkbox "The whole group Everything above, and the group's settings and roles."
+    - text: The whole group Everything above, and the group's settings and roles.
   - group "It may":
     - text: It may
     - checkbox "mod.read" [checked]
@@ -32,8 +40,6 @@
     - text: space.configure
     - checkbox "space.delete"
     - text: space.delete
-    - checkbox "group.configure"
-    - text: group.configure
   - group "People with it can give":
     - text: People with it can give
     - checkbox "Admin"

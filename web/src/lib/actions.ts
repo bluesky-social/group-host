@@ -50,3 +50,28 @@ export const SCOPES: Record<(typeof KNOWN)[number], string> = {
   'space.delete': 'space:*?manage=delete',
   'group.configure': 'include:fyi.opensocial.authManageGroup'
 };
+
+const set = (name: string) => `include:fyi.opensocial.${name}`;
+const MODERATES = ['mod.read', 'mod.resolve', 'label', 'invite', 'admit', 'eject', 'role.assign'];
+
+/**
+ * The group's permission sets a role may carry, smallest first: each its
+ * scope, the actions the host reads it as granting, and the smaller sets
+ * it holds all of. The whole group's is `group.configure`'s scope, so
+ * that action is chosen here, not on its own.
+ */
+export const SETS: { key: SetKey; scope: string; actions: string[]; within: SetKey[] }[] = [
+  { key: 'profile', scope: set('authManageProfile'), actions: [], within: [] },
+  { key: 'moderate', scope: set('authModerate'), actions: MODERATES, within: [] },
+  {
+    key: 'group',
+    scope: SCOPES['group.configure'],
+    actions: [...MODERATES, 'group.configure'],
+    within: ['profile', 'moderate']
+  }
+];
+
+export type SetKey = 'profile' | 'moderate' | 'group';
+
+/** The actions a role's editor offers one by one: all but the one only a set gives. */
+export const SINGLE = ACTIONS.filter((a) => a !== 'group.configure');

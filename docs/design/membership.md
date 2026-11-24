@@ -138,6 +138,25 @@ every role can make a role and give it at once. One who can't may make a
 role and grant it what they hold, but nobody can give it until someone
 who may assign it adds it to a role's `assignable`.
 
+`getGroup` says beforehand what a member may give. In each role's
+binding, each scope comes with the actions the host reads it as
+granting. The viewer's `grantable` lists, of each action's scope and the
+`authManageProfile` and `authModerate` sets, those their roles hold
+enough of to add, by the same check. `authManageGroup` is
+`group.configure`'s scope, so it's among the actions'.
+
+The console's role editor shows those and no more, beside what the role
+has already, which it may take away. It offers the three permission sets
+as parts in running the group (profile and rules, moderation, the whole
+group), each its own choice. An action a ticked set gives shows ticked
+and can't be unticked while the set is, saying which set it comes with.
+Taking it away means choosing a smaller set, or none, and ticking the
+actions to keep one by one. The editor saves what it shows: the sets
+and actions ticked, and any other scope of the role as it was, whose
+actions it shows as coming with those. It changes only roles the
+editing member may assign, and lists among the roles a role may give
+only those they may assign, beside those it lists already.
+
 A membership (`fyi.opensocial.membership`) is kept at its member's DID,
 holds `member` (`MemberRole`), and names only roles the group defines.
 

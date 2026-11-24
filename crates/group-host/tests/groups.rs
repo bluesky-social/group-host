@@ -10,7 +10,7 @@ use common::spaces::*;
 use common::start;
 use group_host::authority::Access;
 use group_host::group::{members_space, meta_space};
-use group_host::rbac::ACTIONS;
+use group_host::rbac::{ACTIONS, scope_of};
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
 
@@ -174,6 +174,43 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     assert_eq!(admin["actions"], json!(every));
     assert_eq!(admin["assignable"], json!([{"role": "*"}]));
     assert_eq!(admin["repoCollections"], json!([{"collection": "*"}]));
+    // Each of its scopes with the actions the host reads it as granting.
+    let moderates = [
+        "admit",
+        "eject",
+        "invite",
+        "label",
+        "mod.read",
+        "mod.resolve",
+        "role.assign",
+    ];
+    let mut configures = moderates.to_vec();
+    configures.insert(2, "group.configure");
+    assert_eq!(
+        admin["scopes"][0],
+        json!({"scope": format!("include:{NS}.authManageGroup"), "actions": configures})
+    );
+    assert_eq!(
+        admin["scopes"][5],
+        json!({"scope": "repo:*", "actions": []})
+    );
+    // She holds enough to give a role each action, and each of the
+    // group's permission sets.
+    let sets = [
+        format!("include:{NS}.authManageProfile"),
+        format!("include:{NS}.authModerate"),
+    ];
+    let mut offered: Vec<String> = ACTIONS.iter().map(|a| scope_of(a).unwrap()).collect();
+    offered.extend(sets.clone());
+    assert_eq!(
+        viewer["grantable"],
+        json!(
+            offered
+                .iter()
+                .map(|s| json!({"scope": s}))
+                .collect::<Vec<_>>()
+        )
+    );
     // Each role's grant in its own record: the founders administer the
     // group, label, make, change and end spaces, write any record as the
     // group in its repo and its spaces, and give every role; and the
@@ -247,6 +284,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     let board = spaces.iter().find(|s| s["uri"] == admins).unwrap();
     assert_eq!(board.get("policy"), None);
     assert_eq!(hers["group"]["viewer"]["actions"], json!([]));
+    assert_eq!(hers["group"]["viewer"]["grantable"], json!([]));
     let theirs = spaces
         .iter()
         .find(|s| s["uri"] == members_space(&did))
@@ -265,6 +303,52 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     };
     assert!(!shown(&hers));
     assert!(shown(&view(&h, &did, Some(&alice)).await));
+
+    // A moderator may give what moderating holds, and no more: not the
+    // labels in every space, nor the profile, nor running the group.
+    let moderator = json!({"$type": format!("{NS}.role"), "scopes": [&sets[1]], "createdAt": "2026-11-03T00:00:00Z"});
+    let theirs = json!({"$type": format!("{NS}.membership"), "roles": ["member", "moderator"], "createdAt": "2026-11-03T00:00:00Z"});
+    h.host
+        .space_write(
+            &did,
+            &members_space(&did),
+            &[
+                Write::Create {
+                    collection: format!("{NS}.role"),
+                    rkey: "moderator".into(),
+                    value: moderator,
+                },
+                Write::Update {
+                    collection: format!("{NS}.membership"),
+                    rkey: carol.did.clone(),
+                    value: theirs,
+                },
+            ],
+        )
+        .await
+        .unwrap();
+    let hers = view(&h, &did, Some(&carol)).await;
+    let gives: Vec<String> = [
+        "mod.read",
+        "mod.resolve",
+        "invite",
+        "admit",
+        "eject",
+        "role.assign",
+    ]
+    .iter()
+    .map(|a| scope_of(a).unwrap())
+    .chain([sets[1].clone()])
+    .collect();
+    assert_eq!(
+        hers["group"]["viewer"]["grantable"],
+        json!(
+            gives
+                .iter()
+                .map(|s| json!({"scope": s}))
+                .collect::<Vec<_>>()
+        )
+    );
 
     // Once they write their acceptance, they have accepted.
     h.host

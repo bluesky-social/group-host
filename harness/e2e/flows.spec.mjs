@@ -934,18 +934,40 @@ test('adding a rule, and taking it away', async () => {
   await expect(page.locator('.rule-rows')).toHaveCount(0);
 });
 
-test('defining a role', async () => {
+test('defining a role, then giving it less', async () => {
   await page.goto(url('/g/hikers.groups.test/settings/roles'));
   await page.getByRole('button', { name: 'Create a role' }).click();
-  await page.getByRole('textbox', { name: 'Its key' }).fill('leader');
-  await page.getByRole('textbox', { name: 'Its name' }).fill('Ride leader');
-  await page.getByRole('checkbox', { name: 'invite' }).check();
-  await page
-    .getByRole('dialog', { name: 'Create a role' })
-    .getByRole('button', { name: 'Create', exact: true })
-    .click();
-  await expect(page.locator('.roles li', { hasText: 'Ride leader' })).toContainText('invite');
-  await page.getByRole('button', { name: 'Delete Ride leader' }).click();
+  const create = page.getByRole('dialog', { name: 'Create a role' });
+  await create.getByRole('textbox', { name: 'Its key' }).fill('leader');
+  await create.getByRole('textbox', { name: 'Its name' }).fill('Ride leader');
+  // Moderation, a part in running the group: what comes with it shows
+  // ticked, and can't be unticked while it is.
+  await create.locator('input[name=set][value=moderate]').check();
+  const admit = create.locator('input[name=action][value=admit]');
+  await expect(admit).toBeChecked();
+  await expect(admit).toBeDisabled();
+  await create.getByRole('button', { name: 'Create', exact: true }).click();
+  const row = page.locator('.roles > li', {
+    has: page.locator('strong', { hasText: 'Ride leader' })
+  });
+  await expect(row.locator('.tags')).toContainText('admit');
+  await expect(row.locator('.tags')).toContainText('mod.read');
+  // To take some of that away: no part, and only invite, ticked alone.
+  await row.locator('.action-menu summary').click();
+  await row.getByRole('button', { name: 'Change', exact: true }).click();
+  const change = page.getByRole('dialog', { name: 'Change this role' }).filter({ visible: true });
+  const moderate = change.locator('input[name=set][value=moderate]');
+  await expect(moderate).toBeChecked();
+  await expect(change.locator('input[name=action][value=invite]')).toBeDisabled();
+  await moderate.uncheck();
+  await expect(change.locator('input[name=action][value=admit]')).not.toBeChecked();
+  await change.getByRole('checkbox', { name: 'invite', exact: true }).check();
+  await change.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(change).toBeHidden();
+  // Saved as shown: invite, and nothing moderation gave.
+  await expect(row.locator('.tags')).toHaveText('invite');
+  await row.locator('.action-menu summary').click();
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
   await page
     .getByRole('dialog', { name: 'Delete this role?' })
     .filter({ visible: true })

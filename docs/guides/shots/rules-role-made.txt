@@ -5,11 +5,12 @@
   - listitem:
     - strong: Admin
     - text: admin Can admit eject group.configure invite label mod.read mod.resolve role.assign space.configure space.create space.delete
-    - button "Delete Admin": Delete
+    - group
   - listitem:
     - strong: Member
     - text: member Nothing more than a member
+    - group
   - listitem:
     - strong: Ride leader
     - text: ride-leader Can admit invite mod.read
-    - button "Delete Ride leader": Delete
+    - group

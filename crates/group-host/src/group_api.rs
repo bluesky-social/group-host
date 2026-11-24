@@ -7,7 +7,11 @@
 use crate::Host;
 use crate::api::{Params, page, param};
 use crate::group::{Made, NewGroup, members_space, meta_space, rkey_did};
-use crate::rbac::{NS, actions_for, listed, repo_collections_for, roles_of};
+use crate::member_writes::{expanded, held};
+use crate::rbac::{
+    ACTIONS, Grant, NS, actions_for, actions_of, listed, repo_collections_for, roles_of, scope_of,
+};
+use crate::scopes::covers;
 use crate::space_api::{service_caller, unauthorized};
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -192,6 +196,19 @@ fn objects(field: &str, items: impl IntoIterator<Item = impl Into<String>>) -> V
         .collect()
 }
 
+/// The scopes a role's editor offers that holders of `roles` hold enough
+/// of to give, as a role write asks: each action's, then the group's
+/// permission sets but `authManageGroup`, which is `group.configure`'s.
+fn grantable(grants: &[Grant], roles: &[String], group: &str) -> Vec<Value> {
+    let held = held(grants, roles);
+    let sets = ["authManageProfile", "authModerate"].map(|s| format!("include:{NS}.{s}"));
+    let offered = ACTIONS.iter().filter_map(|a| scope_of(a)).chain(sets);
+    offered
+        .filter(|s| expanded(s).iter().all(|x| covers(&held, x, group)))
+        .map(|s| json!({ "scope": s }))
+        .collect()
+}
+
 /// A group as someone not signed in sees it: what anyone can learn of it
 /// already, its DID and handle.
 fn signed_out(did: &str, handle: String) -> Value {
@@ -258,6 +275,7 @@ pub async fn get_group(
     });
     if member {
         viewer["accepted"] = json!(accepted(&host, &members, &me).map_err(XrpcError::internal)?);
+        viewer["grantable"] = json!(grantable(&granted, &roles, group));
     }
     // Their own request, while it waits.
     let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
@@ -300,7 +318,10 @@ pub async fn get_group(
                 "actions": actions_for(&granted, one),
                 "assignable": objects("role", g.assignable.clone()),
                 "repoCollections": objects("collection", repo_collections_for(&granted, one)),
-                "scopes": objects("scope", g.scopes.clone()),
+                "scopes": g.scopes.iter().map(|s| json!({
+                    "scope": s,
+                    "actions": actions_of(std::slice::from_ref(s)),
+                })).collect::<Vec<_>>(),
             })
         })
         .collect();

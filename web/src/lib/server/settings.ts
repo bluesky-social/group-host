@@ -14,7 +14,7 @@ import { refusal, refused } from '#lib/errors.ts';
 import { m } from '#lib/paraglide/messages.js';
 import { getLocale } from '#lib/paraglide/runtime.js';
 import { applyAsGroup, membersOf, withGroup, type Done, type GroupSession } from '#lib/asGroup.ts';
-import { SCOPES } from '#lib/actions.ts';
+import { SCOPES, SETS } from '#lib/actions.ts';
 import { ADDRESS, type Place } from '#lib/places.ts';
 
 type Handle = `${string}.${string}`;
@@ -330,22 +330,24 @@ const all = {
       group: group as Did
     });
     const was = roles?.find((r) => r.key === key);
-    // What the form does not show stays as it was: among its scopes, any
-    // that is no action's.
-    const named = new Set(Object.values(SCOPES));
+    // The form shows the group's permission sets and the actions; any
+    // other scope it does not show stays as it was.
+    const named = new Set([...Object.values(SCOPES), ...SETS.map((s) => s.scope)]);
     const kept =
       bindings
         ?.find((b) => b.role === key)
         ?.scopes?.map((s) => s.scope)
         .filter((s) => !named.has(s)) ?? [];
+    const sets = form.getAll('set').map((k) => SETS.find((s) => s.key === k)?.scope);
     const actions = form.getAll('action').map((a) => SCOPES[String(a) as keyof typeof SCOPES]);
+    const chosen = [...sets, ...actions].filter((s) => s !== undefined);
     const role = {
       $type: 'fyi.opensocial.role',
       ...(was?.description ? { description: was.description } : {}),
       ...(was?.bot ? { bot: true } : {}),
       displayName: text(form, 'name'),
       default: form.get('default') === 'on',
-      scopes: [...new Set([...kept, ...actions])],
+      scopes: [...new Set([...kept, ...chosen])],
       assignable: form.getAll('assignable').map(String),
       createdAt: new Date().toISOString()
     };

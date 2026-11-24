@@ -1,24 +1,35 @@
 <script lang="ts">
+  import ActionMenu from '#lib/molecules/ActionMenu.svelte';
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import FormDialog from '#lib/molecules/FormDialog.svelte';
+  import RoleFields from '#lib/molecules/RoleFields.svelte';
   import Tag from '#lib/atoms/Tag.svelte';
   import { m } from '#lib/paraglide/messages.js';
   /**
-   * A group's roles: each, what it may do, to delete (asked to be sure
-   * of); and the dialog creating a new one, opened by a button whose
-   * `popovertarget` is `define-role`: what it may do, the roles its
-   * holders may give (any role, even ones made later, for one who may
-   * give any: `anyRole`), and whether members get it on joining.
+   * A group's roles: each, what it may do, and for one who may give it,
+   * a "⋯" menu to change it or delete it (asked to be sure of); and the
+   * dialog creating a new one, opened by a button whose `popovertarget`
+   * is `define-role`. What a role may be given is what the one editing
+   * holds enough of to give (`grantable`, scopes), and the roles its
+   * holders may give those they may give themselves (`mine`, `*` for
+   * every role), as the host refuses any more.
    */
-  type Role = { key: string; name?: string; description?: string };
-  type Binding = { role: string; actions: string[] };
+  type Role = { key: string; name?: string; default?: boolean };
+  type Binding = {
+    role: string;
+    actions: string[];
+    assignable: { role: string }[];
+    scopes?: { scope: string; actions?: string[] }[];
+  };
   let {
     roles = [],
     bindings = [],
-    actions,
-    anyRole = false
-  }: { roles?: Role[]; bindings?: Binding[]; actions: string[]; anyRole?: boolean } = $props();
-  const may = (key: string) => bindings.find((b) => b.role === key)?.actions ?? [];
+    grantable = [],
+    mine = []
+  }: { roles?: Role[]; bindings?: Binding[]; grantable?: string[]; mine?: string[] } = $props();
+  const of = (key: string) => bindings.find((b) => b.role === key);
+  const may = (key: string) => of(key)?.actions ?? [];
+  const yours = (key: string) => mine.includes('*') || mine.includes(key);
 </script>
 
 <ul class="roles">
@@ -33,25 +44,47 @@
             >{#each may(r.key) as a (a)}<Tag text={a} />{/each}</span
           >{/if}
       </span>
-      {#if r.key !== 'member'}
-        <span class="row-actions"
-          ><button
-            class="quiet small"
-            type="button"
-            popovertarget={`unrole-${i}`}
-            aria-label={m.roles_editor_delete_label({ role: r.name ?? r.key })}
-            >{m.common_delete()}</button
-          ></span
+      {#if yours(r.key)}
+        <ActionMenu
+          label={m.roles_editor_more({ role: r.name ?? r.key })}
+          actions={[
+            { text: m.roles_editor_change(), opens: `change-role-${i}` },
+            ...(r.key !== 'member' ? [{ text: m.common_delete(), opens: `unrole-${i}` }] : [])
+          ]}
+        />
+        <FormDialog
+          id={`change-role-${i}`}
+          title={m.roles_editor_change_title()}
+          action="?/role"
+          submit={m.common_save()}
+          wide
         >
-        <ConfirmDialog
-          id={`unrole-${i}`}
-          title={m.roles_editor_delete_title()}
-          action="?/unrole"
-          confirm={m.common_delete()}
-          fields={{ role: r.key }}
-        >
-          {m.roles_editor_delete_body()}
-        </ConfirmDialog>
+          {#snippet intro()}{m.roles_editor_change_intro({ role: r.name ?? r.key })}{/snippet}
+          <input type="hidden" name="role" value={r.key} />
+          <label class="field"
+            >{m.roles_editor_name()}
+            <input name="name" required maxlength="64" value={r.name ?? r.key} /></label
+          >
+          <RoleFields
+            scopes={of(r.key)?.scopes}
+            assignable={of(r.key)?.assignable.map((a) => a.role)}
+            isDefault={r.default}
+            {roles}
+            {grantable}
+            {mine}
+          />
+        </FormDialog>
+        {#if r.key !== 'member'}
+          <ConfirmDialog
+            id={`unrole-${i}`}
+            title={m.roles_editor_delete_title()}
+            action="?/unrole"
+            confirm={m.common_delete()}
+            fields={{ role: r.key }}
+          >
+            {m.roles_editor_delete_body()}
+          </ConfirmDialog>
+        {/if}
       {/if}
     </li>
   {/each}
@@ -85,19 +118,5 @@
       /></label
     >
   </div>
-  <fieldset>
-    <legend>{m.roles_editor_may()}</legend>
-    {#each actions as a (a)}<label><input type="checkbox" name="action" value={a} /> {a}</label
-      >{/each}
-  </fieldset>
-  <fieldset>
-    <legend>{m.roles_editor_can_give()}</legend>
-    {#each roles as r (r.key)}<label
-        ><input type="checkbox" name="assignable" value={r.key} /> {r.name ?? r.key}</label
-      >{/each}
-    {#if anyRole}<label
-        ><input type="checkbox" name="assignable" value="*" /> {m.roles_editor_any_role()}</label
-      >{/if}
-  </fieldset>
-  <label><input type="checkbox" name="default" /> {m.roles_editor_default()}</label>
+  <RoleFields {roles} {grantable} {mine} />
 </FormDialog>

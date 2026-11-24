@@ -358,6 +358,24 @@ label:has(> input[type='radio']) {
   gap: var(--space-2);
   cursor: pointer;
 }
+/* A choice with a line under its name: the box beside the name, not
+   between the two lines, and kept its size however the lines wrap. */
+label:has(> input + .described) {
+  align-items: flex-start;
+}
+label > input:has(+ .described) {
+  flex-shrink: 0;
+  margin-top: calc((1lh - 1rem) / 2);
+}
+.described {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+/* What is ticked because something else is: greyed, and not to change. */
+label:has(> input:disabled) {
+  cursor: default;
+}
 fieldset {
   border: var(--border);
   border-radius: var(--radius-md);

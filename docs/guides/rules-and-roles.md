@@ -89,6 +89,16 @@ each. They show by their short names:
 | `space.create`, `space.configure`, `space.delete` | Make a space (a part of the group with its own say over who reads and writes in it), change who can read and write one, and delete one. |
 | `group.configure` | Change the group's settings: its profile, rules, roles, apps and recovery keys. |
 
+Three parts in running the group bring several permissions at once,
+under **Running the group** when you create or change a role:
+
+- **Profile and rules** lets them change the group's profile and rules.
+  It adds none of the permissions above.
+- **Moderation** brings `mod.read`, `mod.resolve`, `label`, `invite`,
+  `admit`, `eject` and `role.assign`. Its `label` reaches the group's
+  members and profile, not every space.
+- **The whole group** brings all of that, and `group.configure`.
+
 A role also says which roles its members can give. That list limits
 three things. They can change only the roles on it. They can remove only
 members whose roles are all on it. Everyone they let in gets Member, so
@@ -101,8 +111,10 @@ every role, even ones made later, so admins can give any role.
 2. In **Its key**, type a short name for the role, such as
    "ride-leader". Use lowercase letters, digits and hyphens.
 3. In **Its name**, type the name people see, such as "Ride leader".
-4. Under **It may**, tick what the role lets its members do. A ride
-   leader here gets `mod.read`, `invite` and `admit`.
+4. Under **Running the group**, tick a part if the role should bring
+   all it gives. A ride leader needs none. Under **It may**, tick what
+   else the role lets its members do. A ride leader here gets
+   `mod.read`, `invite` and `admit`.
 5. Under **People with it can give**, tick the roles its members can
    give. Here, **Member**. If you can give every role yourself, **Any
    role, even ones made later** lets its members give every role too.
@@ -116,11 +128,37 @@ every role, even ones made later, so admins can give any role.
    permissions.
 
    <!-- look /g/riders.groups.test/settings/roles --as alice --click 'button[popovertarget=define-role]' --type '#define-role [name=role]=ride-leader' --type '#define-role [name=name]=Ride leader' --click '#define-role input[value=invite]' --click '#define-role input[value=admit]' --click '#define-role input[value="mod.read"]' --click '#define-role input[name=assignable][value=member]' --click '#define-role button[type=submit]' --element section -->
-   ![Roles 3: Admin, Member, and Ride leader ride-leader with admit, invite and mod.read, and Delete](shots/rules-role-made.png)
+   ![Roles 3: Admin, Member, and Ride leader ride-leader with admit, invite and mod.read, each with a ⋯ menu](shots/rules-role-made.png)
 
-You can give a role only permissions your own roles have. The console
-can't edit a role. To change one, take it off everyone who holds it,
-delete it, and create it again.
+You can give a role only permissions your own roles hold, and the
+dialog offers only those.
+
+## How do I change a role?
+
+1. On the **Roles** tab, press the ⋯ at the end of the role's row. A
+   menu opens.
+
+   <!-- look /g/riders.groups.test/settings/roles --as alice --click '.roles > li:has(strong:text-is("Ride leader")) .action-menu summary' --element '.action-menu[open] .menu' -->
+   ![The menu of Ride leader's row, open: Change and Delete](shots/rules-role-menu.png)
+
+2. Press **Change**. The **Change this role** dialog opens, with what the
+   role has ticked.
+3. Tick or untick what it lets its members do. A permission that comes
+   with a part in running the group shows ticked and greyed, saying
+   which part it comes with, as when **Moderation** is ticked here. To
+   remove one of those, untick the part, then tick the permissions the
+   role keeps one by one.
+
+   <!-- look /g/riders.groups.test/settings/roles --as alice --click '.roles > li:has(strong:text-is("Ride leader")) .action-menu summary' --click '.action-menu[open] .menu button:has-text("Change")' --click ':popover-open input[name=set][value=moderate]' --element ':popover-open' -->
+   ![The Change this role dialog for Ride leader: Moderation ticked under Running the group, and under It may, mod.read, mod.resolve, label, invite, admit, eject and role.assign ticked and greyed, each saying Comes with moderation](shots/rules-change-role.png)
+
+4. Press **Save**. The dialog closes, and the role's row shows what it
+   lets its members do now.
+
+A permission a role has from a scope the dialog doesn't show, such as
+Admin's making and deleting spaces, says "Comes with its other
+permissions". The dialog keeps those as they are. Change them from a
+terminal.
 
 ## How do I give a role to a member?
 
@@ -156,8 +194,8 @@ can't change roles or remove members.
 
 1. To take a role off, press the ⋯ on the member's row, then **Change
    roles**, untick the role, and press **Save**. The tag goes from their row.
-2. To delete a role, press **Delete** beside it on the **Roles** tab.
-   The console asks you to confirm.
+2. To delete a role, press the ⋯ at the end of its row on the **Roles**
+   tab, then **Delete**. The console asks you to confirm.
 3. Press **Delete**. The role goes from the list.
 
 People with a role lose what it lets them do when it goes. You can only
@@ -166,8 +204,9 @@ turns down a delete while anyone holds the role.
 
 ## What can't be changed?
 
-Everyone in the group keeps the Member role, and it has no **Delete**.
-Admin shows a **Delete**, but you hold Admin, so the host turns it down.
+Everyone in the group keeps the Member role, and its menu has no
+**Delete**. Admin's menu has one, but you hold Admin, so the host turns
+it down.
 Leave Admin as it is.
 You can give and take only the roles your own roles can give, and a role
 you make can have only permissions you hold. Only members whose roles
