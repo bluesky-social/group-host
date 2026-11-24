@@ -52,6 +52,12 @@ docs-deploy:
     cd docs-site && npm ci --no-audit --no-fund && npm run build
     knotless site knotless://chadtmiller.com/group-host docs-site/dist --not-found 404.html
 
+# Tags the release that last landed, then cuts the next from main's
+# change files as the `Release <version>` pull (deploy/release.sh), as
+# the owner, signed in with `knotless login`; --dry-run pushes nothing.
+release *args:
+    deploy/release.sh {{args}}
+
 lint:
     {{cargo}} fmt --all --check
     {{oxfmt}} --check {{js}}

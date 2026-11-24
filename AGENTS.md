@@ -194,7 +194,7 @@ that page in the same pull:
   `docs/reference/mcp.md`
 - a new page: the sidebar in `docs-site/astro.config.mjs`
 - a command of `opensocial`, or a `just` recipe: `docs/reference/cli.md`
-- building, testing, the checks: `docs/development.md`
+- building, testing, the checks, releasing: `docs/development.md`
 - a flow in the console a guide shows: that guide, its pictures drawn
   again with `just shots` (the `e2e` check fails until they are)
 
@@ -216,6 +216,8 @@ pulls into it or into a `feature/` branch:
   unsound or yanked crate, permissive licences only, and crates from
   crates.io and the atproto registry alone. No crate has unsafe code:
   `Cargo.toml` forbids it in every target, and the build refuses any.
+  On a pull, that a change people see comes with a change file
+  (`harness/changes.sh`, Versioning below).
 - `test`: every test, under the 100% gate of lines and functions.
 - `web`: oxfmt's format, the component layers, dialogs' titles, words
   as messages, svelte-check (failing on any warning), and the build.
@@ -238,6 +240,22 @@ runs only its owner's repositories, and holds its secrets.
 
 On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
 what they read; otherwise each passes at once, noted as skipped.
+
+## Versioning
+
+A pull that changes what someone running a group, calling the host or
+using the command or the console sees adds a change file under
+`.changeset/`, as `knope document-change` writes one
+(https://knope.tech): `default: patch`, `minor` or `major` in its front
+matter, then a heading and a line for them. `just release`, run by the
+owner, turns them into the version and CHANGELOG.md with `knope
+release`, in the `Release <version>` pull; merging it releases, and the
+next `just release` tags it `v<version>`. Commit titles stay prose: no
+conventional commits. The `check` check fails a pull that changes
+`crates/*/src`, `web/src`, `web/messages`, `lexicons/fyi` or
+`packages/sdk/src` and adds no change file, unless one of its commits
+says, on a line of its message, `Changeset: none`: for a change no one
+running or using the host sees.
 
 ## Landing a change
 

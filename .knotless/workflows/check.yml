@@ -1,5 +1,6 @@
 # Formatting, lints and the dependencies, as `just lint` checks the Rust, on
-# every pull and push to main; test.yml runs the tests.
+# every pull and push to main; test.yml runs the tests. On a pull, that a
+# change people see comes with a change file (harness/changes.sh).
 #
 # The image is the Rust `just lint` runs locally, so a newer release's new
 # lints land on purpose. The build, the toolchain's components and
@@ -31,3 +32,5 @@ steps:
       /opt/cargo-deny/bin/cargo-deny --version 2>/dev/null | grep -qx "cargo-deny $v" ||
         cargo install --locked --force --version "$v" --root /opt/cargo-deny cargo-deny
       /opt/cargo-deny/bin/cargo-deny check
+  - name: changes
+    run: harness/changes.sh

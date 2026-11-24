@@ -253,3 +253,46 @@ written (`.claude/hooks/format.mjs`).
 `just lex` is the `lexicons` check, with goat 0.2.8 in CI. `just docs`
 with the site's build is the `docs` check. `AGENTS.md` says what each
 workflow runs, and when.
+
+## Releasing
+
+The workspace has one version, in `Cargo.toml`, which `/xrpc/_health`
+and the MCP server's `serverInfo` name. It's set with
+[knope](https://knope.tech) from change files, not conventional commits.
+
+A pull that changes what someone running a group, calling the host, or
+using the command or the console sees adds a change file under
+`.changeset/`, as `knope document-change` writes one. Its front matter
+names the bump (`default: patch`, `minor` or `major`), and below it a
+heading and a line say what changed for them. The `check` check asks
+for one on any pull that changes `crates/*/src`, `web/src`,
+`web/messages`, `lexicons/fyi` or `packages/sdk/src`
+(`harness/changes.sh`). A change no one sees says `Changeset: none` on a
+line of one of its commits' messages instead. The pull's body would be
+the place, but a run can't read it, since the repository is private.
+
+`just release` (`deploy/release.sh`) cuts a release from main's change
+files. It works out the version: a `minor` or `major` file bumps 0.x's
+minor, where knope alone would bump the patch, and a `patch` file the
+patch; from 1.0 on, each bumps its own part. It runs `knope release
+--override-version <version>` at main's tip, in a worktree of its own,
+which bumps `Cargo.toml` and the crates' entries in `Cargo.lock`, writes
+the version's section of `CHANGELOG.md`, and deletes the change files.
+It commits that as `Release <version>`, force-pushes it to
+`release/next`, and opens the pull of that title with the changelog in
+its body, or brings the open one up to date. A pull that already holds
+main's change files and still merges with main is left alone, so its
+checks don't run again for nothing.
+
+Merging that pull is the release, and `deploy` puts it up on
+next.opensocial.fyi as it does any push to main. The next `just release`
+tags its commit `v<version>` before it cuts anything, and `mirror` pushes
+the tag to GitHub. `just release --dry-run` tags nothing, makes the
+release commit, and prints the pull's body, pushing nothing.
+
+The owner runs it, signed in with `knotless login`, with knope
+installed (`cargo install knope`). No workflow can, for the same reason
+as the docs site: reading or writing a private repository takes an OAuth
+login's space credential, and an app password, all a run could sign in
+with, can't get one. For the same reason, nothing is published as a
+knotless release: knotless refuses a private repository's releases.

@@ -1,0 +1,30 @@
+# Versioning, from change files: a pull that changes what someone running
+# a group, calling the host or using the command sees adds one, with
+# `knope document-change`, naming the bump and saying what changed for
+# them. `knope release` bumps the workspace's version, writes CHANGELOG.md
+# and removes the files it used; `just release` (deploy/release.sh) runs
+# it. No conventional commits: commit titles say what changed, for us.
+
+[package]
+versioned_files = [
+    "Cargo.toml",
+    { path = "Cargo.lock", dependency = "group-host" },
+    { path = "Cargo.lock", dependency = "group-host-mcp" },
+    { path = "Cargo.lock", dependency = "opensocial" },
+]
+changelog = "CHANGELOG.md"
+
+[changes]
+ignore_conventional_commits = true
+
+[[workflows]]
+name = "document-change"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
+
+[[workflows]]
+name = "release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
