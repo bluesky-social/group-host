@@ -155,7 +155,7 @@ pub(crate) async fn acting<'a>(
     lxm: &str,
     action: Option<&str>,
 ) -> Result<(Members<'a>, String, Vec<String>), XrpcError> {
-    let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
+    let me = signed_in(host, headers, lxm).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(host, group)?;
     let members = Members::of(host, group)?;
@@ -216,7 +216,8 @@ pub async fn leave_group(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let (members, me, _) = acting(&host, &headers, &body, "leaveGroup", None).await?;
+    let (members, me, _) =
+        acting(&host, &headers, &body, &format!("{NS}.leaveGroup"), None).await?;
     if members.membership(&me)?.is_none() {
         return Err(bad("NotAMember", "you are not a member"));
     }

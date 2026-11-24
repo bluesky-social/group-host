@@ -74,10 +74,10 @@
           "lxm": [
             "fyi.opensocial.listJoinRequests",
             "fyi.opensocial.denyJoinRequest",
-            "fyi.opensocial.listInvites",
+            "fyi.opensocial.internal.listInvites",
             "fyi.opensocial.listModSubjects",
             "fyi.opensocial.getModSubjectHistory",
-            "fyi.opensocial.getModSubjectBlob",
+            "fyi.opensocial.internal.getModSubjectBlob",
             "fyi.opensocial.resolveModSubject"
           ]
         }

@@ -18,7 +18,7 @@ use serde_json::{Value as Json, json};
 async fn starts_a_group_with_its_spaces() {
     let h = start(&[], false).await;
     let [alice, bob, _] = people(&h).await;
-    let lxm = format!("{NS}.createGroup");
+    let lxm = format!("{INTERNAL}.createGroup");
     let body = json!({
         "handle": RIDERS,
         "displayName": "Riders",
@@ -495,7 +495,7 @@ async fn its_policies_say_who_reads_and_writes_its_spaces() {
 async fn refuses_a_group_it_should_not_start() {
     let h = start(&[], false).await;
     let [alice, _, _] = people(&h).await;
-    let lxm = format!("{NS}.createGroup");
+    let lxm = format!("{INTERNAL}.createGroup");
     let me = [auth(&h, &alice, &lxm)];
     let body = |extra: Json| {
         let mut b = json!({"handle": RIDERS, "displayName": "Riders"});
@@ -513,7 +513,7 @@ async fn refuses_a_group_it_should_not_start() {
         ),
         (
             body(json!({})),
-            vec![auth(&h, &alice, "fyi.opensocial.getGroup")],
+            vec![auth(&h, &alice, "fyi.opensocial.internal.getGroup")],
             (401, "BadJwtLexiconMethod"),
         ),
         (
@@ -591,7 +591,13 @@ async fn refuses_a_group_it_should_not_start() {
     assert!(picky.host.may_found("did:plc:someone"));
 
     // A group that is not one is not found.
-    let (status, said) = get(&h, &format!("{NS}.getGroup"), "group=did:plc:nobody", &[]).await;
+    let (status, said) = get(
+        &h,
+        &format!("{INTERNAL}.getGroup"),
+        "group=did:plc:nobody",
+        &[],
+    )
+    .await;
     assert_eq!(
         (status, said["error"].as_str().unwrap()),
         (400, "GroupNotFound")
@@ -599,7 +605,7 @@ async fn refuses_a_group_it_should_not_start() {
     let plain = h.host.create_account("plain.groups.test").await.unwrap();
     let (status, _) = get(
         &h,
-        &format!("{NS}.getGroup"),
+        &format!("{INTERNAL}.getGroup"),
         &format!("group={plain}"),
         &[],
     )
@@ -618,8 +624,11 @@ async fn keeps_a_groups_address_for_it_after_it_takes_a_handle_of_its_own() {
     )
     .await;
     let free = async |address: &str| {
-        h.get("fyi.opensocial.checkAddress", &format!("address={address}"))
-            .await
+        h.get(
+            "fyi.opensocial.internal.checkAddress",
+            &format!("address={address}"),
+        )
+        .await
     };
     assert_eq!(free("hikers.groups.test").await.1["available"], true);
     assert_eq!(
@@ -633,7 +642,7 @@ async fn keeps_a_groups_address_for_it_after_it_takes_a_handle_of_its_own() {
         .set_handle(&did, "riders.example.com", &[])
         .unwrap();
     assert_eq!(free(RIDERS).await.1["available"], false);
-    let lxm = format!("{NS}.createGroup");
+    let lxm = format!("{INTERNAL}.createGroup");
     let body = json!({"handle": RIDERS, "displayName": "Riders again"});
     let (status, said) = post(&h, &lxm, &body, &[auth(&h, &bob, &lxm)]).await;
     assert_eq!(

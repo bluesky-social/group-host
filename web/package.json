@@ -7,18 +7,12 @@
     "#lib/*": "./src/lib/*"
   },
   "scripts": {
-    "lex": "npm --prefix ../packages/sdk run lex && lex build --lexicons ../lexicons --out src/lib/lexicons --clear --import-ext .ts",
+    "lex": "lex build --lexicons ../lexicons --out src/lib/lexicons --clear --import-ext .ts",
     "dev": "npm run lex && vite dev",
-    "build": "npm run lex && vite build && npm run shell",
-    "shell": "vite build --config shell/vite.config.ts",
+    "build": "npm run lex && vite build",
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy cookie preferredLanguage baseLocale --silent",
     "prepare": "svelte-kit sync || echo ''",
-    "check": "npm run lex && npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p shell"
-  },
-  "dependencies": {
-    "@atproto/lex-space": "0.0.0-spaces-alpha-20261117141222",
-    "@atproto/oauth-client-browser": "0.0.0-spaces-alpha-20261117141222",
-    "@opensocial/sdk": "file:../packages/sdk"
+    "check": "npm run lex && npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
   },
   "devDependencies": {
     "@atproto/lex": "0.0.0-spaces-alpha-20261117141222",

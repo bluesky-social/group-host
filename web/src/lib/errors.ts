@@ -44,7 +44,6 @@ const SAID: Record<string, () => string> = {
   InvalidRepo: m.error_invalid_repo,
   InvalidRequest: m.error_invalid_request,
   InvalidScope: m.error_invalid_scope,
-  InvalidSite: m.error_invalid_site,
   InvalidSubject: m.error_invalid_subject,
   InvalidSwap: m.error_invalid_swap,
   InvalidToken: m.error_invalid_token,
@@ -91,8 +90,8 @@ const SAID: Record<string, () => string> = {
 /**
  * The names the host gives for more than one reason, its `message` saying
  * which: what a lexicon or a handler found wrong with the input
- * (`InvalidRequest`, "label is lowercase letters and hyphens"), a handle,
- * a site or an archive, or what another server said. The reader needs that
+ * (`InvalidRequest`, "label is lowercase letters and hyphens"), a handle
+ * or an archive, or what another server said. The reader needs that
  * reason to fix what they sent, and the console can't know it, so for
  * these the host's own words are said. They are English: a language other
  * than English needs the host to name each reason first.
@@ -100,7 +99,6 @@ const SAID: Record<string, () => string> = {
 const REASONED: Record<string, true> = {
   InvalidRequest: true,
   InvalidHandle: true,
-  InvalidSite: true,
   InvalidArchive: true,
   UpstreamFailure: true
 };

@@ -2,7 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { settings } from '#lib/server/settings.ts';
 
 /**
- * A group's settings, each part a page of its own: its profile, site,
+ * A group's settings, each part a page of its own: its profile and domain,
  * rules and roles, recovery keys and the apps acting as it, to its
  * configurers; its app passwords, to them and to whoever may make one.
  */

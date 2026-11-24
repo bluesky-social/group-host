@@ -5,7 +5,7 @@ use crate::Host;
 use crate::api::{Params, page, param};
 use crate::group::{members_space, meta_space};
 use crate::group_api::{caller, group_of, signed_in};
-use crate::rbac::NS;
+use crate::rbac::{INTERNAL, NS};
 use crate::store::Store;
 use crate::xrpc::XrpcError;
 use atproto::did;
@@ -22,7 +22,7 @@ type Answer = Result<Json<Value>, XrpcError>;
 /// accounts the browser is signed in to: nothing, for no one.
 pub async fn get_viewer(State(host): State<Arc<Host>>, headers: HeaderMap) -> Answer {
     let signup = host.config.signup_pds.as_str();
-    let Some(me) = caller(&host, &headers, &format!("{NS}.getViewer")).await? else {
+    let Some(me) = caller(&host, &headers, &format!("{INTERNAL}.getViewer")).await? else {
         return Ok(Json(json!({ "signUpAt": signup })));
     };
     let mut actor = json!({"did": me, "canCreateGroup": host.may_found(&me)});
@@ -105,7 +105,7 @@ pub async fn get_actor(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.getActor")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.getActor")).await?;
     let actor = param(&p, "actor")?;
     let shown = actor == me
         || !host.groups_of(actor)?.is_empty()
@@ -135,7 +135,7 @@ pub async fn get_actor_groups(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.getActorGroups")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.getActorGroups")).await?;
     let asked = param(&p, "actor")?.trim_start_matches('@').to_lowercase();
     let actor = match asked.starts_with("did:") {
         true => Some(asked.clone()),

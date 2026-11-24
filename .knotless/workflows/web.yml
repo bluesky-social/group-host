@@ -1,44 +1,35 @@
-# The console's checks, as `just lint` runs them: that it, the SDK, the
-# harness and the docs site are formatted as `just fmt` leaves them
-# (oxfmt), that each component uses only its own layer and those below
-# (harness/layers.mjs), that every dialog's title is its own fixed words
-# (harness/dialogs.mjs), that every word a page shows is a message
-# (harness/strings.mjs), the SDK's types and tests (packages/sdk, which the
-# site shell builds on), and svelte-check, which fails on any warning. The
-# packages are kept between runs and installed again only when a lockfile
-# changes.
+# The console's checks, as `just lint` runs them: that it, the harness and
+# the docs site are formatted as `just fmt` leaves them (oxfmt), that each
+# component uses only its own layer and those below (harness/layers.mjs),
+# that every dialog's title is its own fixed words (harness/dialogs.mjs),
+# that every word a page shows is a message (harness/strings.mjs), and
+# svelte-check, which fails on any warning. The packages are kept between
+# runs and installed again only when a lockfile changes.
 image: node:24.22.1
 # The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
 runners: [runner.knotless.dev]
-# Pushes to main, and pulls that change the pages, the packages they build
-# on, the lexicons their types are made from, the harness, the docs site,
+# Pushes to main, and pulls that change the pages, the lexicons their
+# types are made from, the harness, the docs site,
 # the format's settings or this file. A pull changing none passes at once,
 # noted as skipped.
 on:
   push: {refs: [refs/heads/main]}
   pull:
     base: [refs/heads/main, refs/heads/feature/*]
-    paths: [web/**, packages/**, lexicons/**, harness/**, docs-site/**, .oxfmtrc.json, .knotless/workflows/web.yml, .knotless/uses.lock]
-cache: [web/node_modules, packages/sdk/node_modules]
+    paths: [web/**, lexicons/**, harness/**, docs-site/**, .oxfmtrc.json, .knotless/workflows/web.yml, .knotless/uses.lock]
+cache: [web/node_modules]
 steps:
-  - uses: chadtmiller.com/steps/npm-ci@1
-    name: sdk packages
-    with: {dir: packages/sdk}
   - uses: chadtmiller.com/steps/npm-ci@1
     name: packages
     with: {dir: web}
   - name: format
-    run: web/node_modules/.bin/oxfmt --check web packages/sdk harness docs-site
+    run: web/node_modules/.bin/oxfmt --check web harness docs-site
   - name: layers
     run: node harness/layers.mjs
   - name: dialogs
     run: node harness/dialogs.mjs
   - name: strings
     run: node harness/strings.mjs
-  - name: sdk check
-    run: cd packages/sdk && npm run check
-  - name: sdk test
-    run: cd packages/sdk && npm test
   - name: svelte-check
     run: cd web && npm run check
   - name: build

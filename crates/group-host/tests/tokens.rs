@@ -170,7 +170,7 @@ async fn says_whom_a_token_is_for() {
         said.body,
         json!({"did": did, "handle": RIDERS, "active": true})
     );
-    let lxm = format!("{NS}.deactivateGroup");
+    let lxm = format!("{INTERNAL}.deactivateGroup");
     post(&h, &lxm, &json!({"group": did}), &[auth(&h, &alice, &lxm)]).await;
     let said = app
         .call(&h, "com.atproto.server.getSession", &access, None)
@@ -513,10 +513,10 @@ async fn uploads_only_while_its_member_may_write_and_the_group_is_on() {
     };
     assert_eq!(upload().await.status, 200);
     // Not while the group is switched off.
-    let off = format!("{NS}.deactivateGroup");
+    let off = format!("{INTERNAL}.deactivateGroup");
     post(&h, &off, &json!({"group": did}), &[auth(&h, &alice, &off)]).await;
     assert_eq!(upload().await.error(), (400, "RepoDeactivated"));
-    let on = format!("{NS}.activateGroup");
+    let on = format!("{INTERNAL}.activateGroup");
     post(&h, &on, &json!({"group": did}), &[auth(&h, &alice, &on)]).await;
     assert_eq!(upload().await.status, 200);
     // While Bob, an admin no more, may still add events in the calendar,

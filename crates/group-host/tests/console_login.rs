@@ -11,7 +11,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Json, Router};
-use common::groups::NS;
+use common::groups::INTERNAL;
 use common::spaces::plc_url;
 use common::{Running, serve, start, start_reachable};
 use serde_json::{Value as Json_, json};
@@ -264,7 +264,7 @@ async fn sign_in_beside(
 async fn create_group(h: &Running, cookie: Option<&str>, handle: &str) -> (u16, Json_) {
     let mut req = h
         .http
-        .post(format!("{}/xrpc/{NS}.createGroup", h.url))
+        .post(format!("{}/xrpc/{INTERNAL}.createGroup", h.url))
         .json(&json!({"handle": handle, "displayName": "Riders"}));
     if let Some(c) = cookie {
         req = req.header("cookie", c);
@@ -628,7 +628,7 @@ const COOKIE_NAME: &str = "group_host_session";
 async fn viewer(h: &Running, cookie: &str) -> (u16, Json_) {
     let res = h
         .http
-        .get(format!("{}/xrpc/{NS}.getViewer", h.url))
+        .get(format!("{}/xrpc/{INTERNAL}.getViewer", h.url))
         .header("cookie", cookie)
         .send()
         .await
@@ -785,7 +785,7 @@ async fn a_session_is_the_consoles_alone_and_only_its_pages_use_it() {
     let as_from = async |origin: Option<&str>| {
         let mut req = h
             .http
-            .get(format!("{}/xrpc/{NS}.getViewer", h.url))
+            .get(format!("{}/xrpc/{INTERNAL}.getViewer", h.url))
             .header("cookie", &jar);
         if let Some(o) = origin {
             req = req.header("origin", o);
@@ -796,8 +796,8 @@ async fn a_session_is_the_consoles_alone_and_only_its_pages_use_it() {
     // From the console's own pages, or with no word of where from.
     assert_eq!(as_from(None).await.as_deref(), Some(did.as_str()));
     assert_eq!(as_from(Some(console)).await.as_deref(), Some(did.as_str()));
-    // From a page anywhere else, a group's site or a sandboxed page, it is
-    // as nobody's.
+    // From a page anywhere else, a group's address or a sandboxed page, it
+    // is as nobody's.
     for elsewhere in [
         "https://riders.groups.test",
         "null",

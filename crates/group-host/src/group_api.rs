@@ -9,8 +9,8 @@ use crate::api::{Params, page, param};
 use crate::group::{Made, NewGroup, members_space, meta_space, rkey_did};
 use crate::member_writes::{expanded, held};
 use crate::rbac::{
-    ACTIONS, Grant, NS, actions_for, actions_of, label_writes_in, listed, repo_collections_for,
-    roles_of, scope_of,
+    ACTIONS, Grant, INTERNAL, NS, actions_for, actions_of, label_writes_in, listed,
+    repo_collections_for, roles_of, scope_of,
 };
 use crate::scopes::covers;
 use crate::space_api::{service_caller, unauthorized};
@@ -88,7 +88,7 @@ pub async fn create_group(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let founder = signed_in(&host, &headers, &format!("{NS}.createGroup")).await?;
+    let founder = signed_in(&host, &headers, &format!("{INTERNAL}.createGroup")).await?;
     let Made { did, meta, members } = host.create_group(&new_group(&body, founder)?).await?;
     Ok(Json(json!({"did": did, "meta": meta, "members": members})))
 }
@@ -165,9 +165,9 @@ fn base(host: &Host, did: &str, handle: &str) -> Result<Value, XrpcError> {
         "meta": meta_space(did),
         "members": members_space(did),
     });
-    let domain = host.store.site_domain(did).map_err(XrpcError::internal)?;
+    let domain = host.store.domain(did).map_err(XrpcError::internal)?;
     if let Some(domain) = domain {
-        view["siteDomain"] = json!(domain);
+        view["domain"] = json!(domain);
     }
     Ok(view)
 }
@@ -209,7 +209,7 @@ pub async fn get_group(
 ) -> Answer {
     let group = param(&p, "group")?;
     let handle = group_of(&host, group)?;
-    let me = caller(&host, &headers, &format!("{NS}.getGroup")).await?;
+    let me = caller(&host, &headers, &format!("{INTERNAL}.getGroup")).await?;
     let Some(me) = me else {
         return Ok(Json(json!({ "group": signed_out(group, handle) })));
     };
@@ -366,7 +366,7 @@ pub async fn list_members(
 ) -> Answer {
     let group = param(&p, "group")?;
     group_of(&host, group)?;
-    let me = signed_in(&host, &headers, &format!("{NS}.listMembers")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.listMembers")).await?;
     let members = members_space(group);
     let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
     if !host.reads_space(&members, &roles)? {

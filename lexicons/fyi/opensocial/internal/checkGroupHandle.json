@@ -1,0 +1,59 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.internal.checkGroupHandle",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Whether a domain is ready to be the group's handle: what its _atproto DNS record, or its /.well-known/atproto-did, names now. Changes nothing. Requires group.configure.",
+      "parameters": {
+        "type": "params",
+        "required": ["group", "handle"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did",
+            "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+          },
+          "handle": {
+            "type": "string",
+            "description": "The domain to check, such as riders.org."
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["handle", "ready"],
+          "properties": {
+            "handle": {
+              "type": "string",
+              "format": "handle",
+              "description": "The domain, as the host reads it: lower case, with no @."
+            },
+            "ready": {
+              "type": "boolean",
+              "description": "Whether updateGroupHandle would take it now: the domain names this group, or it is the group's own address."
+            },
+            "did": {
+              "type": "string",
+              "format": "did",
+              "description": "The DID the domain names now, if any: another one means its record is wrong."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "InvalidHandle"
+        },
+        {
+          "name": "UnsupportedDomain"
+        },
+        {
+          "name": "HandleNotAvailable"
+        }
+      ]
+    }
+  }
+}

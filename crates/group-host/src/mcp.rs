@@ -24,7 +24,7 @@ use crate::api::{Params, invalid, param};
 use crate::group_api::{group_of, signed_in};
 use crate::oauth_resource::Acting;
 use crate::oauth_store::Grant;
-use crate::rbac::NS;
+use crate::rbac::{INTERNAL, NS};
 use crate::repo::{Write, record_cid};
 use crate::scopes::Permissions;
 use crate::store::Store;
@@ -990,7 +990,7 @@ pub async fn list_connected_apps(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, XrpcError> {
-    let me = signed_in(&host, &headers, &format!("{NS}.listConnectedApps")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.listConnectedApps")).await?;
     let group = param(&p, "group")?;
     group_of(&host, group)?;
     let connected = host.store.mcp_clients_of(group, &me, now_millis());
@@ -1015,7 +1015,7 @@ pub async fn revoke_connected_app(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, XrpcError> {
-    let me = signed_in(&host, &headers, &format!("{NS}.revokeConnectedApp")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.revokeConnectedApp")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     let client = body["clientId"].as_str();
     let client = client.expect("its lexicon requires it");

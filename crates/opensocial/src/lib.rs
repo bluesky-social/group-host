@@ -36,6 +36,10 @@ group
   group handle <group> <handle>
                          give a group a handle on a domain of its own, once the domain
                          names it, or its own address back
+  group domain <group> [--undo]
+                         serve the group at its own domain, its handle, rather than its
+                         address, once that domain reaches this host; or with --undo, at
+                         its address again
   group delete <group>   delete a group, its spaces and its identity, for good
 profile
   profile set <group> [--display-name <name>] [--join-policy <policy>] [--description <words>] …
@@ -59,24 +63,6 @@ role
                          delete a role nobody holds
   role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
                          add to what a role may do, or with --undo take it away
-site
-  site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]
-          [--acts <methods>] [--spaces <type[/key],…>]
-          [--writes <type[/key]:collection,…>] [--inbox]
-                         publish the files under <dir> as the group's website, at its
-                         address, in place of the one there; with --reads, the host's
-                         methods its pages may ask as whoever signs in on it; with
-                         --acts, the host's procedures they may ask as that person, such
-                         as createReport; with --spaces, the types of the group's spaces
-                         they may read whole as that person, each by its NSID; with
-                         --writes, the records they may write in that person's own repo,
-                         each a type of the group's spaces and a collection there; a type
-                         with /<key> after it names just the one space of it by that key;
-                         with --inbox, making that person's invite inbox as they sign in
-  site delete <group>    take the group's website down
-  site domain <group> [--undo]
-                         serve the website at the group's own domain, its handle, once
-                         that domain reaches this host; or with --undo, at its address
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
                          who is in the group, and their roles, a page at a time
@@ -367,7 +353,7 @@ fn now_iso() -> String {
     atproto::time::iso(atproto::time::now_millis())
 }
 
-const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
+const GET_GROUP_AUTH: &str = "fyi.opensocial.internal.getGroupAuth";
 
 /// A session as a group, from `getGroupAuth`: its token, bound to a DPoP
 /// key of its own, and the host's nonce as it last gave it.
@@ -631,7 +617,7 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
                 .map(|(flag, value)| (if *flag == "min-ms" { "minMs" } else { flag }, *value))
                 .collect();
             let me = signed_in(env).await?;
-            let said = me.query(&host, &m("getLogs"), &asked).await?;
+            let said = me.query(&host, &internal("getLogs"), &asked).await?;
             Ok(log_lines(&said))
         }
         ["admin", "stats", rest @ ..] => {
@@ -639,78 +625,8 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             let [] = a.take()?;
             let asked: Vec<(&str, &str)> = a.flags.iter().map(|(k, v)| (*k, *v)).collect();
             let me = signed_in(env).await?;
-            let said = me.query(&host, &m("getStats"), &asked).await?;
+            let said = me.query(&host, &internal("getStats"), &asked).await?;
             Ok(stats_lines(&said))
-        }
-        ["site", "publish", rest @ ..] => {
-            let flags = ["fallback", "not-found", "reads", "acts", "spaces", "writes"];
-            // `--inbox` alone, with no value after it.
-            let inbox = rest.contains(&"--inbox");
-            let rest: Vec<&str> = rest.iter().copied().filter(|w| *w != "--inbox").collect();
-            let a = parse(&rest, &flags)?;
-            let [group, dir] = a.take()?;
-            let mut given = json!({"files": site_files(std::path::Path::new(dir))?});
-            for (flag, name) in [("fallback", "fallback"), ("not-found", "not_found")] {
-                if let Some(path) = a.flags.get(flag) {
-                    given[name] = json!(path);
-                }
-            }
-            // Each method by its NSID, or its name alone, as one of ours.
-            let named = |r: &str| match r.contains('.') {
-                true => r.to_string(),
-                false => m(r),
-            };
-            for key in ["reads", "acts"] {
-                if let Some(listed) = a.flags.get(key) {
-                    let methods = listed.split(',').map(str::trim).filter(|r| !r.is_empty());
-                    given[key] = methods.map(|r| json!({"method": named(r)})).collect();
-                }
-            }
-            // A space is a type of the group's spaces, by its NSID, not ours
-            // to name by its last part, and with /<key> after it, just the one
-            // space of that type by that key.
-            let space = |s: &str| {
-                let (kind, key) = match s.split_once('/') {
-                    Some((kind, key)) => (kind.trim(), Some(key.trim())),
-                    None => (s.trim(), None),
-                };
-                if kind.is_empty() || key == Some("") {
-                    bail!("{s}: a space is <type> or <type>/<key>");
-                }
-                let mut named = json!({"space": kind});
-                if let Some(key) = key {
-                    named["key"] = key.into();
-                }
-                Ok(named)
-            };
-            if let Some(listed) = a.flags.get("spaces") {
-                let each = listed.split(',').map(str::trim).filter(|s| !s.is_empty());
-                let spaces: Vec<Value> = each.map(space).collect::<Result<_>>()?;
-                given["spaces"] = spaces.into();
-            }
-            // Each a space, as above, and a collection there.
-            if let Some(writes) = a.flags.get("writes") {
-                let each = writes.split(',').map(str::trim).filter(|w| !w.is_empty());
-                let write = |w: &str| match w.split_once(':') {
-                    Some((named, collection)) => {
-                        let mut write = space(named)?;
-                        write["collection"] = collection.trim().into();
-                        Ok(write)
-                    }
-                    None => Err(anyhow!(
-                        "{w}: a write is <type>:<collection> or <type>/<key>:<collection>"
-                    )),
-                };
-                let writes: Vec<Value> = each.map(write).collect::<Result<_>>()?;
-                given["writes"] = writes.into();
-            }
-            if inbox {
-                given["inbox"] = true.into();
-            }
-            let tools = group_host_mcp::tools();
-            let tool = tools.iter().find(|t| t.name == "site_publish");
-            let tool = tool.expect("site_publish is a tool");
-            command(&signed_in(env).await?, &host, tool, group, given).await
         }
         [group, action, rest @ ..] => {
             let name = format!("{group}_{action}").replace('-', "_");
@@ -782,37 +698,6 @@ fn stats_lines(said: &Value) -> String {
     out
 }
 
-/// The files under `dir`, for `putSite`: each at its path under it, as
-/// text if it is UTF-8, else as bytes. Those whose names start with a dot
-/// are left out, as the files of tools are.
-pub fn site_files(dir: &std::path::Path) -> Result<Vec<Value>> {
-    let mut out = Vec::new();
-    let mut waiting = vec![(dir.to_path_buf(), String::new())];
-    while let Some((at, under)) = waiting.pop() {
-        let entries =
-            std::fs::read_dir(&at).with_context(|| format!("reading {}", at.display()))?;
-        for entry in entries {
-            let entry = entry?;
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
-                continue;
-            }
-            let path = format!("{under}{name}");
-            if std::fs::metadata(entry.path())?.is_dir() {
-                waiting.push((entry.path(), format!("{path}/")));
-                continue;
-            }
-            let bytes = std::fs::read(entry.path())?;
-            out.push(match String::from_utf8(bytes) {
-                Ok(text) => json!({"path": path, "text": text}),
-                Err(e) => json!({"path": path, "bytes": atproto::drisl::Value::Bytes(e.into_bytes()).to_json()}),
-            });
-        }
-    }
-    out.sort_by(|a, b| a["path"].as_str().cmp(&b["path"].as_str()));
-    Ok(out)
-}
-
 /// A tool's command, as `me`, in `group`: what it answers, as JSON; or
 /// for `group show`, as lines.
 async fn command(
@@ -840,7 +725,7 @@ async fn command(
             let members = match done["group"].get("memberCount") {
                 Some(_) => {
                     let asked = [("group", group.as_str()), ("limit", "100")];
-                    let page = me.query(host, &m("listMembers"), &asked).await?;
+                    let page = me.query(host, &internal("listMembers"), &asked).await?;
                     page["members"].clone()
                 }
                 None => Value::Null,
@@ -914,7 +799,7 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             record: None,
         } => {
             // The one waiting, which the group's list of them names.
-            let lxm = m("listInvites");
+            let lxm = internal("listInvites");
             let listed = me
                 .query(host, &lxm, &[("group", group), ("limit", "100")])
                 .await?;
@@ -941,7 +826,9 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             let uri = format!("at://{group}/space/{space}/self");
             let record = format!("{uri}/{group}/{collection}/{rkey}");
             let asked = [("group", group), ("space", &uri), ("uri", &record)];
-            let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
+            let listed = me
+                .query(host, &internal("listSpaceRecords"), &asked)
+                .await?;
             let kept = listed["records"][0]["value"].clone();
             let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
             Box::pin(carry_out(me, host, group, write)).await
@@ -962,7 +849,9 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             let uri = members_of(group);
             let record = format!("{uri}/{group}/{}/{role}", m("role"));
             let asked = [("group", group), ("space", &uri), ("uri", &record)];
-            let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
+            let listed = me
+                .query(host, &internal("listSpaceRecords"), &asked)
+                .await?;
             let kept = &listed["records"][0]["value"];
             let write = group_host_mcp::regrant(kept, &role, &scopes, &assignable, undo);
             let write = write.map_err(anyhow::Error::msg)?;
@@ -1010,7 +899,9 @@ async fn label(
         ("equals", subject),
         ("limit", "100"),
     ];
-    let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
+    let listed = me
+        .query(host, &internal("listSpaceRecords"), &asked)
+        .await?;
     let records = listed["records"].as_array().into_iter().flatten();
     let ours =
         records.filter(|r| r["repo"] == group && group_host_mcp::labels(&r["value"], subject, val));
@@ -1036,6 +927,12 @@ fn m(name: &str) -> String {
     format!("{NS}.{name}")
 }
 
+/// A method of the host's own, not in the proposal: by its name, under
+/// `fyi.opensocial.internal`.
+fn internal(name: &str) -> String {
+    format!("{NS}.internal.{name}")
+}
+
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or_default()
 }
@@ -1055,7 +952,7 @@ async fn create_group(
     if let Some(j) = flags.get("join-policy") {
         body["joinPolicy"] = json!(j);
     }
-    let made = me.call(host, &m("createGroup"), &body).await?;
+    let made = me.call(host, &internal("createGroup"), &body).await?;
     Ok(format!(
         "group    {handle} {}\nfounder  {}\nmeta     {}\nmembers  {}\n",
         text(&made["did"]),
@@ -1117,7 +1014,7 @@ fn members_of(group: &str) -> String {
 async fn delete(me: &Client, host: &Host, group: &str) -> Result<String> {
     let group = me.resolve(host, group).await?;
     let body = json!({"group": group});
-    let done = me.call(host, &m("deleteGroup"), &body).await?;
+    let done = me.call(host, &internal("deleteGroup"), &body).await?;
     let identity = match done["tombstoned"].as_bool() {
         Some(true) => "its DID is ended",
         _ => "its DID is left to the holders of its recovery keys",
@@ -1129,7 +1026,7 @@ async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<Str
     let group = me.resolve(from, group).await?;
     let mut out = format!("moving {group}\n  from {}\n  to   {}\n", from.url, to.url);
     let body = json!({"group": group, "destDid": to.did});
-    let prepared = match me.call(from, &m("migratePrepare"), &body).await {
+    let prepared = match me.call(from, &internal("migratePrepare"), &body).await {
         Ok(prepared) => prepared,
         // Handed over by a run that stopped before switching it on: that
         // is the step left.
@@ -1148,13 +1045,13 @@ async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<Str
         "snapshot": prepared["snapshot"],
         "exportToken": prepared["exportToken"],
     });
-    let received = me.call(to, &m("migrateReceive"), &body).await?;
+    let received = me.call(to, &internal("migrateReceive"), &body).await?;
     out += &format!(
         "received  {} records, {} files, {} spaces\n",
         received["records"], received["blobs"], received["spaces"]
     );
     let body = json!({"group": group, "recommendedCreds": received["recommendedCreds"]});
-    let done = me.call(from, &m("migrateComplete"), &body).await?;
+    let done = me.call(from, &internal("migrateComplete"), &body).await?;
     out += &format!("handed over to {}\n", text(&done["movedTo"]));
     activate(me, to, &group, out).await
 }
@@ -1163,7 +1060,7 @@ async fn migrate(me: &Client, from: &Host, to: &Host, group: &str) -> Result<Str
 /// could not be yet, that the same command run again does it.
 async fn activate(me: &Client, to: &Host, group: &str, mut out: String) -> Result<String> {
     let body = json!({"did": group});
-    if let Err(e) = me.call(to, &m("migrateActivate"), &body).await {
+    if let Err(e) = me.call(to, &internal("migrateActivate"), &body).await {
         bail!("{out}not switched on yet: {e}\nrun the same command again to switch it on");
     }
     out += "switched on\n";
@@ -1189,7 +1086,7 @@ async fn import(
     let did = me.resolve(host, account).await?;
     let mut asked = vec![("did", did.as_str())];
     asked.extend(a.flags.get("address").map(|l| ("address", *l)));
-    let plan = me.query(host, &m("checkImport"), &asked).await?;
+    let plan = me.query(host, &internal("checkImport"), &asked).await?;
     // A move of yours already pending is finished, whatever the address
     // would be now.
     let pending = plan.get("recommendedCreds").is_some();
@@ -1222,7 +1119,7 @@ async fn start_import(
     if let Some(label) = address {
         body["address"] = json!(label);
     }
-    let copied = me.call(host, &m("importAccount"), &body).await?;
+    let copied = me.call(host, &internal("importAccount"), &body).await?;
     let mut out = format!(
         "moving {did}\n  from {}\n  as   {}\n",
         text(&plan["pds"]),
@@ -1252,7 +1149,7 @@ async fn start_import(
         cursor = next(&listed);
     }
     let (mut files, mut records) = (0, 0);
-    let bring = &m("importAccountSpace");
+    let bring = &internal("importAccountSpace");
     for space in &spaces {
         let at = [("space", space.as_str()), ("repo", did)];
         let governs = space.starts_with(&format!("at://{did}/"));
@@ -1316,7 +1213,7 @@ async fn finish_import(
     let sign = "com.atproto.identity.signPlcOperation";
     let signed = theirs.own(sign, &[], Some(&Value::Object(asked))).await?;
     let body = json!({ "did": did, "operation": signed["operation"] });
-    let done = me.call(host, &m("completeImport"), &body).await?;
+    let done = me.call(host, &internal("completeImport"), &body).await?;
     Ok(format!(
         "moved: {} is a group here, run by you\n",
         text(&done["handle"])
@@ -1363,7 +1260,7 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
         "description": "Seeded by opensocial group seed.",
         "joinPolicy": "approval",
     });
-    let made = me.call(host, &m("createGroup"), &body).await?;
+    let made = me.call(host, &internal("createGroup"), &body).await?;
     let group = text(&made["did"]).to_string();
     let mut out = format!("group      {handle} {group}\n");
     // Its rules are its own records, in its meta space, written as it.

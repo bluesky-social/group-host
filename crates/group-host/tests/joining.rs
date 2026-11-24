@@ -12,12 +12,12 @@ use group_host::group::members_space;
 use serde_json::{Value as Json, json};
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
 async fn ask(h: &Running, who: &Authority, method: &str, query: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     get(h, &lxm, query, &[auth(h, who, &lxm)]).await
 }
 
@@ -143,7 +143,7 @@ async fn a_group_that_approves_its_members_keeps_requests() {
         (200, json!({}))
     );
     // And getGroup shows it to them, and all of them to whoever admits.
-    let lxm = format!("{NS}.getGroup");
+    let lxm = format!("{INTERNAL}.getGroup");
     let (_, theirs) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &bob, &lxm)]).await;
     assert_eq!(theirs["group"]["viewer"]["request"]["member"], bob.did);
     let (_, admins) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;

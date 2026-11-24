@@ -19,6 +19,7 @@ pub mod firehose;
 pub mod group;
 pub mod group_api;
 pub mod group_config;
+pub mod group_domain;
 pub mod group_handle;
 pub mod group_invites;
 pub mod group_join;
@@ -54,9 +55,6 @@ pub mod recovery;
 pub mod repo;
 pub mod scopes;
 pub mod secrets;
-pub mod site_domain;
-pub mod site_head;
-pub mod sites;
 pub mod space;
 pub mod space_api;
 pub mod stats;
@@ -177,9 +175,6 @@ pub fn router(host: Arc<Host>) -> Router {
 /// The host's routes, as the MCP server calls them for a tool, within
 /// the request that called it.
 pub(crate) fn routes(host: Arc<Host>) -> Router {
-    // A site is published whole, its files in one body: as large as one
-    // upload may be, as the lexicons' check reads it.
-    let site_limit = usize::try_from(host.config.blob_upload_limit).unwrap_or(usize::MAX);
     Router::new()
         .route("/xrpc/_health", get(health))
         .route(
@@ -190,9 +185,12 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             "/xrpc/com.atproto.server.describeServer",
             get(api::describe_server),
         )
-        .route("/xrpc/fyi.opensocial.checkAddress", get(api::check_address))
         .route(
-            "/xrpc/fyi.opensocial.searchActors",
+            "/xrpc/fyi.opensocial.internal.checkAddress",
+            get(api::check_address),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.internal.searchActors",
             get(actor_search::search_actors),
         )
         .route("/xrpc/com.atproto.repo.getRecord", get(api::get_record))
@@ -222,40 +220,43 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(authority_api::notify_repo_update),
         )
         .route(
-            "/xrpc/fyi.opensocial.createGroup",
+            "/xrpc/fyi.opensocial.internal.createGroup",
             post(group_api::create_group),
         )
-        .route("/xrpc/fyi.opensocial.getGroup", get(group_api::get_group))
         .route(
-            "/xrpc/fyi.opensocial.listMembers",
+            "/xrpc/fyi.opensocial.internal.getGroup",
+            get(group_api::get_group),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.internal.listMembers",
             get(group_api::list_members),
         )
         .route(
-            "/xrpc/fyi.opensocial.deactivateGroup",
+            "/xrpc/fyi.opensocial.internal.deactivateGroup",
             post(group_lifecycle::deactivate_group),
         )
         .route(
-            "/xrpc/fyi.opensocial.activateGroup",
+            "/xrpc/fyi.opensocial.internal.activateGroup",
             post(group_lifecycle::activate_group),
         )
         .route(
-            "/xrpc/fyi.opensocial.deleteGroup",
+            "/xrpc/fyi.opensocial.internal.deleteGroup",
             post(group_lifecycle::delete_group),
         )
         .route(
-            "/xrpc/fyi.opensocial.checkGroupHandle",
+            "/xrpc/fyi.opensocial.internal.checkGroupHandle",
             get(group_handle::check_group_handle),
         )
         .route(
-            "/xrpc/fyi.opensocial.updateGroupHandle",
+            "/xrpc/fyi.opensocial.internal.updateGroupHandle",
             post(group_handle::update_group_handle),
         )
         .route(
-            "/xrpc/fyi.opensocial.listSpaceRecords",
+            "/xrpc/fyi.opensocial.internal.listSpaceRecords",
             get(index_api::list_space_records),
         )
         .route(
-            "/xrpc/fyi.opensocial.getSpaceBlob",
+            "/xrpc/fyi.opensocial.internal.getSpaceBlob",
             get(index_api::get_space_blob),
         )
         .route(
@@ -267,7 +268,7 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(group_join::request_join),
         )
         .route(
-            "/xrpc/fyi.opensocial.getJoinRequest",
+            "/xrpc/fyi.opensocial.internal.getJoinRequest",
             get(group_join::get_join_request),
         )
         .route(
@@ -283,61 +284,67 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(group_join::cancel_join_request),
         )
         .route(
-            "/xrpc/fyi.opensocial.listInvites",
+            "/xrpc/fyi.opensocial.internal.listInvites",
             get(group_invites::list_invites),
         )
         .route(
-            "/xrpc/fyi.opensocial.getActorInvites",
+            "/xrpc/fyi.opensocial.internal.getActorInvites",
             get(group_invites::get_actor_invites),
         )
         .route(
-            "/xrpc/fyi.opensocial.declineInvite",
+            "/xrpc/fyi.opensocial.internal.declineInvite",
             post(group_invites::decline_invite),
         )
         .route(
-            "/xrpc/fyi.opensocial.getAuthorization",
+            "/xrpc/fyi.opensocial.internal.getAuthorization",
             get(authorization::get_authorization),
         )
         .route(
-            "/xrpc/fyi.opensocial.approveAuthorization",
+            "/xrpc/fyi.opensocial.internal.approveAuthorization",
             post(authorization::approve_authorization),
         )
         .route(
-            "/xrpc/fyi.opensocial.declineAuthorization",
+            "/xrpc/fyi.opensocial.internal.declineAuthorization",
             post(authorization::decline_authorization),
         )
         .route(
-            "/xrpc/fyi.opensocial.createAppPassword",
+            "/xrpc/fyi.opensocial.internal.createAppPassword",
             post(app_passwords::create_app_password),
         )
         .route(
-            "/xrpc/fyi.opensocial.listAppPasswords",
+            "/xrpc/fyi.opensocial.internal.listAppPasswords",
             get(app_passwords::list_app_passwords),
         )
         .route(
-            "/xrpc/fyi.opensocial.revokeAppPassword",
+            "/xrpc/fyi.opensocial.internal.revokeAppPassword",
             post(app_passwords::revoke_app_password),
         )
         .route(
-            "/xrpc/fyi.opensocial.listGroupTokens",
+            "/xrpc/fyi.opensocial.internal.listGroupTokens",
             get(group_tokens::list_group_tokens),
         )
         .route(
-            "/xrpc/fyi.opensocial.revokeGroupToken",
+            "/xrpc/fyi.opensocial.internal.revokeGroupToken",
             post(group_tokens::revoke_group_token),
         )
-        .route("/xrpc/fyi.opensocial.getViewer", get(actors::get_viewer))
-        .route("/xrpc/fyi.opensocial.getActor", get(actors::get_actor))
         .route(
-            "/xrpc/fyi.opensocial.getActorGroups",
+            "/xrpc/fyi.opensocial.internal.getViewer",
+            get(actors::get_viewer),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.internal.getActor",
+            get(actors::get_actor),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.internal.getActorGroups",
             get(actors::get_actor_groups),
         )
         .route(
-            "/xrpc/fyi.opensocial.putLabelDefinition",
+            "/xrpc/fyi.opensocial.internal.putLabelDefinition",
             post(moderation::put_label_definition),
         )
         .route(
-            "/xrpc/fyi.opensocial.deleteLabelDefinition",
+            "/xrpc/fyi.opensocial.internal.deleteLabelDefinition",
             post(moderation::delete_label_definition),
         )
         .route(
@@ -349,7 +356,7 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             get(moderation::get_mod_subject_history),
         )
         .route(
-            "/xrpc/fyi.opensocial.getModSubjectBlob",
+            "/xrpc/fyi.opensocial.internal.getModSubjectBlob",
             get(moderation::get_mod_subject_blob),
         )
         .route(
@@ -361,53 +368,59 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(moderation::create_report),
         )
         .route(
-            "/xrpc/fyi.opensocial.listRecoveryKeys",
+            "/xrpc/fyi.opensocial.internal.listRecoveryKeys",
             get(recovery::list_recovery_keys),
         )
         .route(
-            "/xrpc/fyi.opensocial.addRecoveryKey",
+            "/xrpc/fyi.opensocial.internal.addRecoveryKey",
             post(recovery::add_recovery_key),
         )
         .route(
-            "/xrpc/fyi.opensocial.removeRecoveryKey",
+            "/xrpc/fyi.opensocial.internal.removeRecoveryKey",
             post(recovery::remove_recovery_key),
         )
         .route(
-            "/xrpc/fyi.opensocial.migratePrepare",
+            "/xrpc/fyi.opensocial.internal.migratePrepare",
             post(migration::migrate_prepare),
         )
         .route(
-            "/xrpc/fyi.opensocial.migrateExport",
+            "/xrpc/fyi.opensocial.internal.migrateExport",
             get(migration::migrate_export),
         )
         .route(
-            "/xrpc/fyi.opensocial.migrateReceive",
+            "/xrpc/fyi.opensocial.internal.migrateReceive",
             post(migration::migrate_receive),
         )
         .route(
-            "/xrpc/fyi.opensocial.migrateComplete",
+            "/xrpc/fyi.opensocial.internal.migrateComplete",
             post(migration::migrate_complete),
         )
         .route(
-            "/xrpc/fyi.opensocial.migrateActivate",
+            "/xrpc/fyi.opensocial.internal.migrateActivate",
             post(migration::migrate_activate),
         )
         .route(
-            "/xrpc/fyi.opensocial.checkImport",
+            "/xrpc/fyi.opensocial.internal.checkImport",
             get(import::check_import),
         )
         .route(
-            "/xrpc/fyi.opensocial.importAccount",
+            "/xrpc/fyi.opensocial.internal.importAccount",
             post(import::import_account),
         )
         .route(
-            "/xrpc/fyi.opensocial.completeImport",
+            "/xrpc/fyi.opensocial.internal.completeImport",
             post(import::complete_import),
         )
-        .route("/xrpc/fyi.opensocial.getLogs", get(admin::get_logs))
-        .route("/xrpc/fyi.opensocial.getStats", get(admin::get_stats))
         .route(
-            "/xrpc/fyi.opensocial.importAccountSpace",
+            "/xrpc/fyi.opensocial.internal.getLogs",
+            get(admin::get_logs),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.internal.getStats",
+            get(admin::get_stats),
+        )
+        .route(
+            "/xrpc/fyi.opensocial.internal.importAccountSpace",
             post(import_space::import_account_space),
         )
         .route("/oauth/authorize", get(oauth::authorize))
@@ -419,19 +432,19 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
         .route("/console/login", get(console_login::login))
         .route("/console/move/login", get(account_move::login))
         .route(
-            "/xrpc/fyi.opensocial.getAccountMove",
+            "/xrpc/fyi.opensocial.internal.getAccountMove",
             get(account_move::get_account_move),
         )
         .route(
-            "/xrpc/fyi.opensocial.startAccountMove",
+            "/xrpc/fyi.opensocial.internal.startAccountMove",
             post(account_move::start_account_move),
         )
         .route(
-            "/xrpc/fyi.opensocial.finishAccountMove",
+            "/xrpc/fyi.opensocial.internal.finishAccountMove",
             post(account_move::finish_account_move),
         )
         .route(
-            "/xrpc/fyi.opensocial.cancelAccountMove",
+            "/xrpc/fyi.opensocial.internal.cancelAccountMove",
             post(account_move::cancel_account_move),
         )
         .route("/console/callback", get(console_login::callback))
@@ -441,29 +454,21 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
         .merge(oauth_routes())
         .merge(space_routes())
         .route(
-            "/xrpc/fyi.opensocial.putSite",
-            post(sites::put_site).layer(axum::extract::DefaultBodyLimit::max(site_limit)),
-        )
-        .route("/xrpc/fyi.opensocial.deleteSite", post(sites::delete_site))
-        .route(
-            "/xrpc/fyi.opensocial.putSiteDomain",
-            post(site_domain::put_site_domain),
+            "/xrpc/fyi.opensocial.internal.putGroupDomain",
+            post(group_domain::put_group_domain),
         )
         .route(
-            "/xrpc/fyi.opensocial.deleteSiteDomain",
-            post(site_domain::delete_site_domain),
+            "/xrpc/fyi.opensocial.internal.deleteGroupDomain",
+            post(group_domain::delete_group_domain),
         )
-        .route("/tls/ask", get(site_domain::tls_ask))
+        .route("/tls/ask", get(group_domain::tls_ask))
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
         .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
+        .layer(axum::middleware::from_fn(lexicons::check))
         .layer(axum::middleware::from_fn_with_state(
             host.clone(),
-            lexicons::check,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            host.clone(),
-            sites::serve,
+            group_domain::serve,
         ))
         .with_state(host)
 }
@@ -495,11 +500,11 @@ fn oauth_routes() -> Router<Arc<Host>> {
         .route("/mcp/authorize", get(mcp::authorize))
         .route("/mcp/token", post(mcp::token))
         .route(
-            "/xrpc/fyi.opensocial.listConnectedApps",
+            "/xrpc/fyi.opensocial.internal.listConnectedApps",
             get(mcp::list_connected_apps),
         )
         .route(
-            "/xrpc/fyi.opensocial.revokeConnectedApp",
+            "/xrpc/fyi.opensocial.internal.revokeConnectedApp",
             post(mcp::revoke_connected_app),
         )
         .layer(axum::middleware::from_fn(oauth::cors))
@@ -507,7 +512,7 @@ fn oauth_routes() -> Router<Arc<Host>> {
 
 /// What a space's member reads it by, from its authority and from each
 /// writer's repo here: open to any origin, as lex-space reads a space in
-/// a browser (the page around a group's site).
+/// a browser.
 fn space_routes() -> Router<Arc<Host>> {
     Router::new()
         .route(
@@ -617,11 +622,11 @@ fn token_routes() -> Router<Arc<Host>> {
             post(app_passwords::delete_session),
         )
         .route(
-            &x("fyi.opensocial.provisionGroup"),
+            &x("fyi.opensocial.internal.provisionGroup"),
             post(provision::provision_group),
         )
         .route(
-            &x("fyi.opensocial.getGroupAuth"),
+            &x("fyi.opensocial.internal.getGroupAuth"),
             post(group_tokens::get_group_auth),
         )
         .layer(axum::middleware::from_fn(oauth::cors))

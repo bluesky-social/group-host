@@ -15,7 +15,7 @@ its member's roles. Roles are in [membership](membership.md), spaces in
 | ------------------------ | ----------- | -------------------------------------- | ----------------------- |
 | A person, in the console | themselves  | OAuth at their own PDS                 | a session cookie        |
 | An app                   | a group     | OAuth at this host, or an app password | a group grant           |
-| The console              | a group     | `fyi.opensocial.getGroupAuth`          | a 15-minute group token |
+| The console              | a group     | `fyi.opensocial.internal.getGroupAuth` | a 15-minute group token |
 | An MCP client            | a member    | OAuth at `/mcp`                        | an MCP grant            |
 
 Members keep their accounts on their own PDSes, so the host only needs
@@ -68,7 +68,7 @@ the sign-up PDS's own name, `you.bsky.social` or
 As you type, the field suggests the accounts whose handle matches, with
 each one's picture, name and handle where they're known. Picking one
 signs in as it at once. From two letters on, the browser asks the host
-(`fyi.opensocial.searchActors`), and the host asks wherever
+(`fyi.opensocial.internal.searchActors`), and the host asks wherever
 `ACTOR_SEARCH` says. On the network everyone's on, that's
 typeahead.waow.tech, a service that knows the accounts of the whole
 network. So what you type reaches it from the host and never from a
@@ -368,7 +368,7 @@ storing one.
 ## Group tokens for the console
 
 The console acts as a group too. It doesn't run OAuth against the host
-it's part of. Instead it asks `fyi.opensocial.getGroupAuth` for a group
+it's part of. Instead it asks `fyi.opensocial.internal.getGroupAuth` for a group
 and one of its spaces, as the member, with a DPoP proof. For each
 collection the member's roles may write in that space as the group, by
 the scopes its policy grants them, the token's scope holds a space scope
@@ -404,8 +404,8 @@ checks it as it checks any write ([MCP](../reference/mcp.md)).
 Every grant records its member, its client, its source (`oauth`,
 `getGroupAuth`, `appPassword` or `provisionGroup`), its scope, when it
 was made, and when it was last used. Members who hold `group.configure`
-list every grant in force with `fyi.opensocial.listGroupTokens` and end
-any one with `fyi.opensocial.revokeGroupToken`. An app ends its own at
+list every grant in force with `fyi.opensocial.internal.listGroupTokens` and end
+any one with `fyi.opensocial.internal.revokeGroupToken`. An app ends its own at
 `/oauth/revoke`. MCP grants are listed separately, with
 `listConnectedApps`.
 
@@ -424,7 +424,7 @@ Some apps sign in with a handle and a password through
 passwords let them sign in as a group.
 
 A member whose roles hold `repo:*` makes one in the console with
-`fyi.opensocial.createAppPassword`, and it stays theirs. The password
+`fyi.opensocial.internal.createAppPassword`, and it stays theirs. The password
 appears in that answer only, and the host keeps its SHA-256. A group
 holds at most 25. Makers list their own with `listAppPasswords`, and
 configurers list every one. `revokeAppPassword` deletes one along with
@@ -447,7 +447,7 @@ none of them works again even if the maker gets `repo:*` back.
 ## Provisioning
 
 An app that starts groups wants to sign in to the new group in the same
-step. `fyi.opensocial.provisionGroup` does both. The person calls it as
+step. `fyi.opensocial.internal.provisionGroup` does both. The person calls it as
 themselves and becomes the founder. The app proves itself in the same
 call with its `clientId`, a client assertion if it's confidential, a
 DPoP proof, and the scope it wants. That scope must hold `atproto` and

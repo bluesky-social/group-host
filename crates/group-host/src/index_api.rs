@@ -8,7 +8,7 @@ use crate::Host;
 use crate::api::{Params, invalid, page, param};
 use crate::authority::Access::Write;
 use crate::group_api::{group_of, signed_in};
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::store::Indexed;
 use crate::time::iso;
 use crate::xrpc::XrpcError;
@@ -45,7 +45,7 @@ async fn readable(
     group_of(host, group).map_err(|_| not_found("unknown group"))?;
     host.active(group).map_err(|_| not_found("unknown group"))?;
     // Someone not signed in reads no space, a public one included.
-    let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
+    let me = signed_in(host, headers, &format!("{INTERNAL}.{lxm}")).await?;
     let named = SpaceRef::parse(space).ok().filter(|s| s.authority == group);
     let policy = match named {
         Some(_) => host.policy(space).map_err(XrpcError::internal)?,

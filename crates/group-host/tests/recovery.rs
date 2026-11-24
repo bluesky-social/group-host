@@ -23,12 +23,12 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
 }
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
 async fn list(h: &Running, who: &Authority, did: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.listRecoveryKeys");
+    let lxm = format!("{INTERNAL}.listRecoveryKeys");
     get(h, &lxm, &format!("group={did}"), &[auth(h, who, &lxm)]).await
 }
 
@@ -95,9 +95,9 @@ async fn puts_a_stewards_key_ahead_of_the_hosts() {
     assert_eq!(rotation_keys(&h, &did).await, [second, host_key]);
     let (_, grants) = get(
         &h,
-        &format!("{NS}.listGroupTokens"),
+        &format!("{INTERNAL}.listGroupTokens"),
         &format!("group={did}"),
-        &[auth(&h, &alice, &format!("{NS}.listGroupTokens"))],
+        &[auth(&h, &alice, &format!("{INTERNAL}.listGroupTokens"))],
     )
     .await;
     let actions: Vec<&str> = grants["activity"]

@@ -66,7 +66,7 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
 }
 
 async fn list(h: &Running, who: Option<&Authority>, query: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.listSpaceRecords");
+    let lxm = format!("{INTERNAL}.listSpaceRecords");
     let headers: Vec<_> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
     get(h, &lxm, query, &headers).await
 }
@@ -137,7 +137,7 @@ async fn indexes_a_member_writing_at_another_host() {
     assert_eq!(texts(&page), ["Third", "First, again"]);
 
     // Its files come from his host, through the group's.
-    let lxm = format!("{NS}.getSpaceBlob");
+    let lxm = format!("{INTERNAL}.getSpaceBlob");
     let cid = picture["ref"]["$link"].as_str().unwrap();
     let got = read(
         &a,
@@ -252,7 +252,7 @@ async fn a_public_space_is_for_anyone_signed_in() {
         (401, "AuthMissing")
     );
     let cid = picture["ref"]["$link"].as_str().unwrap();
-    let blob = format!("{NS}.getSpaceBlob");
+    let blob = format!("{INTERNAL}.getSpaceBlob");
     let got = read(&h, &blob, &format!("{query}&repo={did}&cid={cid}"), &[]).await;
     assert_eq!(got.error(), (401, "AuthMissing".into()));
 }
@@ -774,7 +774,7 @@ async fn fetches_no_file_too_big_or_not_asked_for() {
     let writer = fake_writer(&h, &fake).await;
     let [alice, _, _] = people(&h).await;
     let (did, space) = group_with(&h, &alice, &writer).await;
-    let lxm = format!("{NS}.getSpaceBlob");
+    let lxm = format!("{INTERNAL}.getSpaceBlob");
     let fetch = |cid: &str| format!("group={did}&space={space}&repo={writer}&cid={cid}");
     // Not a writer of the space yet: nobody is asked for its files.
     let got = read(

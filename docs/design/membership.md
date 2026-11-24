@@ -231,14 +231,14 @@ members. So any group may write an invite there and only the invitee
 reads the space. The invitee's PDS keeps each group that writes there
 among the inbox's writers.
 
-An app makes it with the SDK's `InviteInbox.open`, asking the person for
+An app makes it with `com.atproto.space.createSpace` at the person's PDS,
+asking them for
 `space:fyi.opensocial.invites?action=read_self&manage=create`: to make
 their own inbox, and to see the policy of one already there, which it
-leaves as it is ([the SDK](../reference/sdk.md#the-invite-inbox)). A
-group's site that sets `inbox` makes it for each visitor who signs in
-there ([sites](sites.md#the-page-around-a-site)). The console doesn't
-make one: someone whose app never made their inbox still sees their
-invites in the console, from the host's own list (below).
+leaves as it is. The
+console doesn't make one: someone whose app never made their inbox
+still sees their invites in the console, from the host's own list
+(below).
 
 An app invites someone by writing that record as the group, through
 `com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
@@ -274,7 +274,7 @@ own within the hour, and inviting again writes a fresh one. The invitee
 may refuse with `declineInvite`, and the group may still invite them
 later. Holders of `invite` list invites with `listInvites`.
 
-A site that can't read someone's inbox shows them their invites through
+An app that can't read someone's inbox shows them their invites through
 `getActorInvites`. The console reads them once for each page, beside who
 is signed in. A dot on your picture in the header and a count in its
 menu say some are waiting. The home page lists them, each with a way to

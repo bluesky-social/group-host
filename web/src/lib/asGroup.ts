@@ -131,7 +131,7 @@ export async function withGroup(
   const prover = new Prover(resource);
   const given = await prover.post(
     load,
-    'fyi.opensocial.getGroupAuth',
+    'fyi.opensocial.internal.getGroupAuth',
     JSON.stringify({ group, space }),
     'application/json'
   );

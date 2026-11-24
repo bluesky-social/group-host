@@ -58,8 +58,6 @@ Compose reads these and passes each to the host under the name the host knows:
 | `GROUP_HOST_PROVISIONING_CLIENTS` | `PROVISIONING_CLIENTS` | none |
 | `GROUP_HOST_CRAWLERS` | `PDS_CRAWLERS` | none |
 | `GROUP_HOST_SIGNUP_PDS` | `SIGNUP_PDS` | `https://bsky.social` |
-| `GROUP_HOST_SITE_HANDLE_RESOLVER` | `SITE_HANDLE_RESOLVER` | `https://bsky.social` |
-| `GROUP_HOST_SITE_PLC_URL` | `SITE_PLC_URL` | `GROUP_HOST_PLC_URL`'s |
 | `GROUP_HOST_BLOB_UPLOAD_LIMIT` | host `BLOB_UPLOAD_LIMIT` and console `BODY_SIZE_LIMIT` | `52428800` |
 | `GROUP_HOST_LOG` | `RUST_LOG` | `info` |
 | `GROUP_HOST_ADMINS` | `HOST_ADMINS`, the operators who read its logs and stats | none |
@@ -117,9 +115,9 @@ group.example.com {
 
 `lb_try_duration` holds each request through the second or two the host is down while it restarts. The body limit sits above the upload limit. How groups are named and made is in [Groups](design/groups.md).
 
-## Serving sites on groups' own domains
+## Groups' own domains
 
-A group that takes a handle on a domain of its own, such as `riders.org`, may move its site there from its settings ([Sites](design/sites.md#on-its-own-domain)). The group points the domain's A and AAAA records, and `www.` under it, at the host's addresses. The proxy can't know those domains ahead of time, so it gets each one's certificate the first time someone asks for it. Before it does, it asks the host at `/tls/ask?domain=<domain>`. The host answers 200 only for a group's own domain, or `www.` under it, while the group is on. So nobody can point DNS at the host and spend its certificate limits. Every other name goes to the host unchanged, and the host serves the site there or answers nothing:
+A group that takes a handle on a domain of its own, such as `riders.org`, may have the host serve it there from its settings ([its own domain](design/groups.md#its-own-domain)). The group points the domain's A and AAAA records, and `www.` under it, at the host's addresses. The proxy can't know those domains ahead of time, so it gets each one's certificate the first time someone asks for it. Before it does, it asks the host at `/tls/ask?domain=<domain>`. The host answers 200 only for a group's own domain, or `www.` under it, while the group is on. So nobody can point DNS at the host and spend its certificate limits. Every other name goes to the host unchanged, and the host redirects there or answers nothing:
 
 ```
 {
@@ -136,7 +134,7 @@ https:// {
 }
 ```
 
-Before it moves a site, the host checks that the domain reaches it by asking `https://<domain>/xrpc/com.atproto.server.describeServer` for its own DID. If your host can't reach its own public addresses from inside, it asks `SITE_CHECK_AT` instead, with the domain as the `Host`. Caddy passes the name a browser asked for as `X-Forwarded-Host`. A site that signs its visitors in names its OAuth client for that name.
+Before it serves a group at its domain, the host checks that the domain reaches it by asking `https://<domain>/xrpc/com.atproto.server.describeServer` for its own DID. If your host can't reach its own public addresses from inside, it asks `DOMAIN_CHECK_AT` instead, with the domain as the `Host`.
 
 ## Checking it is up
 

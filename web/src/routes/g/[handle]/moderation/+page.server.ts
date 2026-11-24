@@ -1,9 +1,9 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
-import type * as getActor from '#lib/lexicons/fyi/opensocial/getActor.ts';
-import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
+import type * as getActor from '#lib/lexicons/fyi/opensocial/internal/getActor.ts';
+import type * as getGroup from '#lib/lexicons/fyi/opensocial/internal/getGroup.ts';
 import type * as getModSubjectHistory from '#lib/lexicons/fyi/opensocial/getModSubjectHistory.ts';
 import type * as listModSubjects from '#lib/lexicons/fyi/opensocial/listModSubjects.ts';
-import type * as listSpaceRecords from '#lib/lexicons/fyi/opensocial/listSpaceRecords.ts';
+import type * as listSpaceRecords from '#lib/lexicons/fyi/opensocial/internal/listSpaceRecords.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { applyAsGroup, asGroup } from '#lib/asGroup.ts';
@@ -47,9 +47,13 @@ async function history(event: Event, group: Did, key: `${string}:${string}`) {
  */
 export const load: PageServerLoad = async (event) => {
   const group = await groupOf(event);
-  const { group: view } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', {
-    group
-  });
+  const { group: view } = await xrpc<typeof getGroup.main>(
+    event,
+    'fyi.opensocial.internal.getGroup',
+    {
+      group
+    }
+  );
   const actions = view.viewer?.actions ?? [];
   const asked = event.url.searchParams.get('status') ?? '';
   const status = (STATUSES.includes(asked) ? asked : 'open') as Status;
@@ -82,7 +86,7 @@ export const load: PageServerLoad = async (event) => {
     const did = authorOf(review);
     const actor = await xrpc<typeof getActor.main>(
       event,
-      'fyi.opensocial.getActor',
+      'fyi.opensocial.internal.getActor',
       { actor: did },
       true
     );
@@ -166,7 +170,7 @@ export const actions: Actions = {
     // A label is taken back by deleting the group's records of it on the subject.
     const { records } = await xrpc<typeof listSpaceRecords.main>(
       event,
-      'fyi.opensocial.listSpaceRecords',
+      'fyi.opensocial.internal.listSpaceRecords',
       { group, space, collection: LABEL, field: 'uri', equals: uri, limit: 100 }
     );
     const rkeys = records

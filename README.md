@@ -34,10 +34,6 @@ people start and run groups and approve apps, and a command,
 - **Apps sign in as the group.** A member approves an app over OAuth,
   and it gets what that member's roles allow, checked again at every
   write. → [Signing in](docs/design/signing-in.md)
-- **Sites.** A group publishes a website whole, served sandboxed at its
-  address or on its own domain, and its pages show a signed-in visitor
-  the group's live data. → [Sites](docs/design/sites.md),
-  [the site kit](docs/reference/site-kit.md), [the SDK](docs/reference/sdk.md)
 - **One command, one tool.** An `opensocial` command acts in a group
   as you, and its MCP tool twin acts the same way for a member through an
   AI app they connect. Only the commands that make, move or end a group
@@ -94,16 +90,14 @@ The same pages are a site, made by `docs-site/`.
 | [Commands](docs/reference/cli.md) | Every `opensocial` command and `just` recipe |
 | [MCP tools](docs/reference/mcp.md) | Every tool, and the command it's the twin of |
 | [Configuration](docs/reference/config.md) | Every environment variable the host reads |
-| [The SDK](docs/reference/sdk.md) | `@opensocial/sdk`, for apps that read and write a group's spaces |
-| [The site kit](docs/reference/site-kit.md) | What a group's site can call from its pages |
 | [Deploying](docs/deploying.md) | The image, running it behind a proxy, and what to back up |
 | [Development](docs/development.md) | Building, testing, the checks a pull runs, and the docs site |
 
 ## The pieces
 
 The server is `crates/group-host`, the command `crates/opensocial`, the
-MCP tools `crates/group-host-mcp`, the console `web/` and the SDK
-`packages/sdk`. The atproto primitives are the `atproto` crate, in
+MCP tools `crates/group-host-mcp` and the console `web/`. The atproto
+primitives are the `atproto` crate, in
 [its own repository](https://knotless.dev/chadtmiller.com/atproto).
 [The pieces](docs/design/README.md#the-pieces) says what each one holds.
 

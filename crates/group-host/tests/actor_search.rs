@@ -12,7 +12,7 @@ use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 
 async fn search(h: &Running, query: &str) -> Vec<Json> {
-    let (status, said) = h.get("fyi.opensocial.searchActors", query).await;
+    let (status, said) = h.get("fyi.opensocial.internal.searchActors", query).await;
     assert_eq!(status, 200, "{said}");
     said["actors"].as_array().unwrap().clone()
 }
@@ -44,7 +44,7 @@ async fn on_a_network_of_its_own_the_directory_is_searched() {
         json!({"handle": "riders-gone.groups.test", "displayName": "Gone"}),
     )
     .await;
-    let lxm = format!("{NS}.deleteGroup");
+    let lxm = format!("{INTERNAL}.deleteGroup");
     let (status, said) = post(&h, &lxm, &json!({"group": gone}), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(
         (status, said["tombstoned"].clone()),

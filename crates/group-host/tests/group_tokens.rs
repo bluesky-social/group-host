@@ -14,7 +14,7 @@ use serde_json::{Value as Json, json};
 const CALENDAR: &str = "com.example.calendar";
 const EVENT: &str = "com.example.event";
 const LABEL: &str = "com.atproto.label.record";
-const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
+const GET_GROUP_AUTH: &str = "fyi.opensocial.internal.getGroupAuth";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let value = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
@@ -176,7 +176,7 @@ async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them()
         .call(&h, "com.atproto.space.putRecord", token, Some(&body))
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, listed) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     let [membership, role] = [&listed["activity"][0], &listed["activity"][1]];
     assert_eq!(
@@ -237,7 +237,7 @@ async fn refuses_a_group_token_it_should_not_give() {
         .await;
     assert_eq!(said.error(), (401, "AuthMissing"));
     // Nor while the group is switched off.
-    let lxm = format!("{NS}.deactivateGroup");
+    let lxm = format!("{INTERNAL}.deactivateGroup");
     post(&h, &lxm, &json!({"group": did}), &[auth(&h, &alice, &lxm)]).await;
     let said = ask(&alice, json!({"group": did, "space": calendar})).await;
     assert_eq!(said.error(), (400, "RepoDeactivated"));
@@ -267,7 +267,7 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
     .await;
     assert_eq!(given.status, 200, "{}", given.body);
 
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let list = async |who: &Authority, group: &str| {
         get(&h, &lxm, &format!("group={group}"), &[auth(&h, who, &lxm)]).await
     };
@@ -309,7 +309,7 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
     assert_eq!(list(&bob, &did).await.0, 403);
     assert_eq!(list(&alice, "did:plc:nothing").await.0, 400);
 
-    let lxm = format!("{NS}.revokeGroupToken");
+    let lxm = format!("{INTERNAL}.revokeGroupToken");
     let revoke =
         async |who: &Authority, body: Json| post(&h, &lxm, &body, &[auth(&h, who, &lxm)]).await;
     let id = oauth["tokenId"].as_str().unwrap();
@@ -392,7 +392,7 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
     );
 
     // The log says what each write was, as it was made.
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, listed) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(
         listed["activity"][0]["action"],

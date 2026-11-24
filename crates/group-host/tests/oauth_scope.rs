@@ -640,10 +640,10 @@ fn makes_a_permission_set_concrete() {
             ),
             format!("rpc:{NS}.listJoinRequests?aud=*"),
             format!("rpc:{NS}.denyJoinRequest?aud=*"),
-            format!("rpc:{NS}.listInvites?aud=*"),
+            format!("rpc:{INTERNAL}.listInvites?aud=*"),
             format!("rpc:{NS}.listModSubjects?aud=*"),
             format!("rpc:{NS}.getModSubjectHistory?aud=*"),
-            format!("rpc:{NS}.getModSubjectBlob?aud=*"),
+            format!("rpc:{INTERNAL}.getModSubjectBlob?aud=*"),
             format!("rpc:{NS}.resolveModSubject?aud=*"),
         ]
     );

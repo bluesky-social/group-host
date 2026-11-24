@@ -3,10 +3,10 @@
 // which each page's +page.server.ts takes the ones of it wants.
 
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
-import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
-import type * as listAppPasswords from '#lib/lexicons/fyi/opensocial/listAppPasswords.ts';
-import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/listGroupTokens.ts';
-import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/listRecoveryKeys.ts';
+import type * as getGroup from '#lib/lexicons/fyi/opensocial/internal/getGroup.ts';
+import type * as listAppPasswords from '#lib/lexicons/fyi/opensocial/internal/listAppPasswords.ts';
+import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/internal/listGroupTokens.ts';
+import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/internal/listRecoveryKeys.ts';
 import { fail, redirect, type Action } from '@sveltejs/kit';
 import { act, xrpc, type Answer } from '#lib/data.ts';
 import { refusal, refused } from '#lib/errors.ts';
@@ -50,13 +50,19 @@ export function changes(view: Answer<typeof getGroup.main>) {
  */
 export async function settings(event: Event) {
   const group = await groupOf(event);
-  const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
+  const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.internal.getGroup', {
+    group
+  });
   const { configures, issues } = changes(view);
   const passwords =
     configures || issues
-      ? await xrpc<typeof listAppPasswords.main>(event, 'fyi.opensocial.listAppPasswords', {
-          group
-        })
+      ? await xrpc<typeof listAppPasswords.main>(
+          event,
+          'fyi.opensocial.internal.listAppPasswords',
+          {
+            group
+          }
+        )
       : null;
   return { ...view, configures, passwords: passwords?.passwords ?? null };
 }
@@ -69,13 +75,13 @@ export function listed(view: Answer<typeof getGroup.main>) {
 
 /** The apps acting as the group, and what they did lately: to one who configures it. */
 export const tokensOf = (event: Event, group: string) =>
-  xrpc<typeof listGroupTokens.main>(event, 'fyi.opensocial.listGroupTokens', {
+  xrpc<typeof listGroupTokens.main>(event, 'fyi.opensocial.internal.listGroupTokens', {
     group: group as Did
   });
 
 /** The group's recovery keys, or null where the host does not keep them. */
 export const recoveryOf = (event: Event, group: string) =>
-  xrpc<typeof listRecoveryKeys.main>(event, 'fyi.opensocial.listRecoveryKeys', {
+  xrpc<typeof listRecoveryKeys.main>(event, 'fyi.opensocial.internal.listRecoveryKeys', {
     group: group as Did
   }).catch(() => null);
 
@@ -106,9 +112,13 @@ async function picture(event: Event, did: string, cid?: string) {
  * whole with what is changed: what the form does not show is kept.
  */
 async function profileNow(event: Event, group: string) {
-  const { group: now } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', {
-    group: group as `did:${string}:${string}`
-  });
+  const { group: now } = await xrpc<typeof getGroup.main>(
+    event,
+    'fyi.opensocial.internal.getGroup',
+    {
+      group: group as `did:${string}:${string}`
+    }
+  );
   const kept = Object.fromEntries(
     ['description', 'url'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : []))
   );
@@ -173,7 +183,7 @@ const all = {
     const { group, form } = await asked(event);
     const { group: now, spaces } = await xrpc<typeof getGroup.main>(
       event,
-      'fyi.opensocial.getGroup',
+      'fyi.opensocial.internal.getGroup',
       { group }
     );
     const meta = spaces?.find((s) => s.uri === now.meta);
@@ -221,9 +231,13 @@ const all = {
   role: async (event) => {
     const { group, form } = await asked(event);
     const key = text(form, 'role');
-    const { roles, bindings } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', {
-      group: group as Did
-    });
+    const { roles, bindings } = await xrpc<typeof getGroup.main>(
+      event,
+      'fyi.opensocial.internal.getGroup',
+      {
+        group: group as Did
+      }
+    );
     const was = roles?.find((r) => r.key === key);
     // The form shows the group's permission sets and the actions; any
     // other scope it does not show stays as it was.
@@ -264,11 +278,14 @@ const all = {
   },
   revoke: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.revokeGroupToken', { group, tokenId: text(form, 'tokenId') });
+    return act(event, 'fyi.opensocial.internal.revokeGroupToken', {
+      group,
+      tokenId: text(form, 'tokenId')
+    });
   },
   password: async (event) => {
     const { group, form } = await asked(event);
-    const res = await event.fetch('/xrpc/fyi.opensocial.createAppPassword', {
+    const res = await event.fetch('/xrpc/fyi.opensocial.internal.createAppPassword', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -283,15 +300,21 @@ const all = {
   },
   key: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.addRecoveryKey', { group, key: text(form, 'key') });
+    return act(event, 'fyi.opensocial.internal.addRecoveryKey', { group, key: text(form, 'key') });
   },
   unkey: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.removeRecoveryKey', { group, key: text(form, 'key') });
+    return act(event, 'fyi.opensocial.internal.removeRecoveryKey', {
+      group,
+      key: text(form, 'key')
+    });
   },
   unpassword: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.revokeAppPassword', { group, name: text(form, 'name') });
+    return act(event, 'fyi.opensocial.internal.revokeAppPassword', {
+      group,
+      name: text(form, 'name')
+    });
   },
   handle: async (event) => {
     const { group, form } = await asked(event);
@@ -306,18 +329,18 @@ const all = {
     const { group } = await asked(event);
     // Off, its page is where it is switched back on.
     return (
-      (await act(event, 'fyi.opensocial.deactivateGroup', { group })) ??
+      (await act(event, 'fyi.opensocial.internal.deactivateGroup', { group })) ??
       redirect(303, `/g/${event.params.handle}`)
     );
   },
   activate: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.activateGroup', { group });
+    return act(event, 'fyi.opensocial.internal.activateGroup', { group });
   },
   define: async (event) => {
     const { group, form } = await asked(event);
     const label = text(form, 'label').toLowerCase().replace(/\s+/g, '-');
-    return act(event, 'fyi.opensocial.putLabelDefinition', {
+    return act(event, 'fyi.opensocial.internal.putLabelDefinition', {
       group,
       label,
       name: text(form, 'name'),
@@ -330,57 +353,14 @@ const all = {
   },
   undefine: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.deleteLabelDefinition', {
+    return act(event, 'fyi.opensocial.internal.deleteLabelDefinition', {
       group,
       label: text(form, 'label')
     });
   },
-  site: async (event) => {
-    const { group, form } = await asked(event);
-    const files = await siteFiles(form);
-    if (!files.length) return fail(400, { failed: m.settings_site_folder_needed() });
-    // A 404.html at the top of the folder is its page for addresses not
-    // found, as static hosts take it.
-    const notFound = files.some((f) => f.path === '404.html') ? { notFound: '404.html' } : {};
-    const fallback = text(form, 'fallback') ? { fallback: text(form, 'fallback') } : {};
-    const reads = form.getAll('reads').map((method) => ({ method: String(method) }));
-    const acts = form.getAll('acts').map((method) => ({ method: String(method) }));
-    // Each one per line: a space as `<type>` or `<type>/<key>`; a write as
-    // that and `:<collection>`.
-    const [spaceLines, writeLines] = ['spaces', 'writes'].map((key) =>
-      text(form, key)
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean)
-    );
-    const spaces = [...new Set(spaceLines)].map(spaceOf);
-    if (spaces.some((s) => !s)) return fail(400, { failed: m.settings_site_spaces_bad() });
-    const writes = writeLines.map((line) => {
-      const at = line.indexOf(':');
-      const space = at < 0 ? undefined : spaceOf(line.slice(0, at));
-      const collection = line.slice(at + 1).trim();
-      return space && collection ? { ...space, collection } : undefined;
-    });
-    if (writes.some((w) => !w)) return fail(400, { failed: m.settings_site_writes_bad() });
-    return act(event, 'fyi.opensocial.putSite', {
-      group,
-      files,
-      ...notFound,
-      ...fallback,
-      ...(reads.length ? { reads } : {}),
-      ...(acts.length ? { acts } : {}),
-      ...(spaces.length ? { spaces } : {}),
-      ...(writes.length ? { writes } : {}),
-      ...(form.has('inbox') ? { inbox: true } : {})
-    });
-  },
-  unsite: async (event) => {
-    const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.deleteSite', { group });
-  },
   domain: async (event) => {
     const { group, form } = await asked(event);
-    const res = await event.fetch('/xrpc/fyi.opensocial.putSiteDomain', {
+    const res = await event.fetch('/xrpc/fyi.opensocial.internal.putGroupDomain', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ group })
@@ -396,58 +376,16 @@ const all = {
   },
   undomain: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.deleteSiteDomain', { group });
+    return act(event, 'fyi.opensocial.internal.deleteGroupDomain', { group });
   },
   delete: async (event) => {
     const { group } = await asked(event);
     // Gone, there is no page of it to come back to.
-    return (await act(event, 'fyi.opensocial.deleteGroup', { group })) ?? redirect(303, '/');
+    return (
+      (await act(event, 'fyi.opensocial.internal.deleteGroup', { group })) ?? redirect(303, '/')
+    );
   }
 } satisfies Record<string, Action<{ handle: string }>>;
-
-/** A file's bytes as text, where they are UTF-8: kept as they are, a byte-order mark included. */
-const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-
-/**
- * The files of a folder chosen to publish, as `putSite` takes them, each
- * at its path under the folder (`paths`, as the browser gives them, in
- * the files' order, or else each file's name); those whose names start
- * with a dot left out, as the command leaves them. Each as text if it is
- * UTF-8, else as bytes.
- */
-async function siteFiles(form: FormData) {
-  const paths: unknown = JSON.parse(text(form, 'paths') || '[]');
-  const given = form.getAll('files').filter((f): f is File => f instanceof File && f.name !== '');
-  const named = given.map((file, i) => ({
-    file,
-    path: (Array.isArray(paths) && typeof paths[i] === 'string' && paths[i]) || file.name
-  }));
-  // The folder's own name is no part of the site's paths.
-  const top = named[0]?.path.split('/')[0] ?? '';
-  const under = named.every((n) => n.path.startsWith(`${top}/`));
-  const files = [];
-  for (const { file, path: whole } of named) {
-    const path = under ? whole.slice(top.length + 1) : whole;
-    if (path.split('/').some((s) => s.startsWith('.'))) continue;
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    try {
-      files.push({ path, text: UTF8.decode(bytes) });
-    } catch {
-      const $bytes = Buffer.from(bytes).toString('base64').replace(/=+$/, '');
-      files.push({ path, bytes: { $bytes } });
-    }
-  }
-  return files;
-}
-
-/** A space as typed, `<type>` or `<type>/<key>`; nothing when either part is empty. */
-function spaceOf(line: string): { space: string; key?: string } | undefined {
-  const at = line.indexOf('/');
-  const space = (at < 0 ? line : line.slice(0, at)).trim();
-  const key = at < 0 ? undefined : line.slice(at + 1).trim();
-  if (!space || key === '') return;
-  return key === undefined ? { space } : { space, key };
-}
 
 /** The writes named, as a page's actions. */
 const pick = <K extends keyof typeof all>(...names: K[]) =>
@@ -458,7 +396,7 @@ const pick = <K extends keyof typeof all>(...names: K[]) =>
  * the host's refusal is one they can act on.
  */
 async function newHandle(event: Event, group: string, handle: string) {
-  const res = await event.fetch('/xrpc/fyi.opensocial.updateGroupHandle', {
+  const res = await event.fetch('/xrpc/fyi.opensocial.internal.updateGroupHandle', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ group, handle })
@@ -481,6 +419,8 @@ export const profileActions = pick(
   'unpicture',
   'visibility',
   'deactivate',
+  'domain',
+  'undomain',
   'delete'
 );
 /** What a group switched off is: switched back on, or deleted, from its own page. */
@@ -490,4 +430,3 @@ export const labelActions = pick('define', 'undefine');
 export const roleActions = pick('role', 'unrole');
 export const appActions = pick('revoke', 'password', 'unpassword');
 export const recoveryActions = pick('key', 'unkey');
-export const siteActions = pick('site', 'unsite', 'domain', 'undomain');

@@ -33,10 +33,7 @@ own space methods ([below](#making-changing-and-ending-a-space)). Meta
 and members come and go with the group.
 
 A space's type is any NSID, but a member's PDS grants an app a type only
-once it can read that type's published schema. For a group's site, the
-host publishes one, `fyi.opensocial.siteSpace`. It lists no collections,
-and a group makes one space of it per part of its site under its own key,
-such as `board` or `calendar` ([sites](sites.md#a-space-for-a-site)).
+once it can read that type's published schema.
 
 ## Who writes where
 
@@ -113,7 +110,7 @@ refused, and they change only when the policy does.
 A space is made, changed, ended and read by atproto's own methods,
 `com.atproto.space.createSpace`, `updateSpace`, `deleteSpace` and
 `getSpace`, called as the group. That's an app signed in as the group,
-or a group token from `fyi.opensocial.getGroupAuth`
+or a group token from `fyi.opensocial.internal.getGroupAuth`
 ([signing in](signing-in.md)). An app password can't call them, since
 its session never reaches spaces. Each call is checked twice:
 
@@ -252,7 +249,7 @@ for. The host keeps documents five minutes. When the kept key turns a
 signature away, the host checks it again against a fresh document, so a
 key that just changed still works.
 
-`fyi.opensocial.getSpaceBlob` serves a file from the member who wrote
+`fyi.opensocial.internal.getSpaceBlob` serves a file from the member who wrote
 it, with the group's credential. It fetches only from a repo in the
 space's writer set, so a caller can't point the host at a server of
 their choosing. The bytes must hash to the CID asked for.
@@ -266,7 +263,7 @@ Details:
 ## Reading a space through the host
 
 The `fyi.opensocial.*` methods answer from the index.
-`fyi.opensocial.listSpaceRecords` brings the index up to date, waiting
+`fyi.opensocial.internal.listSpaceRecords` brings the index up to date, waiting
 at most 5 seconds, then answers newest first. It orders by when the
 index first saw each record, its `createdAt`, which reading a repo again
 doesn't move. It and `getSpaceBlob` check the policy on every call, so

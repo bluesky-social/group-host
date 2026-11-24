@@ -60,25 +60,12 @@ pub struct Config {
     /// How many of the lines it logs at info and below it keeps to read
     /// back, `LOGS_KEEP`; any line is kept 30 days at most.
     pub logs_keep: u64,
-    /// Where the built page that holds a site visitor's session is,
-    /// `SITE_SHELL_DIR`: its `shell.js`, served at `/_os/shell.js` on a
-    /// group's address. A site that asks for live data has none to run
-    /// without it.
-    pub site_shell: Option<std::path::PathBuf>,
-    /// Where that page looks up a handle typed to sign in,
-    /// `SITE_HANDLE_RESOLVER`: a service answering
-    /// `com.atproto.identity.resolveHandle`. Bluesky's unless set.
-    pub site_handle_resolver: String,
-    /// Where that page looks up the `did:plc` of whoever signs in,
-    /// `SITE_PLC_URL`: the directory as their browser reaches it, where
-    /// `PLC_URL` names one only the host reaches. `PLC_URL` unless set.
-    pub site_plc_url: String,
     /// Where the host asks a group's own domain whether it reaches this
-    /// host, before serving the group's site there, `SITE_CHECK_AT`: a URL
+    /// host, before serving the group there, `DOMAIN_CHECK_AT`: a URL
     /// asked in the domain's place, with the domain as its `Host` (a proxy
     /// in front that the host can't reach at its public addresses). Unset,
     /// the domain itself, over https.
-    pub site_check_at: Option<String>,
+    pub domain_check_at: Option<String>,
     /// Whether it limits how much one caller asks, `RATE_LIMITS`: `on`,
     /// unless `off` (`limits`).
     pub rate_limits: bool,
@@ -174,11 +161,7 @@ impl Config {
                 .with_context(|| format!("LOGS_KEEP is no number of lines: {n}"))?,
             None => crate::logs::KEEP,
         };
-        let site_shell = var("SITE_SHELL_DIR").map(std::path::PathBuf::from);
-        let site_handle_resolver =
-            var("SITE_HANDLE_RESOLVER").unwrap_or_else(|| "https://bsky.social".into());
-        let site_plc_url = var("SITE_PLC_URL").unwrap_or_else(|| plc_url.clone());
-        let site_check_at = var("SITE_CHECK_AT").map(|u| u.trim_end_matches('/').to_string());
+        let domain_check_at = var("DOMAIN_CHECK_AT").map(|u| u.trim_end_matches('/').to_string());
         let rate_limits = match var("RATE_LIMITS").as_deref() {
             None | Some("on") => true,
             Some("off") => false,
@@ -202,10 +185,7 @@ impl Config {
             signup_pds,
             host_admins,
             logs_keep,
-            site_shell,
-            site_handle_resolver,
-            site_plc_url,
-            site_check_at,
+            domain_check_at,
             rate_limits,
         })
     }

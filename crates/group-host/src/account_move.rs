@@ -27,7 +27,7 @@ use crate::console_login::{Pending, sign_in};
 use crate::group_api::signed_in;
 use crate::index_api::capped;
 use crate::migration::creds;
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::store::Store;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
@@ -479,7 +479,7 @@ fn moving(host: &Host, me: &str) -> Result<Move, XrpcError> {
 
 /// The account signed in for the caller to move, if any.
 pub async fn get_account_move(State(host): State<Arc<Host>>, headers: HeaderMap) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.getAccountMove")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.getAccountMove")).await?;
     let Some(m) = host
         .store
         .move_of(&me, now_millis())
@@ -508,7 +508,7 @@ pub async fn start_account_move(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.startAccountMove")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.startAccountMove")).await?;
     let mut m = moving(&host, &me)?;
     let aud = format!("{}#opensocial", host.config.service_did);
     let asked = [
@@ -534,7 +534,7 @@ pub async fn finish_account_move(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.finishAccountMove")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.finishAccountMove")).await?;
     let mut m = moving(&host, &me)?;
     let code = body["code"].as_str().map(str::trim).unwrap_or_default();
     let pending = host
@@ -567,7 +567,7 @@ pub async fn finish_account_move(
 /// Forgets the account the caller signed in to move, its tokens given
 /// back, and discards a copy of it not yet finished.
 pub async fn cancel_account_move(State(host): State<Arc<Host>>, headers: HeaderMap) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.cancelAccountMove")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.cancelAccountMove")).await?;
     let m = moving(&host, &me)?;
     let pending = host
         .store

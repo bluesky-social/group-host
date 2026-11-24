@@ -195,7 +195,7 @@ async fn starts_shows_and_runs_a_group() {
     // Out, he does not act as the group.
     let said_so = fails(&env(&h, 1), &["member", "eject", &did, &me]).await;
     assert!(
-        said_so.starts_with("fyi.opensocial.getGroupAuth: 403"),
+        said_so.starts_with("fyi.opensocial.internal.getGroupAuth: 403"),
         "{said_so}"
     );
     // A request turned down is no request at all.
@@ -454,7 +454,9 @@ async fn switches_a_group_off_and_on_and_deletes_it() {
     };
     let key = Keypair::generate(Curve::K256).public().did_key();
     let body = json!({"group": did, "key": key});
-    let added = me.call(&at, "fyi.opensocial.addRecoveryKey", &body).await;
+    let added = me
+        .call(&at, "fyi.opensocial.internal.addRecoveryKey", &body)
+        .await;
     added.unwrap();
     let gone = ok(&alice, &["group", "delete", &did]).await;
     let left = "its DID is left to the holders of its recovery keys";
@@ -521,7 +523,10 @@ async fn moves_a_group_to_another_host() {
     let bob = env(&a, 1);
     let to = format!("{}/", b.url);
     let said = fails(&bob, &["group", "move", "riders.groups.test", "--to", &to]).await;
-    assert!(said.contains("fyi.opensocial.migratePrepare"), "{said}");
+    assert!(
+        said.contains("fyi.opensocial.internal.migratePrepare"),
+        "{said}"
+    );
     let said = ok(
         &alice,
         &[
@@ -845,7 +850,7 @@ async fn answers_a_call_a_persons_pds_proxies() {
         .await
         .unwrap();
     let res = http
-        .get(format!("{}/xrpc/fyi.opensocial.getViewer", n.pds))
+        .get(format!("{}/xrpc/fyi.opensocial.internal.getViewer", n.pds))
         .header("atproto-proxy", format!("{}#opensocial", did_web(&h.url)))
         .bearer_auth(session["accessJwt"].as_str().unwrap())
         .send()
@@ -868,189 +873,16 @@ fn reads_its_environment() {
 }
 
 #[tokio::test]
-async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
+async fn serves_a_group_at_its_own_domain_or_its_address() {
     let h = host().await;
     let alice = env(&h, 0);
     let group = "riders.groups.test";
     ok(&alice, &["group", "create", group]).await;
-    let did = h.host.store.account(group).unwrap().unwrap().did;
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir(dir.path().join("rides")).unwrap();
-    std::fs::create_dir(dir.path().join(".git")).unwrap();
-    std::fs::write(dir.path().join("index.html"), "<h1>Riders</h1>").unwrap();
-    std::fs::write(dir.path().join("rides/index.html"), "<h1>Rides</h1>").unwrap();
-    std::fs::write(dir.path().join("logo.png"), [0x89, b'P', b'N', b'G', 0xff]).unwrap();
-    std::fs::write(dir.path().join(".env"), "SECRET=1").unwrap();
-    std::fs::write(dir.path().join(".git/HEAD"), "ref").unwrap();
-    let folder = dir.path().to_str().unwrap();
-
-    let args = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--not-found",
-        "index.html",
-        "--fallback",
-        "rides/index.html",
-    ];
-    let made = said(&ok(&alice, &args).await);
-    assert_eq!(made["uploaded"], 3, "{made}");
-    assert_eq!(made["url"], format!("http://{group}/"));
-    let record = h
-        .host
-        .store
-        .record(&did, "fyi.opensocial.site", "self")
-        .unwrap()
-        .unwrap();
-    let site = atproto::drisl::decode(&record.value).unwrap().to_json();
-    let paths: Vec<&str> = site["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|f| f["path"].as_str().unwrap())
-        .collect();
-    assert_eq!(paths, ["index.html", "logo.png", "rides/index.html"]);
-    assert_eq!(
-        (site["notFound"].as_str(), site["fallback"].as_str()),
-        (Some("index.html"), Some("rides/index.html"))
-    );
-
-    // Reads by name, as one of the host's, or by NSID.
-    let args = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--reads",
-        "getGroup, fyi.opensocial.listMembers",
-    ];
-    ok(&alice, &args).await;
-    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
-    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
-    let reads = &site.to_json()["reads"];
-    let wanted =
-        json!([{"method": "fyi.opensocial.getGroup"}, {"method": "fyi.opensocial.listMembers"}]);
-    assert_eq!(reads, &wanted);
-
-    // Writes, each a type of the group's spaces and a collection there.
-    let args = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--writes",
-        "com.example.board:com.example.note, fyi.opensocial.members:fyi.opensocial.acceptance",
-    ];
-    ok(&alice, &args).await;
-    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
-    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
-    let wanted = json!([
-        {"space": "com.example.board", "collection": "com.example.note"},
-        {"space": "fyi.opensocial.members", "collection": "fyi.opensocial.acceptance"},
-    ]);
-    assert_eq!(&site.to_json()["writes"], &wanted);
-    let unsaid = fails(
-        &alice,
-        &[
-            "site",
-            "publish",
-            group,
-            folder,
-            "--writes",
-            "com.example.note",
-        ],
-    )
-    .await;
-    assert!(
-        unsaid.contains("a write is <type>:<collection> or <type>/<key>:<collection>"),
-        "{unsaid}"
-    );
-    // A write in just the one space of a type, by its key.
-    let args = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--writes",
-        "fyi.opensocial.siteSpace/board:com.example.note",
-    ];
-    ok(&alice, &args).await;
-    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
-    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
-    let wanted = json!([
-        {"space": "fyi.opensocial.siteSpace", "key": "board", "collection": "com.example.note"},
-    ]);
-    assert_eq!(&site.to_json()["writes"], &wanted);
-
-    // Spaces, each a type by its NSID, read whole by the site's pages.
-    let args = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--spaces",
-        "com.example.board, fyi.opensocial.members",
-    ];
-    ok(&alice, &args).await;
-    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
-    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
-    let wanted = json!([{"space": "com.example.board"}, {"space": "fyi.opensocial.members"}]);
-    assert_eq!(&site.to_json()["spaces"], &wanted);
-    // Or just the one space of a type, by its key.
-    let args = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--spaces",
-        "fyi.opensocial.siteSpace/board, fyi.opensocial.siteSpace/calendar",
-    ];
-    ok(&alice, &args).await;
-    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
-    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
-    let wanted = json!([
-        {"space": "fyi.opensocial.siteSpace", "key": "board"},
-        {"space": "fyi.opensocial.siteSpace", "key": "calendar"},
-    ]);
-    assert_eq!(&site.to_json()["spaces"], &wanted);
-    let keyless = [
-        "site",
-        "publish",
-        group,
-        folder,
-        "--spaces",
-        "fyi.opensocial.siteSpace/",
-    ];
-    let keyless = fails(&alice, &keyless).await;
-    assert!(
-        keyless.contains("a space is <type> or <type>/<key>"),
-        "{keyless}"
-    );
-
-    // Each visitor's invite inbox, made when they sign in.
-    ok(&alice, &["site", "publish", group, folder, "--inbox"]).await;
-    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
-    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
-    assert_eq!(&site.to_json()["inbox"], &json!(true));
-
-    let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
-    assert!(missing.contains("reading /no/such/folder"), "{missing}");
-
     // Its handle its address, there is no domain to move it to; moving it
     // back is the opposite method, and leaves it where it is.
-    let moved = fails(&alice, &["site", "domain", group]).await;
+    let moved = fails(&alice, &["group", "domain", group]).await;
     assert!(moved.contains("NoOwnDomain"), "{moved}");
-    ok(&alice, &["site", "domain", group, "--undo"]).await;
-
-    ok(&alice, &["site", "delete", group]).await;
-    assert!(
-        h.host
-            .store
-            .record(&did, "fyi.opensocial.site", "self")
-            .unwrap()
-            .is_none()
-    );
+    ok(&alice, &["group", "domain", group, "--undo"]).await;
 }
 
 #[tokio::test]
@@ -1091,7 +923,8 @@ async fn reads_the_hosts_logs_and_stats_as_its_operator() {
     let today = printed.next().unwrap();
     assert!(today.ends_with("\t0\t1\t2"), "{today}");
     let rest: Vec<&str> = printed.collect();
-    let made = "route\tPOST /xrpc/fyi.opensocial.createGroup\t1 requests, 0 refused, 0 failed";
+    let made =
+        "route\tPOST /xrpc/fyi.opensocial.internal.createGroup\t1 requests, 0 refused, 0 failed";
     assert!(rest.iter().any(|l| l.starts_with(made)), "{rest:?}");
 
     // Only the host's operators may read them.

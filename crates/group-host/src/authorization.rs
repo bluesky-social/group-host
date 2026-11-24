@@ -11,7 +11,7 @@ use crate::group_api::{group_of, signed_in};
 use crate::mcp;
 use crate::oauth_scope::{concrete, set_of};
 use crate::oauth_store::Request;
-use crate::rbac::NS;
+use crate::rbac::{INTERNAL, NS};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -112,7 +112,7 @@ impl Host {
             if let Some(cid) = profile["avatar"]["ref"]["$link"].as_str() {
                 // Read as any file in the space is, by whoever may.
                 let url = reqwest::Url::parse_with_params(
-                    &format!("{}/xrpc/{NS}.getSpaceBlob", self.config.public_url),
+                    &format!("{}/xrpc/{INTERNAL}.getSpaceBlob", self.config.public_url),
                     &[
                         ("group", group),
                         ("space", &meta),
@@ -148,7 +148,7 @@ pub async fn get_authorization(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.getAuthorization")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.getAuthorization")).await?;
     let uri = param(&p, "requestUri")?;
     if uri.starts_with(mcp::PREFIX) {
         return Ok(Json(mcp::mcp_view(&host, uri, &me)?));
@@ -204,7 +204,7 @@ pub async fn approve_authorization(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.approveAuthorization")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.approveAuthorization")).await?;
     let uri = body["requestUri"].as_str();
     let uri = uri.expect("its lexicon requires it");
     let group = body["group"].as_str();
@@ -246,7 +246,7 @@ pub async fn decline_authorization(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    signed_in(&host, &headers, &format!("{NS}.declineAuthorization")).await?;
+    signed_in(&host, &headers, &format!("{INTERNAL}.declineAuthorization")).await?;
     let uri = body["requestUri"].as_str();
     let uri = uri.expect("its lexicon requires it");
     if uri.starts_with(mcp::PREFIX) {

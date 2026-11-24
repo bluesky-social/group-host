@@ -25,7 +25,7 @@ async fn join(h: &Running, did: &str, who: &str) {
 }
 
 async fn viewer(h: &Running, who: Option<&Authority>) -> Json {
-    let lxm = format!("{NS}.getViewer");
+    let lxm = format!("{INTERNAL}.getViewer");
     let headers: Vec<(&str, String)> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
     let (status, said) = get(h, &lxm, "", &headers).await;
     assert_eq!(status, 200, "{said}");
@@ -33,7 +33,7 @@ async fn viewer(h: &Running, who: Option<&Authority>) -> Json {
 }
 
 async fn groups_of(h: &Running, who: &Authority, query: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.getActorGroups");
+    let lxm = format!("{INTERNAL}.getActorGroups");
     get(h, &lxm, query, &[auth(h, who, &lxm)]).await
 }
 
@@ -174,7 +174,7 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
         "ActorNotFound"
     );
     assert_eq!(groups_of(&h, &alice, "").await.0, 400);
-    let lxm = format!("{NS}.getActorGroups");
+    let lxm = format!("{INTERNAL}.getActorGroups");
     assert_eq!(
         get(&h, &lxm, &format!("actor={}", alice.did), &[]).await.0,
         401
@@ -207,7 +207,7 @@ async fn names_by_did_alone_someone_whose_document_it_cannot_read() {
     )
     .await;
     join(&h, &riders, "did:plc:nobodynobodynobodyxx").await;
-    let lxm = format!("{NS}.listMembers");
+    let lxm = format!("{INTERNAL}.listMembers");
     let (_, view) = get(
         &h,
         &lxm,
@@ -231,7 +231,7 @@ async fn names_by_did_alone_someone_whose_document_it_cannot_read() {
 async fn names_a_person_the_host_shows() {
     let h = start(&[], false).await;
     let [alice, bob, carol] = people(&h).await;
-    let lxm = format!("{NS}.getActor");
+    let lxm = format!("{INTERNAL}.getActor");
     let actor = async |asker: &Authority, who: &str| {
         get(&h, &lxm, &format!("actor={who}"), &[auth(&h, asker, &lxm)]).await
     };

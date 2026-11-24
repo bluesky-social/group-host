@@ -17,7 +17,7 @@ use serde_json::{Value as Json, json};
 const NS: &str = "fyi.opensocial";
 
 async fn call(h: &Running, who: &Authority, method: &str, did: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &json!({"group": did}), &[auth(h, who, &lxm)]).await
 }
 
@@ -150,7 +150,7 @@ async fn a_group_switched_off_is_read_by_nobody() {
     assert_eq!(got.error(), (400, "RepoDeactivated".into()));
 
     // Shown as switched off, and nothing more, to its admins too.
-    let lxm = format!("{NS}.getGroup");
+    let lxm = format!("{INTERNAL}.getGroup");
     let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(shown["group"]["deactivated"], true);
     assert_eq!(shown["group"].get("displayName"), None);
@@ -162,7 +162,13 @@ async fn a_group_switched_off_is_read_by_nobody() {
     let viewer = json!({"member": false, "roles": [], "actions": [], "steward": false});
     assert_eq!(shown["group"]["viewer"], viewer);
     // To no one signed in, as any other: its DID and handle.
-    let (_, shown) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
+    let (_, shown) = get(
+        &h,
+        &format!("{INTERNAL}.getGroup"),
+        &format!("group={did}"),
+        &[],
+    )
+    .await;
     assert_eq!(shown["group"].get("deactivated"), None);
 
     // Off twice, or on when on, changes nothing.
@@ -213,7 +219,7 @@ async fn a_group_switched_off_is_read_by_nobody() {
     assert_eq!(last_two[1]["active"], true);
 
     for method in ["deactivateGroup", "activateGroup", "deleteGroup"] {
-        let lxm = format!("{NS}.{method}");
+        let lxm = nsid(method);
         let said = post(&h, &lxm, &json!({}), &[auth(&h, &alice, &lxm)]).await;
         assert_eq!(error(&said), (400, "InvalidRequest"));
         let said = call(&h, &alice, method, "did:plc:nobody").await;
@@ -285,7 +291,13 @@ async fn a_group_deleted_is_gone() {
     // Its DID is ended in the directory.
     let ops = h.plc.ops.lock().unwrap()[&did].clone();
     assert!(matches!(ops.last(), Some(Signed::Tombstone { .. })));
-    let (status, _) = get(&h, &format!("{NS}.getGroup"), &format!("group={did}"), &[]).await;
+    let (status, _) = get(
+        &h,
+        &format!("{INTERNAL}.getGroup"),
+        &format!("group={did}"),
+        &[],
+    )
+    .await;
     assert_eq!(status, 400);
     let told = syncer
         .told_of("com.atproto.space.notifySpaceUpdate#spaceDeleted", 2)
@@ -362,7 +374,7 @@ async fn a_did_ended_already_is_ended() {
 async fn a_group_half_made_frees_its_handle() {
     let h = start(&[], false).await;
     let [alice, _, _] = people(&h).await;
-    let lxm = format!("{NS}.createGroup");
+    let lxm = format!("{INTERNAL}.createGroup");
     // A steward whose DID is no record key: the members space refuses
     // their membership after meta is written.
     let body = json!({"handle": RIDERS, "displayName": "Riders", "stewards": [{"did": "did:web:example.com%20x"}]});
@@ -381,7 +393,7 @@ async fn a_group_half_made_frees_its_handle() {
 async fn a_group_half_made_that_cannot_go_fails_as_it_did() {
     let h = start(&[], false).await;
     let [alice, _, _] = people(&h).await;
-    let lxm = format!("{NS}.createGroup");
+    let lxm = format!("{INTERNAL}.createGroup");
     turn(&h.plc.refuse_ends, true);
     let body = json!({"handle": RIDERS, "displayName": "Riders", "stewards": [{"did": "did:web:example.com%20x"}]});
     let said = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;

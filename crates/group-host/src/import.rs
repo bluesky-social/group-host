@@ -30,7 +30,7 @@ use crate::group_api::{for_host, signed_in};
 use crate::import_space::keeps;
 use crate::index_api::capped;
 use crate::migration::{creds, repo_writes, take_in};
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::repo::{Asked, Write};
 use crate::store::Store;
 use crate::time::now_millis;
@@ -376,7 +376,7 @@ pub async fn check_import(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.checkImport")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.checkImport")).await?;
     let did = param(&p, "did")?;
     let plan = host
         .plan_import(did, p.get("address").map(String::as_str))
@@ -415,7 +415,7 @@ pub async fn import_account(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.importAccount")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.importAccount")).await?;
     let jwt = body["serviceJwt"].as_str();
     let jwt = jwt.expect("its lexicon requires it");
     let started = host.import_as(&me, jwt, body["address"].as_str()).await?;
@@ -524,7 +524,7 @@ pub async fn complete_import(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.completeImport")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.completeImport")).await?;
     let did = body["did"].as_str();
     let did = did.expect("its lexicon requires it");
     let done = host

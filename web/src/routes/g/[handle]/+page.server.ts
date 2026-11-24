@@ -1,15 +1,14 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
-import type * as getActorInvites from '#lib/lexicons/fyi/opensocial/getActorInvites.ts';
-import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
-import type * as listConnectedApps from '#lib/lexicons/fyi/opensocial/listConnectedApps.ts';
-import type * as listInvites from '#lib/lexicons/fyi/opensocial/listInvites.ts';
-import type * as listMembers from '#lib/lexicons/fyi/opensocial/listMembers.ts';
+import type * as getActorInvites from '#lib/lexicons/fyi/opensocial/internal/getActorInvites.ts';
+import type * as getGroup from '#lib/lexicons/fyi/opensocial/internal/getGroup.ts';
+import type * as listConnectedApps from '#lib/lexicons/fyi/opensocial/internal/listConnectedApps.ts';
+import type * as listInvites from '#lib/lexicons/fyi/opensocial/internal/listInvites.ts';
+import type * as listMembers from '#lib/lexicons/fyi/opensocial/internal/listMembers.ts';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
 import { asGroup, membersOf } from '#lib/asGroup.ts';
 import { changes, switchedOffActions } from '#lib/server/settings.ts';
-import { siteOf } from '#lib/server/site.ts';
 import { m } from '#lib/paraglide/messages.js';
 
 type Handle = `${string}.${string}`;
@@ -36,12 +35,13 @@ const STEP = 5;
  * who may read them, its members, `shown` of them (five more each time)
  * whose handle holds `q`; its invites waiting, for one who may invite;
  * the AI apps a member connected; whether its settings have anything
- * for them; to one not in it, whether it has invited them; and to
- * anyone signed in, its site, while it has one.
+ * for them; and to one not in it, whether it has invited them.
  */
 export const load: PageServerLoad = async (event) => {
   const group = await groupOf(event);
-  const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group });
+  const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.internal.getGroup', {
+    group
+  });
   const viewer = view.group.viewer;
   const q = event.url.searchParams.get('q')?.trim() ?? '';
   const more = Math.floor(Number(event.url.searchParams.get('shown')) / STEP) * STEP;
@@ -49,32 +49,39 @@ export const load: PageServerLoad = async (event) => {
   const page =
     view.group.memberCount === undefined
       ? null
-      : await xrpc<typeof listMembers.main>(event, 'fyi.opensocial.listMembers', {
+      : await xrpc<typeof listMembers.main>(event, 'fyi.opensocial.internal.listMembers', {
           group,
           limit: shown,
           ...(q ? { q } : {})
         });
   const invites = viewer?.actions?.includes('invite')
-    ? (await xrpc<typeof listInvites.main>(event, 'fyi.opensocial.listInvites', { group })).invites
+    ? (await xrpc<typeof listInvites.main>(event, 'fyi.opensocial.internal.listInvites', { group }))
+        .invites
     : null;
   // The AI apps a member connected here, and where they connect one.
   const apps = viewer?.member
     ? (
-        await xrpc<typeof listConnectedApps.main>(event, 'fyi.opensocial.listConnectedApps', {
-          group
-        })
+        await xrpc<typeof listConnectedApps.main>(
+          event,
+          'fyi.opensocial.internal.listConnectedApps',
+          {
+            group
+          }
+        )
       ).apps
     : null;
   const invited =
     viewer && !viewer.member && !view.group.deactivated
       ? (
-          await xrpc<typeof getActorInvites.main>(event, 'fyi.opensocial.getActorInvites', {
-            group
-          })
+          await xrpc<typeof getActorInvites.main>(
+            event,
+            'fyi.opensocial.internal.getActorInvites',
+            {
+              group
+            }
+          )
         ).invites.length > 0
       : false;
-  const address = view.group.siteDomain ?? view.group.address;
-  const site = address && !view.group.deactivated ? await siteOf(event, group, address) : null;
   const { configures, issues } = changes(view);
   return {
     ...view,
@@ -86,7 +93,6 @@ export const load: PageServerLoad = async (event) => {
     invites,
     apps,
     invited,
-    site,
     mcp: `${event.url.origin}/mcp`
   };
 };
@@ -139,7 +145,7 @@ export const actions: Actions = {
   },
   decline: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.declineInvite', { group });
+    return act(event, 'fyi.opensocial.internal.declineInvite', { group });
   },
   cancel: async (event) => {
     const { group } = await asked(event);
@@ -152,7 +158,7 @@ export const actions: Actions = {
   admit: async (event) => {
     const { group, who } = await asked(event);
     // With the roles every new member gets, and member, which everyone holds.
-    const { roles } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', {
+    const { roles } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.internal.getGroup', {
       group: group as `did:${string}:${string}`
     });
     const given = (roles ?? []).filter((r) => r.default).map((r) => r.key);
@@ -198,7 +204,7 @@ export const actions: Actions = {
   },
   disconnect: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.revokeConnectedApp', {
+    return act(event, 'fyi.opensocial.internal.revokeConnectedApp', {
       group,
       clientId: String(form.get('clientId'))
     });

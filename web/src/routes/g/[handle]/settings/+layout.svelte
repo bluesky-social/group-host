@@ -13,7 +13,6 @@
     ...(data.configures
       ? [
           { href: at, text: m.route_group_settings_tab_profile() },
-          { href: `${at}/site`, text: m.route_group_settings_tab_site() },
           { href: `${at}/rules`, text: m.route_group_settings_tab_rules() },
           { href: `${at}/labels`, text: m.route_group_settings_tab_labels() },
           { href: `${at}/roles`, text: m.route_group_settings_tab_roles() }

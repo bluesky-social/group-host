@@ -44,7 +44,7 @@ async fn groups(h: &Running) -> (String, String, [Authority; 3]) {
 }
 
 async fn offer(h: &Running, who: &Authority, request_uri: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.getAuthorization");
+    let lxm = format!("{INTERNAL}.getAuthorization");
     let query = format!("requestUri={}", urlencode(request_uri));
     get(h, &lxm, &query, &[auth(h, who, &lxm)]).await
 }
@@ -75,7 +75,7 @@ fn dids(offered: &Json) -> Vec<&str> {
 }
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
@@ -247,9 +247,9 @@ async fn shows_the_groups_picture() {
     assert_eq!(param(avatar, "cid").unwrap(), cid);
     // Where any file in the space is served, to whoever may read it.
     let query = avatar
-        .strip_prefix("https://host.test/xrpc/fyi.opensocial.getSpaceBlob?")
+        .strip_prefix("https://host.test/xrpc/fyi.opensocial.internal.getSpaceBlob?")
         .unwrap();
-    let lxm = format!("{NS}.getSpaceBlob");
+    let lxm = format!("{INTERNAL}.getSpaceBlob");
     let (k, v) = auth(&h, &alice, &lxm);
     let res = h
         .http
@@ -291,7 +291,7 @@ async fn refuses_a_request_that_has_expired_or_never_was() {
         .await;
         assert_eq!(error(&said), (400, "ExpiredRequest"));
     }
-    let lxm = format!("{NS}.getAuthorization");
+    let lxm = format!("{INTERNAL}.getAuthorization");
     assert_eq!(get(&h, &lxm, "", &[auth(&h, &alice, &lxm)]).await.0, 400);
     assert_eq!(get(&h, &lxm, "requestUri=x", &[]).await.0, 401);
     for method in ["approveAuthorization", "declineAuthorization"] {

@@ -6,7 +6,6 @@
   - heading "Settings" [level=1]
   - navigation "Settings":
     - link "Profile":
-    - link "Site":
     - link "Rules":
     - link "Labels":
     - link "Roles":

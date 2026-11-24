@@ -65,8 +65,8 @@ async function migrateOnce(dir) {
 }
 
 const CONSOLE_HOST = 'console.group-host.internal';
-// Names beside it, as a group's site is reached in harness/e2e: the PDS
-// fetches a site's OAuth client there.
+// It and every name beside it resolve to this machine, in the certificate
+// the PDS trusts.
 const BESIDE = '.group-host.internal';
 const certs = mkdtempSync(join(tmpdir(), 'group-host-tls-'));
 const cert = join(certs, 'cert.pem');
@@ -125,7 +125,7 @@ for (const name of names) {
 // The space types the host keeps, published as lexicons from an account
 // of their own, which the PDS is told to resolve every lexicon from (as
 // PDS_LEXICON_AUTHORITY_DID would tell it): the PDS grants a `space:`
-// scope, as a site that writes asks for, only for a space whose
+// scope, as an app that writes in a space asks for, only for a space whose
 // declaration it can read.
 {
   const { readdirSync, statSync } = await import('node:fs');

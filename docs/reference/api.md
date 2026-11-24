@@ -3,8 +3,11 @@
 This is what the host answers over HTTP, at `PUBLIC_URL` ([config](config.md)).
 Each `fyi.opensocial.*` method has its lexicon under
 `lexicons/fyi/opensocial`, which says what it takes and answers, and the
-site shows it under the method. The design pages say why each part works
-the way it does.
+docs site shows it under the method. The `fyi.opensocial.internal.*`
+methods, under `lexicons/fyi/opensocial/internal`, are this host's own,
+for its console, its command and its operators. They aren't part of the
+opensocial proposal, and may change. The design pages say why each part
+works the way it does.
 
 An XRPC error is JSON, the same as atproto's servers send: an HTTP status
 and `{"error", "message"}`. Besides the names a method's lexicon lists,
@@ -13,7 +16,7 @@ any method may answer these:
 | Error                                                          | When                                                                                                                                                                                                                                                   |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `InvalidRequest`                                               | a parameter is missing or bad. The host checks a `fyi.opensocial.*` method's parameters and JSON input against its lexicon before anything else, and says where and what is wrong (`input.roles[2].role must not be longer than 64 bytes`)             |
-| `PayloadTooLarge`                                              | a JSON input is over 2 MiB, or over `BLOB_UPLOAD_LIMIT` for `putSite`                                                                                                                                                                                  |
+| `PayloadTooLarge`                                              | a JSON input is over 2 MiB                                                                                                                                                                                                                             |
 | `AuthMissing`                                                  | the method needs a caller and there isn't one                                                                                                                                                                                                          |
 | `BadJwt`, `BadJwtAudience`, `BadJwtIss`, `BadJwtLexiconMethod` | service auth doesn't hold up: a bad token, a token for another service, a signer whose key can't be found, or a token for another method                                                                                                               |
 | `Forbidden`                                                    | the caller's roles lack the action (`missing <action>`)                                                                                                                                                                                                |
@@ -57,29 +60,40 @@ spaces through the atproto methods below.
 
 | Method                                  | What it does                                                                                                                                                                                                                              |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST fyi.opensocial.createGroup`       | starts a group, with the caller as its founder and first admin. `metaPublicRead: false` keeps its `meta` space from anyone but its members                                                                                                |
-| `GET fyi.opensocial.getGroup`           | shows a group as the caller may see it. Someone signed in who may read `meta` gets its profile and rules, and one who may read `members` also gets its member count, roles and spaces. A member is told, as `grantable`, which actions' scopes and permission sets they hold enough of to give a role, and as `labelSpaces` the spaces where their roles write labels. Someone not signed in gets only its DID and handle |
-| `GET fyi.opensocial.checkAddress`       | says whether an address (one label under `HANDLE_DOMAIN`) is free for a new group. Anyone may ask                                                                                                                                         |
-| `GET fyi.opensocial.checkGroupHandle`   | says whether a domain names the group yet, so it can be its handle                                                                                                                                                                        |
-| `POST fyi.opensocial.updateGroupHandle` | gives the group a handle on its own domain, or gives its address back                                                                                                                                                                     |
-| `POST fyi.opensocial.deactivateGroup`   | switches a group off until `activateGroup`                                                                                                                                                                                                |
-| `POST fyi.opensocial.activateGroup`     | switches a deactivated group back on                                                                                                                                                                                                      |
-| `POST fyi.opensocial.deleteGroup`       | deletes a group for good ([groups](../design/groups.md))                                                                                                                                                                                  |
+| `POST fyi.opensocial.internal.createGroup`       | starts a group, with the caller as its founder and first admin. `metaPublicRead: false` keeps its `meta` space from anyone but its members                                                                                                |
+| `GET fyi.opensocial.internal.getGroup`           | shows a group as the caller may see it. Someone signed in who may read `meta` gets its profile and rules, and one who may read `members` also gets its member count, roles and spaces. A member is told, as `grantable`, which actions' scopes and permission sets they hold enough of to give a role, and as `labelSpaces` the spaces where their roles write labels. Someone not signed in gets only its DID and handle |
+| `GET fyi.opensocial.internal.checkAddress`       | says whether an address (one label under `HANDLE_DOMAIN`) is free for a new group. Anyone may ask                                                                                                                                         |
+| `GET fyi.opensocial.internal.checkGroupHandle`   | says whether a domain names the group yet, so it can be its handle                                                                                                                                                                        |
+| `POST fyi.opensocial.internal.updateGroupHandle` | gives the group a handle on its own domain, or gives its address back                                                                                                                                                                     |
+| `POST fyi.opensocial.internal.putGroupDomain`    | serves the group at its handle's own domain once that domain answers as this host. Its address and `www.` under the domain redirect there (`NoOwnDomain`, `NotReaching`) ([its own domain](../design/groups.md#its-own-domain)) |
+| `POST fyi.opensocial.internal.deleteGroupDomain` | stops serving the group at its own domain                                                                                                                                                                                                 |
+| `POST fyi.opensocial.internal.deactivateGroup`   | switches a group off until `activateGroup`                                                                                                                                                                                                |
+| `POST fyi.opensocial.internal.activateGroup`     | switches a deactivated group back on                                                                                                                                                                                                      |
+| `POST fyi.opensocial.internal.deleteGroup`       | deletes a group for good ([groups](../design/groups.md))                                                                                                                                                                                  |
+
+A group's address, and its own domain once it's served there, answer
+these too. A request to the host's own name never does:
+
+| Route | What it does |
+| --- | --- |
+| `GET`, `HEAD` `https://<address>/` | redirects to the group's page in the console. Any other path, besides `/.well-known/` and `/xrpc/`, which the host keeps for itself there, is a plain 404 |
+| `https://<address>/<path>`, `https://www.<domain>/<path>` | while the group is served at its own domain, redirect (301) to the same path and query there |
+| `GET /tls/ask?domain=<domain>` | answers 200 if the proxy in front may get a certificate for `domain`, and 404 otherwise. A domain qualifies if it's a group's own domain, or `www.` under it, while the group is on |
 
 ## Membership
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.listMembers` | lists the group's members and their roles, a page at a time in DID order (`limit`, `cursor`), filtered to those whose handle or DID contains `q`. It's for a caller who may read the members space |
+| `GET fyi.opensocial.internal.listMembers` | lists the group's members and their roles, a page at a time in DID order (`limit`, `cursor`), filtered to those whose handle or DID contains `q`. It's for a caller who may read the members space |
 | `POST fyi.opensocial.leaveGroup` | leaves a group, unless no one else could configure it (`LastConfigurer`) |
 | `POST fyi.opensocial.requestJoin` | asks to join, or redeems an invite |
-| `GET fyi.opensocial.getJoinRequest` | shows the caller's own request to join while it waits |
+| `GET fyi.opensocial.internal.getJoinRequest` | shows the caller's own request to join while it waits |
 | `POST fyi.opensocial.cancelJoinRequest` | withdraws that request |
 | `GET fyi.opensocial.listJoinRequests` | lists the waiting requests, for those who admit people. A cursor it never gave fails with `InvalidCursor` |
 | `POST fyi.opensocial.denyJoinRequest` | turns a request down |
-| `GET fyi.opensocial.listInvites` | lists the group's invites that are still waiting, each with the invitee's handle |
-| `GET fyi.opensocial.getActorInvites` | lists the caller's own invites from groups here |
-| `POST fyi.opensocial.declineInvite` | turns an invite down |
+| `GET fyi.opensocial.internal.listInvites` | lists the group's invites that are still waiting, each with the invitee's handle |
+| `GET fyi.opensocial.internal.getActorInvites` | lists the caller's own invites from groups here |
+| `POST fyi.opensocial.internal.declineInvite` | turns an invite down |
 
 A group's roles, what each may do, and who holds them are records in its
 members space: `fyi.opensocial.role`, each with its scopes and the roles
@@ -107,10 +121,10 @@ the same writes ([membership](../design/membership.md#invites)).
 
 | Method                              | What it does                                                                                                                                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET fyi.opensocial.getViewer`      | says who's asking, by the console's cookie or service auth. It also lists the other accounts the browser is signed in to (`accounts`), and where someone without an account makes one (`signUpAt`, `SIGNUP_PDS`)               |
-| `GET fyi.opensocial.getActor`       | gives a person's DID and handle to someone signed in, about themselves or anyone the host shows (a member of a group here, or someone asking to join one). Asked about themselves, it also says whether they may start a group |
-| `GET fyi.opensocial.getActorGroups` | lists the groups here a person is in, as far as the caller shares them                                                                                                                                                         |
-| `GET fyi.opensocial.searchActors`   | finds accounts whose handle matches what's typed, from the source `ACTOR_SEARCH` names. Anyone may ask                                                                                                                         |
+| `GET fyi.opensocial.internal.getViewer`      | says who's asking, by the console's cookie or service auth. It also lists the other accounts the browser is signed in to (`accounts`), and where someone without an account makes one (`signUpAt`, `SIGNUP_PDS`)               |
+| `GET fyi.opensocial.internal.getActor`       | gives a person's DID and handle to someone signed in, about themselves or anyone the host shows (a member of a group here, or someone asking to join one). Asked about themselves, it also says whether they may start a group |
+| `GET fyi.opensocial.internal.getActorGroups` | lists the groups here a person is in, as far as the caller shares them                                                                                                                                                         |
+| `GET fyi.opensocial.internal.searchActors`   | finds accounts whose handle matches what's typed, from the source `ACTOR_SEARCH` names. Anyone may ask                                                                                                                         |
 | `GET /img/<did>/<cid>`              | serves a group's or a person's image to anyone who may see it. That's anyone for an image in a public repo, and otherwise only someone signed in to the console. One the group has taken down in a space, by its writer or a record holding it, it serves to nobody; a moderator reads it through `getModSubjectBlob` |
 
 ## Spaces
@@ -119,25 +133,8 @@ A group's spaces, and the records in them ([spaces](../design/spaces.md)).
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.listSpaceRecords` | lists the records in a space from the host's index of it, for someone signed in who may read it, but none the group has taken down with a `!takedown` label, for a moderator as for anyone |
-| `GET fyi.opensocial.getSpaceBlob` | serves a file in a space, read from the repo of whoever wrote it, unless the group has taken down its writer or a record holding it |
-
-## Sites
-
-A group's website ([sites](../design/sites.md)).
-
-| Method                                       | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST fyi.opensocial.putSite`                | publishes a group's whole site from the files given, each as text or bytes, and replaces the one there. `reads` lists the host's methods its pages may read, `acts` the procedures they may ask, and `spaces` the group's spaces they may read whole, each a type and, for one space of it, a `key`. `writes` lists the records they may write in the signed-in person's own repo in the group's spaces, each a type, an optional `key` and a collection. Pages do all of it as that person. `inbox` makes that person's invite inbox as they sign in, if they have none. It takes a body up to `BLOB_UPLOAD_LIMIT` |
-| `POST fyi.opensocial.deleteSite`             | takes a group's site down                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `POST fyi.opensocial.putSiteDomain`          | serves a group's site at its handle's own domain once that domain answers as this host. The site's address and `www.` under the domain redirect there                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `POST fyi.opensocial.deleteSiteDomain`       | serves a group's site at its address alone again                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `GET /tls/ask?domain=<domain>`               | answers 200 if the proxy in front may get a certificate for `domain`, and 404 otherwise. A domain qualifies if it's a group's own domain, or `www.` under it, while the group is on                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `GET`, `HEAD` `https://<address>/<path>`     | serves a file, sandboxed, from the site of the group whose address the request's `Host` names. The host keeps `/.well-known/` and `/xrpc/` there for itself. For a site that names `reads`, `spaces`, `acts` or `writes`, or sets `inbox`, a page is the host's page wrapped around the site's. It holds the visitor's session and carries the site page's title, preview tags and the status it would have |
-| `GET https://<address>/_site/<path>`         | for a site that names `reads`, `spaces`, `acts` or `writes`, or sets `inbox`, serves the file the frame shows, sandboxed, as above |
-| `GET https://<address>/client-metadata.json` | for a site that names `reads`, `spaces`, `acts` or `writes`, or sets `inbox`, serves its OAuth client's metadata. It's a public client asking for `atproto`, an `rpc:` scope for each read, each act and `getViewer`, and a `space:` scope to read each of its `spaces`, with `authority` the group and `skey` its key if it has one. For each write it asks a `space:` scope of its type, with `authority` the group, `skey` its key if it has one, its collection and every action, and with any write it asks `blob:image/*`. With `inbox` it asks `space:fyi.opensocial.invites?action=read_self&manage=create` ([live data](../design/sites.md#live-data)). It's named for the request's `X-Forwarded-Host` if a proxy sends one, and otherwise its `Host` |
-| `GET https://<address>/_os/kit.js`           | for a site that names `reads`, `spaces`, `acts` or `writes`, or sets `inbox`, serves the script its pages load for `os` ([the site kit](site-kit.md)) |
-| `GET https://<address>/_os/shell.js`         | for a site that names `reads`, `spaces`, `acts` or `writes`, or sets `inbox`, serves the host's page script from `SITE_SHELL_DIR`, or 404 without it |
+| `GET fyi.opensocial.internal.listSpaceRecords` | lists the records in a space from the host's index of it, for someone signed in who may read it, but none the group has taken down with a `!takedown` label, for a moderator as for anyone |
+| `GET fyi.opensocial.internal.getSpaceBlob` | serves a file in a space, read from the repo of whoever wrote it, unless the group has taken down its writer or a record holding it |
 
 The host is the spaces' authority and the PDS of the group's own repo in
 each, so it answers the space alpha's methods:
@@ -166,16 +163,16 @@ The host is each group's OAuth server ([signing in](../design/signing-in.md)):
 
 | Method                                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST fyi.opensocial.provisionGroup`       | lets an app that `PROVISIONING_CLIENTS` names start a group for a person, and signs the app in to it. It takes `metaPublicRead` as `createGroup` does                                                                                                                                                                                                                                                                           |
-| `POST fyi.opensocial.getGroupAuth`         | gives a member with a DPoP proof a 15-minute token to act as the group. In one of the group's spaces, it's scoped to what their roles may write there as the group, and to the `manage=` operations they may use on it. For a space not made yet, that's `manage=create`, if their roles hold `space.create`. In someone's inbox, it lets a member who may invite write invites there. It answers `Forbidden` if that's nothing |
-| `GET fyi.opensocial.getAuthorization`      | shows an app's request to sign in as a group, as the caller would approve it                                                                                                                                                                                                                                                                                                                                                    |
-| `POST fyi.opensocial.approveAuthorization` | approves the request with what the caller's roles allow                                                                                                                                                                                                                                                                                                                                                                         |
-| `POST fyi.opensocial.declineAuthorization` | declines the request                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `GET fyi.opensocial.listGroupTokens`       | lists the apps signed in as the group and what they did lately, each with the handle of whoever let it in. A write also comes in its parts (`write`: operation, collection, key, space) and with whom it's about (`subject`)                                                                                                                                                                                                    |
-| `POST fyi.opensocial.revokeGroupToken`     | signs one app out                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `POST fyi.opensocial.createAppPassword`    | makes an app password for the group, for an app that signs in with one                                                                                                                                                                                                                                                                                                                                                          |
-| `GET fyi.opensocial.listAppPasswords`      | lists the group's app passwords, each with its owner's handle. It never shows the passwords                                                                                                                                                                                                                                                                                                                                     |
-| `POST fyi.opensocial.revokeAppPassword`    | revokes one, and signs out its apps                                                                                                                                                                                                                                                                                                                                                                                             |
+| `POST fyi.opensocial.internal.provisionGroup`       | lets an app that `PROVISIONING_CLIENTS` names start a group for a person, and signs the app in to it. It takes `metaPublicRead` as `createGroup` does                                                                                                                                                                                                                                                                           |
+| `POST fyi.opensocial.internal.getGroupAuth`         | gives a member with a DPoP proof a 15-minute token to act as the group. In one of the group's spaces, it's scoped to what their roles may write there as the group, and to the `manage=` operations they may use on it. For a space not made yet, that's `manage=create`, if their roles hold `space.create`. In someone's inbox, it lets a member who may invite write invites there. It answers `Forbidden` if that's nothing |
+| `GET fyi.opensocial.internal.getAuthorization`      | shows an app's request to sign in as a group, as the caller would approve it                                                                                                                                                                                                                                                                                                                                                    |
+| `POST fyi.opensocial.internal.approveAuthorization` | approves the request with what the caller's roles allow                                                                                                                                                                                                                                                                                                                                                                         |
+| `POST fyi.opensocial.internal.declineAuthorization` | declines the request                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `GET fyi.opensocial.internal.listGroupTokens`       | lists the apps signed in as the group and what they did lately, each with the handle of whoever let it in. A write also comes in its parts (`write`: operation, collection, key, space) and with whom it's about (`subject`)                                                                                                                                                                                                    |
+| `POST fyi.opensocial.internal.revokeGroupToken`     | signs one app out                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `POST fyi.opensocial.internal.createAppPassword`    | makes an app password for the group, for an app that signs in with one                                                                                                                                                                                                                                                                                                                                                          |
+| `GET fyi.opensocial.internal.listAppPasswords`      | lists the group's app passwords, each with its owner's handle. It never shows the passwords                                                                                                                                                                                                                                                                                                                                     |
+| `POST fyi.opensocial.internal.revokeAppPassword`    | revokes one, and signs out its apps                                                                                                                                                                                                                                                                                                                                                                                             |
 
 An app signed in this way, or with an app password, uses these as the
 group:
@@ -208,8 +205,8 @@ Its tools are in [MCP tools](mcp.md).
 
 | Method                                   | What it does                                          |
 | ---------------------------------------- | ----------------------------------------------------- |
-| `GET fyi.opensocial.listConnectedApps`   | lists the MCP clients the caller connected to a group |
-| `POST fyi.opensocial.revokeConnectedApp` | disconnects one                                       |
+| `GET fyi.opensocial.internal.listConnectedApps`   | lists the MCP clients the caller connected to a group |
+| `POST fyi.opensocial.internal.revokeConnectedApp` | disconnects one                                       |
 
 ## Moderation
 
@@ -218,10 +215,10 @@ Its tools are in [MCP tools](mcp.md).
 | `POST fyi.opensocial.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo: `subject` is an account's DID or a record's URI, with an optional `cid`. The reporter must be able to read its space (the members space for a member or their public record), and the group's labeler must take reports. It answers the report's `id` and `createdAt`. `reasonType` is `spam`, `violation`, `misleading`, `nsfw`, `rude`, `other` or `appeal`. An appeal only its subject may file (the account itself, or the record's author). Anyone else gets `InvalidRequest`. The host takes an appeal even from someone put out, as long as the queue already has the subject. A reason or note is at most 2,000 characters (20,000 bytes) |
 | `GET fyi.opensocial.listModSubjects` | lists the moderation queue for one status, `open` by default. A cursor it never gave fails with `InvalidCursor` |
 | `GET fyi.opensocial.getModSubjectHistory` | lists a subject's events, oldest first, a page at a time. With a `cid`, it lists those about that version. A cursor it never gave fails with `InvalidCursor`. For a record in one of the group's spaces that the caller may read, it also answers the `record` as the host's index holds it, with `takenDown` true if the group has taken that version down |
-| `GET fyi.opensocial.getModSubjectBlob` | serves a file the record `subject` holds, by its `cid`, to someone with `mod.read` whom the record's space lets read it, even if the group has taken the record down. A file the record doesn't hold, or a record the caller can't read there, fails with `NotFound` |
+| `GET fyi.opensocial.internal.getModSubjectBlob` | serves a file the record `subject` holds, by its `cid`, to someone with `mod.read` whom the record's space lets read it, even if the group has taken the record down. A file the record doesn't hold, or a record the caller can't read there, fails with `NotFound` |
 | `POST fyi.opensocial.resolveModSubject` | sets a subject (`subject`, and an optional `cid`) `resolved` or `escalated`, with an optional note, and answers the subject |
-| `POST fyi.opensocial.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
-| `POST fyi.opensocial.deleteLabelDefinition` | stops defining one. Labels already applied stay |
+| `POST fyi.opensocial.internal.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
+| `POST fyi.opensocial.internal.deleteLabelDefinition` | stops defining one. Labels already applied stay |
 
 ## Operating the host
 
@@ -231,8 +228,8 @@ refuses anyone else with `Forbidden`.
 
 | Method                        | What it does                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET fyi.opensocial.getLogs`  | returns the lines the host logged, oldest first, each as it wrote it. It returns one request's lines by its `trace`, or the last lines of a `message`, at a `level` and above, or that took `minMs` or longer. It returns 100 unless `limit` asks for up to 500, and 500 for a trace. The read itself is logged as `logs read`, with who asked and for what |
-| `GET fyi.opensocial.getStats` | shows how the host was used over the last `days` (7 by default, 400 at most), day by day in UTC, and what it holds. It counts requests by route and by status class, slow ones, MCP tools called by name, and groups and spaces made. Nothing in it names who asked                                                                                         |
+| `GET fyi.opensocial.internal.getLogs`  | returns the lines the host logged, oldest first, each as it wrote it. It returns one request's lines by its `trace`, or the last lines of a `message`, at a `level` and above, or that took `minMs` or longer. It returns 100 unless `limit` asks for up to 500, and 500 for a trace. The read itself is logged as `logs read`, with who asked and for what |
+| `GET fyi.opensocial.internal.getStats` | shows how the host was used over the last `days` (7 by default, 400 at most), day by day in UTC, and what it holds. It counts requests by route and by status class, slow ones, MCP tools called by name, and groups and spaces made. Nothing in it names who asked                                                                                         |
 
 The host logs every request as a `request` line, with its method, route,
 path (never its query), status and `duration_ms`. When it refuses or
@@ -247,9 +244,9 @@ method other than HTTP's own seven is counted as `OTHER`.
 
 | Method                                  | What it does                                                                                     |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET fyi.opensocial.listRecoveryKeys`   | lists the rotation keys on the group's `did:plc` that matter ([recovery](../design/recovery.md)) |
-| `POST fyi.opensocial.addRecoveryKey`    | adds a steward's key, ahead of the host's                                                        |
-| `POST fyi.opensocial.removeRecoveryKey` | takes one off                                                                                    |
+| `GET fyi.opensocial.internal.listRecoveryKeys`   | lists the rotation keys on the group's `did:plc` that matter ([recovery](../design/recovery.md)) |
+| `POST fyi.opensocial.internal.addRecoveryKey`    | adds a steward's key, ahead of the host's                                                        |
+| `POST fyi.opensocial.internal.removeRecoveryKey` | takes one off                                                                                    |
 
 ## Moving
 
@@ -257,19 +254,19 @@ Moving groups between hosts, and accounts here to become groups ([moving](../des
 
 | Method                                   | What it does                                                       |
 | ---------------------------------------- | ------------------------------------------------------------------ |
-| `POST fyi.opensocial.migratePrepare`     | on the host a group leaves, starts the move                        |
-| `GET fyi.opensocial.migrateExport`       | on that host, serves what the destination pulls of the group       |
-| `POST fyi.opensocial.migrateReceive`     | on the destination, takes the group in, switched off               |
-| `POST fyi.opensocial.migrateComplete`    | on the host it leaves, points its DID at the destination           |
-| `POST fyi.opensocial.migrateActivate`    | on the destination, switches it on                                 |
-| `GET fyi.opensocial.checkImport`         | shows what moving an account here would make of it                 |
-| `POST fyi.opensocial.importAccount`      | starts moving an account here                                      |
-| `POST fyi.opensocial.importAccountSpace` | brings over one of its spaces while the move waits                 |
-| `POST fyi.opensocial.completeImport`     | finishes the move                                                  |
-| `GET fyi.opensocial.getAccountMove`      | shows the account the caller signed in to from the console to move |
-| `POST fyi.opensocial.startAccountMove`   | starts that move                                                   |
-| `POST fyi.opensocial.finishAccountMove`  | finishes it with the code the account's server emailed             |
-| `POST fyi.opensocial.cancelAccountMove`  | stops it                                                           |
+| `POST fyi.opensocial.internal.migratePrepare`     | on the host a group leaves, starts the move                        |
+| `GET fyi.opensocial.internal.migrateExport`       | on that host, serves what the destination pulls of the group       |
+| `POST fyi.opensocial.internal.migrateReceive`     | on the destination, takes the group in, switched off               |
+| `POST fyi.opensocial.internal.migrateComplete`    | on the host it leaves, points its DID at the destination           |
+| `POST fyi.opensocial.internal.migrateActivate`    | on the destination, switches it on                                 |
+| `GET fyi.opensocial.internal.checkImport`         | shows what moving an account here would make of it                 |
+| `POST fyi.opensocial.internal.importAccount`      | starts moving an account here                                      |
+| `POST fyi.opensocial.internal.importAccountSpace` | brings over one of its spaces while the move waits                 |
+| `POST fyi.opensocial.internal.completeImport`     | finishes the move                                                  |
+| `GET fyi.opensocial.internal.getAccountMove`      | shows the account the caller signed in to from the console to move |
+| `POST fyi.opensocial.internal.startAccountMove`   | starts that move                                                   |
+| `POST fyi.opensocial.internal.finishAccountMove`  | finishes it with the code the account's server emailed             |
+| `POST fyi.opensocial.internal.cancelAccountMove`  | stops it                                                           |
 
 ## The console
 
@@ -305,6 +302,6 @@ The OAuth routes, the `/mcp` routes, and the methods an app calls with a
 token (the writes, the sessions, `provisionGroup`, `getGroupAuth`) answer
 any origin. So do the methods a space is read by. Those are its
 authority's `authorizeSpaceSync` and `listWriters`, and the reads of a
-repo in it (`getRepo`, `listRepoOps` and the rest), which
-`@opensocial/sdk` makes in a site's page. The rest are for the console,
+repo in it (`getRepo`, `listRepoOps` and the rest), which an app's page
+makes. The rest are for the console,
 at its own origin.

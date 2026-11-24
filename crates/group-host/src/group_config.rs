@@ -100,8 +100,8 @@ fn said(text: &Value) -> bool {
     text.as_str().is_some_and(|t| !t.trim().is_empty())
 }
 
-/// Refuses a site that is not on the web.
-fn site(profile: &Value) -> Result<(), XrpcError> {
+/// Refuses a website that is not on the web.
+fn website(profile: &Value) -> Result<(), XrpcError> {
     let url = profile
         .get("url")
         .map(|url| url.as_str().unwrap_or_default());
@@ -137,7 +137,7 @@ impl Host {
     }
 
     /// Refuses a profile the group should not keep: one with no name, a
-    /// join policy the host does not know, a site not on the web, or a
+    /// join policy the host does not know, a website not on the web, or a
     /// picture that is not one of its own.
     fn profile(&self, group: &str, profile: &Value) -> Result<(), XrpcError> {
         if !said(&profile["displayName"]) {
@@ -146,7 +146,7 @@ impl Host {
         if let Some(policy) = profile["joinPolicy"].as_str() {
             join_policy(Some(policy))?;
         }
-        site(profile)?;
+        website(profile)?;
         self.picture(group, profile, "avatar")?;
         self.picture(group, profile, "banner")
     }

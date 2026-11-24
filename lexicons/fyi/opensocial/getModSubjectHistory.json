@@ -58,7 +58,7 @@
             },
             "record": {
               "type": "ref",
-              "ref": "fyi.opensocial.defs#modRecordView",
+              "ref": "fyi.opensocial.internal.defs#modRecordView",
               "description": "The subject, a record in one of the group's spaces, as the host's index holds it: given when the index holds it and the space's policy lets the caller read it, whether or not the group has taken it down."
             }
           }

@@ -27,10 +27,10 @@ use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
-const CHECK: &str = "fyi.opensocial.checkImport";
-const IMPORT: &str = "fyi.opensocial.importAccount";
-const COMPLETE: &str = "fyi.opensocial.completeImport";
-const BRING: &str = "fyi.opensocial.importAccountSpace";
+const CHECK: &str = "fyi.opensocial.internal.checkImport";
+const IMPORT: &str = "fyi.opensocial.internal.importAccount";
+const COMPLETE: &str = "fyi.opensocial.internal.completeImport";
+const BRING: &str = "fyi.opensocial.internal.importAccountSpace";
 const CREATE_ACCOUNT: &str = "com.atproto.server.createAccount";
 const AVATAR: &[u8] = &[1, 2, 3, 4];
 
@@ -749,7 +749,7 @@ async fn sends_the_operation_switches_it_on_and_makes_a_group_its_mover_runs() {
             .is_some()
     );
     assert!(host.store.pending_import(&w.did).unwrap().is_none());
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, grants) = get(
         &w.h,
         &lxm,

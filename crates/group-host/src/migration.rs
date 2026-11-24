@@ -33,7 +33,7 @@ use crate::group::did_rkey;
 use crate::group_api::signed_in;
 use crate::import_space::MEMBER;
 use crate::index_api::capped;
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::repo::{Asked, Write};
 use crate::store::{Account, Space, Store};
 use crate::time::now_millis;
@@ -59,7 +59,7 @@ type Answer = Result<Json<Value>, XrpcError>;
 /// How long the destination may pull the group with its export token.
 const EXPORT_FOR: i64 = 60 * 60_000;
 /// The method the group's service token is for.
-pub const RECEIVE: &str = "fyi.opensocial.migrateReceive";
+pub const RECEIVE: &str = "fyi.opensocial.internal.migrateReceive";
 
 fn refused(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)
@@ -135,7 +135,7 @@ impl Host {
         lxm: &str,
         group: Option<&str>,
     ) -> Result<(String, String), XrpcError> {
-        let me = signed_in(self, headers, &format!("{NS}.{lxm}")).await?;
+        let me = signed_in(self, headers, &format!("{INTERNAL}.{lxm}")).await?;
         let group = group.expect("its lexicon requires it");
         crate::group_api::group_of(self, group)?;
         if !self.may_do(group, &me, "group.configure")? {
@@ -408,7 +408,7 @@ impl Host {
         token: &str,
         extra: &[(&str, &str)],
     ) -> Result<reqwest::Response, XrpcError> {
-        let url = format!("{pds}/xrpc/fyi.opensocial.migrateExport");
+        let url = format!("{pds}/xrpc/fyi.opensocial.internal.migrateExport");
         let mut query = vec![("group", group), ("token", token)];
         query.extend_from_slice(extra);
         self.ask_source(&url, &query).await
@@ -510,7 +510,7 @@ pub async fn migrate_receive(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.migrateReceive")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.migrateReceive")).await?;
     host.founding(&me)?;
     let group = body["did"].as_str().expect("its lexicon requires it");
     let token = body["exportToken"]

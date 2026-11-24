@@ -5,17 +5,15 @@
 //! of one of our own collections an app writes as a group before it is
 //! kept ([`check_record`]).
 
-use crate::Host;
 use crate::api::invalid;
 use crate::xrpc::XrpcError;
 use atproto::lexicon::Lexicons;
 use axum::body::Body;
-use axum::extract::{Query, Request, State};
+use axum::extract::{Query, Request};
 use axum::http::{Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
-use std::sync::Arc;
 use std::sync::OnceLock;
 
 macro_rules! lexicon {
@@ -27,90 +25,87 @@ macro_rules! lexicon {
 /// Every lexicon under `lexicons/`.
 pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/acceptance"),
-    lexicon!("fyi/opensocial/activateGroup"),
-    lexicon!("fyi/opensocial/addRecoveryKey"),
-    lexicon!("fyi/opensocial/approveAuthorization"),
     lexicon!("fyi/opensocial/authManageGroup"),
     lexicon!("fyi/opensocial/authManageProfile"),
     lexicon!("fyi/opensocial/authModerate"),
     lexicon!("fyi/opensocial/authParticipate"),
-    lexicon!("fyi/opensocial/cancelAccountMove"),
     lexicon!("fyi/opensocial/cancelJoinRequest"),
-    lexicon!("fyi/opensocial/checkAddress"),
-    lexicon!("fyi/opensocial/checkGroupHandle"),
-    lexicon!("fyi/opensocial/checkImport"),
-    lexicon!("fyi/opensocial/completeImport"),
-    lexicon!("fyi/opensocial/createAppPassword"),
-    lexicon!("fyi/opensocial/createGroup"),
     lexicon!("fyi/opensocial/createReport"),
-    lexicon!("fyi/opensocial/deactivateGroup"),
     lexicon!("fyi/opensocial/declaration"),
-    lexicon!("fyi/opensocial/declineAuthorization"),
-    lexicon!("fyi/opensocial/declineInvite"),
     lexicon!("fyi/opensocial/defs"),
-    lexicon!("fyi/opensocial/deleteGroup"),
-    lexicon!("fyi/opensocial/deleteLabelDefinition"),
-    lexicon!("fyi/opensocial/deleteSite"),
-    lexicon!("fyi/opensocial/deleteSiteDomain"),
     lexicon!("fyi/opensocial/denyJoinRequest"),
-    lexicon!("fyi/opensocial/finishAccountMove"),
-    lexicon!("fyi/opensocial/getAccountMove"),
-    lexicon!("fyi/opensocial/getActor"),
-    lexicon!("fyi/opensocial/getActorGroups"),
-    lexicon!("fyi/opensocial/getActorInvites"),
-    lexicon!("fyi/opensocial/getAuthorization"),
-    lexicon!("fyi/opensocial/getGroup"),
-    lexicon!("fyi/opensocial/getGroupAuth"),
-    lexicon!("fyi/opensocial/getJoinRequest"),
-    lexicon!("fyi/opensocial/getLogs"),
-    lexicon!("fyi/opensocial/getModSubjectBlob"),
     lexicon!("fyi/opensocial/getModSubjectHistory"),
-    lexicon!("fyi/opensocial/getSpaceBlob"),
-    lexicon!("fyi/opensocial/getStats"),
-    lexicon!("fyi/opensocial/getViewer"),
-    lexicon!("fyi/opensocial/importAccount"),
-    lexicon!("fyi/opensocial/importAccountSpace"),
     lexicon!("fyi/opensocial/invite"),
     lexicon!("fyi/opensocial/invites"),
     lexicon!("fyi/opensocial/labeler"),
     lexicon!("fyi/opensocial/leaveGroup"),
-    lexicon!("fyi/opensocial/listAppPasswords"),
-    lexicon!("fyi/opensocial/listConnectedApps"),
-    lexicon!("fyi/opensocial/listGroupTokens"),
-    lexicon!("fyi/opensocial/listInvites"),
     lexicon!("fyi/opensocial/listJoinRequests"),
-    lexicon!("fyi/opensocial/listMembers"),
     lexicon!("fyi/opensocial/listModSubjects"),
-    lexicon!("fyi/opensocial/listRecoveryKeys"),
-    lexicon!("fyi/opensocial/listSpaceRecords"),
     lexicon!("fyi/opensocial/members"),
     lexicon!("fyi/opensocial/membership"),
     lexicon!("fyi/opensocial/meta"),
-    lexicon!("fyi/opensocial/migrateActivate"),
-    lexicon!("fyi/opensocial/migrateComplete"),
-    lexicon!("fyi/opensocial/migrateExport"),
-    lexicon!("fyi/opensocial/migratePrepare"),
-    lexicon!("fyi/opensocial/migrateReceive"),
     lexicon!("fyi/opensocial/policy"),
     lexicon!("fyi/opensocial/profile"),
-    lexicon!("fyi/opensocial/provisionGroup"),
-    lexicon!("fyi/opensocial/putLabelDefinition"),
-    lexicon!("fyi/opensocial/putSite"),
-    lexicon!("fyi/opensocial/putSiteDomain"),
-    lexicon!("fyi/opensocial/removeRecoveryKey"),
     lexicon!("fyi/opensocial/requestJoin"),
     lexicon!("fyi/opensocial/resolveModSubject"),
-    lexicon!("fyi/opensocial/revokeAppPassword"),
-    lexicon!("fyi/opensocial/revokeConnectedApp"),
-    lexicon!("fyi/opensocial/revokeGroupToken"),
     lexicon!("fyi/opensocial/role"),
     lexicon!("fyi/opensocial/rule"),
-    lexicon!("fyi/opensocial/searchActors"),
-    lexicon!("fyi/opensocial/site"),
-    lexicon!("fyi/opensocial/siteSpace"),
     lexicon!("fyi/opensocial/space"),
-    lexicon!("fyi/opensocial/startAccountMove"),
-    lexicon!("fyi/opensocial/updateGroupHandle"),
+    lexicon!("fyi/opensocial/internal/activateGroup"),
+    lexicon!("fyi/opensocial/internal/addRecoveryKey"),
+    lexicon!("fyi/opensocial/internal/approveAuthorization"),
+    lexicon!("fyi/opensocial/internal/cancelAccountMove"),
+    lexicon!("fyi/opensocial/internal/checkAddress"),
+    lexicon!("fyi/opensocial/internal/checkGroupHandle"),
+    lexicon!("fyi/opensocial/internal/checkImport"),
+    lexicon!("fyi/opensocial/internal/completeImport"),
+    lexicon!("fyi/opensocial/internal/createAppPassword"),
+    lexicon!("fyi/opensocial/internal/createGroup"),
+    lexicon!("fyi/opensocial/internal/deactivateGroup"),
+    lexicon!("fyi/opensocial/internal/declineAuthorization"),
+    lexicon!("fyi/opensocial/internal/declineInvite"),
+    lexicon!("fyi/opensocial/internal/defs"),
+    lexicon!("fyi/opensocial/internal/deleteGroup"),
+    lexicon!("fyi/opensocial/internal/deleteGroupDomain"),
+    lexicon!("fyi/opensocial/internal/deleteLabelDefinition"),
+    lexicon!("fyi/opensocial/internal/finishAccountMove"),
+    lexicon!("fyi/opensocial/internal/getAccountMove"),
+    lexicon!("fyi/opensocial/internal/getActor"),
+    lexicon!("fyi/opensocial/internal/getActorGroups"),
+    lexicon!("fyi/opensocial/internal/getActorInvites"),
+    lexicon!("fyi/opensocial/internal/getAuthorization"),
+    lexicon!("fyi/opensocial/internal/getGroup"),
+    lexicon!("fyi/opensocial/internal/getGroupAuth"),
+    lexicon!("fyi/opensocial/internal/getJoinRequest"),
+    lexicon!("fyi/opensocial/internal/getLogs"),
+    lexicon!("fyi/opensocial/internal/getModSubjectBlob"),
+    lexicon!("fyi/opensocial/internal/getSpaceBlob"),
+    lexicon!("fyi/opensocial/internal/getStats"),
+    lexicon!("fyi/opensocial/internal/getViewer"),
+    lexicon!("fyi/opensocial/internal/importAccount"),
+    lexicon!("fyi/opensocial/internal/importAccountSpace"),
+    lexicon!("fyi/opensocial/internal/listAppPasswords"),
+    lexicon!("fyi/opensocial/internal/listConnectedApps"),
+    lexicon!("fyi/opensocial/internal/listGroupTokens"),
+    lexicon!("fyi/opensocial/internal/listInvites"),
+    lexicon!("fyi/opensocial/internal/listMembers"),
+    lexicon!("fyi/opensocial/internal/listRecoveryKeys"),
+    lexicon!("fyi/opensocial/internal/listSpaceRecords"),
+    lexicon!("fyi/opensocial/internal/migrateActivate"),
+    lexicon!("fyi/opensocial/internal/migrateComplete"),
+    lexicon!("fyi/opensocial/internal/migrateExport"),
+    lexicon!("fyi/opensocial/internal/migratePrepare"),
+    lexicon!("fyi/opensocial/internal/migrateReceive"),
+    lexicon!("fyi/opensocial/internal/provisionGroup"),
+    lexicon!("fyi/opensocial/internal/putGroupDomain"),
+    lexicon!("fyi/opensocial/internal/putLabelDefinition"),
+    lexicon!("fyi/opensocial/internal/removeRecoveryKey"),
+    lexicon!("fyi/opensocial/internal/revokeAppPassword"),
+    lexicon!("fyi/opensocial/internal/revokeConnectedApp"),
+    lexicon!("fyi/opensocial/internal/revokeGroupToken"),
+    lexicon!("fyi/opensocial/internal/searchActors"),
+    lexicon!("fyi/opensocial/internal/startAccountMove"),
+    lexicon!("fyi/opensocial/internal/updateGroupHandle"),
     lexicon!("upstream/com/atproto/admin/defs"),
     lexicon!("upstream/com/atproto/identity/resolveHandle"),
     lexicon!("upstream/com/atproto/label/defs"),
@@ -150,9 +145,9 @@ fn refuse(err: XrpcError) -> Response {
 /// Refuses a call to a `fyi.opensocial.*` method whose parameters or JSON
 /// input are not what its lexicon describes, as `InvalidRequest` saying
 /// where and what, or whose input is larger than it takes, as
-/// `PayloadTooLarge`: [`INPUT_AT_MOST`], but for `putSite`, which carries
-/// a whole site, `BLOB_UPLOAD_LIMIT`. Any other request passes as it came.
-pub async fn check(State(host): State<Arc<Host>>, request: Request, next: Next) -> Response {
+/// `PayloadTooLarge`: [`INPUT_AT_MOST`]. Any other request passes as it
+/// came.
+pub async fn check(request: Request, next: Next) -> Response {
     let path = request.uri().path();
     let ours = path
         .strip_prefix("/xrpc/")
@@ -179,10 +174,7 @@ pub async fn check(State(host): State<Arc<Host>>, request: Request, next: Next) 
         return next.run(request).await;
     }
     let (parts, body) = request.into_parts();
-    let most = match nsid.as_str() {
-        "fyi.opensocial.putSite" => host.config.blob_upload_limit as usize,
-        _ => INPUT_AT_MOST,
-    };
+    let most = INPUT_AT_MOST;
     let Ok(bytes) = axum::body::to_bytes(body, most).await else {
         let said = format!("an input of {most} bytes at most, read whole");
         return refuse(XrpcError::new(

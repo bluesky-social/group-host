@@ -45,12 +45,12 @@ async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
 }
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
 async fn query(h: &Running, who: &Authority, method: &str, q: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     get(h, &lxm, q, &[auth(h, who, &lxm)]).await
 }
 
@@ -1152,7 +1152,7 @@ async fn events(
     space: &str,
     uri: Option<&str>,
 ) -> Vec<String> {
-    let lxm = format!("{NS}.listSpaceRecords");
+    let lxm = format!("{INTERNAL}.listSpaceRecords");
     let mut q = format!("group={did}&space={space}&collection=com.example.event");
     if let Some(uri) = uri {
         q = format!("group={did}&space={space}&uri={uri}");
@@ -1193,7 +1193,7 @@ async fn takes_out_of_the_space_what_the_group_takes_down() {
     let picnic = format!("{space}/{dan}/com.example.event/picnic");
     let ride = format!("{space}/{dan}/com.example.event/ride");
     let both = vec![picnic.clone(), ride.clone()];
-    let blob = format!("{NS}.getSpaceBlob");
+    let blob = format!("{INTERNAL}.getSpaceBlob");
     let cid = map["ref"]["$link"].as_str().unwrap();
     let q = format!("group={did}&space={space}&repo={dan}&cid={cid}");
     let the_map = async || read(&h, &blob, &q, &[auth(&h, &bob, &blob)]).await;
@@ -1239,7 +1239,7 @@ async fn takes_out_of_the_space_what_the_group_takes_down() {
     );
 
     // A takedown of the version it is now takes it down.
-    let lxm = format!("{NS}.listSpaceRecords");
+    let lxm = format!("{INTERNAL}.listSpaceRecords");
     let one = format!("group={did}&space={space}&uri={picnic}");
     let (_, page) = get(&h, &lxm, &one, &[auth(&h, &bob, &lxm)]).await;
     let mut now = label(&picnic, "!takedown");
@@ -1294,7 +1294,7 @@ async fn reviewed(h: &Running, who: &Authority, did: &str, subject: &str) -> (u1
 
 /// The file `cid` of the record `subject`, as `who` reviews it.
 async fn reviewed_file(h: &Running, who: &Authority, did: &str, subject: &str, cid: &str) -> Read {
-    let lxm = format!("{NS}.getModSubjectBlob");
+    let lxm = format!("{INTERNAL}.getModSubjectBlob");
     let q = format!("group={did}&subject={}&cid={cid}", urlencode(subject));
     read(h, &lxm, &q, &[auth(h, who, &lxm)]).await
 }
@@ -1333,7 +1333,7 @@ async fn shows_a_moderator_what_was_taken_down_where_they_review_it() {
     // the picnic's flyer, which nothing taken down holds, is not.
     for who in [&bob, &alice] {
         assert_eq!(events(&h, who, &did, &space, None).await, [picnic.as_str()]);
-        let lxm = format!("{NS}.getSpaceBlob");
+        let lxm = format!("{INTERNAL}.getSpaceBlob");
         let q = format!("group={did}&space={space}&repo={dan}&cid={map}");
         let file = read(&h, &lxm, &q, &[auth(&h, who, &lxm)]).await;
         assert_eq!(file.error(), (400, "NotFound".into()));

@@ -28,13 +28,13 @@ pub const TIERS: [&str; 3] = ["authManageProfile", "authModerate", "authManageGr
 /// The action each of the host's methods a permission set lists asks of
 /// the member who signed the app in.
 const ASKS: [(&str, &str); 7] = [
-    ("listJoinRequests", "admit"),
-    ("denyJoinRequest", "admit"),
-    ("listInvites", "invite"),
-    ("listModSubjects", "mod.read"),
-    ("getModSubjectHistory", "mod.read"),
-    ("getModSubjectBlob", "mod.read"),
-    ("resolveModSubject", "mod.resolve"),
+    ("fyi.opensocial.listJoinRequests", "admit"),
+    ("fyi.opensocial.denyJoinRequest", "admit"),
+    ("fyi.opensocial.internal.listInvites", "invite"),
+    ("fyi.opensocial.listModSubjects", "mod.read"),
+    ("fyi.opensocial.getModSubjectHistory", "mod.read"),
+    ("fyi.opensocial.internal.getModSubjectBlob", "mod.read"),
+    ("fyi.opensocial.resolveModSubject", "mod.resolve"),
 ];
 
 /// The permission set of this host's that `scope` includes, from its
@@ -340,7 +340,7 @@ pub fn meta_writes(actions: &BTreeSet<&'static str>) -> BTreeMap<String, BTreeSe
 fn parts(set: &Value, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> Vec<String> {
     let mut out = Vec::new();
     for scope in scopes_of(set) {
-        if let Some(rpc) = scope.strip_prefix(&format!("rpc:{NS}.")) {
+        if let Some(rpc) = scope.strip_prefix("rpc:") {
             let method = rpc.split('?').next().unwrap_or_default();
             let asks = ASKS.iter().find(|(m, _)| *m == method);
             if asks.is_some_and(|(_, a)| actions.contains(a)) {

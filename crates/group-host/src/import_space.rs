@@ -30,7 +30,7 @@ use crate::group::{members_space, meta_space};
 use crate::group_api::signed_in;
 use crate::lexicons::lexicons;
 use crate::migration::create;
-use crate::rbac::{NS, POLICY};
+use crate::rbac::{INTERNAL, POLICY};
 use crate::repo::{Asked, Write, record_cid};
 use crate::store::{SpaceHead, Store};
 use crate::xrpc::{XrpcError, read_body};
@@ -349,7 +349,7 @@ pub async fn import_account_space(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Json<serde_json::Value>, XrpcError> {
-    let me = signed_in(&host, &headers, &format!("{NS}.importAccountSpace")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.importAccountSpace")).await?;
     let did = param(&p, "did")?;
     let pending = host
         .store

@@ -256,7 +256,6 @@ impl Host {
         // A role may publish what it may write as the group in a space, as
         // it may write it there.
         let publishable = self.publishable(&acting.grant.group, &roles)?;
-        let configures = actions_for(&grants, &roles).contains("group.configure");
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.repo(collection, action(w)) {
@@ -267,7 +266,6 @@ impl Host {
                 return Err(no_longer(collection));
             }
             self.declaration(&acting.grant.group, w)?;
-            self.site_write(configures, w)?;
         }
         checked(writes)
     }

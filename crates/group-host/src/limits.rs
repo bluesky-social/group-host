@@ -247,13 +247,12 @@ fn by_path(path: &str) -> &'static [Limit] {
         // stream, open for as long as it reads.
         "/xrpc/_health" | "/tls/ask" | "/xrpc/com.atproto.sync.subscribeRepos" => &[],
         "/xrpc/com.atproto.sync.getRepo" => &[SYNC_REPO],
-        "/xrpc/fyi.opensocial.createGroup" | "/xrpc/fyi.opensocial.provisionGroup" => {
-            &[BY_ADDRESS, NEW_GROUPS]
-        }
+        "/xrpc/fyi.opensocial.internal.createGroup"
+        | "/xrpc/fyi.opensocial.internal.provisionGroup" => &[BY_ADDRESS, NEW_GROUPS],
         "/oauth/par" => &[BY_ADDRESS, PUSHED],
         "/mcp/register" => &[BY_ADDRESS, REGISTER],
         "/console/login" | "/console/move/login" => &[BY_ADDRESS, SIGN_IN],
-        "/xrpc/fyi.opensocial.searchActors" => &[BY_ADDRESS, SEARCH],
+        "/xrpc/fyi.opensocial.internal.searchActors" => &[BY_ADDRESS, SEARCH],
         _ => &[BY_ADDRESS],
     }
 }

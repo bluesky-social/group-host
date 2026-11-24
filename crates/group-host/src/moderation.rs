@@ -19,7 +19,7 @@ use crate::blobs::blob_refs;
 use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::index_api::served;
-use crate::rbac::{LABEL, NS};
+use crate::rbac::{INTERNAL, LABEL, NS};
 use crate::repo::Write;
 use crate::store::Store;
 use crate::takedown::Reviewed;
@@ -316,7 +316,7 @@ impl Host {
         group: &str,
         action: &str,
     ) -> Result<String, XrpcError> {
-        let me = signed_in(self, headers, &format!("{NS}.{lxm}")).await?;
+        let me = signed_in(self, headers, lxm).await?;
         group_of(self, group)?;
         if !self.may_do(group, &me, action)? {
             return Err(forbidden(format!("missing {action}")));
@@ -460,8 +460,13 @@ pub async fn list_mod_subjects(
     headers: HeaderMap,
 ) -> Answer {
     let group = param(&p, "group")?;
-    host.moderator(&headers, "listModSubjects", group, "mod.read")
-        .await?;
+    host.moderator(
+        &headers,
+        &format!("{NS}.listModSubjects"),
+        group,
+        "mod.read",
+    )
+    .await?;
     let limit = page(&p, 50, 100)?;
     let cursor = p
         .get("cursor")
@@ -499,7 +504,12 @@ pub async fn get_mod_subject_history(
 ) -> Answer {
     let group = param(&p, "group")?;
     let me = host
-        .moderator(&headers, "getModSubjectHistory", group, "mod.read")
+        .moderator(
+            &headers,
+            &format!("{NS}.getModSubjectHistory"),
+            group,
+            "mod.read",
+        )
         .await?;
     let subject = param(&p, "subject")?;
     subject_of(group, subject)?;
@@ -550,7 +560,12 @@ pub async fn get_mod_subject_blob(
 ) -> Result<Response, XrpcError> {
     let group = param(&p, "group")?;
     let me = host
-        .moderator(&headers, "getModSubjectBlob", group, "mod.read")
+        .moderator(
+            &headers,
+            &format!("{INTERNAL}.getModSubjectBlob"),
+            group,
+            "mod.read",
+        )
         .await?;
     let subject = param(&p, "subject")?;
     subject_of(group, subject)?;
@@ -574,7 +589,12 @@ pub async fn resolve_mod_subject(
 ) -> Answer {
     let group = body["group"].as_str().expect("its lexicon requires it");
     let me = host
-        .moderator(&headers, "resolveModSubject", group, "mod.resolve")
+        .moderator(
+            &headers,
+            &format!("{NS}.resolveModSubject"),
+            group,
+            "mod.resolve",
+        )
         .await?;
     let (subject, cid) = subject_in(group, &body)?;
     let status = body["status"].as_str().expect("its lexicon requires it");
@@ -756,8 +776,13 @@ pub async fn put_label_definition(
     Json(body): Json<Value>,
 ) -> Answer {
     let group = body["group"].as_str().expect("its lexicon requires it");
-    host.moderator(&headers, "putLabelDefinition", group, "group.configure")
-        .await?;
+    host.moderator(
+        &headers,
+        &format!("{INTERNAL}.putLabelDefinition"),
+        group,
+        "group.configure",
+    )
+    .await?;
     let label = body["label"].as_str().expect("its lexicon requires it");
     if !is_own_label(label) {
         return Err(invalid("label is lowercase letters and hyphens"));
@@ -805,8 +830,13 @@ pub async fn delete_label_definition(
     Json(body): Json<Value>,
 ) -> Answer {
     let group = body["group"].as_str().expect("its lexicon requires it");
-    host.moderator(&headers, "deleteLabelDefinition", group, "group.configure")
-        .await?;
+    host.moderator(
+        &headers,
+        &format!("{INTERNAL}.deleteLabelDefinition"),
+        group,
+        "group.configure",
+    )
+    .await?;
     let label = body["label"].as_str().expect("its lexicon requires it");
     if !is_own_label(label) {
         return Err(invalid("label is lowercase letters and hyphens"));

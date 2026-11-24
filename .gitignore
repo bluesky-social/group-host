@@ -9,7 +9,4 @@
 /lcov.info
 /data
 .DS_Store
-/web/build-shell
-/packages/sdk/node_modules
-/packages/sdk/src/lexicons
 /web/src/lib/paraglide

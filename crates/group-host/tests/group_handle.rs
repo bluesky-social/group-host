@@ -13,8 +13,6 @@ use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-const NS: &str = "fyi.opensocial";
-
 /// A service resolving handles from what it is told, as one reading DNS.
 #[derive(Default)]
 struct Names(Mutex<HashMap<String, String>>);
@@ -55,7 +53,7 @@ async fn here() -> (Running, Arc<Names>, String, [Authority; 3]) {
 }
 
 async fn check(h: &Running, who: &Authority, did: &str, handle: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.checkGroupHandle");
+    let lxm = format!("{INTERNAL}.checkGroupHandle");
     get(
         h,
         &lxm,
@@ -66,7 +64,7 @@ async fn check(h: &Running, who: &Authority, did: &str, handle: &str) -> (u16, J
 }
 
 async fn update(h: &Running, who: &Authority, did: &str, handle: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.updateGroupHandle");
+    let lxm = format!("{INTERNAL}.updateGroupHandle");
     post(
         h,
         &lxm,
@@ -174,7 +172,7 @@ async fn takes_a_domain_that_names_it_and_its_address_back() {
         ("#identity", json!("riders.test"))
     );
     // Its address stays.
-    let lxm = format!("{NS}.getGroup");
+    let lxm = format!("{INTERNAL}.getGroup");
     let (_, shown) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(
         (
@@ -271,7 +269,7 @@ async fn refuses_a_handle_it_cannot_take() {
         error(&update(&h, &bob, &did, "riders.test").await),
         (403, "Forbidden")
     );
-    let lxm = format!("{NS}.updateGroupHandle");
+    let lxm = format!("{INTERNAL}.updateGroupHandle");
     for body in [json!({"handle": "riders.test"}), json!({"group": did})] {
         let said = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
         assert_eq!(error(&said), (400, "InvalidRequest"));

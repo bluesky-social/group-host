@@ -21,7 +21,7 @@ use crate::lexicons::check_record;
 use crate::mcp::McpGrant;
 use crate::oauth_resource::Acting;
 use crate::oauth_store::Grant;
-use crate::rbac::NS;
+use crate::rbac::{INTERNAL, NS};
 use crate::repo::Write;
 use crate::scopes::Permissions;
 use crate::store::Invite;
@@ -374,7 +374,14 @@ pub async fn list_invites(
     headers: HeaderMap,
 ) -> Answer {
     let body = json!({ "group": param(&p, "group")? });
-    let (members, _, _) = acting(&host, &headers, &body, "listInvites", Some("invite")).await?;
+    let (members, _, _) = acting(
+        &host,
+        &headers,
+        &body,
+        &format!("{INTERNAL}.listInvites"),
+        Some("invite"),
+    )
+    .await?;
     let limit = page(&p, 50, 100)?;
     let before = match p.get("cursor") {
         None => None,
@@ -413,7 +420,7 @@ pub async fn get_actor_invites(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.getActorInvites")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.getActorInvites")).await?;
     let waiting = host
         .store
         .invites_to(&me, now_millis())
@@ -460,7 +467,7 @@ pub async fn decline_invite(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.declineInvite")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.declineInvite")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     let invited = host

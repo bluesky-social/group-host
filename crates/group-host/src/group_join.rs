@@ -15,7 +15,7 @@ use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
 use crate::group_invites::invite_uri;
 use crate::group_members::{Members, acting};
-use crate::rbac::NS;
+use crate::rbac::{INTERNAL, NS};
 use crate::store::JoinRequest;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -115,7 +115,7 @@ pub async fn get_join_request(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.getJoinRequest")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.getJoinRequest")).await?;
     let group = param(&p, "group")?;
     group_of(&host, group)?;
     let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
@@ -133,7 +133,14 @@ pub async fn list_join_requests(
 ) -> Answer {
     let group = param(&p, "group")?;
     let body = json!({ "group": group });
-    let (members, _, _) = acting(&host, &headers, &body, "listJoinRequests", Some("admit")).await?;
+    let (members, _, _) = acting(
+        &host,
+        &headers,
+        &body,
+        &format!("{NS}.listJoinRequests"),
+        Some("admit"),
+    )
+    .await?;
     let limit = page(&p, 50, 100)?;
     let before = match p.get("cursor") {
         None => None,
@@ -157,7 +164,14 @@ pub async fn deny_join_request(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let (members, _, _) = acting(&host, &headers, &body, "denyJoinRequest", Some("admit")).await?;
+    let (members, _, _) = acting(
+        &host,
+        &headers,
+        &body,
+        &format!("{NS}.denyJoinRequest"),
+        Some("admit"),
+    )
+    .await?;
     let did = body["member"].as_str().expect("its lexicon requires it");
     let decided = host.store.decide(&members.group, did);
     if !decided.map_err(XrpcError::internal)? {

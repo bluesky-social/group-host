@@ -8,7 +8,7 @@ use common::spaces::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const PROVISION: &str = "fyi.opensocial.provisionGroup";
+const PROVISION: &str = "fyi.opensocial.internal.provisionGroup";
 const SCOPE: &str = "atproto repo:app.bsky.feed.post";
 
 /// Asks `app` to provision as `who` with `body`, once more with the nonce
@@ -94,7 +94,7 @@ async fn makes_a_group_and_a_session_on_it_for_the_app() {
         .refresh(&h, session["refresh_token"].as_str().unwrap())
         .await;
     assert_eq!(refreshed.status, 200, "{}", refreshed.body);
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, grants) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     let sessions = grants["sessions"].as_array().unwrap();
     assert_eq!(sessions.len(), 1);

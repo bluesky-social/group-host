@@ -1,6 +1,6 @@
 #!/bin/sh
 # Whether a pull that changes what the host, its console, its MCP tools,
-# the command, the lexicons or the SDK do says so in a change file, as
+# the command or the lexicons do says so in a change file, as
 # AGENTS.md (Versioning) asks: it adds a file under .changeset/, as `knope
 # document-change` writes one, or one of its commits says on a line of
 # its message
@@ -21,7 +21,7 @@ git config --global --add safe.directory '*'
 
 changed=$(git diff --name-only "$base" HEAD -- \
   crates/group-host/src crates/group-host-mcp/src crates/opensocial/src \
-  web/src web/messages lexicons/fyi packages/sdk/src)
+  web/src web/messages lexicons/fyi)
 if [ -z "$changed" ]; then
   echo "nothing anyone uses is changed: no change file needed"
   exit 0

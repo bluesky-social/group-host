@@ -2,6 +2,7 @@
   import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   import { m } from '#lib/paraglide/messages.js';
   import Section from '#lib/molecules/Section.svelte';
+  import GroupDomain from '#lib/organisms/GroupDomain.svelte';
   import GroupHandle from '#lib/organisms/GroupHandle.svelte';
   import ProfileForm from '#lib/organisms/ProfileForm.svelte';
   import ProfilePictures from '#lib/organisms/ProfilePictures.svelte';
@@ -43,6 +44,12 @@
       {#snippet address()}<span class="mono">{data.address}</span>{/snippet}
     </ParaglideMessage>{/snippet}
   <GroupHandle did={g.did} handle={g.handle} address={data.address} pointing={data.pointing} />
+</Section>
+<Section title={m.route_group_settings_domain()}>
+  {#snippet intro()}<ParaglideMessage message={m.route_group_settings_domain_intro}>
+      {#snippet address()}<span class="mono">{data.address}</span>{/snippet}
+    </ParaglideMessage>{/snippet}
+  <GroupDomain address={data.address} domain={data.domain} on={data.on} host={data.host} />
 </Section>
 <Section title={m.route_group_settings_switch_off()}>
   {#snippet intro()}{m.route_group_settings_switch_off_intro()}{/snippet}

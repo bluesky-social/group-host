@@ -16,6 +16,9 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const NS: &str = "fyi.opensocial";
+/// The host's own methods and the views they answer with, beside the
+/// proposal's.
+pub const INTERNAL: &str = "fyi.opensocial.internal";
 /// A label, as a record the group writes beside its subject.
 pub const LABEL: &str = "com.atproto.label.record";
 /// The space policy group spaces are kept under, as a policy's `$type`.

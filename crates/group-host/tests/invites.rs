@@ -20,12 +20,12 @@ const CREATE: &str = "com.atproto.space.createRecord";
 const DELETE: &str = "com.atproto.space.deleteRecord";
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
 async fn ask(h: &Running, who: &Authority, method: &str, query: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     get(h, &lxm, query, &[auth(h, who, &lxm)]).await
 }
 

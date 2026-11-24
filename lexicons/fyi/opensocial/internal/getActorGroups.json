@@ -1,0 +1,48 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.internal.getActorGroups",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Get the groups on this host the actor is in. For the caller, all of theirs; for anyone else, only those the caller is in too, since a group's members are only its members' to know.",
+      "parameters": {
+        "type": "params",
+        "required": ["actor"],
+        "properties": {
+          "actor": {
+            "type": "string",
+            "format": "at-identifier"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["groups"],
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.internal.defs#groupViewBasic"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

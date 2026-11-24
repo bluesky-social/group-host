@@ -46,33 +46,17 @@ const up = async (url) => {
   throw new Error(`${url} never answered`);
 };
 
-/// An https front, harness/tls-proxy.mjs with the certificate the PDS
-/// trusts, for what listens on `port`, asked as `host` if given: the
-/// process, and the port it listens on.
-const proxied = async (net, port, host) => {
+/// The console's front for a browser the harness drives, harness/tls-proxy.mjs
+/// with the certificate the PDS trusts, for the name only it resolves
+/// (harness/pds.mjs), which the browser is told (`resolving`).
+export const tlsFront = async (consolePort, net, children) => {
   const args = [join(root, 'harness/tls-proxy.mjs'), net.console.cert, net.console.key];
-  const proxy = spawn('node', [...args, String(port), ...(host ? [host] : [])], {
+  const proxy = spawn('node', [...args, String(consolePort)], {
     stdio: ['pipe', 'pipe', 'inherit']
   });
-  return { proxy, port: (await line(proxy, (l) => /^\d+$/.test(l.trim()))).trim() };
-};
-
-/// The console's front for a browser the harness drives, for the name
-/// only it resolves (harness/pds.mjs), which the browser is told
-/// (`resolving`).
-export const tlsFront = async (consolePort, net, children) => {
-  const { proxy, port } = await proxied(net, consolePort);
   children.push(proxy);
+  const port = (await line(proxy, (l) => /^\d+$/.test(l.trim()))).trim();
   return `https://${net.console.host}:${port}`;
-};
-
-/// A group's site, at its `address` on the host at `hostPort`, behind a
-/// front at `name`, a name beside the console's: the browser takes its
-/// pages for the same site as the console, as it does a deployment's
-/// group addresses beside the host's own name. Its URL, and the front.
-export const siteFront = async (net, hostPort, name, address) => {
-  const { proxy, port } = await proxied(net, hostPort, address);
-  return { url: `https://${name}:${port}`, proxy };
 };
 
 /// Chromium's argument that sends the console's name, and every name
@@ -133,10 +117,6 @@ export async function start({
         DID_WEB_SCHEME: 'http',
         HANDLE_DOMAIN: handleDomain,
         HANDLE_RESOLVERS: net.pds,
-        // The page around a site that asks for live data (web/shell), and
-        // where it looks up a handle typed to sign in: this world's PDS.
-        SITE_SHELL_DIR: join(root, 'web/build-shell'),
-        SITE_HANDLE_RESOLVER: net.pds,
         // Every browser, page and command here is one address, asking far
         // more than any one person would.
         RATE_LIMITS: 'off'
@@ -169,7 +149,7 @@ export async function start({
 
     // A group of alice's, as her own client would make one.
     const alice = net.accounts.find((a) => a.handle === 'alice.test');
-    const lxm = 'fyi.opensocial.createGroup';
+    const lxm = 'fyi.opensocial.internal.createGroup';
     const made = await fetch(`${host}/xrpc/${lxm}`, {
       method: 'POST',
       headers: {

@@ -5,7 +5,7 @@
 //
 //   node harness/strings.mjs
 //
-// Parses every component under web/src and web/shell, and prints each run
+// Parses every component under web/src, and prints each run
 // of text in its markup with a letter in it, and each attribute that
 // people read (a `title`, `label`, `placeholder`, …) given words as it is
 // written, as `file:line: words`, failing if any. Words that are no
@@ -45,7 +45,7 @@ const LETTER = /\p{L}/u;
 
 /**
  * Whether `word` is a language's: not a name, and not code, a domain or
- * an NSID (`_atproto.`, `fyi.opensocial.siteSpace/board`), which hold a
+ * an NSID (`_atproto.`, `fyi.opensocial.members/self`), which hold a
  * dot, an underscore, a slash, a colon or an @ before their end.
  */
 function spoken(word) {
@@ -78,7 +78,7 @@ const files = (d) =>
   );
 
 const problems = [];
-for (const file of [...files(join(web, 'src')), ...files(join(web, 'shell'))]) {
+for (const file of files(join(web, 'src'))) {
   const text = readFileSync(file, 'utf8');
   const line = (at) => text.slice(0, at).split('\n').length;
   const where = (at, what) =>

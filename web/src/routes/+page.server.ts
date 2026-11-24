@@ -9,6 +9,6 @@ export const actions: Actions = {
   },
   decline: async (event) => {
     const group = String((await event.request.formData()).get('group'));
-    return act(event, 'fyi.opensocial.declineInvite', { group });
+    return act(event, 'fyi.opensocial.internal.declineInvite', { group });
   }
 };

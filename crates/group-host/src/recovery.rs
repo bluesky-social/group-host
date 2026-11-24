@@ -17,7 +17,7 @@
 use crate::Host;
 use crate::api::{Params, param};
 use crate::group_api::{group_of, signed_in};
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::store::Store;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -96,7 +96,7 @@ impl Host {
         lxm: &str,
         group: Option<&str>,
     ) -> Result<(String, String), XrpcError> {
-        let me = signed_in(self, headers, &format!("{NS}.{lxm}")).await?;
+        let me = signed_in(self, headers, &format!("{INTERNAL}.{lxm}")).await?;
         let group = group.expect("its lexicon requires it");
         group_of(self, group)?;
         if !self.may_do(group, &me, "group.configure")? {

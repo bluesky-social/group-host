@@ -1,12 +1,12 @@
 //! What the host's operators, the accounts `HOST_ADMINS` names, may read
-//! of it: the lines it logged (`fyi.opensocial.getLogs`) and how it is
-//! used (`fyi.opensocial.getStats`); and the writing of both, as it
+//! of it: the lines it logged (`fyi.opensocial.internal.getLogs`) and how it is
+//! used (`fyi.opensocial.internal.getStats`); and the writing of both, as it
 //! serves.
 
 use crate::Host;
 use crate::group_api::signed_in;
 use crate::logs::Asked;
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::space_api::forbidden;
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -41,7 +41,7 @@ pub async fn get_logs(
     headers: HeaderMap,
     Query(asked): Query<Asked>,
 ) -> Answer {
-    let did = operator(&host, &headers, &format!("{NS}.getLogs")).await?;
+    let did = operator(&host, &headers, &format!("{INTERNAL}.getLogs")).await?;
     tracing::info!(did, asked = asked.said(), "logs read");
     // What was logged up to now, this read's own line with it.
     let read = host.logs.flush().and_then(|()| host.logs.read(&asked));
@@ -65,7 +65,7 @@ pub async fn get_stats(
     headers: HeaderMap,
     Query(asked): Query<StatsAsked>,
 ) -> Answer {
-    operator(&host, &headers, &format!("{NS}.getStats")).await?;
+    operator(&host, &headers, &format!("{INTERNAL}.getStats")).await?;
     let counted = host.stats.flush().map_err(anyhow::Error::from);
     let days = asked.days.unwrap_or(7);
     let now = crate::time::now_millis();

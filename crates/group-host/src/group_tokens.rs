@@ -20,7 +20,7 @@ use crate::member_writes::own_scopes;
 use crate::oauth_resource::Refusal;
 use crate::oauth_scope::{may_write, with_labels};
 use crate::oauth_store::{Grant, Tokens};
-use crate::rbac::{LABEL, NS, Policy, label_writes};
+use crate::rbac::{INTERNAL, LABEL, NS, Policy, label_writes};
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
@@ -213,7 +213,7 @@ pub async fn get_group_auth(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, Refusal> {
-    let nsid = format!("{NS}.getGroupAuth");
+    let nsid = format!("{INTERNAL}.getGroupAuth");
     let me = signed_in(&host, &headers, &nsid).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     let uri = body["space"].as_str().expect("its lexicon requires it");
@@ -307,7 +307,7 @@ pub async fn list_group_tokens(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, XrpcError> {
-    let me = signed_in(&host, &headers, &format!("{NS}.listGroupTokens")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.listGroupTokens")).await?;
     let group = param(&p, "group")?;
     host.configures(group, &me)?;
     let grants = host
@@ -375,7 +375,7 @@ pub async fn revoke_group_token(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, XrpcError> {
-    let me = signed_in(&host, &headers, &format!("{NS}.revokeGroupToken")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.revokeGroupToken")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     let id = body["tokenId"].as_str().expect("its lexicon requires it");
     host.configures(group, &me)?;

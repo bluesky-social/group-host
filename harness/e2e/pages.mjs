@@ -50,13 +50,13 @@ export const joins = async (name, handle) => {
   expect(said.status, JSON.stringify(said)).toBe('admitted');
 };
 
-/// Stands in for the host's handle search (fyi.opensocial.searchActors)
+/// Stands in for the host's handle search (fyi.opensocial.internal.searchActors)
 /// in the browser `context`, as the typeahead service it asks would on the
 /// whole network, with names and pictures the reference directory has
 /// none of: the world's accounts whose handle holds what is typed, named
 /// for themselves. The host's own search is tested in its own tests.
 export const suggests = (context) =>
-  context.route('**/xrpc/fyi.opensocial.searchActors?*', (route) => {
+  context.route('**/xrpc/fyi.opensocial.internal.searchActors?*', (route) => {
     const asked = new URL(route.request().url()).searchParams;
     const q = asked.get('q').toLowerCase();
     const actors = world.accounts

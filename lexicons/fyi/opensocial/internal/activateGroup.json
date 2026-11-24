@@ -1,0 +1,38 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.internal.activateGroup",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Switch a deactivated group back on. Allowed to anyone who held group.configure when it was switched off.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotDeactivated"
+        }
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
+}

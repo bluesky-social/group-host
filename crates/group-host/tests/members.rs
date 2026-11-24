@@ -17,7 +17,7 @@ use group_host::scopes::covers;
 use serde_json::{Value as Json, json};
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
@@ -814,7 +814,7 @@ async fn one_whose_credentials_cannot_be_revoked_stays_in() {
 
 /// What `listMembers` answers `who` for `query`, past `group=`.
 async fn listed(h: &Running, who: Option<&Authority>, group: &str, query: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.listMembers");
+    let lxm = format!("{INTERNAL}.listMembers");
     let headers: Vec<_> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
     get(h, &lxm, &format!("group={group}{query}"), &headers).await
 }

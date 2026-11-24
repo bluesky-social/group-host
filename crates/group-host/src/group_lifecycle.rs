@@ -8,7 +8,7 @@
 use crate::Host;
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::forbidden;
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::xrpc::XrpcError;
 use axum::Json;
 use axum::extract::State;
@@ -29,7 +29,7 @@ async fn asked(
     body: &Value,
     lxm: &str,
 ) -> Result<(String, String), XrpcError> {
-    let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
+    let me = signed_in(host, headers, &format!("{INTERNAL}.{lxm}")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(host, group)?;
     Ok((group.to_string(), me))

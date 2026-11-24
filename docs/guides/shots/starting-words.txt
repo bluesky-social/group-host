@@ -6,7 +6,6 @@
   - heading "Settings" [level=1]
   - navigation "Settings":
     - link "Profile":
-    - link "Site":
     - link "Rules":
     - link "Labels":
     - link "Roles":
@@ -46,11 +45,16 @@
   - status
   - heading "Handle" [level=2]
   - button "Use your own domain"
-  - paragraph: The name the group goes by in Bluesky and other apps. Its address here, bookclub.groups.test, and its site keep working whichever you use.
+  - paragraph: The name the group goes by in Bluesky and other apps. Its address here, bookclub.groups.test, keeps working whichever you use.
   - list:
     - listitem:
       - strong: bookclub.groups.test
       - text: The address this host gave it.
+  - heading "Domain" [level=2]
+  - paragraph: The group can be at its own domain instead of bookclub.groups.test.
+  - paragraph: No domain yet
+  - paragraph: Change the group's handle to a domain you own. Then the group can be at it.
+  - button "Change the handle"
   - heading "Switch off or delete the group" [level=2]
   - paragraph: Switching the group off hides it from everyone until an admin switches it back on. Deleting it can't be undone.
   - button "Switch off"

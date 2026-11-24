@@ -290,7 +290,7 @@ pub async fn start_reachable(vars: &[(&str, &str)]) -> Running {
 }
 
 /// A host given where it listens as `var` too, as for a domain that
-/// reaches it (`SITE_CHECK_AT`).
+/// reaches it (`DOMAIN_CHECK_AT`).
 pub async fn start_naming_itself(var: &str, vars: &[(&str, &str)]) -> Running {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());

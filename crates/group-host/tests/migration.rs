@@ -21,10 +21,10 @@ use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
-const PREPARE: &str = "fyi.opensocial.migratePrepare";
-const RECEIVE: &str = "fyi.opensocial.migrateReceive";
-const COMPLETE: &str = "fyi.opensocial.migrateComplete";
-const ACTIVATE: &str = "fyi.opensocial.migrateActivate";
+const PREPARE: &str = "fyi.opensocial.internal.migratePrepare";
+const RECEIVE: &str = "fyi.opensocial.internal.migrateReceive";
+const COMPLETE: &str = "fyi.opensocial.internal.migrateComplete";
+const ACTIVATE: &str = "fyi.opensocial.internal.migrateActivate";
 
 /// The host a group leaves, with Riders, Alice's, Bob in it, a picture, a
 /// rule, a post, and a calendar Carol writes in and Bob may write in by a
@@ -161,7 +161,7 @@ async fn moves_a_group_whole_to_another_host() {
 
     // The source hands it over, and keeps its stewards ahead.
     let steward = Keypair::generate(Curve::K256).public().did_key();
-    let lxm = format!("{NS}.addRecoveryKey");
+    let lxm = format!("{INTERNAL}.addRecoveryKey");
     assert_eq!(
         post(
             &a,
@@ -212,7 +212,7 @@ async fn moves_a_group_whole_to_another_host() {
     let token = prepared["exportToken"].as_str().unwrap();
     let (status, _) = a
         .get(
-            "fyi.opensocial.migrateExport",
+            "fyi.opensocial.internal.migrateExport",
             &format!("group={did}&token={token}&part=blobs"),
         )
         .await;
@@ -227,7 +227,7 @@ async fn moves_a_group_whole_to_another_host() {
         let writers = b.host.store.writers(space, None, 100).unwrap();
         assert!(writers.iter().any(|w| w.did == did), "{space}: {writers:?}");
     }
-    let lxm = format!("{NS}.getGroup");
+    let lxm = format!("{INTERNAL}.getGroup");
     let (_, view) = get(&b, &lxm, &format!("group={did}"), &[auth(&b, &alice, &lxm)]).await;
     assert_eq!(view["group"]["displayName"], "Riders");
     assert_eq!(view["group"]["handle"], "riders.groups.b.test");
@@ -261,7 +261,7 @@ async fn prepares_only_for_one_who_configures_and_exports_only_with_the_token() 
     let token = prepared["exportToken"].as_str().unwrap();
     let export = |q: String| {
         a.get(
-            "fyi.opensocial.migrateExport",
+            "fyi.opensocial.internal.migrateExport",
             Box::leak(q.into_boxed_str()),
         )
     };
@@ -584,7 +584,10 @@ async fn fake_export(
 async fn from_fake(b: &Running, alice: &Authority, fake: Arc<Fake>, key: &Keypair) -> (u16, Json) {
     let router = Router::new()
         .route("/xrpc/com.atproto.sync.getRepo", route(fake_repo))
-        .route("/xrpc/fyi.opensocial.migrateExport", route(fake_export))
+        .route(
+            "/xrpc/fyi.opensocial.internal.migrateExport",
+            route(fake_export),
+        )
         .with_state(fake.clone());
     let url = serve(router).await;
     let rotation = Keypair::generate(Curve::K256);

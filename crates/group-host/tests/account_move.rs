@@ -19,7 +19,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Json, Router};
-use common::groups::NS;
+use common::groups::INTERNAL;
 use common::spaces::plc_url;
 use common::{Running, serve, start_reachable};
 use serde_json::{Value as Json_, json};
@@ -502,7 +502,7 @@ async fn world() -> World {
 
 impl World {
     async fn call(&self, nsid: &str, body: Option<Json_>) -> (u16, Json_) {
-        let url = format!("{}/xrpc/{NS}.{nsid}", self.h.url);
+        let url = format!("{}/xrpc/{INTERNAL}.{nsid}", self.h.url);
         let req = match body {
             Some(b) => self.h.http.post(url).json(&b),
             None => self.h.http.get(url),

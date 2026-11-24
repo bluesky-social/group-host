@@ -1,9 +1,9 @@
-// What a role may do, as the host's methods ask (fyi.opensocial.defs#action).
+// What a role may do, as the host's methods ask (fyi.opensocial.internal.defs#action).
 // The lexicon's types carry its known values only as a type, so the list is
 // written here and held to that type both ways: a value it does not know, or
 // one it knows and the list leaves out, fails svelte-check.
 
-import type { Action } from '#lib/lexicons/fyi/opensocial/defs.defs.ts';
+import type { Action } from '#lib/lexicons/fyi/opensocial/internal/defs.defs.ts';
 
 const KNOWN = [
   'mod.read',

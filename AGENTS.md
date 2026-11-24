@@ -74,19 +74,10 @@ right, and come before the code they test.
 - `web/`: the console, a SvelteKit app. Its TypeScript types are made from
   the lexicons by @atproto/lex (`npm run lex`, which `dev`, `build` and
   `check` run first) into `web/src/lib/lexicons`, not kept in git.
-- `packages/sdk`: `@opensocial/sdk`, for apps on group hosts: lex-space for
-  a group's spaces and the host's own methods, in lex-space's style. The
-  host's page around a site (`web/shell`) uses it. Its lexicon types are
-  made by `npm run lex` into `packages/sdk/src/lexicons`, not kept in git.
 - `docs-site/`: the docs as a site, made from `docs/` as it is, and
   deployed with `just docs-deploy` (`docs/development.md`).
 - `harness/`: the checks beside the tests, and the console's flows end to
   end (`harness/e2e`).
-- `examples/`: apps built on a group host, each run against this
-  repository's host by its own Justfile and harness, outside the checks.
-  `examples/kicker` is a skate club's members-only site, published
-  as its group's site with no server of its own; its `AGENTS.md` says how
-  to work on it, and its `DESIGN.md` how it looks.
 
 ## Commands and tools
 
@@ -252,10 +243,9 @@ owner, turns them into the version and CHANGELOG.md with `knope
 release`, in the `Release <version>` pull; merging it releases, and the
 next `just release` tags it `v<version>`. Commit titles stay prose: no
 conventional commits. The `check` check fails a pull that changes
-`crates/*/src`, `web/src`, `web/messages`, `lexicons/fyi` or
-`packages/sdk/src` and adds no change file, unless one of its commits
-says, on a line of its message, `Changeset: none`: for a change no one
-running or using the host sees.
+`crates/*/src`, `web/src`, `web/messages` or `lexicons/fyi` and adds no
+change file, unless one of its commits says, on a line of its message,
+`Changeset: none`: for a change no one running or using the host sees.
 
 ## Landing a change
 

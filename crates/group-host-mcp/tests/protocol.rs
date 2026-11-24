@@ -33,6 +33,7 @@ fn names_each_tool_for_its_command() {
             "group_show",
             "group_deactivate",
             "group_handle",
+            "group_domain",
             "profile_set",
             "rule_set",
             "rule_delete",
@@ -41,9 +42,6 @@ fn names_each_tool_for_its_command() {
             "role_set",
             "role_delete",
             "role_grant",
-            "site_publish",
-            "site_delete",
-            "site_domain",
             "member_list",
             "member_assign",
             "member_eject",
@@ -266,7 +264,7 @@ fn plans_a_method_asked_with_its_arguments() {
     assert_eq!(
         planned("group_show", json!({})),
         Ok(Plan::Call {
-            nsid: "fyi.opensocial.getGroup".into(),
+            nsid: "fyi.opensocial.internal.getGroup".into(),
             procedure: false,
             input: json!({}),
         })
@@ -274,12 +272,16 @@ fn plans_a_method_asked_with_its_arguments() {
     // Its opposite, with undo, which takes nothing but the group.
     let off = |undo: bool| planned("group_deactivate", json!({"undo": undo}));
     let call = |nsid: &str| Plan::Call {
-        nsid: format!("fyi.opensocial.{nsid}"),
+        nsid: format!("fyi.opensocial.internal.{nsid}"),
         procedure: true,
         input: json!({}),
     };
     assert_eq!(off(false), Ok(call("deactivateGroup")));
     assert_eq!(off(true), Ok(call("activateGroup")));
+    // The group served at its own domain, or with undo at its address.
+    let domain = |undo: bool| planned("group_domain", json!({"undo": undo}));
+    assert_eq!(domain(false), Ok(call("putGroupDomain")));
+    assert_eq!(domain(true), Ok(call("deleteGroupDomain")));
     let Ok(Plan::Call { input, .. }) = planned("join_list", json!({"limit": 5})) else {
         panic!()
     };
@@ -289,7 +291,7 @@ fn plans_a_method_asked_with_its_arguments() {
     let Ok(Plan::Call { nsid, input, .. }) = planned("label_define", args) else {
         panic!()
     };
-    assert_eq!(nsid, "fyi.opensocial.putLabelDefinition");
+    assert_eq!(nsid, "fyi.opensocial.internal.putLabelDefinition");
     assert_eq!(
         input,
         json!({"label": "troll", "name": "Troll", "description": "Picks fights.", "defaultSetting": "hide", "adultOnly": true})
@@ -297,7 +299,7 @@ fn plans_a_method_asked_with_its_arguments() {
     let Ok(Plan::Call { nsid, .. }) = planned("label_delete", json!({"label": "troll"})) else {
         panic!()
     };
-    assert_eq!(nsid, "fyi.opensocial.deleteLabelDefinition");
+    assert_eq!(nsid, "fyi.opensocial.internal.deleteLabelDefinition");
     // A subject and its version, sent as they are given.
     let call = |args: Value| match planned("mod_resolve", args).unwrap() {
         Plan::Call { nsid, input, .. } => (nsid, input),

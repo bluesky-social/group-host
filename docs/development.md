@@ -27,13 +27,9 @@ emails, and how to run the command against it. ctrl-c stops it all, and
 each start is empty again.
 
 Its groups are named under `groups.localtest.me`, as
-`riders.groups.localtest.me`, so a group's address opens in a browser.
-A site published with `site publish` is at
-https://riders.groups.localtest.me, sandboxed the same way it is when
-deployed. A group with no site sends `/` to its page in the console.
-Before it starts, `just dev` builds the page around a site that names
-`reads` (`web/shell`, by `npm run shell` in `web/`), and the host reads
-it from there. A change to it means starting again.
+`riders.groups.localtest.me`, so a group's address opens in a browser,
+and sends `/` to the group's page in the console, as it does when
+deployed.
 
 Signing in to the console takes https at a name. That's because the
 host is the console's OAuth client, and a PDS only fetches a client's
@@ -68,9 +64,7 @@ it with SIGTERM, so it exits cleanly and writes the coverage it counted.
 `just e2e` uses the console the way people do, in Chromium, with
 Playwright (`harness/e2e/flows.spec.mjs`). It signs in through the
 reference PDS's own approval page, signs an app in as a group and has it
-write as the group. It publishes a site and checks that a page of it
-reaches the console without the session of the person opening it. It
-signs in on a site that shows its members to those who may see them,
+write as the group. It also starts and runs groups, invites, moderates,
 declines an app, and signs out.
 
 Its setup (`harness/e2e/setup.mjs`) runs the reference PDS, the host
@@ -78,13 +72,10 @@ over it, and the built console behind an https front at
 `console.group-host.internal` (`harness/tls-proxy.mjs`). That's because
 the PDS only reaches an OAuth client over https at a hostname.
 `harness/pds.mjs` makes a certificate for that name and every name
-beside it, and resolves them. Hikers' and Riders' sites have fronts of
-their own at `hikers.group-host.internal` and
-`riders.group-host.internal`. Those names sit beside the console's, so
-the browser treats their pages as the same site as the console, the
-same way it treats a deployment's group addresses. Each front passes the
-name asked on as `X-Forwarded-Host`, and a site's OAuth client is named
-for it (the PDS refuses a client under `.test`). Install Chromium with
+beside it, and resolves them. Hikers' and Riders' addresses have fronts
+of their own at `hikers.group-host.internal` and
+`riders.group-host.internal`, beside the console's, as a deployment's
+group addresses are. Install Chromium with
 `cd harness && npx playwright install chromium`. It's told that every
 name under `group-host.internal` is this machine. A failed flow leaves
 its trace and a picture under `target/e2e/results`.
@@ -139,7 +130,7 @@ follow it (`#lib/locale.ts`), and a label shows its name in it when the
 group gave one. Times stay in UTC, since the page is drawn on the
 server. The host's own error messages
 stay English, and the console says each by its name (`#lib/errors.ts`).
-A few names (`InvalidRequest`, `InvalidHandle`, `InvalidSite`,
+A few names (`InvalidRequest`, `InvalidHandle`,
 `InvalidArchive`, `UpstreamFailure`) cover several reasons the reader
 needs to tell apart, so for those the console shows the host's message.
 A language other than English needs the host to give each such reason
@@ -266,8 +257,8 @@ using the command or the console sees adds a change file under
 names the bump (`default: patch`, `minor` or `major`), and below it a
 heading and a line say what changed for them. The `check` check asks
 for one on any pull that changes `crates/*/src`, `web/src`,
-`web/messages`, `lexicons/fyi` or `packages/sdk/src`
-(`harness/changes.sh`). A change no one sees says `Changeset: none` on a
+`web/messages` or `lexicons/fyi` (`harness/changes.sh`). A change no one
+sees says `Changeset: none` on a
 line of one of its commits' messages instead. The pull's body would be
 the place, but a run can't read it, since the repository is private.
 

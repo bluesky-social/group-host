@@ -24,7 +24,7 @@ export default async ({ world, who, opensocial }) => {
   const { did } = await fetch(
     `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=${g}`
   ).then((r) => r.json());
-  const { group } = await call('alice', 'fyi.opensocial.getGroup', null, `group=${did}`);
+  const { group } = await call('alice', 'fyi.opensocial.internal.getGroup', null, `group=${did}`);
   const [rule] = group.rules ?? [];
   const space = `at://${did}/space/com.example.forum/talk`;
   opensocial(

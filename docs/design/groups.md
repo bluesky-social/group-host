@@ -65,10 +65,16 @@ Details:
 
 A group needs a name before it has a domain of its own. So the host gives
 it a handle of one label under `HANDLE_DOMAIN`, the domain of this host's
-handles. It keeps that handle as the group's address, where its site is
-served ([sites](sites.md)). The address never changes. When the group
-takes a handle on its own domain, the address stays reserved for it, and
-its site stays there, until the group is deleted.
+handles. It keeps that handle as the group's address. The address never
+changes. When the group takes a handle on its own domain, the address
+stays reserved for it until the group is deleted.
+
+At its address, the host keeps `/.well-known/` and `/xrpc/` for itself.
+While the address is the group's handle, its `atproto-did` is how anyone
+checks that the handle names the group. A `GET` or `HEAD` of `/` there
+redirects to the group's page in the console, and anything else is a
+plain 404. A request to the host's own name, `PUBLIC_URL`, never goes to
+a group.
 
 `checkAddress` says, without signing in, whether an address is free. A
 free address isn't an account's handle here and isn't kept as a group's
@@ -174,7 +180,7 @@ group.
 A put replaces the record whole, so anything it leaves out goes. Beyond
 what the lexicon checks, the host keeps a profile only if it has a
 display name that's more than spaces and a join policy of `open`,
-`approval` or `invite`. A site must be on `http` or `https`.
+`approval` or `invite`. Its website, `url`, must be on `http` or `https`.
 The profile stays at `self` and is never deleted.
 
 A picture must be a blob in the group's own repo, because a blob in
@@ -246,8 +252,9 @@ host's own record. Then it updates the group's DID document with the
 host's rotation key and tells relays. If the directory refuses the
 update, the host puts the group's previous handle back. It fails when
 the domain doesn't name the group, or when the host's key no longer
-controls the DID. Both are for `group.configure`. The group's site stays
-at its address whatever its handle is ([sites](sites.md)).
+controls the DID. Both are for `group.configure`. The group keeps its
+address whatever its handle is, and taking another handle stops serving
+it at its own domain ([its own domain](#its-own-domain)).
 
 In the console, the profile page of a group's settings shows its handle.
 While that's a domain of its own, it also shows whether the domain still
@@ -255,6 +262,42 @@ names the group. "Use your own domain" takes the domain and shows the
 `_atproto` TXT record to add there, `did=` and the group's DID. "Go back"
 gives the group its address back, after asking you to confirm. The
 command is `group handle`, and an MCP client's tool is `group_handle`.
+
+## Its own domain
+
+A group with a handle on a domain of its own, such as `riders.org`, may
+want people who visit that domain sent to it, and its address sent there
+too. The handle proves the group controls the domain. It doesn't prove
+the domain's web traffic reaches this host, since its A record may still
+name a site the group is leaving. So the host serves the group at the
+domain only when a steward switches it on, with
+`fyi.opensocial.internal.putGroupDomain` (for `group.configure`), and
+only if the domain then answers as this host. The host asks
+`https://<domain>/xrpc/com.atproto.server.describeServer`, or
+`DOMAIN_CHECK_AT` with the domain as its `Host`, for its own DID. If the
+handle is the group's address, the call fails with `NoOwnDomain`. If the
+domain doesn't answer as this host, it fails with `NotReaching`.
+
+Once it's on, the domain keeps `/.well-known/` and `/xrpc/` for the host,
+as the address does. A request to the address, or to `www.` under the
+domain, redirects (301) to the same path and query at the domain, except
+for the host's own paths at the address. At the domain, a `GET` or
+`HEAD` of `/` redirects to the group's page in the console, and anything
+else is a plain 404. The group's view names the domain as `domain`.
+`fyi.opensocial.internal.deleteGroupDomain` switches it off again. So
+does the group taking another handle, since the host never checked that
+handle's domain.
+
+In the console, the Domain card on a group's settings page, beside its
+handle, says whether the group is served at its domain. It switches that
+on, telling you which DNS records to add first, and off again.
+`opensocial group domain <group>` switches it on and `--undo` off. An
+MCP client does the same with `group_domain`.
+
+The host's proxy gets each domain's certificate the first time it's
+asked for. Before it does, it asks the host at `/tls/ask`, which says
+yes only for a group's own domain, or `www.` under it, while the group
+is on ([deploying](../deploying.md#groups-own-domains)).
 
 ## Switching off, on and deleting
 

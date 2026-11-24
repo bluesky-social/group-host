@@ -20,7 +20,7 @@ use crate::limits::{Client, SESSIONS, key};
 use crate::oauth_dpop::hmac;
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_store::{AppPassword, Grant, Tokens, app_password_client};
-use crate::rbac::{NS, repo_collections_for};
+use crate::rbac::{INTERNAL, repo_collections_for};
 use crate::scopes::Permissions;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -335,7 +335,7 @@ pub async fn create_app_password(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.createAppPassword")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.createAppPassword")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     if !host.may_issue(group, &me)? {
@@ -396,7 +396,7 @@ pub async fn list_app_passwords(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.listAppPasswords")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.listAppPasswords")).await?;
     let group = param(&p, "group")?;
     group_of(&host, group)?;
     let configures = host.may_do(group, &me, "group.configure")?;
@@ -448,7 +448,7 @@ pub async fn revoke_app_password(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.revokeAppPassword")).await?;
+    let me = signed_in(&host, &headers, &format!("{INTERNAL}.revokeAppPassword")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     let name = body["name"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;

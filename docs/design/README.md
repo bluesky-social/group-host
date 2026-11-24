@@ -8,7 +8,9 @@ to decide who reads it. This host does both for every group it holds.
 
 It implements the opensocial proposal
 (https://tangled.org/opensocial.group/proposal). Members keep their own
-accounts on their own PDSes, anywhere on the network.
+accounts on their own PDSes, anywhere on the network. What the host adds
+beyond the proposal, for its console, its command and its operators, is
+under `fyi.opensocial.internal.*`, and may change.
 
 ## What the host is to a group
 
@@ -31,7 +33,6 @@ accounts on their own PDSes, anywhere on the network.
 | --- | --- |
 | The group's identity | its DID document in the PLC directory, changed with the host's rotation key and any recovery keys ([recovery](recovery.md)) |
 | Its public records and files | its repo here |
-| Its website | a record in its repo here, served at its address ([sites](sites.md)) |
 | Its profile, rules and labeler | its `meta` space, in the group's repo there |
 | Its roles, permissions, memberships and spaces | its `members` space, in the group's repo there |
 | What members write in its spaces | each member's own repo in the space, on their own PDS |
@@ -47,25 +48,20 @@ accounts on their own PDSes, anywhere on the network.
 | `crates/group-host` | the server, over SQLite. It holds accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries. |
 | `crates/group-host-mcp` | the MCP tools, each the twin of an `opensocial` command, and what each call comes to. The host carries a call out as the member who connected an MCP client, and the command carries it out as the person running it. |
 | `crates/opensocial` | a client for group hosts, and the `opensocial` command ([commands](../reference/cli.md)) |
-| `web/` | the console, a SvelteKit app where people start and run groups and approve apps. It's also the page the host serves around a group's site, with the kit its pages load ([the site kit](../reference/site-kit.md)) and the messages between them (`web/shell`). |
-| `packages/sdk` | `@opensocial/sdk`, for apps on group hosts: a group's spaces read and written with atproto's lex-space, and the host's own methods, as a member ([the SDK](../reference/sdk.md)) |
+| `web/` | the console, a SvelteKit app where people start and run groups and approve apps. |
 | `Dockerfile`, `deploy/` | one image of the host, the console and the command, and the compose file that runs it ([deploying](../deploying.md)) |
 | `lexicons/` | the schemas of the records and methods. The host checks every `fyi.opensocial.*` method's parameters and input against its schema before the handler runs. It also checks a record of our own collections that an app writes as a group before it keeps it. |
-| `examples/` | apps built on a group host, run against this repository's host. `examples/kicker` is a skate club's members-only site, published as its group's site, with no server of its own. |
 
 ## The pages
 
 - [Spaces](spaces.md): what a space is, who reads and writes, credentials,
   and the index.
 - [Groups](groups.md): starting a group, what it shows, its profile,
-  spaces and handle, and ending it.
+  spaces, handle and own domain, and ending it.
 - [Membership](membership.md): roles, joining, invites, and leaving.
 - [Signing in](signing-in.md): people, apps and MCP clients, and what a
   token may do.
 - [Moderation](moderation.md): labels, the queue, reports and appeals.
-- [Sites](sites.md): a group's website, published whole and served
-  sandboxed at its address or on its own domain, and the live data a
-  visitor sees once they sign in on it.
 - [MCP](mcp.md): connecting an AI app to a group, and its tools.
 - [Recovery](recovery.md): keys that let a group's stewards hold its
   identity.

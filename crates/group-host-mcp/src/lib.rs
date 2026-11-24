@@ -26,6 +26,8 @@ they chose, with what their roles there allow: read the group, change its profil
 and run its members, roles, invites, spaces and moderation. Each is a command of `opensocial`, \
 `<group> <action>`, named `<group>_<action>`. Anything their roles do not allow is refused.";
 
+/// A lexicon of ours: in the proposal, by its name; or the host's own,
+/// `internal` and its name, as `fyi.opensocial.internal.<name>`.
 macro_rules! lexicon {
     ($name:literal) => {
         (
@@ -33,34 +35,43 @@ macro_rules! lexicon {
             include_str!(concat!("../../../lexicons/fyi/opensocial/", $name, ".json")),
         )
     };
+    (internal $name:literal) => {
+        (
+            concat!("fyi.opensocial.internal.", $name),
+            include_str!(concat!(
+                "../../../lexicons/fyi/opensocial/internal/",
+                $name,
+                ".json"
+            )),
+        )
+    };
 }
 
 /// The lexicons the tools are made from, and what they refer to: ours,
 /// and atproto's.
 const LEXICONS: &[(&str, &str)] = &[
-    lexicon!("getGroup"),
-    lexicon!("deactivateGroup"),
-    lexicon!("activateGroup"),
-    lexicon!("updateGroupHandle"),
-    lexicon!("listMembers"),
+    lexicon!(internal "getGroup"),
+    lexicon!(internal "deactivateGroup"),
+    lexicon!(internal "activateGroup"),
+    lexicon!(internal "updateGroupHandle"),
+    lexicon!(internal "putGroupDomain"),
+    lexicon!(internal "deleteGroupDomain"),
+    lexicon!(internal "listMembers"),
     lexicon!("listJoinRequests"),
     lexicon!("denyJoinRequest"),
-    lexicon!("listInvites"),
-    lexicon!("listSpaceRecords"),
+    lexicon!(internal "listInvites"),
+    lexicon!(internal "listSpaceRecords"),
     lexicon!("listModSubjects"),
     lexicon!("getModSubjectHistory"),
-    lexicon!("putLabelDefinition"),
-    lexicon!("deleteLabelDefinition"),
+    lexicon!(internal "putLabelDefinition"),
+    lexicon!(internal "deleteLabelDefinition"),
     lexicon!("resolveModSubject"),
-    lexicon!("putSite"),
-    lexicon!("deleteSite"),
-    lexicon!("putSiteDomain"),
-    lexicon!("deleteSiteDomain"),
     lexicon!("profile"),
     lexicon!("rule"),
     lexicon!("role"),
     lexicon!("membership"),
     lexicon!("defs"),
+    lexicon!(internal "defs"),
     lexicon!("policy"),
     lexicon!("invite"),
     (
@@ -230,12 +241,12 @@ impl Docs {
                 s
             }
             "object" | "params" => self.object(doc, def, depth),
-            "ref" if depth > 0 => {
-                let reference = def["ref"].as_str().unwrap_or_default();
-                match self.resolve(doc, reference) {
-                    Some((at, found)) => self.schema(&at, found, depth - 1),
-                    None => json!({}),
-                }
+            "ref"
+                if depth > 0
+                    && let Some((at, found)) =
+                        self.resolve(doc, def["ref"].as_str().unwrap_or_default()) =>
+            {
+                self.schema(&at, found, depth - 1)
             }
             _ => json!({}),
         };
@@ -273,7 +284,8 @@ enum At {
 
 /// What a tool is made of, as `TOOLS` says it.
 enum Made {
-    /// A method of ours, by the last part of its NSID; and its opposite's.
+    /// A method of ours, by its NSID past `fyi.opensocial.` (the host's
+    /// own `internal.<name>`); and its opposite's.
     Method(&'static str, Option<&'static str>),
     /// A record of ours put, or deleted, in the group's space of a type.
     Put(&'static str, &'static str, At),
@@ -293,23 +305,35 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "group_show",
         &[],
         "The group as the member may see it.",
-        Made::Method("getGroup", None),
+        Made::Method("internal.getGroup", None),
     ),
     (
         "group_deactivate",
         &[],
         "Switches the group off: nobody can read its spaces or write as it until one who \
          could switch it off switches it back on. With undo, switches it back on.",
-        Made::Method("deactivateGroup", Some("activateGroup")),
+        Made::Method("internal.deactivateGroup", Some("internal.activateGroup")),
     ),
     (
         "group_handle",
         &["handle"],
         "Gives the group a handle on a domain of its own, once the domain names the group: an \
          _atproto TXT record there saying did=<the group's DID>, or the DID at the domain's \
-         /.well-known/atproto-did. Given the group's own address, gives it that back. The \
-         group's site stays at its address either way.",
-        Made::Method("updateGroupHandle", None),
+         /.well-known/atproto-did. Given the group's own address, gives it that back.",
+        Made::Method("internal.updateGroupHandle", None),
+    ),
+    (
+        "group_domain",
+        &[],
+        "Serves the group at its handle's own domain, such as riders.org, rather than its \
+         address, once that domain reaches this host: www. under it and the group's address \
+         redirect there. Refused while the handle is the address, or before the domain's A and \
+         AAAA records name this host's addresses. With undo, serves it at its address alone \
+         again.",
+        Made::Method(
+            "internal.putGroupDomain",
+            Some("internal.deleteGroupDomain"),
+        ),
     ),
     (
         "profile_set",
@@ -335,13 +359,13 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         &["label"],
         "Defines one of the group's own labels, or changes one it defines: what it is called and \
          means, and how apps should show what wears it.",
-        Made::Method("putLabelDefinition", None),
+        Made::Method("internal.putLabelDefinition", None),
     ),
     (
         "label_delete",
         &["label"],
         "Stops defining one of the group's own labels. Labels already applied stay.",
-        Made::Method("deleteLabelDefinition", None),
+        Made::Method("internal.deleteLabelDefinition", None),
     ),
     (
         "role_set",
@@ -364,44 +388,10 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         Made::Grant,
     ),
     (
-        "site_publish",
-        &[],
-        "Publishes the group's website, whole, at its address (`https://<address>/`): every file \
-         of it, each as text or as bytes, in place of the site there; a file the group holds \
-         already is used again. Its pages run sandboxed, each in an origin of its own, with no \
-         cookies or storage. A site that names `reads`, methods of the host's such as \
-         fyi.opensocial.listMembers, `acts`, procedures of the host's such as \
-         fyi.opensocial.createReport, `spaces`, types of the group's spaces, or `writes`, \
-         records of a collection in a type of the group's spaces, each type alone for every \
-         space of it or with a `key` for just the one space of it by that key, is served in a page of the \
-         host's that signs its visitor in: its pages ask those reads as whoever is looking, \
-         with `os.call` from `/_os/kit.js`, those acts with `os.act`, and open those spaces \
-         with `os.space`, to sync and read them whole and make those writes in that person's \
-         own repo. With `inbox`, it is served so too, and makes each visitor's invite inbox \
-         (fyi.opensocial.invites) at their own PDS as they sign in, if they have none.",
-        Made::Method("putSite", None),
-    ),
-    (
-        "site_delete",
-        &[],
-        "Takes the group's website down.",
-        Made::Method("deleteSite", None),
-    ),
-    (
-        "site_domain",
-        &[],
-        "Serves the group's website at its handle's own domain, such as riders.org, once that \
-         domain reaches this host: the domain serves it, and www. under it and the group's \
-         address redirect there. Refused while the handle is the address, or before the domain's \
-         A and AAAA records name this host's addresses. With undo, serves it at its address \
-         alone again.",
-        Made::Method("putSiteDomain", Some("deleteSiteDomain")),
-    ),
-    (
         "member_list",
         &[],
         "Who is in the group, and their roles, a page at a time.",
-        Made::Method("listMembers", None),
+        Made::Method("internal.listMembers", None),
     ),
     (
         "member_assign",
@@ -440,7 +430,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "invite_list",
         &[],
         "The invites waiting.",
-        Made::Method("listInvites", None),
+        Made::Method("internal.listInvites", None),
     ),
     (
         "space_create",
@@ -453,7 +443,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "space_records",
         &["space"],
         "The records in one of the group's spaces.",
-        Made::Method("listSpaceRecords", None),
+        Made::Method("internal.listSpaceRecords", None),
     ),
     (
         "mod_list",
@@ -665,7 +655,7 @@ impl Docs {
                 let policy = format!("{NS}.policy");
                 let main = self.main(&policy);
                 let mut input = json!({"type": "object", "properties": {}, "required": []});
-                let said = "The space's type: an NSID, as fyi.opensocial.siteSpace.";
+                let said = "The space's type: an NSID, as com.example.board.";
                 let kind = json!({"type": "string", "format": "nsid", "description": said});
                 add(&mut input, "type", kind, true);
                 add(

@@ -26,17 +26,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
         -p opensocial --bin opensocial \
     && cp target/deploy/group-host target/deploy/opensocial /
 
-# The console, its types made from the lexicons beside it, and the page
-# the host serves around a site that asks for live data (web/shell),
-# which builds on the SDK beside it (packages/sdk, its types made from the
-# same lexicons).
+# The console, its types made from the lexicons beside it.
 FROM node:24.22.1-bookworm-slim AS console
-WORKDIR /packages/sdk
-COPY packages/sdk/package.json packages/sdk/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY packages/sdk/ ./
 COPY lexicons/ /lexicons/
-RUN npm run lex
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -51,11 +43,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=host /group-host /opensocial /usr/local/bin/
 COPY --from=console /web/build /app/build
-COPY --from=console /web/build-shell /app/build-shell
 COPY --from=console /web/package.json /app/package.json
 # The host's state, a volume the compose file mounts, owned by the node
-# user (uid 1000) the image runs as; and where it finds the site shell.
-ENV DATA_DIR=/data PORT=2600 SITE_SHELL_DIR=/app/build-shell
+# user (uid 1000) the image runs as.
+ENV DATA_DIR=/data PORT=2600
 RUN mkdir /data && chown node:node /data
 USER node
 WORKDIR /app

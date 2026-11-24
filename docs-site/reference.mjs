@@ -5,7 +5,7 @@
 // parameters, input and output, read from lexicons/ so it cannot drift. An
 // MCP tool has the lexicon its table's Lexicon column names: the method it
 // asks, or the record it writes. Each method there is an anchor, its NSID,
-// and a method named in code on any page, `fyi.opensocial.addRecoveryKey` or
+// and a method named in code on any page, `fyi.opensocial.internal.addRecoveryKey` or
 // `addRecoveryKey`, links to it.
 // docs/ stays plain Markdown: all of this happens as the site is built.
 
@@ -14,17 +14,20 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const LEXICONS = join(here, '../lexicons/fyi/opensocial');
+const LEXICONS = join(here, '../lexicons');
 import { REPO } from './plugins.mjs';
 
-/** Every fyi.opensocial lexicon, by NSID. */
+/** Every fyi.opensocial lexicon, the host's own internal ones too, by NSID. */
 const lexicons = new Map(
-  existsSync(LEXICONS)
-    ? readdirSync(LEXICONS)
+  ['fyi/opensocial', 'fyi/opensocial/internal']
+    .map((dir) => join(LEXICONS, dir))
+    .filter((dir) => existsSync(dir))
+    .flatMap((dir) =>
+      readdirSync(dir)
         .filter((f) => f.endsWith('.json'))
-        .map((f) => JSON.parse(readFileSync(join(LEXICONS, f), 'utf8')))
-        .map((l) => [l.id, l])
-    : []
+        .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')))
+    )
+    .map((l) => [l.id, l])
 );
 
 /** Every method the API page lists, by NSID; and by its name alone, where only one has that name. */
@@ -90,11 +93,11 @@ function type(field) {
       if (field.maxLength) bits.push(`at most ${field.maxLength}`);
       break;
     case 'ref':
-      bits.push(field.ref.replace(/^#/, '').replace(/^fyi\.opensocial\./, ''));
+      bits.push(field.ref.replace(/^#/, '').replace(/^fyi\.opensocial\.(internal\.)?/, ''));
       break;
     case 'union':
       bits.push(
-        `one of ${field.refs.map((r) => r.replace(/^#/, '').replace(/^fyi\.opensocial\./, '')).join(', ')}`
+        `one of ${field.refs.map((r) => r.replace(/^#/, '').replace(/^fyi\.opensocial\.(internal\.)?/, '')).join(', ')}`
       );
       break;
     default:
@@ -136,7 +139,7 @@ function lexicon(nsid, named = false) {
     (main.errors?.length
       ? `<p class="lex-title">Errors</p><p>${main.errors.map((e) => `<code>${escape(e.name)}</code>`).join(', ')}</p>`
       : '');
-  const source = `${REPO}/blob/main/lexicons/fyi/opensocial/${nsid.split('.').pop()}.json`;
+  const source = `${REPO}/blob/main/lexicons/${nsid.replaceAll('.', '/')}.json`;
   return (
     `<details class="lexicon"><summary>Lexicon${named ? ` of <code>${escape(nsid.split('.').pop())}</code>` : ''}</summary>` +
     (main.description ? `<p>${inline(main.description)}</p>` : '') +
@@ -297,7 +300,7 @@ export function remarkReference({ base = '/' } = {}) {
           node.children.length === 1 &&
           node.children[0].type === 'inlineCode'
         ) {
-          // `### \`GET /healthz\``, `### \`fyi.opensocial.getGroup\``: the method a badge before it. The
+          // `### \`GET /healthz\``, `### \`fyi.opensocial.internal.getGroup\``: the method a badge before it. The
           // anchor is fixed first, from the heading as written, so links to it still land.
           const code = node.children[0];
           const { method, nsid } = route(code.value);

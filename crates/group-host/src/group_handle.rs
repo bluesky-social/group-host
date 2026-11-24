@@ -12,7 +12,7 @@ use crate::Host;
 use crate::api::{Params, param};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::forbidden;
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::repo::identity;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
@@ -37,7 +37,7 @@ async fn configurable(
     group: &str,
     lxm: &str,
 ) -> Result<String, XrpcError> {
-    let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
+    let me = signed_in(host, headers, &format!("{INTERNAL}.{lxm}")).await?;
     group_of(host, group)?;
     if !host.may_configure(group, &me)? {
         return Err(forbidden());
@@ -155,10 +155,10 @@ pub async fn update_group_handle(
         .store
         .set_handle(group, &handle, &[identity(group, &handle)]);
     set.map_err(XrpcError::internal)?;
-    // The site was served at the old handle's domain, checked to reach
-    // here; the new one isn't, so the site goes back to the address.
-    let unsite = host.store.set_site_domain(group, None, now_millis());
-    unsite.map_err(XrpcError::internal)?;
+    // The group was served at the old handle's domain, checked to reach
+    // here; the new one isn't, so the group goes back to its address.
+    let undomain = host.store.set_domain(group, None, now_millis());
+    undomain.map_err(XrpcError::internal)?;
     host.announce();
     Ok(Json(json!({ "handle": handle })))
 }

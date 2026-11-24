@@ -68,7 +68,7 @@ export function filesOf(value: unknown, field = ''): Held[] {
 export function reviewedFile(uri: string, cid: string): string {
   const group = uri.slice('at://'.length).split('/')[0];
   const asked = new URLSearchParams({ group, subject: uri, cid });
-  return `/xrpc/fyi.opensocial.getModSubjectBlob?${asked}`;
+  return `/xrpc/fyi.opensocial.internal.getModSubjectBlob?${asked}`;
 }
 
 /** What an event is: `reportEvent`, `statusEvent`, `labelEvent`, `ejectEvent`. */

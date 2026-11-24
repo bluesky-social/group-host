@@ -9,6 +9,18 @@ use atproto::service_auth::{self, Claims};
 use serde_json::Value as Json;
 
 pub const NS: &str = "fyi.opensocial";
+/// The host's own methods and views, beside the proposal's.
+pub const INTERNAL: &str = "fyi.opensocial.internal";
+
+/// The NSID of our method `name`: the host's own if it has a lexicon
+/// there, else the proposal's.
+pub fn nsid(name: &str) -> String {
+    let internal = format!("{INTERNAL}.{name}");
+    match group_host::lexicons::lexicons().def(&internal) {
+        Some(_) => internal,
+        None => format!("{NS}.{name}"),
+    }
+}
 
 /// Service auth from `who` for this host and `lxm`.
 pub fn auth(h: &Running, who: &Authority, lxm: &str) -> (&'static str, String) {
@@ -52,7 +64,7 @@ pub async fn get(h: &Running, nsid: &str, query: &str, headers: &[(&str, String)
 
 /// A group started by `founder` with `body`: its DID.
 pub async fn start_group(h: &Running, founder: &Authority, body: Json) -> String {
-    let lxm = format!("{NS}.createGroup");
+    let lxm = format!("{INTERNAL}.createGroup");
     let (status, made) = post(h, &lxm, &body, &[auth(h, founder, &lxm)]).await;
     assert_eq!(status, 200, "{made}");
     made["did"].as_str().unwrap().to_string()
@@ -68,7 +80,7 @@ pub async fn people(h: &Running) -> [Authority; 3] {
 }
 
 pub async fn view(h: &Running, group: &str, who: Option<&Authority>) -> Json {
-    let lxm = format!("{NS}.getGroup");
+    let lxm = format!("{INTERNAL}.getGroup");
     let headers: Vec<_> = who.map(|w| auth(h, w, &lxm)).into_iter().collect();
     let (status, view) = get(h, &lxm, &format!("group={group}"), &headers).await;
     assert_eq!(status, 200, "{view}");

@@ -1,0 +1,87 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.internal.getGroupAuth",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Obtain a DPoP-bound OAuth access token to act as the group DID. The host is the group's PDS and authorization server: the caller authenticates with their personal account (service auth) and presents a DPoP proof; the host issues a short-lived token for the group DID whose space: scopes are exactly what the caller's roles grant them there, across the group and in the space's policy. No group password is involved. The same token may write those kinds of record in the group's public repo too (repoCollections): publishing them, as the group. For someone's inbox (fyi.opensocial.invites), a caller whose roles may invite gets a token to write the group's invite there, and nothing in the group's repo.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group",
+            "space"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did"
+            },
+            "space": {
+              "type": "string",
+              "format": "space-ref",
+              "description": "The space the caller intends to write into: one of the group's, where the scopes the caller's roles hold there bound the grant, or someone's inbox, to invite them."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did",
+            "accessJwt",
+            "pds",
+            "collections",
+            "expiresAt"
+          ],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "accessJwt": {
+              "type": "string"
+            },
+            "pds": {
+              "type": "string",
+              "format": "uri",
+              "description": "Where to use it: the group's PDS (this host)."
+            },
+            "collections": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.internal.defs#collectionRef"
+              },
+              "description": "Collections the caller's roles may write as the group in that space ('*' for any)."
+            },
+            "expiresAt": {
+              "type": "string",
+              "format": "datetime"
+            },
+            "scope": {
+              "type": "string",
+              "description": "The token's OAuth scope string; the PDS enforces it."
+            },
+            "repoCollections": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.internal.defs#collectionRef"
+              },
+              "description": "Public-repo collections this token may also write."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "Forbidden"
+        }
+      ]
+    }
+  }
+}

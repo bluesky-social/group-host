@@ -54,10 +54,10 @@
           "lxm": [
             "fyi.opensocial.requestJoin",
             "fyi.opensocial.cancelJoinRequest",
-            "fyi.opensocial.getJoinRequest",
+            "fyi.opensocial.internal.getJoinRequest",
             "fyi.opensocial.leaveGroup",
-            "fyi.opensocial.getActorInvites",
-            "fyi.opensocial.declineInvite",
+            "fyi.opensocial.internal.getActorInvites",
+            "fyi.opensocial.internal.declineInvite",
             "fyi.opensocial.createReport"
           ]
         }

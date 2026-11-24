@@ -66,7 +66,6 @@ export default defineConfig({
             page('Membership', 'design/membership'),
             page('Signing in', 'design/signing-in'),
             page('Moderation', 'design/moderation'),
-            page('Sites', 'design/sites'),
             page('MCP', 'design/mcp'),
             page('Recovery', 'design/recovery'),
             page('Moving', 'design/moving'),
@@ -78,8 +77,6 @@ export default defineConfig({
           items: [
             page('HTTP and XRPC API', 'reference/api'),
             page('MCP tools', 'reference/mcp'),
-            page('The site kit', 'reference/site-kit'),
-            page('The SDK', 'reference/sdk'),
             page('Commands', 'reference/cli'),
             page('Configuration', 'reference/config')
           ]

@@ -3,7 +3,7 @@
 // console at https://group-host.localtest.me, served by the dev server so a
 // change to it shows at once, a group of alice's, and one of bob's that has
 // invited her. Groups are named under groups.localtest.me, so a group's
-// address, where its site is, opens in a browser too.
+// address, which sends a browser to its page here, opens in one too.
 // Stops on ctrl-c, and forgets everything: the PDS, the directory and the
 // host start empty each time.
 //
@@ -129,7 +129,7 @@ which has invited alice: her invite waits on the home page. harbor is an account
 move here from ${w.base}/move; the code its server emails is at
   ${w.net.mail}?to=harbor@test.com
 
-A group's site is at its address, once published: https://riders.${groups}
+A group's address sends a browser to its page here: https://riders.${groups}
 
 The command, as alice:
   OPENSOCIAL_HOST=${w.host} PDS_URL=${w.net.pds} OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=password just opensocial group show riders.${groups}

@@ -1,0 +1,105 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.internal.importAccount",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Start moving an account that already exists on the network, on any server, here to become a group: check the account's proof that it hands its DID to this host, make it here switched off with new keys, and copy its whole repo and its files from its server. Answers with the credentials the account's PLC operation should name; once its server has signed one, completeImport finishes the move. The caller becomes the group's admin. Only a did:plc account, and never the caller's own. Starting again for an account the caller started on discards what the first start copied.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "serviceJwt"
+          ],
+          "properties": {
+            "serviceJwt": {
+              "type": "string",
+              "description": "A service token from the account's own server (com.atproto.server.getServiceAuth), with this host's DID as aud and com.atproto.server.createAccount as lxm.",
+              "maxLength": 8192
+            },
+            "address": {
+              "type": "string",
+              "description": "The label of its address on this host; by default its handle's first label.",
+              "maxLength": 253
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did",
+            "handle",
+            "address",
+            "displayName",
+            "records",
+            "blobs",
+            "recommendedCreds"
+          ],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "handle": {
+              "type": "string",
+              "format": "handle",
+              "description": "Its handle once moved: its own domain if it has one that still names it, otherwise its address."
+            },
+            "address": {
+              "type": "string",
+              "description": "Its address here: one label under this host's handle domain."
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "records": {
+              "type": "integer",
+              "description": "Records copied."
+            },
+            "blobs": {
+              "type": "integer",
+              "description": "Files copied."
+            },
+            "recommendedCreds": {
+              "type": "unknown",
+              "description": "rotationKeys, alsoKnownAs, verificationMethods and services, as com.atproto.identity.getRecommendedDidCredentials answers: what the account's server signs into its PLC operation (com.atproto.identity.signPlcOperation)."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotAllowed"
+        },
+        {
+          "name": "InvalidToken"
+        },
+        {
+          "name": "NotPlc"
+        },
+        {
+          "name": "SameAccount"
+        },
+        {
+          "name": "AlreadyHere"
+        },
+        {
+          "name": "InvalidHandle"
+        },
+        {
+          "name": "HandleNotAvailable"
+        },
+        {
+          "name": "InvalidRepo"
+        },
+        {
+          "name": "UpstreamFailure"
+        }
+      ]
+    }
+  }
+}

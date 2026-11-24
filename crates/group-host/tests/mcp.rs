@@ -115,7 +115,7 @@ async fn requested(h: &Running, client: &str, challenge: &str) -> String {
 }
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
@@ -227,7 +227,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     let uri = requested(&h, &client, &challenge).await;
 
     // The approval page reads it as an MCP client's.
-    let lxm = format!("{NS}.getAuthorization");
+    let lxm = format!("{INTERNAL}.getAuthorization");
     let (status, view) = get(
         &h,
         &lxm,
@@ -295,7 +295,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     assert!(uri.contains(&format!("/{group}/{NS}.invite/")), "{uri}");
     let got = tool(&h, access, "invite_send", json!({"person": "bob"})).await;
     assert_eq!(got["isError"], true, "{got}");
-    let lxm = format!("{NS}.listInvites");
+    let lxm = format!("{INTERNAL}.listInvites");
     let (_, invites) = get(
         &h,
         &lxm,
@@ -507,7 +507,7 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     assert_eq!(got["isError"], true, "{got}");
 
     // What it did is in the group's log, as the MCP client's.
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, listed) = get(
         &h,
         &lxm,
@@ -747,7 +747,7 @@ async fn refreshes_lists_and_disconnects() {
     let ping = json!({"jsonrpc": "2.0", "id": 1, "method": "ping"});
     assert_eq!(mcp(&h, Some(access), ping.clone()).await.status(), 200);
 
-    let lxm = format!("{NS}.listConnectedApps");
+    let lxm = format!("{INTERNAL}.listConnectedApps");
     let (status, listed) = get(
         &h,
         &lxm,
@@ -830,7 +830,7 @@ async fn sends_a_declined_mcp_client_back_saying_so() {
         let said = call(&h, &alice, method, body).await;
         assert_eq!(said.1["error"], "ExpiredRequest", "{method}");
     }
-    let lxm = format!("{NS}.getAuthorization");
+    let lxm = format!("{INTERNAL}.getAuthorization");
     let (_, said) = get(
         &h,
         &lxm,
@@ -994,7 +994,7 @@ async fn takes_a_client_by_its_metadata_document() {
     assert_eq!(res.status(), 303);
     let uri = query(&location(&res))["request_uri"].clone();
     let [alice, ..] = people(&h).await;
-    let lxm = format!("{NS}.getAuthorization");
+    let lxm = format!("{INTERNAL}.getAuthorization");
     let (_, view) = get(
         &h,
         &lxm,

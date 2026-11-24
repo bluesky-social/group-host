@@ -17,7 +17,7 @@ use crate::oauth::{OAuthError, new_tokens, token_response};
 use crate::oauth_resource::Refusal;
 use crate::oauth_scope::concrete;
 use crate::oauth_store::{Grant, Tokens};
-use crate::rbac::NS;
+use crate::rbac::INTERNAL;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use atproto::jose;
@@ -47,7 +47,7 @@ pub async fn provision_group(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, Refusal> {
-    let nsid = format!("{NS}.provisionGroup");
+    let nsid = format!("{INTERNAL}.provisionGroup");
     let founder = signed_in(&host, &headers, &nsid).await?;
     let now = now_millis();
     let proof = host.dpop_proof(&headers, "POST", &format!("/xrpc/{nsid}"), None, now);

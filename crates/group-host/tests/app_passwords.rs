@@ -69,7 +69,7 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
 }
 
 async fn call(h: &Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
+    let lxm = nsid(method);
     post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
@@ -107,7 +107,7 @@ async fn sign_in(h: &Running, identifier: &str, password: &str) -> (u16, Json) {
 }
 
 async fn list(h: &Running, who: &Authority, group: &str) -> (u16, Json) {
-    let lxm = format!("{NS}.listAppPasswords");
+    let lxm = format!("{INTERNAL}.listAppPasswords");
     get(h, &lxm, &format!("group={group}"), &[auth(h, who, &lxm)]).await
 }
 
@@ -149,7 +149,7 @@ async fn is_made_by_whoever_may_do_anything_as_the_group() {
     make(&h, &bob, &did, "Laptop").await;
     // A privileged one's sessions may use chat too.
     assert_eq!(sign_in(&h, RIDERS, password).await.0, 200);
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, grants) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     assert_eq!(
         grants["sessions"][0]["scope"],
@@ -300,7 +300,7 @@ async fn signs_an_app_in_to_the_groups_repo() {
     assert_eq!(said.1["did"], did.as_str());
     let (_, listed) = list(&h, &alice, &did).await;
     assert!(listed["passwords"][0]["lastUsedAt"].is_string(), "{listed}");
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, grants) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     let sessions = grants["sessions"].as_array().unwrap();
     assert!(
@@ -560,7 +560,7 @@ async fn is_revoked_by_its_maker_or_a_configurer() {
         200
     );
     assert_eq!(names(&list(&h, &alice, &did).await.1), Vec::<&str>::new());
-    let lxm = format!("{NS}.listGroupTokens");
+    let lxm = format!("{INTERNAL}.listGroupTokens");
     let (_, grants) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &alice, &lxm)]).await;
     let actions: Vec<&str> = grants["activity"]
         .as_array()

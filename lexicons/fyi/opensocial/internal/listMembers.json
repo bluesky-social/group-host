@@ -1,0 +1,61 @@
+{
+  "lexicon": 1,
+  "id": "fyi.opensocial.internal.listMembers",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "A group's members, each with their roles, a page at a time in the order of their DIDs, for a caller who may read its members space. With `q`, only those whose handle or DID holds it.",
+      "parameters": {
+        "type": "params",
+        "required": ["group"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did",
+            "description": "The group DID."
+          },
+          "q": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Part of a member's handle or DID, in any case."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 50,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["members"],
+          "properties": {
+            "cursor": {
+              "type": "string",
+              "description": "Present while there are more."
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "fyi.opensocial.internal.defs#memberView"
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "GroupNotFound"
+        }
+      ]
+    }
+  }
+}

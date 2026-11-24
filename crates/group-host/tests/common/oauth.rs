@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use super::Running;
-use super::groups::{NS, auth, post};
+use super::groups::{INTERNAL, NS, auth, post};
 use super::spaces::{Authority, now};
 use atproto::jose;
 use atproto::{Curve, Keypair};
@@ -273,7 +273,7 @@ pub async fn group_token(
     group: &str,
     space: &str,
 ) -> Said {
-    let lxm = format!("{NS}.getGroupAuth");
+    let lxm = format!("{INTERNAL}.getGroupAuth");
     let send = || {
         let (k, v) = auth(h, who, &lxm);
         h.http
@@ -444,7 +444,7 @@ pub async fn approve(
     request_uri: &str,
     group: &str,
 ) -> (u16, Json) {
-    let lxm = format!("{NS}.approveAuthorization");
+    let lxm = format!("{INTERNAL}.approveAuthorization");
     let body = json!({"requestUri": request_uri, "group": group});
     post(h, &lxm, &body, &[auth(h, member, &lxm)]).await
 }

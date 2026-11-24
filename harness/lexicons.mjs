@@ -41,55 +41,25 @@ const base =
     }
   })();
 
-// What was taken back on purpose before any record used it, each with why.
-// Once the base has none of it, an entry matches nothing and can go.
-// - What the host never answered or read, taken out before any client
-//   was written to it: actorView's profile fields (it answers a DID and a
-//   handle, from the DID document), and listSpaceRecords' `rev` and
-//   `actors`.
-// - getGroup's whole roster, which outgrows one answer: it counts its
-//   members, and listMembers gives them a page at a time.
-// - getAuthorization's `assistant`, named `mcp` as the host names its MCP
-//   server, while the console here was the only client reading it.
-// - The labeler's `createdAt`, which the proposal's has not, taken out
-//   while no labeler written with one is kept anywhere.
-// - A membership's `member`, which its key, the member's DID, already
-//   says, as the opensocial proposal has it.
-// - A profile's `location`, and the group views' that showed it: a group
-//   no longer says where it meets. The code still names `location`, as
-//   an HTTP header, so it is listed here.
+// Paths whose change from the base is let through. Once the base has none
+// of it, an entry matches nothing and can go.
 const retracted = new Set([
-  'fyi.opensocial.getGroup#main.output.members',
-  'fyi.opensocial.getAuthorization#main.output.assistant',
   'fyi.opensocial.membership#main.record.member',
-  ...['displayName', 'description', 'avatar', 'pronouns', 'links', 'bot'].map(
-    (f) => `fyi.opensocial.defs#actorView.${f}`
-  ),
   'fyi.opensocial.defs#actorLink',
-  'fyi.opensocial.listSpaceRecords#main.output.rev',
-  'fyi.opensocial.listSpaceRecords#main.output.actors',
   'fyi.opensocial.invite#main.record.by',
-  'fyi.opensocial.getActorInvites#actorInvite.by',
-  ...['createGroup#main.input', 'profile#main.record'].map(
-    (at) => `fyi.opensocial.${at}.joinPolicy`
-  ),
-  'fyi.opensocial.defs#viewerState.request',
-  'fyi.opensocial.getGroup#main.output.joinRequests[]',
-  'fyi.opensocial.getJoinRequest#main.output.request',
+  'fyi.opensocial.profile#main.record.joinPolicy',
   'fyi.opensocial.listJoinRequests#main.output.requests[]',
   'fyi.opensocial.labeler#main.record.policies',
   'fyi.opensocial.labeler#main.record.subjectCollections[]',
-  ...['readableBy', 'credentialScopes'].map((f) => `fyi.opensocial.defs#spaceView.${f}`),
-  // A space's name, public flag and grants, and its index entry's name,
-  // gone as its policy (fyi.opensocial.policy) took their place.
-  ...['name', 'public', 'grants', 'people', 'writableBy'].map(
-    (f) => `fyi.opensocial.defs#spaceView.${f}`
-  ),
   'fyi.opensocial.space#main.record.name',
   'fyi.opensocial.labeler#main.record.createdAt',
-  ...['defs#groupView', 'defs#groupViewDetailed', 'profile#main.record'].map(
-    (at) => `fyi.opensocial.${at}.location`
-  )
+  'fyi.opensocial.profile#main.record.location',
+  ...[
+    'defs#joinRequest.actor',
+    'defs#modSubjectView.actor',
+    'defs#moderationEvent.creator',
+    'getModSubjectHistory#main.output.record'
+  ].map((at) => `fyi.opensocial.${at}`)
 ]);
 
 // Where the opensocial proposal's shape, which the host takes, differs
