@@ -2,13 +2,13 @@
 
 `@opensocial/sdk` is a TypeScript SDK for apps on a group host. It wraps lex-space for a group's [spaces](../design/spaces.md), plus the host's own `fyi.opensocial.*` methods, asked as a member. Its shape follows lex-space's, and it hands back lex-space's `SpaceClient` for anything it doesn't wrap. It lives in `packages/sdk`, beside the host's lexicons. Roles and membership are in [membership](../design/membership.md).
 
-It exports `GroupClient`, `GroupSpace`, `GroupRecord`, `listActorGroups` and `listActorInvites`.
+It exports `GroupClient`, `GroupSpace`, `GroupRecord`, `InviteInbox`, `listActorGroups` and `listActorInvites`.
 
 ## Signing in
 
 Every call is made as a member, with an authenticated lex `Agent` of theirs, such as their OAuth session. `GroupSpace.open` throws a `TypeError` when the agent isn't authenticated.
 
-The app asks the member for two kinds of scope. It asks a `space:` scope for each space type it reads or writes, and `rpc:fyi.opensocial.*` for the host's methods. The host's methods go to the member's PDS, which proxies them to the host's `#opensocial` service. The app names that service in the `service` option as the host's DID with the fragment (`did:web:groups.example#opensocial`).
+The app asks the member for two kinds of scope. It asks a `space:` scope for each space type it reads or writes, and `rpc:fyi.opensocial.*` for the host's methods. The host's methods go to the member's PDS, which proxies them to the host's `#opensocial` service. The app names that service in the `service` option as the host's DID with the fragment (`did:web:groups.example#opensocial`). An app that makes the member's [invite inbox](#the-invite-inbox) asks for `space:fyi.opensocial.invites?action=read_self&manage=create` too, or for `space:fyi.opensocial.invites?action=read&manage=create` to read the invites in it as well.
 
 ## GroupClient
 
@@ -92,6 +92,22 @@ Each record `records()` answers is a `GroupRecord`, in JSON:
 `listActorInvites(client, { group })` answers `getActorInvites`, the member's invites still waiting, newest first. With `group`, it answers only that group's.
 
 Both take a lex `Client` whose `service` is the host's. That's a `GroupClient`'s `client`, or `new Client(session, { service })` before any group is open.
+
+## The invite inbox
+
+`InviteInbox.open(session, options)` makes the member's invite inbox, `at://<did>/space/fyi.opensocial.invites/self` at their own PDS, if they have none, and opens it ([invites](../design/membership.md#invites)). It makes it with `com.atproto.space.createSpace`, policy `com.atproto.memberspace.policy` with `publicWrite` set and no members, so any group may write an invite there and only the member reads it. When their PDS answers `SpaceAlreadyExists`, it reads the inbox's policy with `getSpace` and opens it as it is, never changing it. Any other refusal, such as `UnsupportedPolicy` or a missing scope, is lex's `XrpcResponseError`. The options are `GroupSpace.open`'s.
+
+| Member | What |
+| --- | --- |
+| `uri` | `at://<did>/space/fyi.opensocial.invites/self` |
+| `created` | whether `open` made it |
+| `policy` | its policy, as made or as `getSpace` answered |
+| `fits` | whether that is an inbox's: `com.atproto.memberspace.policy` with `publicWrite` set and `publicRead` not. An inbox made elsewhere with another is left alone, and says so here |
+| `space` | the inbox as a `GroupSpace`, read whole as its owner |
+| `sync()` | brings the invites up to date, as `GroupSpace.sync()` |
+| `invites()` | the `fyi.opensocial.invite` records held now, each as `{ group, uri, rkey, cid, createdAt, message?, expiresAt? }`, `group` the DID of the group that wrote it |
+
+Reading the invites needs `action=read`, as it reads each group's repo in the inbox. Making the inbox needs only `read_self` beside `manage=create`, which lets it see the policy of one already there.
 
 ## When to read every repo
 

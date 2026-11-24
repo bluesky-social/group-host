@@ -208,6 +208,15 @@ members. So any group may write an invite there and only the invitee
 reads the space. The invitee's PDS keeps each group that writes there
 among the inbox's writers.
 
+An app makes it with the SDK's `InviteInbox.open`, asking the person for
+`space:fyi.opensocial.invites?action=read_self&manage=create`: to make
+their own inbox, and to see the policy of one already there, which it
+leaves as it is ([the SDK](../reference/sdk.md#the-invite-inbox)). A
+group's site that sets `inbox` makes it for each visitor who signs in
+there ([sites](sites.md#the-page-around-a-site)). The console doesn't
+make one: someone whose app never made their inbox still sees their
+invites in the console, from the host's own list (below).
+
 An app invites someone by writing that record as the group, through
 `com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
 one write) with a session for the group. It takes the invite back by

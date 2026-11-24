@@ -400,7 +400,8 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
          host's that signs its visitor in: its pages ask those reads as whoever is looking, \
          with `os.call` from `/_os/kit.js`, those acts with `os.act`, and open those spaces \
          with `os.space`, to sync and read them whole and make those writes in that person's \
-         own repo.",
+         own repo. With `inbox`, it is served so too, and makes each visitor's invite inbox \
+         (fyi.opensocial.invites) at their own PDS as they sign in, if they have none.",
         Made::Method("putSite", None),
     ),
     (

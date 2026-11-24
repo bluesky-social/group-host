@@ -45,7 +45,14 @@ test('signed out, the place shows its landing, and the way in', async ({ page })
 });
 
 test('someone asks to join, cancels, asks again, and is let in', async ({ page }) => {
+  expect((await inboxOf('erin')).error).toBe('SpaceNotFound');
   let site = await signIn(page, 'erin');
+  // Signing in made her invite inbox, where any group may write and she
+  // alone reads.
+  expect((await inboxOf('erin')).policy).toMatchObject({
+    $type: 'com.atproto.memberspace.policy',
+    publicWrite: true
+  });
   await expect(site.getByText('Your request is waiting')).toBeVisible();
   await expect(site.getByText('@erin.test')).toBeVisible();
   await expect(site.getByRole('link', { name: 'Events' })).toHaveCount(0);
@@ -205,6 +212,20 @@ const asAlice = async (lxm, params) => {
   const res = await fetch(`${world.host}/xrpc/${lxm}?${query}`, {
     headers: { authorization: `Bearer ${token}` }
   });
+  return await res.json();
+};
+/// `name`'s invite inbox, as their own PDS has it (`getSpace`), or its refusal.
+const inboxOf = async (name) => {
+  const session = await fetch(`${world.pds}/xrpc/com.atproto.server.createSession`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identifier: who[name].handle, password: who[name].password })
+  }).then((r) => r.json());
+  const space = `at://${who[name].did}/space/fyi.opensocial.invites/self`;
+  const res = await fetch(
+    `${world.pds}/xrpc/com.atproto.space.getSpace?space=${encodeURIComponent(space)}`,
+    { headers: { authorization: `Bearer ${session.accessJwt}` } }
+  );
   return await res.json();
 };
 /// The `opensocial` command, as `name`.

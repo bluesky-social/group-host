@@ -102,6 +102,34 @@ type GroupRecord = {
 };
 ```
 
+## InviteInbox
+
+The member's invite inbox, `at://<did>/space/fyi.opensocial.invites/self`
+at their own PDS, where groups write `fyi.opensocial.invite` records to
+them. `InviteInbox.open(session, options)` makes it if they have none
+(`createSpace`, `com.atproto.memberspace.policy` with `publicWrite` and
+no members), or, on `SpaceAlreadyExists`, reads its policy (`getSpace`)
+and opens it as it is, never changing it. The session needs
+`space:fyi.opensocial.invites?action=read_self&manage=create`; reading
+the invites, `action=read` in place of `read_self`.
+
+```ts
+const inbox = await InviteInbox.open(session);
+if (!inbox.fits) console.warn('the inbox has another policy', inbox.policy);
+await inbox.sync();
+for (const invite of inbox.invites()) show(invite.group, invite.message);
+```
+
+| Member      | What                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `uri`       | `at://<did>/space/fyi.opensocial.invites/self`                                              |
+| `created`   | whether `open` made it                                                                      |
+| `policy`    | its policy                                                                                  |
+| `fits`      | whether it is memberspace's with `publicWrite` and not `publicRead`                         |
+| `space`     | the inbox as a `GroupSpace`                                                                 |
+| `sync()`    | as `GroupSpace.sync()`                                                                      |
+| `invites()` | `{ group, uri, rkey, cid, createdAt, message?, expiresAt? }` for each invite held, by group |
+
 ## Checks
 
 `npm run check` (the types) and `npm test` (vitest, lex-space's network

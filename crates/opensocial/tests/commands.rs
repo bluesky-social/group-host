@@ -1068,6 +1068,12 @@ async fn publishes_a_folder_as_the_groups_site_and_takes_it_down() {
         "{keyless}"
     );
 
+    // Each visitor's invite inbox, made when they sign in.
+    ok(&alice, &["site", "publish", group, folder, "--inbox"]).await;
+    let record = h.host.store.record(&did, "fyi.opensocial.site", "self");
+    let site = atproto::drisl::decode(&record.unwrap().unwrap().value).unwrap();
+    assert_eq!(&site.to_json()["inbox"], &json!(true));
+
     let missing = fails(&alice, &["site", "publish", group, "/no/such/folder"]).await;
     assert!(missing.contains("reading /no/such/folder"), "{missing}");
 

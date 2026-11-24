@@ -8,7 +8,8 @@ names `reads` may also show the group as each visitor may see it. One
 that names `spaces` may read the group's spaces whole as each visitor
 may, and one that names `acts` may act for each visitor, such as
 reporting what they see. One that names `writes` may write in the
-group's spaces as each visitor may. Each works once the visitor signs in
+group's spaces as each visitor may, and one that sets `inbox` makes
+each visitor's invite inbox. Each works once the visitor signs in
 on the site, through a page the host serves around its own
 ([live data](#live-data)).
 
@@ -49,6 +50,10 @@ pages may write in that person's own repo. Each is a type of the group's
 spaces, a key if it's for one space of them, and a collection there,
 such as `com.example.note` in `fyi.opensocial.siteSpace` under `board`.
 
+It may set `inbox`, and then the host's page makes the invite inbox of
+each visitor who signs in, if they have none
+([invites](membership.md#invites)).
+
 A site has 1 to 2000 files. Each publish replaces the record whole, and
 deleting the record takes the site down. A blob only the old record held
 is deleted with it, just as any blob is once no record holds it.
@@ -71,13 +76,13 @@ page says where the site is, how many files it has and when it was
 published. It publishes a folder you choose in the browser, or deletes
 the site after asking you to confirm. Publishing takes a `404.html` at
 the folder's top as `notFound`. It keeps `fallback`, `reads`, `spaces`,
-`acts` and `writes` under Advanced, filled in as the site has them.
+`acts`, `writes` and `inbox` under Advanced, filled in as the site has them.
 
 The `opensocial site publish` command reads a folder and sends its
 files. `--reads` and `--acts` name methods by NSID or by their last
 part, `--spaces` names each space as `<type>` or `<type>/<key>`, and
 `--writes` names each write as `<type>:<collection>` or
-`<type>/<key>:<collection>`. `site delete` takes the site down. Both
+`<type>/<key>:<collection>`; `--inbox` sets `inbox`. `site delete` takes the site down. Both
 leave out files whose names start with a dot. They send each file as
 text if it's UTF-8 and as bytes otherwise, and they take the folder's
 own name off each path. An AI app
@@ -250,7 +255,7 @@ them.
 
 ### The page around a site
 
-A site that names `reads`, `spaces`, `acts` or `writes` is served
+A site that names `reads`, `spaces`, `acts` or `writes`, or sets `inbox`, is served
 differently. Each of its pages is the host's own page, which holds the
 visitor's session. It shows the
 site's page in a sandboxed frame beneath it, filling the window. The
@@ -283,17 +288,23 @@ Its scope is `atproto`, plus these:
 - for each of its `writes`,
   `space:<type>?authority=<the group>&skey=<key>&collection=<collection>&action=create&action=update&action=delete`.
 - `blob:image/*`, if it has any `writes`.
+- `space:fyi.opensocial.invites?action=read_self&manage=create`, if it
+  sets `inbox`.
 
 An entry without a key leaves out `&skey=<key>`, and its scope covers
 every space of the type. So the site can call those methods on the
 host, read those of this group's spaces, and write those records in the
-visitor's own repo in them.
+visitor's own repo in them. With `inbox`, it can make the visitor's own
+`fyi.opensocial.invites` space and read its policy, but nothing written
+in it. Coming back from signing in, the host's page makes the inbox with
+the SDK's `InviteInbox.open`: one already there is left as it is,
+whatever its policy, and a failure only logs to the console.
 It can't do anything else. The session is kept in the browser at the
 address's origin and goes only to the visitor's PDS. The site's frame
 never holds it.
 
 The visitor's PDS must support spaces for them to sign in to a site
-that names `spaces` or `writes`, since it must grant the `space:`
+that names `spaces` or `writes`, or sets `inbox`, since it must grant the `space:`
 scopes. bsky.social doesn't yet.
 
 As the visitor moves through the site, the host's page puts the frame's

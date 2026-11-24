@@ -473,7 +473,8 @@ const all = {
       ...(reads.length ? { reads } : {}),
       ...(acts.length ? { acts } : {}),
       ...(spaces.length ? { spaces } : {}),
-      ...(writes.length ? { writes } : {})
+      ...(writes.length ? { writes } : {}),
+      ...(form.has('inbox') ? { inbox: true } : {})
     });
   },
   unsite: async (event) => {

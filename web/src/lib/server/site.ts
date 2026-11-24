@@ -22,6 +22,8 @@ export type Site = {
   acts: string[];
   spaces: { space: string; key?: string }[];
   writes: { space: string; key?: string; collection: string }[];
+  /** Whether it makes each visitor's invite inbox as they sign in. */
+  inbox: boolean;
 };
 
 type Load = { fetch: typeof fetch; url: URL };
@@ -47,6 +49,7 @@ export async function siteOf(event: Load, group: string, address: string): Promi
     reads: (answer.value.reads ?? []).map((r: { method: string }) => r.method),
     acts: (answer.value.acts ?? []).map((a: { method: string }) => a.method),
     spaces: answer.value.spaces ?? [],
-    writes: answer.value.writes ?? []
+    writes: answer.value.writes ?? [],
+    inbox: answer.value.inbox === true
   };
 }

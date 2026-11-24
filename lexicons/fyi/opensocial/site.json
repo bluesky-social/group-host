@@ -57,6 +57,10 @@
             "maxLength": 20,
             "items": { "type": "ref", "ref": "#write" },
             "description": "The records the site's pages may write, as whoever is looking and signed in, in their own repo in the group's spaces, through the page the host serves around them: each asked of the visitor's PDS when they sign in. What a space lets each visitor write is still its policy's to say."
+          },
+          "inbox": {
+            "type": "boolean",
+            "description": "Whether the page the host serves around the site makes the invite inbox (fyi.opensocial.invites) of whoever signs in, at their own PDS, if they have none: it asks their PDS to make that space and see its policy when they sign in."
           }
         }
       }

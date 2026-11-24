@@ -107,6 +107,7 @@
       site?.acts.length ||
       site?.spaces.length ||
       site?.writes.length ||
+      site?.inbox ||
       site?.fallback
     )}
   >
@@ -174,6 +175,14 @@
           placeholder="fyi.opensocial.siteSpace/board:com.example.note"
           >{site?.writes.map((w) => `${spaceText(w)}:${w.collection}`).join('\n') ?? ''}</textarea
         ></label
+      >
+    </fieldset>
+    <fieldset class="choices">
+      <legend>{m.group_site_inbox_legend()}</legend>
+      <p class="mute">{m.group_site_inbox_body()}</p>
+      <label
+        ><input type="checkbox" name="inbox" checked={site?.inbox ?? false} />
+        {m.group_site_inbox()}</label
       >
     </fieldset>
   </details>

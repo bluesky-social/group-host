@@ -38,10 +38,13 @@ with what it held last time while it reads afresh.
 | Act   | a report of a note, or an appeal of one's own                       | `os.act('fyi.opensocial.createReport')`, into the group host's moderation queue                                                                |
 | Join  | joining, asking to with a note, cancelling the request, and leaving | `os.act` with `requestJoin`, `cancelJoinRequest` and `leaveGroup`, each of this group alone, as the host's page sets it                        |
 | Read  | the moderators' labels on notes                                     | the group's own `com.atproto.label.record` records in the same spaces, shown as the group defines each (`getGroup`'s `labels`)                 |
+| Make  | the visitor's invite inbox, as they sign in, if they have none      | the site published with `inbox`: the host's page makes `fyi.opensocial.invites` at their PDS (`InviteInbox.open` of `@opensocial/sdk`)         |
 
 The site declares those reads, and its writes (each a space, by its type
 and key, and a collection), when it is published; the visitor's sign-in
-asks their PDS for exactly those, in this group's spaces alone. Both
+asks their PDS for exactly those, in this group's spaces alone, and, as
+it names `inbox`, to make their own inbox
+(`space:fyi.opensocial.invites?action=read_self&manage=create`). Both
 spaces are of the host's `fyi.opensocial.siteSpace` type, published with
 its lexicons, so the site publishes nothing for a PDS to read: its
 collections never need it. What each person may write is the spaces' to

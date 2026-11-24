@@ -23,7 +23,7 @@ import {
   TokenRevokedError,
   createDidResolver
 } from '@atproto/oauth-client-browser';
-import { GroupSpace } from '@opensocial/sdk';
+import { GroupSpace, InviteInbox } from '@opensocial/sdk';
 import { mount } from 'svelte';
 import consoleStyles from '../src/app.css?inline';
 import { SIGN_IN } from '../src/lib/signIn.ts';
@@ -38,6 +38,7 @@ type Config = {
   reads: string[];
   acts: string[];
   writes: { space: string; key?: string; collection: string }[];
+  inbox: boolean;
   spaces: { space: string; key?: string }[];
   aud: string;
   handleResolver: string;
@@ -75,13 +76,28 @@ const asked = `${frame.dataset.src ?? '/_site/'}${location.search}${location.has
 let session: OAuthSession | null = null;
 
 /**
+ * Makes the visitor's invite inbox if they have none, for a site that
+ * names `inbox`. One already there is left as it is, whatever its policy.
+ */
+async function makeInbox(signedIn: OAuthSession) {
+  try {
+    const inbox = await InviteInbox.open(signedIn);
+    if (!inbox.fits) console.warn('the invite inbox has another policy', inbox.policy);
+  } catch (e) {
+    console.warn('making the invite inbox failed', e);
+  }
+}
+
+/**
  * The visitor's session, restored, or finished as they come back from
- * signing in: where the frame goes then, the page sign-in started from.
+ * signing in (making their inbox then, when the site asks): where the
+ * frame goes then, the page sign-in started from.
  */
 async function restore(): Promise<string> {
   try {
     const found = await (await client).init();
     session = found?.session ?? null;
+    if (back && session && config.inbox) await makeInbox(session);
     if (back) {
       const from = found && 'state' in found && typeof found.state === 'string' ? found.state : '/';
       history.replaceState(null, '', from);

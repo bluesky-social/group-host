@@ -62,7 +62,7 @@ role
 site
   site publish <group> <dir> [--fallback <path>] [--not-found <path>] [--reads <methods>]
           [--acts <methods>] [--spaces <type[/key],…>]
-          [--writes <type[/key]:collection,…>]
+          [--writes <type[/key]:collection,…>] [--inbox]
                          publish the files under <dir> as the group's website, at its
                          address, in place of the one there; with --reads, the host's
                          methods its pages may ask as whoever signs in on it; with
@@ -71,7 +71,8 @@ site
                          they may read whole as that person, each by its NSID; with
                          --writes, the records they may write in that person's own repo,
                          each a type of the group's spaces and a collection there; a type
-                         with /<key> after it names just the one space of it by that key
+                         with /<key> after it names just the one space of it by that key;
+                         with --inbox, making that person's invite inbox as they sign in
   site delete <group>    take the group's website down
   site domain <group> [--undo]
                          serve the website at the group's own domain, its handle, once
@@ -687,7 +688,10 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
         }
         ["site", "publish", rest @ ..] => {
             let flags = ["fallback", "not-found", "reads", "acts", "spaces", "writes"];
-            let a = parse(rest, &flags)?;
+            // `--inbox` alone, with no value after it.
+            let inbox = rest.contains(&"--inbox");
+            let rest: Vec<&str> = rest.iter().copied().filter(|w| *w != "--inbox").collect();
+            let a = parse(&rest, &flags)?;
             let [group, dir] = a.take()?;
             let mut given = json!({"files": site_files(std::path::Path::new(dir))?});
             for (flag, name) in [("fallback", "fallback"), ("not-found", "not_found")] {
@@ -743,6 +747,9 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
                 };
                 let writes: Vec<Value> = each.map(write).collect::<Result<_>>()?;
                 given["writes"] = writes.into();
+            }
+            if inbox {
+                given["inbox"] = true.into();
             }
             let tools = group_host_mcp::tools();
             let tool = tools.iter().find(|t| t.name == "site_publish");

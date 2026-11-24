@@ -105,8 +105,8 @@ export function make(run, handle) {
  * Publishes the site as built (site/dist, `npm run build` there) as the
  * place `handle`'s, as `run` does it: every room's address answered by
  * its index.html; reading the group, its members, and its room and
- * calendar whole, reporting what members see, and writing each kind of
- * record in the visitor's own repo.
+ * calendar whole, reporting what members see, writing each kind of
+ * record in the visitor's own repo, and making their invite inbox.
  */
 export function publish(run, handle) {
   run(
@@ -123,7 +123,8 @@ export function publish(run, handle) {
     '--acts',
     'createReport,requestJoin,cancelJoinRequest,leaveGroup',
     '--writes',
-    WRITES.join(',')
+    WRITES.join(','),
+    '--inbox'
   );
 }
 

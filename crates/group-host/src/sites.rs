@@ -159,13 +159,19 @@ fn skey(key: Option<&str>) -> String {
     key.map(|key| format!("&skey={key}")).unwrap_or_default()
 }
 
+/// Whether a site makes each visitor's invite inbox when they sign in.
+fn inbox_of(site: &Value) -> bool {
+    site["inbox"] == true
+}
+
 /// Whether a site asks for its visitor's session: to read, act, read
-/// spaces or write.
+/// spaces, write, or make their inbox.
 fn is_live(site: &Value) -> bool {
     !reads_of(site).is_empty()
         || !acts_of(site).is_empty()
         || !spaces_of(site).is_empty()
         || !writes_of(site).is_empty()
+        || inbox_of(site)
 }
 
 /// Refuses a site whose `spaces` name no type, or one space twice.
@@ -617,9 +623,10 @@ fn script(bytes: Vec<u8>) -> Response {
 /// The site's OAuth client document, at its address `origin`: `atproto`;
 /// leave to ask each of its `reads` and `acts`, and `getViewer`, of the
 /// host; to read each of its `spaces` whole, in the group `did`'s spaces
-/// of that type; and to make each of its `writes` in the visitor's own repo, in the group
+/// of that type; to make each of its `writes` in the visitor's own repo, in the group
 /// `did`'s spaces of that type alone, with pictures they upload for those
-/// records to point to.
+/// records to point to; and with `inbox`, to make the visitor's own invite
+/// inbox and see its policy.
 fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Value) -> Response {
     let aud = format!("{}#opensocial", host.config.service_did);
     let aud = reqwest::Url::parse_with_params("https://x/", &[("aud", aud)])
@@ -647,6 +654,9 @@ fn client_metadata(host: &Host, did: &str, handle: &str, origin: &str, site: &Va
     }
     if !written.is_empty() {
         scope.push("blob:image/*".to_string());
+    }
+    if inbox_of(site) {
+        scope.push("space:fyi.opensocial.invites?action=read_self&manage=create".to_string());
     }
     let doc = json!({
         "client_id": format!("{origin}/client-metadata.json"),
@@ -702,6 +712,7 @@ fn shell(host: &Host, did: &str, handle: &str, site: &Value, path: &str) -> Resp
         "acts": acts,
         "spaces": spaces,
         "writes": writes,
+        "inbox": inbox_of(site),
         "aud": format!("{}#opensocial", host.config.service_did),
         "handleResolver": host.config.site_handle_resolver,
         "plc": host.config.site_plc_url,
@@ -792,7 +803,9 @@ pub async fn put_site(
     let group = configuring(&host, &headers, &body, "putSite").await?;
     host.active(&group)?;
     let mut site = json!({"$type": SITE, "files": [], "createdAt": iso(now_millis())});
-    for key in ["fallback", "notFound", "reads", "acts", "spaces", "writes"] {
+    for key in [
+        "fallback", "notFound", "reads", "acts", "spaces", "writes", "inbox",
+    ] {
         if let Some(given) = body.get(key) {
             site[key] = given.clone();
         }

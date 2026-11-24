@@ -58,6 +58,10 @@
               "maxLength": 20,
               "items": { "type": "ref", "ref": "fyi.opensocial.site#write" },
               "description": "The records the site's pages may write, as whoever is looking and signed in, in their own repo in the group's spaces."
+            },
+            "inbox": {
+              "type": "boolean",
+              "description": "Whether the site makes the invite inbox of whoever signs in on it, at their own PDS, if they have none."
             }
           }
         }

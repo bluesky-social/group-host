@@ -807,6 +807,45 @@ async fn a_site_reads_the_groups_spaces_whole_as_its_visitor() {
 }
 
 #[tokio::test]
+async fn a_site_with_an_inbox_asks_to_make_its_visitors_invite_inbox() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let files = json!([{"path": "index.html", "text": "<p>the club</p>"}]);
+    let said = call(
+        &h,
+        &alice,
+        "putSite",
+        json!({"group": did, "files": files, "inbox": true}),
+    )
+    .await;
+    assert_eq!(said.0, 200, "{}", said.1);
+
+    // Though it reads and writes nothing of the group's, its pages are
+    // served in the page that holds a session, which is told to make the
+    // visitor's inbox when they sign in.
+    let shell = page(&h, "/").await;
+    let (_, config) = shell_of(&shell);
+    assert_eq!(config["inbox"], json!(true));
+
+    // Its OAuth client asks the visitor's PDS to make their own inbox, and
+    // to see its policy, and nothing in it.
+    let client = page(&h, "/client-metadata.json").await;
+    let doc: Json = serde_json::from_str(&client.body).unwrap();
+    let scope: Vec<&str> = doc["scope"].as_str().unwrap().split(' ').collect();
+    let wanted = [
+        "atproto".to_string(),
+        format!("rpc:{NS}.getViewer?aud=did%3Aweb%3Ahost.test%23opensocial"),
+        format!("space:{NS}.invites?action=read_self&manage=create"),
+    ];
+    assert_eq!(scope, wanted);
+
+    // The record says so, for any app that reads it.
+    let kept = h.host.store.record(&did, SITE, "self").unwrap().unwrap();
+    let site = atproto::drisl::decode(&kept.value).unwrap().to_json();
+    assert_eq!(site["inbox"], json!(true));
+}
+
+#[tokio::test]
 async fn a_site_that_writes_asks_its_visitor_for_those_writes_alone() {
     let h = start(&[], false).await;
     let (did, [alice, ..]) = group(&h).await;
