@@ -78,25 +78,11 @@ async fn an_admin_changes_the_profile() {
     assert_eq!(avatar["size"], 2_000_000);
     assert_eq!(avatar["mimeType"], "image/webp");
     let banner = uploaded(&h, &app, &token, b"road".to_vec(), "image/jpeg").await;
-    // As large as a link's icon may be.
-    let icon = uploaded(&h, &app, &token, vec![8; 100_000], "image/png").await;
     let record = riders(json!({
         "displayName": "Riders United",
         "description": "We ride.",
         "url": "https://riders.example",
-        // As many links as a profile holds, a title as long as one may be.
-        "links": [
-            {"url": "https://chat.riders.example", "title": "Our chat", "icon": icon},
-            {"url": "http://calendar.riders.example/rides"},
-            {"url": "https://a.example", "title": "x".repeat(64)},
-            {"url": "https://b.example", "title": "B"},
-            {"url": "https://c.example", "title": "C"},
-        ],
         "joinPolicy": "invite",
-        "location": {"$type": "community.lexicon.location.address", "locality": "Ljubljana", "country": "SI"},
-        "online": true,
-        "topics": [{"topic": "bikes"}, {"topic": "x".repeat(64)}],
-        "languages": [{"language": "sl"}, {"language": "en-GB"}],
         "avatar": avatar,
         "banner": banner,
     }));
@@ -118,7 +104,7 @@ async fn an_admin_changes_the_profile() {
     let shown = view(&h, &did, Some(&alice)).await;
     assert_eq!(shown["group"]["displayName"], "Riders United");
     assert_eq!(shown["group"]["joinPolicy"], "invite");
-    assert_eq!(shown["group"]["links"], record["links"]);
+    assert_eq!(shown["group"]["url"], "https://riders.example");
 
     // Replaced whole: what is left out goes, pictures and all.
     let said = app
@@ -134,7 +120,7 @@ async fn an_admin_changes_the_profile() {
     assert_eq!(said.status, 200, "{}", said.body);
     let p = profile(&h, &did);
     assert_eq!(p.get("avatar"), None);
-    assert_eq!(p.get("topics"), None);
+    assert_eq!(p.get("url"), None);
     assert_eq!(p["joinPolicy"], "approval");
 }
 
@@ -147,7 +133,6 @@ async fn refuses_a_profile_it_should_not_keep() {
     let moving = uploaded(&h, &app, &token, b"GIF89a".to_vec(), "image/gif").await;
     let large = uploaded(&h, &app, &token, vec![0; 2_000_001], "image/png").await;
     let face = uploaded(&h, &app, &token, b"face".to_vec(), "image/webp").await;
-    let wide = uploaded(&h, &app, &token, vec![0; 100_001], "image/png").await;
     // Its type and size are the upload's, whatever the record says.
     let mut retyped = face.clone();
     retyped["mimeType"] = json!("image/png");
@@ -160,17 +145,7 @@ async fn refuses_a_profile_it_should_not_keep() {
         riders(json!({"joinPolicy": "sometimes"})),
         // A join policy is one of the words the lexicon knows.
         riders(json!({"joinPolicy": "fyi.opensocial.profile#invite"})),
-        riders(json!({"location": {"$type": "xyz.place"}})),
         riders(json!({"url": "ftp://riders.example"})),
-        riders(
-            json!({"links": [{"url": "https://riders.example"}, {"url": "ftp://riders.example"}]}),
-        ),
-        riders(json!({"links": [{"title": "Nowhere"}]})),
-        riders(json!({"links": [{"url": "https://riders.example", "title": "x".repeat(65)}]})),
-        riders(json!({"links": vec![json!({"url": "https://riders.example"}); 6]})),
-        riders(json!({"topics": [{"topic": "bikes"}, {"topic": " bikes "}]})),
-        riders(json!({"topics": [{"topic": " "}]})),
-        riders(json!({"languages": [{"language": "sl"}, {"language": "sl"}]})),
         // Pictures that are not the group's own images, as it kept them.
         riders(json!({"avatar": words})),
         riders(json!({"avatar": moving})),
@@ -180,14 +155,8 @@ async fn refuses_a_profile_it_should_not_keep() {
         riders(json!({"avatar": never})),
         riders(json!({"avatar": anothers})),
         riders(json!({"avatar": {"ref": "x"}})),
-        // Icons that are not the group's own small PNGs, as it kept them.
-        riders(json!({"links": [{"url": "https://riders.example", "icon": face}]})),
-        riders(json!({"links": [{"url": "https://riders.example", "icon": wide}]})),
-        riders(json!({"links": [{"url": "https://riders.example", "icon": anothers}]})),
         // Longer than the lexicon has them, or not of its format.
         riders(json!({"displayName": "x".repeat(65)})),
-        riders(json!({"topics": [{"topic": "x".repeat(65)}]})),
-        riders(json!({"languages": [{"language": "not a tag"}]})),
         riders(json!({"description": "x".repeat(2001)})),
         json!({"$type": format!("{NS}.profile"), "displayName": "Riders"}),
     ] {

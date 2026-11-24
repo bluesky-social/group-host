@@ -11,7 +11,7 @@
   import Section from '#lib/molecules/Section.svelte';
   import Standing from '#lib/molecules/Standing.svelte';
   import SwitchedOff from '#lib/molecules/SwitchedOff.svelte';
-  import { image, linksOf } from '#lib/images.ts';
+  import { image } from '#lib/images.ts';
   import GroupPage from '#lib/templates/GroupPage.svelte';
   import Welcome from '#lib/templates/Welcome.svelte';
   let { data, form } = $props();
@@ -54,11 +54,6 @@
         description={g.description}
         avatar={image(g.did, g.avatar)}
         banner={image(g.did, g.banner)}
-        location={g.location}
-        online={g.online}
-        languages={g.languages}
-        topics={g.topics}
-        links={linksOf(g.did, g.links)}
         rules={g.rules}
       >
         {#snippet nav()}

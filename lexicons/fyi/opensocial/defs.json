@@ -120,38 +120,6 @@
           "type": "string",
           "description": "How new members get in, as the profile states it."
         },
-        "location": {
-          "type": "union",
-          "refs": [
-            "community.lexicon.location.address",
-            "community.lexicon.location.geo",
-            "community.lexicon.location.fsq",
-            "community.lexicon.location.hthree"
-          ],
-          "description": "Where it meets, if it meets somewhere: a town or city is enough."
-        },
-        "online": {
-          "type": "boolean",
-          "description": "It meets online, as well as or instead of somewhere."
-        },
-        "topics": {
-          "type": "array",
-          "maxLength": 10,
-          "items": {
-            "type": "ref",
-            "ref": "#topicRef"
-          },
-          "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
-        },
-        "languages": {
-          "type": "array",
-          "maxLength": 5,
-          "items": {
-            "type": "ref",
-            "ref": "#languageRef"
-          },
-          "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
-        },
         "avatar": {
           "type": "string",
           "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
@@ -225,38 +193,6 @@
           "type": "string",
           "description": "How new members get in, as the profile states it."
         },
-        "location": {
-          "type": "union",
-          "refs": [
-            "community.lexicon.location.address",
-            "community.lexicon.location.geo",
-            "community.lexicon.location.fsq",
-            "community.lexicon.location.hthree"
-          ],
-          "description": "Where it meets, if it meets somewhere: a town or city is enough."
-        },
-        "online": {
-          "type": "boolean",
-          "description": "It meets online, as well as or instead of somewhere."
-        },
-        "topics": {
-          "type": "array",
-          "maxLength": 10,
-          "items": {
-            "type": "ref",
-            "ref": "#topicRef"
-          },
-          "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
-        },
-        "languages": {
-          "type": "array",
-          "maxLength": 5,
-          "items": {
-            "type": "ref",
-            "ref": "#languageRef"
-          },
-          "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
-        },
         "avatar": {
           "type": "string",
           "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
@@ -268,15 +204,6 @@
         "banner": {
           "type": "string",
           "description": "CID of the banner blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
-        },
-        "links": {
-          "type": "array",
-          "maxLength": 5,
-          "description": "Where else the group is, as its profile lists them.",
-          "items": {
-            "type": "ref",
-            "ref": "#link"
-          }
         },
         "rules": {
           "type": "array",
@@ -661,62 +588,6 @@
         "did": {
           "type": "string",
           "format": "did"
-        }
-      }
-    },
-    "link": {
-      "type": "object",
-      "description": "A place on the web where the group is: its site, a chat, a calendar.",
-      "required": [
-        "url"
-      ],
-      "properties": {
-        "url": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048,
-          "description": "An http or https address."
-        },
-        "title": {
-          "type": "string",
-          "maxGraphemes": 64,
-          "maxLength": 640,
-          "description": "What it is, as the group puts it."
-        },
-        "icon": {
-          "type": "blob",
-          "accept": [
-            "image/png"
-          ],
-          "maxSize": 100000,
-          "description": "The site's icon, as it was when the link was added: one of the group's own blobs, which the host serves at /img/{did}/{cid} to whoever may see the profile, so that nobody who sees the link asks the site for it."
-        }
-      }
-    },
-    "languageRef": {
-      "type": "object",
-      "description": "A language the group uses.",
-      "required": [
-        "language"
-      ],
-      "properties": {
-        "language": {
-          "type": "string",
-          "format": "language"
-        }
-      }
-    },
-    "topicRef": {
-      "type": "object",
-      "description": "A topic the group is about.",
-      "required": [
-        "topic"
-      ],
-      "properties": {
-        "topic": {
-          "type": "string",
-          "maxLength": 640,
-          "maxGraphemes": 64
         }
       }
     },

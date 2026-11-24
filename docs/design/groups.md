@@ -174,24 +174,15 @@ group.
 A put replaces the record whole, so anything it leaves out goes. Beyond
 what the lexicon checks, the host keeps a profile only if it has a
 display name that's more than spaces and a join policy of `open`,
-`approval` or `invite`. A location must be one of
-`community.lexicon.location`'s kinds. A site and links must be on `http`
-or `https`. Topics and languages must each be listed once, and none may
-be blank. The profile stays at `self` and is never deleted.
+`approval` or `invite`. A site must be on `http` or `https`.
+The profile stays at `self` and is never deleted.
 
 A picture must be a blob in the group's own repo, because a blob in
 another account's repo wouldn't resolve for the group's profile. So the
 app uploads it as the group (`com.atproto.repo.uploadBlob`, which a
 token for `meta` may do for images) and names the blob it gets back in
-the profile. A link's `icon` is its site's favicon, and it's kept the
-same way. It's a PNG of at most 100,000 bytes, so someone looking at the
-group asks the host for it and never the site. The console, the
-`opensocial` command and the host's MCP tools each ask the favicon
-service `FAVICONS` names for it when they write a new link, and upload
-it as the group. A link whose site has none, or answers too slowly, is
-kept without one. A link written again keeps the icon it had. An upload
-no record takes within a day is swept away, and a blob goes when its
-last reference does.
+the profile. An upload no record takes within a day is swept away, and
+a blob goes when its last reference does.
 
 The host serves images at `/img/{did}/{cid}` to anyone who may see a
 record holding them. For the public repo that's anyone. Otherwise it's

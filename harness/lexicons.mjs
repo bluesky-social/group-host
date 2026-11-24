@@ -55,6 +55,9 @@ const base =
 //   while no labeler written with one is kept anywhere.
 // - A membership's `member`, which its key, the member's DID, already
 //   says, as the opensocial proposal has it.
+// - A profile's `location`, and the group views' that showed it: a group
+//   no longer says where it meets. The code still names `location`, as
+//   an HTTP header, so it is listed here.
 const retracted = new Set([
   'fyi.opensocial.getGroup#main.output.members',
   'fyi.opensocial.getAuthorization#main.output.assistant',
@@ -83,7 +86,10 @@ const retracted = new Set([
     (f) => `fyi.opensocial.defs#spaceView.${f}`
   ),
   'fyi.opensocial.space#main.record.name',
-  'fyi.opensocial.labeler#main.record.createdAt'
+  'fyi.opensocial.labeler#main.record.createdAt',
+  ...['defs#groupView', 'defs#groupViewDetailed', 'profile#main.record'].map(
+    (at) => `fyi.opensocial.${at}.location`
+  )
 ]);
 
 // Where the opensocial proposal's shape, which the host takes, differs
@@ -150,8 +156,8 @@ const say = (at, what) =>
 
 // goat (github.com/bluesky-social/goat), one finding a line.
 // The schemas held to the guide are this host's own. Those under
-// lexicons/upstream and community.lexicon.* are others', copied as they
-// are for what ours refer to, and are only checked to grow from main's.
+// lexicons/upstream are others', copied as they are for what ours refer
+// to, and are only checked to grow from main's.
 const ours = (id) => typeof id === 'string' && id.startsWith('fyi.opensocial.');
 
 // What the space alpha brings, which goat does not know yet: a space's
@@ -338,6 +344,8 @@ const loosened = (before, after, path) => {
 //   tiered as authManageProfile, within authModerate, within
 //   authManageGroup, and participate named authParticipate, as the
 //   opensocial proposal's permission sets are.
+// - community.lexicon.location.address, geo, fsq and hthree: a group's
+//   profile no longer says where it meets, so nothing here refers to them.
 const RETIRED = new Set([
   'com.atproto.moderation.createReport',
   'com.atproto.managedspace.checkAccess',
@@ -349,7 +357,11 @@ const RETIRED = new Set([
   'fyi.opensocial.manageSpaces',
   'fyi.opensocial.manageMembers',
   'fyi.opensocial.moderate',
-  'fyi.opensocial.participate'
+  'fyi.opensocial.participate',
+  'community.lexicon.location.address',
+  'community.lexicon.location.geo',
+  'community.lexicon.location.fsq',
+  'community.lexicon.location.hthree'
 ]);
 
 // None of ours is published yet, so nothing out there was written to it.

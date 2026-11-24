@@ -52,13 +52,11 @@ export class Saving {
   track = (form: HTMLFormElement) => {
     this.#form = form;
     this.#was = held(form);
-    // A chosen language taken off is a click, not an input.
-    for (const kind of ['input', 'change', 'click']) form.addEventListener(kind, this.#compare);
+    for (const kind of ['input', 'change']) form.addEventListener(kind, this.#compare);
     return {
       destroy: () => {
         unsaved.delete(this);
-        for (const kind of ['input', 'change', 'click'])
-          form.removeEventListener(kind, this.#compare);
+        for (const kind of ['input', 'change']) form.removeEventListener(kind, this.#compare);
       }
     };
   };

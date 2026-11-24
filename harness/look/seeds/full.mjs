@@ -1,5 +1,5 @@
 // A group in full: Lantern Hikers (lanterns.groups.test), alice's, with a
-// banner and a picture, words, a place, topics, languages, links, two rules
+// banner and a picture, words, two rules
 // and a moderator role; bob, carol (its moderator), dan, erin and frank in
 // it, more than a page of members; harbor asking to join with a note; and an invite waiting
 // for maximilianaquinces.
@@ -9,13 +9,6 @@ export default async ({ world, opensocial, ask, page, picture, who, exists }) =>
   if (!(await exists(g))) opensocial('alice', 'group', 'seed', g);
   const about =
     'Evening walks on the ridge trails, lanterns lit, every Thursday from April to October.';
-  const where = {
-    $type: 'community.lexicon.location.address',
-    locality: 'Ljubljana',
-    country: 'SI'
-  };
-  const topics = ['night hikes', 'ridge trails', 'lanterns'].map((topic) => ({ topic }));
-  const languages = ['sl', 'en'].map((language) => ({ language }));
   opensocial(
     'alice',
     'profile',
@@ -24,14 +17,7 @@ export default async ({ world, opensocial, ask, page, picture, who, exists }) =>
     '--display-name',
     'Lantern Hikers',
     '--description',
-    about,
-    '--location',
-    JSON.stringify(where),
-    '--online',
-    '--topics',
-    JSON.stringify(topics),
-    '--languages',
-    JSON.stringify(languages)
+    about
   );
   for (const name of ['bob', 'carol', 'dan', 'erin', 'frank']) {
     await ask(name, g);
@@ -54,22 +40,8 @@ export default async ({ world, opensocial, ask, page, picture, who, exists }) =>
     '--message',
     'Come walk with us.'
   );
-  // Its pictures and links, through its settings, as only the console
-  // uploads them and keeps a link's icon.
+  // Its pictures, through its settings, as only the console uploads them.
   const p = await page('alice');
-  await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' });
-  for (const [address, title] of [
-    ['https://chat.lanterns.example', 'Our chat'],
-    ['https://maps.lanterns.example/routes']
-  ]) {
-    if (await p.locator('.link-list li', { hasText: address }).count()) continue;
-    await p.getByRole('button', { name: 'Add a link' }).click();
-    const dialog = p.getByRole('dialog', { name: 'Add a link' });
-    await dialog.getByRole('textbox', { name: 'Its address' }).fill(address);
-    if (title) await dialog.getByRole('textbox', { name: 'Title' }).fill(title);
-    await dialog.getByRole('button', { name: 'Add', exact: true }).click();
-    await p.locator('.link-list li', { hasText: address }).waitFor();
-  }
   for (const [slot, png] of [
     ['Avatar', picture(256, 256)],
     ['Banner', picture(1500, 500, [47, 122, 75], [246, 241, 234])]

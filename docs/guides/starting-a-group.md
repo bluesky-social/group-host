@@ -108,16 +108,11 @@ app, so it can act for you in the group with what your roles let you do.
    its first card is **About it**.
 2. Type into **What it is for**, such as "We read one book a month and
    meet to talk it over."
-3. Fill in where it meets: **Town or city it meets in** with its
-   **Country**, or **It meets online**.
-4. Type into **Topics**, with commas between them, such as "novels,
-   reading". It takes up to ten.
-5. Fill in **Languages it uses** and **Its own site**. Leave empty any
-   field here that doesn't apply.
-6. Press **Save**, at the foot of **About it**. **Saved** shows beside
+3. Fill in **Its own site**, or leave it empty.
+4. Press **Save**, at the foot of **About it**. **Saved** shows beside
    it once your changes are kept.
 
-<!-- look /g/bookclub.groups.test/settings --as alice --type '[name=description]=We read one book a month and meet to talk it over.' --type '[name=topics]=novels, reading' --click 'form[action="?/profile"] button[type=submit]' -->
+<!-- look /g/bookclub.groups.test/settings --as alice --type '[name=description]=We read one book a month and meet to talk it over.' --click 'form[action="?/profile"] button[type=submit]' -->
 ![The foot of About it: How people join, Its own site, and the Save button with Saved beside it](shots/starting-words.png)
 
 You can change any of this later on the same card.
@@ -141,28 +136,13 @@ it. Removing takes a picture off at once, without asking.
 <!-- look /g/bookclub.groups.test/settings --as alice --seed bookclub-pictures --element 'section:has(.pictures)' -->
 ![The Pictures card: Avatar with a round blue picture and Banner with a wide purple one, each with the buttons Remove and Change](shots/starting-pictures.png)
 
-## Add a link
-
-1. On the card **Links**, press **Add a link**.
-2. In the dialog, type the link into **Its address**, starting with
-   `https://`. This is the web address the link goes to.
-3. Type a title for it, such as "Our chat". Without one, the
-   link shows as its address.
-4. Press **Add**. The dialog closes, and the link is on the card.
-
-<!-- look /g/bookclub.groups.test/settings --as alice --click 'button[popovertarget=add-link]' --type '#add-link [name=url]=https://chat.bookclub.example' --type '#add-link [name=title]=Our chat' --click '#add-link button[type=submit]' --element 'section:has(.link-list)' -->
-![The Links card, with Our chat and its address listed, Remove beside it, and the button Add a link](shots/starting-link-added.png)
-
-**Remove** beside it takes it off again. A group can have
-up to five, shown on its card in the order they were added.
-
 ## What does my group look like now?
 
 1. Press **← Book club**, above **Settings**. The card has its banner, its
-   avatar, its words, its topics as tags, and its link.
+   avatar and its words.
 
 <!-- look /g/bookclub.groups.test --as alice --element '.group-card' -->
-![Book club's card: a purple banner, a round blue avatar, Book club and bookclub.groups.test, the words We read one book a month and meet to talk it over, the tags novels and reading, a link Our chat, and You're a member with the admin role](shots/starting-card-done.png)
+![Book club's card: a purple banner, a round blue avatar, Book club and bookclub.groups.test, the words We read one book a month and meet to talk it over, and You're a member with the admin role](shots/starting-card-done.png)
 
 Someone signed in who isn't a member sees the same card, without your
 standing, **Moderation** or **Settings**. Under it is the way to join
@@ -181,10 +161,8 @@ The `opensocial` command does the same, signed in as the handle in
 - Start the group:
   `opensocial group create bookclub.groups.test --display-name "Book club" --join-policy approval`
 - See it: `opensocial group show bookclub.groups.test`
-- Write what it is for, and its topics:
-  `opensocial profile set bookclub.groups.test --description "We read one book a month and meet to talk it over." --topics '[{"topic":"novels"},{"topic":"reading"}]'`
-- Set its links, the whole list at once:
-  `opensocial profile set bookclub.groups.test --links '[{"url":"https://chat.bookclub.example","title":"Our chat"}]'`
+- Write what it is for:
+  `opensocial profile set bookclub.groups.test --description "We read one book a month and meet to talk it over."`
 
 Pictures and **Who sees it** are set in the console only.
 

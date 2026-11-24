@@ -14,7 +14,7 @@ they might do next.
 3. What is the address, and can I change it later?
 4. Who can see my group, and who can join it?
 5. What does my new group look like, and what is on its page?
-6. How do I give it a picture, words and links?
+6. How do I give it a picture and words?
 7. What next: inviting people, writing rules.
 
 ## inviting-people.md

@@ -4,8 +4,8 @@
   "defs": {
     "main": {
       "type": "record",
+      "description": "The group's profile. Written by the group in the meta space.",
       "key": "literal:self",
-      "description": "The group's profile. Written by the group authority into the meta space.",
       "record": {
         "type": "object",
         "required": [
@@ -41,55 +41,19 @@
             ],
             "maxSize": 2000000
           },
+          "joinPolicy": {
+            "type": "string",
+            "knownValues": [
+              "open",
+              "approval",
+              "invite"
+            ],
+            "description": "open admits anyone; approval queues a join request; invite requires an invitation. An invitation admits its recipient under any policy."
+          },
           "url": {
             "type": "string",
             "format": "uri",
-            "description": "The group's own site, if it keeps one. A third-party app that shows the group can link back to it."
-          },
-          "links": {
-            "type": "array",
-            "maxLength": 5,
-            "items": {
-              "type": "ref",
-              "ref": "fyi.opensocial.defs#link"
-            },
-            "description": "Where else the group is, in the order it shows them: each an http or https address, and what it is."
-          },
-          "joinPolicy": {
-            "type": "ref",
-            "ref": "fyi.opensocial.defs#joinPolicy"
-          },
-          "location": {
-            "type": "union",
-            "refs": [
-              "community.lexicon.location.address",
-              "community.lexicon.location.geo",
-              "community.lexicon.location.fsq",
-              "community.lexicon.location.hthree"
-            ],
-            "description": "Where it meets, if it meets somewhere: a town or city is enough."
-          },
-          "online": {
-            "type": "boolean",
-            "description": "It meets online, as well as or instead of somewhere."
-          },
-          "topics": {
-            "type": "array",
-            "maxLength": 10,
-            "items": {
-              "type": "ref",
-              "ref": "fyi.opensocial.defs#topicRef"
-            },
-            "description": "What it's about, a few words each, as the group puts it: climbing, choir, renters' union."
-          },
-          "languages": {
-            "type": "array",
-            "maxLength": 5,
-            "items": {
-              "type": "ref",
-              "ref": "fyi.opensocial.defs#languageRef"
-            },
-            "description": "The languages it uses, as BCP 47 tags: en, pl, sl."
+            "description": "Group website. Must be http or https."
           },
           "createdAt": {
             "type": "string",

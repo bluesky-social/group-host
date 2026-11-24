@@ -423,27 +423,6 @@ test("changing a group's profile", async () => {
   await page.goto(url('/g/hikers.groups.test'));
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Hikers of the Hills');
-  // Where it meets: a town asks for its country.
-  await page.getByRole('textbox', { name: 'Town or city it meets in' }).fill('Kraków');
-  await expect(page.getByRole('combobox', { name: 'Country' })).toHaveAttribute('required', '');
-  await page.getByRole('combobox', { name: 'Country' }).selectOption({ label: 'Poland' });
-  await page.getByRole('checkbox', { name: 'It meets online' }).check();
-  await page.getByRole('textbox', { name: 'Topics' }).fill('hiking, , ridge walks, hiking');
-  // Its languages: typed and picked from what matches, by Enter or by a
-  // click, the field cleared for the next; each taken off by its button.
-  const languages = page.getByRole('combobox', { name: 'Languages it uses' });
-  await languages.fill('pol');
-  await languages.press('Enter');
-  await expect(languages).toHaveValue('');
-  await languages.fill('eng');
-  await page.getByRole('option', { name: 'English' }).click();
-  await languages.fill('Germ');
-  await languages.press('Enter');
-  await expect(page.getByText('Choose up to five.')).toBeVisible();
-  await page.getByRole('button', { name: 'Remove German' }).click();
-  // Focus comes back to the field, but its list stays shut, off the form below.
-  await expect(languages).toBeFocused();
-  await expect(page.getByRole('listbox', { name: 'Languages it uses' })).toHaveCount(0);
   // Changed, it says so beside Save, and Save is the thing to press.
   const profile = page.locator('form[action="?/profile"]');
   const said = profile.getByRole('status');
@@ -454,57 +433,13 @@ test("changing a group's profile", async () => {
   // Saved, it says that, until something is changed again.
   await expect(said).toHaveText('Saved');
   await expect(save).toHaveClass(/quiet/);
-  // Drawn again as saved: each topic once, none blank.
-  await expect(page.getByRole('textbox', { name: 'Topics' })).toHaveValue('hiking, ridge walks');
-  await expect(page.getByRole('combobox', { name: 'Country' })).toHaveValue('PL');
-  await expect(page.getByRole('list', { name: 'Chosen' }).getByRole('button')).toHaveText([
-    /^Polish/,
-    /^English/
-  ]);
-  // Its links, each added from a dialog: with what it is, or without.
-  const addLink = async (address, title) => {
-    await page.getByRole('button', { name: 'Add a link' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add a link' });
-    await dialog.getByRole('textbox', { name: 'Its address' }).fill(address);
-    if (title) await dialog.getByRole('textbox', { name: 'Title' }).fill(title);
-    await dialog.getByRole('button', { name: 'Add', exact: true }).click();
-    await expect(page.locator('.link-list', { hasText: address })).toBeVisible();
-  };
-  await addLink('https://chat.hikers.example', 'Our chat');
-  await addLink('https://walks.example/');
-  await addLink('https://gone.example/');
-  await page.getByRole('button', { name: 'Remove gone.example' }).click();
-  await expect(page.locator('.link-list', { hasText: 'gone.example' })).toHaveCount(0);
-  // Each by its site's icon, kept as the group's own, where the site has one.
-  await expect(
-    page.locator('.link-list li', { hasText: 'Our chat' }).locator('img.link-icon')
-  ).toHaveAttribute('src', /^\/img\/did:/);
-  await expect(
-    page.locator('.link-list li', { hasText: 'walks.example' }).locator('img')
-  ).toHaveCount(0);
+  // Drawn again as saved.
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(
+    'Hikers of the Hills'
+  );
   await page.goto(url('/g/hikers.groups.test'));
   await expect(page.getByRole('heading', { name: 'Hikers of the Hills' })).toBeVisible();
   await expect(page.getByText('Walks on Sundays.')).toBeVisible();
-  // Where it meets, its languages and what it is about, under its words.
-  await expect(page.locator('.facts')).toHaveText(
-    'Meets in Kraków, Poland, and online. Speaks Polish and English.'
-  );
-  await expect(page.locator('.group-card .tag')).toHaveText(['hiking', 'ridge walks']);
-  // Its links, in a row: by title, or by address.
-  const links = page.getByRole('navigation', { name: "Hikers of the Hills's links" });
-  await expect(links.getByRole('link', { name: 'Our chat' })).toHaveAttribute(
-    'href',
-    'https://chat.hikers.example'
-  );
-  await expect(links.getByRole('link', { name: 'walks.example' })).toHaveAttribute(
-    'href',
-    'https://walks.example/'
-  );
-  const icon = links.getByRole('link', { name: 'Our chat' }).locator('img.link-icon');
-  await expect(icon).toHaveJSProperty('naturalWidth', 16);
-  await expect(
-    links.getByRole('link', { name: 'walks.example' }).locator('svg.icon')
-  ).toBeVisible();
 });
 
 // A one-pixel PNG.

@@ -178,14 +178,11 @@ impl Docs {
         Docs(parsed.collect())
     }
 
-    /// The def `reference` names, from within `doc`: `#name`, `nsid#name`,
-    /// or `nsid` for its main; with the NSID of the document it is in.
+    /// The def `reference` names, from within `doc`: `#name` or
+    /// `nsid#name`; with the NSID of the document it is in.
     fn resolve(&self, doc: &str, reference: &str) -> Option<(String, &Value)> {
-        let (nsid, name) = match reference.split_once('#') {
-            Some(("", name)) => (doc, name),
-            Some((nsid, name)) => (nsid, name),
-            None => (reference, "main"),
-        };
+        let (nsid, name) = reference.split_once('#')?;
+        let nsid = if nsid.is_empty() { doc } else { nsid };
         let def = self.0.get(nsid)?.get("defs")?.get(name)?;
         Some((nsid.to_string(), def))
     }
@@ -240,11 +237,6 @@ impl Docs {
                     None => json!({}),
                 }
             }
-            "union" if depth > 0 => {
-                let refs = def["refs"].as_array().cloned().unwrap_or_default();
-                let any: Vec<Value> = refs.iter().map(|r| self.member(doc, r, depth)).collect();
-                json!({ "anyOf": any })
-            }
             _ => json!({}),
         };
         if let Some(d) = def["description"].as_str() {
@@ -252,21 +244,6 @@ impl Docs {
             out["description"] = json!(format!("{d}{}", known.unwrap_or_default()));
         }
         out
-    }
-
-    /// A member of a union, `reference`, which says which it is by its
-    /// `$type`, as atproto has it.
-    fn member(&self, doc: &str, reference: &Value, depth: u8) -> Value {
-        let one = json!({"type": "ref", "ref": reference});
-        let mut s = self.schema(doc, &one, depth);
-        let name = reference.as_str().unwrap_or_default();
-        // A local reference, `#name`, is named in full: `<doc>#name`.
-        let local = if name.starts_with('#') { doc } else { "" };
-        let name = format!("{local}{name}");
-        if let Some(props) = s.get_mut("properties").and_then(Value::as_object_mut) {
-            props.insert("$type".into(), json!({ "const": name }));
-        }
-        s
     }
 
     fn object(&self, doc: &str, def: &Value, depth: u8) -> Value {
@@ -338,7 +315,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "profile_set",
         &[],
         "Changes the group's profile as the group. Changes only the fields given, keeping the \
-         rest; a field given empty, or null, is taken away. A new link is given its site's icon.",
+         rest; a field given empty, or null, is taken away.",
         Made::Edit("profile", META, "self"),
     ),
     (
@@ -1008,7 +985,7 @@ pub fn regrant(
 /// The write that changes `kept`, the record of the kind `collection` at
 /// `rkey` in the group's space of the type `space` as it is (none if there
 /// is none), in the `fields` given: each set, or taken away if given
-/// empty, an empty list, or null; the rest as they were.
+/// empty or null; the rest as they were.
 pub fn edited(
     kept: &Value,
     space: String,
@@ -1024,7 +1001,6 @@ pub fn edited(
         let empty = match &value {
             Value::Null => true,
             Value::String(s) => s.is_empty(),
-            Value::Array(a) => a.is_empty(),
             _ => false,
         };
         match empty {
@@ -1039,77 +1015,6 @@ pub fn edited(
         rkey: Some(rkey),
         record: Some(Value::Object(record)),
     }
-}
-
-/// Where a link's site's icon is asked unless another service is named:
-/// the link's address follows, encoded, and a PNG is answered.
-pub const FAVICONS: &str = "https://cardyb.bsky.app/v1/favicon?url=";
-
-/// The most bytes a link's icon may be, as its lexicon has it.
-pub const ICON_AT_MOST: usize = 100_000;
-
-/// The links of a profile `fields` gives, in the `collection` it is
-/// written to, that want their site's icon: each by where it is in the
-/// list, and the address its icon is asked at, of the favicon service at
-/// `favicons`. A link given with no icon, at an address the record `kept`
-/// has one for, is given that one instead, so a list written again keeps
-/// its icons. With no service, none are asked.
-pub fn iconless(
-    collection: &str,
-    kept: &Value,
-    fields: &mut Map<String, Value>,
-    favicons: &str,
-) -> Vec<(usize, String)> {
-    if collection != format!("{NS}.profile") {
-        return Vec::new();
-    }
-    let had = kept["links"].as_array().into_iter().flatten();
-    let had: HashMap<&str, &Value> = had
-        .filter_map(|l| Some((l["url"].as_str()?, l.get("icon")?)))
-        .collect();
-    let mut wanted = Vec::new();
-    let links = fields.get_mut("links").and_then(Value::as_array_mut);
-    for (at, link) in links.into_iter().flatten().enumerate() {
-        let url = link["url"].as_str().unwrap_or_default().to_string();
-        if link.get("icon").is_some() || !link.is_object() {
-            continue;
-        }
-        match had.get(url.as_str()) {
-            Some(icon) => link["icon"] = (*icon).clone(),
-            None if web(&url) && !favicons.is_empty() => {
-                wanted.push((at, format!("{favicons}{}", encoded(&url))))
-            }
-            None => {}
-        }
-    }
-    wanted
-}
-
-/// `fields`' link at `at`, given the blob `icon`.
-pub fn iconed(fields: &mut Map<String, Value>, at: usize, icon: Value) {
-    if let Some(link) = fields.get_mut("links").and_then(|l| l.get_mut(at)) {
-        link["icon"] = icon;
-    }
-}
-
-/// Whether `url` is an address on the web.
-fn web(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://")
-}
-
-/// `text` as it stands in a URL's query: each byte but a letter, a digit
-/// and `-._~` as `%` and its hex.
-fn encoded(text: &str) -> String {
-    let mut out = String::new();
-    for b in text.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                out.push(b as char)
-            }
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
-    }
-    out
 }
 
 fn error(id: &Value, code: i64, message: &str) -> Value {
@@ -1180,23 +1085,4 @@ where
         other => return Some(error(id, -32601, &format!("no method {other}"))),
     };
     Some(json!({"jsonrpc": "2.0", "id": id, "result": answered}))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A union of a lexicon's own defs: each object member names itself in
-    /// full; one that is no object, with nowhere to say so, is as it is.
-    #[test]
-    fn names_a_local_member_of_a_union_in_full() {
-        let a = json!({"type": "object", "properties": {"x": {"type": "string"}}});
-        let doc = json!({"defs": {"a": a, "b": {"type": "string"}}});
-        let docs = Docs(HashMap::from([("com.example.thing".to_string(), doc)]));
-        let union = json!({"type": "union", "refs": ["#a", "#b"]});
-        let schema = docs.schema("com.example.thing", &union, DEPTH);
-        let member = &schema["anyOf"][0]["properties"]["$type"]["const"];
-        assert_eq!(member, "com.example.thing#a");
-        assert_eq!(schema["anyOf"][1], json!({"type": "string"}));
-    }
 }

@@ -65,10 +65,7 @@ isn't text, the host refuses it before asking anything:
 A write replaces the record whole and drops any field not given. The
 exceptions are `profile_set` and `role_grant`, which change only what
 they're given. You can't upload a picture through MCP, so `profile_set`
-keeps the group's pictures as they are. When `profile_set` writes a link
-the profile didn't have, the host asks the favicon service `FAVICONS`
-names for the site's icon and keeps it as the group's. A link the
-profile already had keeps its icon.
+keeps the group's pictures as they are.
 
 ## group
 
@@ -80,9 +77,9 @@ profile already had keeps its icon.
 
 ## profile
 
-| Tool          | Command       | Lexicon                  | What it does                                                                                                                                                            |
-| ------------- | ------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profile_set` | `profile set` | `fyi.opensocial.profile` | changes the fields given in the group's profile (at `self` in its meta space) as the group, and keeps the rest. A field given empty, an empty list or `null` is removed |
+| Tool          | Command       | Lexicon                  | What it does                                                                                                                                       |
+| ------------- | ------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile_set` | `profile set` | `fyi.opensocial.profile` | changes the fields given in the group's profile (at `self` in its meta space) as the group, and keeps the rest. A field given empty or `null` is removed |
 
 ## rule
 

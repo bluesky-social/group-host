@@ -155,9 +155,6 @@ pub struct Env {
     /// The password of an account `import` moves, at its own server,
     /// `OPENSOCIAL_IMPORT_PASSWORD`.
     pub import_password: Option<String>,
-    /// Where a link's site's icon is asked, `FAVICONS`: the link's
-    /// address follows, encoded. Empty asks nowhere.
-    pub favicons: String,
 }
 
 /// The did:web a host at `url` is by default, as the host names itself.
@@ -184,7 +181,6 @@ impl Env {
             handle: var("OPENSOCIAL_AS"),
             password: var("OPENSOCIAL_PASSWORD"),
             import_password: var("OPENSOCIAL_IMPORT_PASSWORD"),
-            favicons: var("FAVICONS").unwrap_or_else(|| group_host_mcp::FAVICONS.into()),
             seed_invite: invite
                 .split(',')
                 .map(str::trim)
@@ -195,13 +191,11 @@ impl Env {
     }
 }
 
-/// A host, by its address and DID; and where a link's site's icon is
-/// asked when a link is written to a group's profile there.
+/// A host, by its address and DID.
 #[derive(Debug, Clone)]
 pub struct Host {
     pub url: String,
     pub did: String,
-    pub favicons: String,
 }
 
 /// A person signed in at their PDS.
@@ -443,14 +437,13 @@ impl<'a> GroupSession<'a> {
         token: Option<&str>,
         body: &Value,
     ) -> Result<Value> {
-        let json = Body::Json(body);
-        let mut res = self.post(nsid, authorization, token, &json).await?;
+        let mut res = self.post(nsid, authorization, token, body).await?;
         let stale = res
             .headers()
             .get("www-authenticate")
             .is_some_and(|v| v.to_str().unwrap_or_default().contains("use_dpop_nonce"));
         if stale {
-            res = self.post(nsid, authorization, token, &json).await?;
+            res = self.post(nsid, authorization, token, body).await?;
         }
         answer(res, nsid).await
     }
@@ -460,16 +453,10 @@ impl<'a> GroupSession<'a> {
         nsid: &str,
         authorization: &str,
         token: Option<&str>,
-        body: &Body<'_>,
+        body: &Value,
     ) -> Result<reqwest::Response> {
         let url = format!("{}/xrpc/{nsid}", self.host.url);
-        let asked = match body {
-            Body::Json(body) => self.client.http.post(url).json(body),
-            Body::Png(bytes) => {
-                let asked = self.client.http.post(url).body(bytes.to_vec());
-                asked.header("content-type", "image/png")
-            }
-        };
+        let asked = self.client.http.post(url).json(body);
         let asked = asked.header("authorization", authorization);
         let sent = asked.header("dpop", self.proof(nsid, token)).send().await;
         let res = sent.context(format!("reaching {}", self.host.url))?;
@@ -485,35 +472,6 @@ impl<'a> GroupSession<'a> {
         let auth = format!("DPoP {}", self.token);
         self.send(nsid, &auth, Some(&self.token), body).await
     }
-
-    /// `png` uploaded as the group's: the blob a record names it by.
-    async fn upload(&self, png: &[u8]) -> Result<Value> {
-        let nsid = "com.atproto.repo.uploadBlob";
-        let auth = format!("DPoP {}", self.token);
-        let token = Some(self.token.as_str());
-        let res = self.post(nsid, &auth, token, &Body::Png(png)).await?;
-        Ok(answer(res, nsid).await?["blob"].clone())
-    }
-}
-
-/// What a request to the host carries: JSON, or a PNG.
-enum Body<'a> {
-    Json(&'a Value),
-    Png(&'a [u8]),
-}
-
-/// How long a site's icon is waited for.
-const ICON_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
-
-/// The icon the favicon service answers at `asked`: a PNG no larger than
-/// a link's icon may be, or none.
-async fn favicon(http: &reqwest::Client, asked: &str) -> Option<Vec<u8>> {
-    let res = http.get(asked).timeout(ICON_WAIT).send().await.ok()?;
-    let kind = res.headers().get("content-type").cloned();
-    let png = res.status().is_success() && kind.is_some_and(|k| k == "image/png");
-    let bytes = res.bytes().await.ok()?;
-    let small = bytes.len() <= group_host_mcp::ICON_AT_MOST;
-    (png && small).then(|| bytes.to_vec())
 }
 
 /// The arguments after a command: its words, and its `--flag value`s.
@@ -631,7 +589,6 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
     let host = Host {
         url: env.host.clone(),
         did: env.host_did.clone(),
-        favicons: env.favicons.clone(),
     };
     let words: Vec<&str> = args.iter().map(String::as_str).collect();
     match words.as_slice() {
@@ -653,7 +610,6 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             let dest = Host {
                 url: to.to_string(),
                 did: did.unwrap_or_else(|| did_web(to)),
-                favicons: env.favicons.clone(),
             };
             migrate(&signed_in(env).await?, &host, &dest, group).await
         }
@@ -987,18 +943,6 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             let asked = [("group", group), ("space", &uri), ("uri", &record)];
             let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
             let kept = listed["records"][0]["value"].clone();
-            // Each new link's site's icon, kept as the group's own.
-            let mut fields = fields;
-            let wanted = group_host_mcp::iconless(&collection, &kept, &mut fields, &host.favicons);
-            if !wanted.is_empty() {
-                let session = GroupSession::start(me, host, group, &uri).await?;
-                for (at, asked) in wanted {
-                    let Some(png) = favicon(&me.http, &asked).await else {
-                        continue;
-                    };
-                    group_host_mcp::iconed(&mut fields, at, session.upload(&png).await?);
-                }
-            }
             let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
             Box::pin(carry_out(me, host, group, write)).await
         }

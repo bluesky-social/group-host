@@ -1,4 +1,4 @@
-// Everything long: a group whose handle, name, words, links and rule
+// Everything long: a group whose handle, name, words, site and rule
 // run as long as the host takes them, dan's; maximilianaquinces in it,
 // the longest handle the PDS takes; and frank asking to join with a
 // note that wraps more than once.
@@ -11,13 +11,8 @@ export default async ({ opensocial, ask, who, exists }) => {
   const name = 'The Evening Society of Ridge Walkers and Lantern Keepers, North';
   const about =
     'We walk the long ridge every Thursday evening from the first warm week of April until the clocks go back, lanterns lit, at a pace anyone can keep. Bring water, a warm layer, and a lantern if you have one; we lend them to whoever does not. Dogs are welcome on a lead.';
-  const links = [
-    {
-      url: 'https://a-very-long-domain-name-for-a-walking-group.example/routes/the-north-ridge/in-the-evening',
-      title: 'Every route we walk, with its distances and where to park'
-    },
-    { url: 'https://chat.example' }
-  ];
+  const site =
+    'https://a-very-long-domain-name-for-a-walking-group.example/routes/the-north-ridge/in-the-evening';
   opensocial(
     'dan',
     'profile',
@@ -27,8 +22,8 @@ export default async ({ opensocial, ask, who, exists }) => {
     name,
     '--description',
     about,
-    '--links',
-    JSON.stringify(links)
+    '--url',
+    site
   );
   const rule = 'Wait for the last walker at every gate, stile and fork';
   opensocial(

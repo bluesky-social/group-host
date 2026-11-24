@@ -134,10 +134,10 @@ component. English is the only language so far.
 
 Each request's language is the one the `PARAGLIDE_LOCALE` cookie names,
 else the first of the browser's `Accept-Language` the console has, else
-English. The page's `<html lang>` and `dir` say it. Dates, lists, and
-countries' and languages' names follow it (`#lib/locale.ts`), and a
-label shows its name in it when the group gave one. Times stay in UTC,
-since the page is drawn on the server. The host's own error messages
+English. The page's `<html lang>` and `dir` say it. Dates and lists
+follow it (`#lib/locale.ts`), and a label shows its name in it when the
+group gave one. Times stay in UTC, since the page is drawn on the
+server. The host's own error messages
 stay English, and the console says each by its name (`#lib/errors.ts`).
 A few names (`InvalidRequest`, `InvalidHandle`, `InvalidSite`,
 `InvalidArchive`, `UpstreamFailure`) cover several reasons the reader

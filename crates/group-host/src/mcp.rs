@@ -846,17 +846,6 @@ impl Host {
                 let kept = self.group_record(&who.group, &uri, &collection, &rkey);
                 let kept = kept.map_err(XrpcError::internal).map_err(said)?;
                 let kept = kept.unwrap_or_default();
-                // Each new link's site's icon, kept as the group's own.
-                let mut fields = fields;
-                let favicons = &self.config.favicons;
-                let wanted = group_host_mcp::iconless(&collection, &kept, &mut fields, favicons);
-                for (at, asked) in wanted {
-                    let Some(png) = favicon(&self.http, &asked).await else {
-                        continue;
-                    };
-                    let icon = self.upload_blob(&who.group, &png, "image/png");
-                    group_host_mcp::iconed(&mut fields, at, icon.map_err(said)?);
-                }
                 let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
                 Box::pin(self.carry_out(who, write)).await
             }
@@ -1034,15 +1023,4 @@ pub async fn revoke_connected_app(
     let ended = host.store.disconnect_mcp_client(group, &me, client);
     ended.map_err(XrpcError::internal)?;
     Ok(Json(json!({})))
-}
-
-/// The icon the favicon service answers at `asked`: a PNG no larger than
-/// a link's icon may be, or none.
-async fn favicon(http: &reqwest::Client, asked: &str) -> Option<Vec<u8>> {
-    let res = http.get(asked).send().await.ok()?;
-    let kind = res.headers().get(header::CONTENT_TYPE).cloned();
-    let png = res.status().is_success() && kind.is_some_and(|k| k == "image/png");
-    let bytes = res.bytes().await.ok()?;
-    let small = bytes.len() <= group_host_mcp::ICON_AT_MOST;
-    (png && small).then(|| bytes.to_vec())
 }

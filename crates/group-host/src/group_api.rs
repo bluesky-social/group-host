@@ -119,17 +119,7 @@ fn cid_of(blob: &Value) -> Option<&str> {
 
 /// Puts in `view` what a group's profile shows of it.
 fn show_profile(view: &mut Value, profile: &Value) {
-    for key in [
-        "displayName",
-        "description",
-        "joinPolicy",
-        "url",
-        "links",
-        "location",
-        "online",
-        "topics",
-        "languages",
-    ] {
+    for key in ["displayName", "description", "joinPolicy", "url"] {
         if let Some(v) = profile.get(key) {
             view[key] = v.clone();
         }

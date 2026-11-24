@@ -26,10 +26,6 @@ macro_rules! lexicon {
 
 /// Every lexicon under `lexicons/`.
 pub const FILES: &[&str] = &[
-    lexicon!("community/lexicon/location/address"),
-    lexicon!("community/lexicon/location/fsq"),
-    lexicon!("community/lexicon/location/geo"),
-    lexicon!("community/lexicon/location/hthree"),
     lexicon!("fyi/opensocial/acceptance"),
     lexicon!("fyi/opensocial/activateGroup"),
     lexicon!("fyi/opensocial/addRecoveryKey"),

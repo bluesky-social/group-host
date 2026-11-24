@@ -43,10 +43,10 @@ picture, no words, no one else. That is the bare state. A seed puts in
 the rest, once per kept world:
 
 - `full`: Lantern Hikers (lanterns.groups.test), alice's, with a banner,
-  a picture, words, links, two rules and a moderator role; bob, carol
+  a picture, words, two rules and a moderator role; bob, carol
   (moderator), dan, erin and frank in it, past a page of members; harbor
   asking to join; an invite waiting for maximilianaquinces.
-- `long`: a group of dan's with the longest handle, name, words, link
+- `long`: a group of dan's with the longest handle, name, words, site
   and rule the host takes; frank asking with a long note.
 - `waiting`: bob asking to join Riders; carol invited to it.
 - `apps`: an app signed in to Riders with alice's app password

@@ -179,8 +179,8 @@ every `main`; a `maxLength` on strings people write; accounts by DID, a
 handle only as an account's own `handle`), and that every schema only
 grows from main's. Nothing is let off but what the space alpha brings and
 goat does not know yet: the `space-ref` format and permissions over a
-`space`. The schemas under `lexicons/upstream` and `community/` are
-others', copied as they are for what ours refer to.
+`space`. The schemas under `lexicons/upstream` are others', copied as
+they are for what ours refer to.
 
 ## Docs
 

@@ -61,9 +61,9 @@ group's requests in it, while an MCP client acts in one group.
 
 ### profile
 
-| Command                                                                                                                                                                               | What it does                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `profile set <group> [--display-name <name>] [--join-policy <policy>] [--description] [--url] [--online] [--topics <json>] [--languages <json>] [--location <json>] [--links <json>]` | changes the fields given in the group's profile, as the group, and keeps the rest and its pictures. A field given `""` is removed. A new link gets its site's icon from the favicon service `FAVICONS` names |
+| Command                                                                                         | What it does                                                                                                                         |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `profile set <group> [--display-name <name>] [--join-policy <policy>] [--description] [--url]` | changes the fields given in the group's profile, as the group, and keeps the rest and its pictures. A field given `""` is removed |
 
 ### rule
 

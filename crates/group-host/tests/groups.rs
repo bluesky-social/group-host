@@ -123,7 +123,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
                 Write::Update {
                     collection: format!("{NS}.profile"),
                     rkey: "self".into(),
-                    value: json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "open", "avatar": picture, "topics": [{"topic": "bikes"}]}),
+                    value: json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "open", "avatar": picture, "url": "https://riders.example"}),
                 },
                 rule_at("b", "Second", None, "2026-11-02T00:00:00Z"),
                 rule_at("a", "Third", None, "2026-11-03T00:00:00Z"),
@@ -141,7 +141,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     assert_eq!(group["displayName"], "Riders");
     assert_eq!(group["joinPolicy"], "open");
     assert_eq!(group["avatar"], picture["ref"]["$link"]);
-    assert_eq!(group["topics"], json!([{"topic": "bikes"}]));
+    assert_eq!(group["url"], "https://riders.example");
     let titles: Vec<&str> = group["rules"]
         .as_array()
         .unwrap()

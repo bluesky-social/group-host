@@ -4,8 +4,5 @@
   - link "Moderation":
   - link "Settings":
 - paragraph: We read one book a month and meet to talk it over.
-- text: novels reading
-- navigation "Book club's links":
-  - link "Our chat":
 - text: You're a member with the admin role.
 - button "Leave the group"

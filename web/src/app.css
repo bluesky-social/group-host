@@ -931,7 +931,7 @@ span.av::before {
 /* Its card: the banner across the top, when it has one; its picture
    (over the banner's foot, when there is one), its name and handle beside
    it, and the ways to its other pages across from them; then its words,
-   its links, its rules and where the person looking stands. */
+   its rules and where the person looking stands. */
 /* A banner wherever it is shown; on the card, edge to edge. */
 .banner {
   display: block;
@@ -999,43 +999,6 @@ span.av::before {
 }
 .group-card .description {
   max-width: var(--measure);
-}
-.links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.links a,
-.profile-links a {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control);
-  padding: 0 var(--space-3);
-  border: var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--panel);
-  color: var(--fg);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  text-decoration: none;
-}
-.links a:hover,
-.profile-links a:hover {
-  border-color: var(--primary);
-  color: var(--fg);
-}
-.profile-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.link-icon {
-  width: var(--icon);
-  height: var(--icon);
-  flex: none;
-  border-radius: var(--radius-xs);
-  object-fit: contain;
 }
 .icon {
   width: var(--icon);
@@ -1401,94 +1364,6 @@ pre.raw {
     padding-top: var(--space-6);
     gap: var(--space-8);
   }
-}
-/* Choosing a few of many: what is chosen, each a button that takes it off,
-   over a field to type into, all in one box that looks like a field. */
-.pick-many {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  font-weight: var(--weight-normal);
-  transition:
-    border-color var(--speed),
-    box-shadow var(--speed);
-}
-.pick-many:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 var(--ring) var(--primary-soft);
-}
-.pick-many > input:not([type='hidden']) {
-  width: 100%;
-  min-height: calc(var(--control) - var(--space-2) - 2px);
-  padding: 0 var(--space-2);
-  border: 0;
-  box-shadow: none;
-  background: transparent;
-}
-.pick-many .drop-list {
-  left: -1px;
-  right: -1px;
-}
-.pick-many > ul.chosen:last-child {
-  padding-bottom: var(--space-1);
-}
-ul.chosen[class] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) 0;
-}
-ul.chosen[class] > li {
-  padding: 0;
-  border: 0;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control-sm);
-  padding: 0 var(--space-3);
-  border: var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--soft);
-  color: var(--fg);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-.chip:hover {
-  background: var(--line);
-  border-color: var(--line-strong);
-}
-.chip span {
-  color: var(--fg);
-  font-size: var(--text-base);
-  line-height: 1;
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-/* What a group is about, where it meets and what it speaks, under its words. */
-.facts {
-  font-size: var(--text-sm);
-  color: var(--mute);
-}
-/* What a group is about: tags, set apart from the roles people hold. */
-.topics .tag {
-  background: var(--soft);
-  border: var(--border);
 }
 
 /* ── A page's head and its tabs ───────────────────────────────────── */

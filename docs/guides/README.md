@@ -4,7 +4,7 @@ How to do each thing in the console, step by step, with a picture of
 each screen as you'll see it.
 
 - [Starting a group](starting-a-group.md): signing in, starting a group,
-  and giving it a picture, words and links.
+  and giving it a picture and words.
 - [Rules and roles](rules-and-roles.md): writing the group's rules,
   making roles, and giving them to members.
 - [Moderating](moderating.md): what members report, labelling and taking

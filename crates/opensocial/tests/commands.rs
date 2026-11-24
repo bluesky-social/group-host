@@ -25,33 +25,7 @@ const INVITE: &str = "space:fyi.opensocial.invites?authority=*&skey=self&collect
 struct Running {
     host: Arc<Host>,
     url: String,
-    favicons: String,
     _data: TempDir,
-}
-
-/// The bytes the favicon service answers for a site whose name starts
-/// `chat.`.
-const FAVICON: &[u8] = b"\x89PNG a green dot";
-
-/// A favicon service, as the command asks one: where it is, the link's
-/// address to follow. A site whose name starts `chat.` has `FAVICON`;
-/// any other none.
-async fn favicons() -> String {
-    async fn icon(
-        axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
-    ) -> axum::response::Response {
-        use axum::response::IntoResponse;
-        let site = q.get("url").map(String::as_str).unwrap_or_default();
-        match site.starts_with("https://chat.") {
-            true => ([("content-type", "image/png")], FAVICON).into_response(),
-            false => axum::http::StatusCode::NOT_FOUND.into_response(),
-        }
-    }
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let at = listener.local_addr().unwrap();
-    let router = axum::Router::new().route("/favicon", axum::routing::get(icon));
-    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    format!("http://{at}/favicon?url=")
 }
 
 async fn host() -> Running {
@@ -81,7 +55,6 @@ async fn host_with(vars: &[(&str, String)]) -> Running {
     Running {
         host,
         url,
-        favicons: favicons().await,
         _data: data,
     }
 }
@@ -96,7 +69,6 @@ fn env(h: &Running, who: usize) -> Env {
         ("PDS_URL", n.pds.clone()),
         ("OPENSOCIAL_AS", person.handle.clone()),
         ("OPENSOCIAL_PASSWORD", person.password.clone()),
-        ("FAVICONS", h.favicons.clone()),
         (
             "OPENSOCIAL_SEED_INVITE",
             format!(" {} ,", n.accounts[1].handle),
@@ -343,34 +315,23 @@ async fn writes_the_groups_rules_roles_and_profile() {
         group,
         "--display-name",
         "Riders United",
-        "--topics",
-        r#"[{"topic": "cycling"}]"#,
+        "--url",
+        "https://riders.example",
     ];
     ok(&alice, &profile).await;
     let written = kept(&meta, "profile", "self").unwrap();
     assert_eq!(written["displayName"], "Riders United");
-    assert_eq!(written["topics"], json!([{"topic": "cycling"}]));
+    assert_eq!(written["url"], "https://riders.example");
     assert_eq!(written["joinPolicy"], before["joinPolicy"]);
     let profile = ["profile", "set", group, "--description", "Bikes"];
     ok(&alice, &profile).await;
     let written = kept(&meta, "profile", "self").unwrap();
-    assert_eq!(written["topics"], json!([{"topic": "cycling"}]));
+    assert_eq!(written["url"], "https://riders.example");
     assert_eq!(written["description"], "Bikes");
-    ok(&alice, &["profile", "set", group, "--topics", ""]).await;
+    ok(&alice, &["profile", "set", group, "--url", ""]).await;
     let written = kept(&meta, "profile", "self").unwrap();
-    assert_eq!(written.get("topics"), None);
+    assert_eq!(written.get("url"), None);
     assert_eq!(written["description"], "Bikes");
-    // Its links, each new one with its site's icon where the site has
-    // one, kept as the group's own; written again, each keeps it.
-    let links = r#"[{"url": "https://chat.riders.example", "title": "Our chat"}, {"url": "https://riders.example"}]"#;
-    let profile = ["profile", "set", group, "--links", links];
-    ok(&alice, &profile).await;
-    let written = kept(&meta, "profile", "self").unwrap()["links"].clone();
-    assert_eq!(written[0]["icon"]["mimeType"], "image/png");
-    assert_eq!(written[0]["icon"]["size"], FAVICON.len());
-    assert_eq!(written[1].get("icon"), None);
-    ok(&alice, &profile).await;
-    assert_eq!(kept(&meta, "profile", "self").unwrap()["links"], written);
 
     // The queue; a label on an account, and taken back, in its history.
     let queue = said(&ok(&alice, &["mod", "list", group, "--status", "open"]).await);
@@ -490,7 +451,6 @@ async fn switches_a_group_off_and_on_and_deletes_it() {
     let at = HostAt {
         url: h.url.clone(),
         did: did_web(&h.url),
-        favicons: String::new(),
     };
     let key = Keypair::generate(Curve::K256).public().did_key();
     let body = json!({"group": did, "key": key});

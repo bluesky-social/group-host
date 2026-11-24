@@ -5,9 +5,6 @@
   - heading "Book club" [level=1]
   - paragraph: bookclub.groups.test
   - paragraph: We read one book a month and meet to talk it over.
-  - text: novels reading
-  - navigation "Book club's links":
-    - link "Our chat":
   - paragraph: Joining is by request.
   - heading "Ask to join" [level=2]
   - paragraph: Someone in Book club reviews each request.
