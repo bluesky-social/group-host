@@ -57,11 +57,13 @@ export function empty(form: HTMLFormElement) {
  * A form on the page, sent in place: what it changed drawn where the
  * reader is, what they typed kept. Refused, the page's notice says why,
  * scrolled to; sent elsewhere (a group just made), the page goes there.
+ * Done, the page stays at its own address, query and all (a queue's
+ * status): never the action's, which has none.
  */
 export const inPlace: SubmitFunction = ({ submitter }) => {
   const done = hold(submitter);
   return async ({ result, update }) => {
-    await update({ reset: false });
+    await update({ reset: false, navigate: false });
     done();
     if (result.type !== 'failure') return;
     await tick();
@@ -92,7 +94,7 @@ export function inDialog(id: string, failed: (why: string | null) => void): Subm
       }
       // Closing it empties it (Dialog.svelte).
       document.getElementById(id)?.hidePopover();
-      await update({ reset: false });
+      await update({ reset: false, navigate: false });
     };
   };
 }
@@ -117,7 +119,7 @@ export function inOpenDialog(failed: (why: string | null) => void): SubmitFuncti
         failed(result.error?.message ?? m.forms_host_failed());
         return;
       }
-      await update({ reset: true });
+      await update({ reset: true, navigate: false });
     };
   };
 }

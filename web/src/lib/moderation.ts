@@ -1,7 +1,7 @@
 // A subject in a group's moderation queue, as its pages read it: whose it
 // is, what happened to it, and the labels it wears now.
 
-import { day } from '#lib/dates.ts';
+import { day, when } from '#lib/dates.ts';
 import { reason } from '#lib/reasons.ts';
 import { m } from '#lib/paraglide/messages.js';
 
@@ -17,17 +17,59 @@ export type Said = {
   deleted?: boolean;
 };
 export type Event = { id: string; createdAt: string; creator?: Actor; cid?: string; event: Said };
-/** A subject: `status` none for one the queue has never had. */
+/**
+ * A record subject as the host's index holds it, which a moderator sees
+ * though the group took it down (`takenDown`).
+ */
+export type Reviewed = {
+  uri: string;
+  cid: string;
+  value: unknown;
+  createdAt: string;
+  takenDown: boolean;
+};
+/** A subject: `status` none for one the queue has never had; `record`, a record subject itself. */
 export type Subject = {
   key: string;
   actor: Actor;
   status?: string;
   reportCount: number;
   events: Event[];
+  record?: Reviewed;
 };
 
 /** The labels that hide what was posted, which the dialog offers as a takedown. */
 export const TAKEDOWN = ['!takedown', '!hide'];
+
+/** What a record says in words: each field of it that is text, a number or yes or no, but its type; times last. */
+export function wordsOf(value: unknown): { name: string; text: string }[] {
+  const time = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v);
+  const fields = Object.entries((value ?? {}) as Record<string, unknown>);
+  return fields
+    .filter(([name, v]) => name !== '$type' && ['string', 'number', 'boolean'].includes(typeof v))
+    .sort(([, a], [, b]) => Number(time(a)) - Number(time(b)))
+    .map(([name, v]) => ({ name, text: time(v) ? when(v as string) : String(v) }));
+}
+
+/** A file a record holds: the field it is in, its CID, and what kind of file. */
+export type Held = { field: string; cid: string; mimeType: string };
+
+/** The files a record holds, at any depth, each once, by the dotted path to it. */
+export function filesOf(value: unknown, field = ''): Held[] {
+  if (!value || typeof value !== 'object') return [];
+  const blob = value as { $type?: string; ref?: { $link?: string }; mimeType?: string };
+  if (blob.$type === 'blob' && blob.ref?.$link)
+    return [{ field, cid: blob.ref.$link, mimeType: blob.mimeType ?? '' }];
+  const found = Object.entries(value).flatMap(([k, v]) => filesOf(v, field ? `${field}.${k}` : k));
+  return found.filter((f, i) => found.findIndex((g) => g.cid === f.cid) === i);
+}
+
+/** Where a moderator reviewing the record `uri` reads the file `cid` it holds, taken down or not. */
+export function reviewedFile(uri: string, cid: string): string {
+  const group = uri.slice('at://'.length).split('/')[0];
+  const asked = new URLSearchParams({ group, subject: uri, cid });
+  return `/xrpc/fyi.opensocial.getModSubjectBlob?${asked}`;
+}
 
 /** What an event is: `reportEvent`, `statusEvent`, `labelEvent`, `ejectEvent`. */
 export const kindOf = (e: Event) => (e.event.$type ?? '').split('#')[1] ?? '';

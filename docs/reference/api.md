@@ -111,7 +111,7 @@ the same writes ([membership](../design/membership.md#invites)).
 | `GET fyi.opensocial.getActor`       | gives a person's DID and handle to someone signed in, about themselves or anyone the host shows (a member of a group here, or someone asking to join one). Asked about themselves, it also says whether they may start a group |
 | `GET fyi.opensocial.getActorGroups` | lists the groups here a person is in, as far as the caller shares them                                                                                                                                                         |
 | `GET fyi.opensocial.searchActors`   | finds accounts whose handle matches what's typed, from the source `ACTOR_SEARCH` names. Anyone may ask                                                                                                                         |
-| `GET /img/<did>/<cid>`              | serves a group's or a person's image to anyone who may see it. That's anyone for an image in a public repo, and otherwise only someone signed in to the console                                                                |
+| `GET /img/<did>/<cid>`              | serves a group's or a person's image to anyone who may see it. That's anyone for an image in a public repo, and otherwise only someone signed in to the console. One the group has taken down in a space, by its writer or a record holding it, it serves to nobody; a moderator reads it through `getModSubjectBlob` |
 
 ## Spaces
 
@@ -119,7 +119,7 @@ A group's spaces, and the records in them ([spaces](../design/spaces.md)).
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.listSpaceRecords` | lists the records in a space from the host's index of it, for someone signed in who may read it, but none the group has taken down with a `!takedown` label |
+| `GET fyi.opensocial.listSpaceRecords` | lists the records in a space from the host's index of it, for someone signed in who may read it, but none the group has taken down with a `!takedown` label, for a moderator as for anyone |
 | `GET fyi.opensocial.getSpaceBlob` | serves a file in a space, read from the repo of whoever wrote it, unless the group has taken down its writer or a record holding it |
 
 ## Sites
@@ -217,7 +217,8 @@ Its tools are in [MCP tools](mcp.md).
 | --- | --- |
 | `POST fyi.opensocial.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo: `subject` is an account's DID or a record's URI, with an optional `cid`. The reporter must be able to read its space (the members space for a member or their public record), and the group's labeler must take reports. It answers the report's `id` and `createdAt`. `reasonType` is `spam`, `violation`, `misleading`, `nsfw`, `rude`, `other` or `appeal`. An appeal only its subject may file (the account itself, or the record's author). Anyone else gets `InvalidRequest`. The host takes an appeal even from someone put out, as long as the queue already has the subject. A reason or note is at most 2,000 characters (20,000 bytes) |
 | `GET fyi.opensocial.listModSubjects` | lists the moderation queue for one status, `open` by default. A cursor it never gave fails with `InvalidCursor` |
-| `GET fyi.opensocial.getModSubjectHistory` | lists a subject's events, oldest first, a page at a time. With a `cid`, it lists those about that version. A cursor it never gave fails with `InvalidCursor` |
+| `GET fyi.opensocial.getModSubjectHistory` | lists a subject's events, oldest first, a page at a time. With a `cid`, it lists those about that version. A cursor it never gave fails with `InvalidCursor`. For a record in one of the group's spaces that the caller may read, it also answers the `record` as the host's index holds it, with `takenDown` true if the group has taken that version down |
+| `GET fyi.opensocial.getModSubjectBlob` | serves a file the record `subject` holds, by its `cid`, to someone with `mod.read` whom the record's space lets read it, even if the group has taken the record down. A file the record doesn't hold, or a record the caller can't read there, fails with `NotFound` |
 | `POST fyi.opensocial.resolveModSubject` | sets a subject (`subject`, and an optional `cid`) `resolved` or `escalated`, with an optional note, and answers the subject |
 | `POST fyi.opensocial.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
 | `POST fyi.opensocial.deleteLabelDefinition` | stops defining one. Labels already applied stay |

@@ -8,8 +8,9 @@
 //! `/img/{did}/{cid}`, to whoever may see a record that holds it: anyone,
 //! for a record in its public repo; for one in a space, whoever signed in
 //! to the console that space lets read, a group's listed profile being for
-//! anyone signed in. Served as an image and nothing more, and kept for
-//! good, as a CID names its bytes.
+//! anyone signed in; but none a takedown of the group's takes out of the
+//! space (`takedown.rs`), to anyone. Served as an image and nothing more,
+//! and kept for good, as a CID names its bytes.
 
 use crate::Host;
 use crate::authority::Access;
@@ -181,7 +182,8 @@ impl Host {
     /// Whether `who` (none, for someone not signed in) may see `did`'s blob
     /// `cid`: a record holding it is one they may read. Someone not signed
     /// in sees only what the public repo holds, as of a group they learn
-    /// no more than its DID and handle.
+    /// no more than its DID and handle. In a space, none the group took
+    /// down (`takedown.rs`), to anyone, as `getSpaceBlob` serves it.
     pub fn may_see(&self, did: &str, cid: &Cid, who: Option<&str>) -> Result<bool> {
         if self.store.deactivation(did)?.is_some() {
             return Ok(false);
@@ -194,8 +196,15 @@ impl Host {
         };
         for space in self.store.holding_spaces(did, cid)? {
             let hosted = self.store.space(&space)?;
-            let may = hosted.map(|h| self.may(&space, &h, Some(who), Access::Read));
-            if may.transpose()?.unwrap_or(false) {
+            let may = hosted
+                .as_ref()
+                .map(|h| self.may(&space, h, Some(who), Access::Read));
+            if !may.transpose()?.unwrap_or(false) {
+                continue;
+            }
+            let group = &hosted.expect("a space they read is hosted").authority;
+            let down = self.taken_down(group, &space)?;
+            if !self.file_taken_down(&down, &space, did, cid)? {
                 return Ok(true);
             }
         }

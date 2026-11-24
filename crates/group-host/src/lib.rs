@@ -349,6 +349,10 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             get(moderation::get_mod_subject_history),
         )
         .route(
+            "/xrpc/fyi.opensocial.getModSubjectBlob",
+            get(moderation::get_mod_subject_blob),
+        )
+        .route(
             "/xrpc/fyi.opensocial.resolveModSubject",
             post(moderation::resolve_mod_subject),
         )

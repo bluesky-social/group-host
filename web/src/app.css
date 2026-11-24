@@ -1264,6 +1264,51 @@ div.row-form {
 .reasons label {
   font-weight: var(--weight-normal);
 }
+/* A record a moderator reviews: its fields, its pictures and the whole of
+   it folded, in a well that scrolls sideways; when taken down, said so. */
+.reviewed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.reviewed > * {
+  max-width: 100%;
+}
+.reviewed > details {
+  align-self: stretch;
+}
+.taken-down-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+.tag.down {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.reviewed .record {
+  align-items: baseline;
+}
+.reviewed .record dd {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.record-picture {
+  max-height: var(--review-picture);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+}
+pre.raw {
+  margin: 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  background: var(--soft);
+  border-radius: var(--radius-sm);
+  font: var(--text-xs)/var(--leading) var(--font-mono);
+}
 /* A rule's place in the order, round, before it. */
 .ordinal {
   display: inline-grid;

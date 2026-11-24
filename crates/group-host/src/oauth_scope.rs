@@ -27,12 +27,13 @@ pub const TIERS: [&str; 3] = ["authManageProfile", "authModerate", "authManageGr
 
 /// The action each of the host's methods a permission set lists asks of
 /// the member who signed the app in.
-const ASKS: [(&str, &str); 6] = [
+const ASKS: [(&str, &str); 7] = [
     ("listJoinRequests", "admit"),
     ("denyJoinRequest", "admit"),
     ("listInvites", "invite"),
     ("listModSubjects", "mod.read"),
     ("getModSubjectHistory", "mod.read"),
+    ("getModSubjectBlob", "mod.read"),
     ("resolveModSubject", "mod.resolve"),
 ];
 

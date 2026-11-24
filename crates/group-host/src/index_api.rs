@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// How long a list waits on the index to read the space's writers.
-const SYNC_AT_MOST: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const SYNC_AT_MOST: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The most bytes a file is fetched from its writer's PDS for.
 pub const FILE_AT_MOST: usize = 5 * 1024 * 1024;
@@ -185,6 +185,12 @@ pub async fn get_space_blob(
     }
     let fetched = host.space_blob(&group, &space, repo, &cid).await;
     let (mime, bytes) = fetched.ok_or_else(|| not_found("no such file in this space"))?;
+    Ok(served(mime, bytes))
+}
+
+/// A file of a space's, as the host serves it: its own type, and nothing
+/// in it run, kept by the browser that asked and no cache between.
+pub(crate) fn served(mime: String, bytes: Vec<u8>) -> Response {
     let headers = [
         (header::CONTENT_TYPE, mime),
         (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
@@ -194,14 +200,14 @@ pub async fn get_space_blob(
         ),
         (header::CACHE_CONTROL, "private, max-age=3600".to_string()),
     ];
-    Ok((headers, bytes).into_response())
+    (headers, bytes).into_response()
 }
 
 impl Host {
     /// `repo`'s blob `cid` in `space`, a group's here: from the store for
     /// a repo here, else from the repo's PDS, with a credential the group
     /// issues itself. Its type and bytes.
-    async fn space_blob(
+    pub(crate) async fn space_blob(
         &self,
         group: &str,
         space: &str,

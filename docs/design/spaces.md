@@ -277,7 +277,7 @@ through these methods, even in a `publicRead` space, and is told
 `com.atproto.space.*`, with a credential `authorizeSpaceSync` gives
 anyone for it.
 The host also serves a space's images at `/img/{did}/{cid}` to anyone
-signed in whom the space lets read.
+signed in whom the space lets read, but none the group has taken down.
 
 The `com.atproto.space.*` methods read one repo directly. They're
 `getRecord`, `listRecords`, `getRepo`, `getLatestCommit`, `listRepoOps`,

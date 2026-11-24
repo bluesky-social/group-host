@@ -8,7 +8,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { applyAsGroup, asGroup, membersOf } from '#lib/asGroup.ts';
 import { act, xrpc } from '#lib/data.ts';
-import type { Event as Happened, Subject } from '#lib/moderation.ts';
+import type { Event as Happened, Reviewed, Subject } from '#lib/moderation.ts';
 import { m } from '#lib/paraglide/messages.js';
 
 type Handle = `${string}.${string}`;
@@ -26,14 +26,18 @@ async function groupOf(event: Event) {
   ).did;
 }
 
-/** What happened to `key`, an account's DID or a record's URI, in `group`'s queue, oldest first. */
+/**
+ * What happened to `key`, an account's DID or a record's URI, in `group`'s
+ * queue, oldest first; and a record itself, as a moderator sees it, taken
+ * down or not.
+ */
 async function history(event: Event, group: Did, key: `${string}:${string}`) {
-  const { events } = await xrpc<typeof getModSubjectHistory.main>(
+  const { events, record } = await xrpc<typeof getModSubjectHistory.main>(
     event,
     'fyi.opensocial.getModSubjectHistory',
     { group, subject: key }
   );
-  return events as Happened[];
+  return { events: events as Happened[], record: record as Reviewed | undefined };
 }
 
 /**
@@ -63,7 +67,7 @@ export const load: PageServerLoad = async (event) => {
         actor: s.actor ?? { did: key },
         status: s.status,
         reportCount: s.reportCount,
-        events: await history(event, group, key)
+        ...(await history(event, group, key))
       };
     })
   );
@@ -82,14 +86,15 @@ export const load: PageServerLoad = async (event) => {
       { actor: did },
       true
     );
-    const events = await history(event, group, review);
+    const { events, record } = await history(event, group, review);
     const reports = events.filter((e) => e.event.$type?.endsWith('#reportEvent')).length;
     found = {
       key: review,
       actor: actor ?? { did },
       status: events.length ? 'in the queue' : undefined,
       reportCount: reports,
-      events
+      events,
+      record
     };
   }
   // The rules a report may cite, by their record key, and by their URI.

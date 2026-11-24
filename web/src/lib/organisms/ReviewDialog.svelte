@@ -3,6 +3,7 @@
   import ConfirmDialog from '#lib/molecules/ConfirmDialog.svelte';
   import Dialog from '#lib/molecules/Dialog.svelte';
   import Person from '#lib/molecules/Person.svelte';
+  import ReviewedRecord from '#lib/molecules/ReviewedRecord.svelte';
   import SubjectHistory from '#lib/molecules/SubjectHistory.svelte';
   import ReportDialog from '#lib/organisms/ReportDialog.svelte';
   import { inDialog, inOpenDialog } from '#lib/forms.ts';
@@ -11,8 +12,9 @@
   import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   /**
    * Everything a moderator does about one subject, in a dialog opened by a
-   * button whose `popovertarget` is `id`: for an account, or a record
-   * whose version the queue knows, the labels it
+   * button whose `popovertarget` is `id`: a record's own words and
+   * pictures, as the host holds it, even taken down; for an account, or a
+   * record whose version the queue knows, the labels it
    * wears, each removable, those the group defines or has used
    * (`choices`, each its value and what it is called) to add and
    * another; taking it down; then resolving or escalating it, or, for one
@@ -79,6 +81,13 @@
 >
   <p><Person actor={s.actor} /> <span class="mute">· {what(s.key)} · {reported(s)}</span></p>
   {#if failed}<p class="danger">{failed}</p>{/if}
+
+  {#if s.record}
+    <div class="review-part">
+      <h3>{m.review_dialog_posted()}</h3>
+      <ReviewedRecord record={s.record} />
+    </div>
+  {/if}
 
   {#if target && can.label}
     <div class="review-part">

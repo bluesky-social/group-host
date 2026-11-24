@@ -10,17 +10,65 @@
 //! where an account's labels go, in every space of the group. Deleting
 //! the label, or its lapsing (`exp`), puts it all back. Only the group's
 //! own labels count: one anyone else writes takes nothing down. What is
-//! taken down stays in its writer's repo; the host only stops serving it.
+//! taken down stays in its writer's repo; the host only stops serving it,
+//! but to a moderator reviewing it (`getModSubjectHistory`,
+//! `getModSubjectBlob`) whom the space lets read it, as it was.
 
 use crate::Host;
+use crate::authority::Access;
 use crate::blobs::blob_refs;
 use crate::group::members_space;
 use crate::group_invites::millis_of;
+use crate::index_api::SYNC_AT_MOST;
+use crate::moderation::space_of;
 use crate::rbac::LABEL;
+use crate::store::Indexed;
 use crate::time::now_millis;
 use anyhow::Result;
 use atproto::{Cid, drisl, syntax};
 use std::collections::HashSet;
+
+/// A record subject as a moderator reviews it: the space it is in, the
+/// version the index holds, and whether the group took that down.
+pub struct Reviewed {
+    pub space: String,
+    pub record: Indexed,
+    pub taken_down: bool,
+}
+
+impl Host {
+    /// The record `subject` names in one of `group`'s spaces, as the index
+    /// holds it, for `me`, a moderator whom the space's policy lets read
+    /// it: taken down or not. None for an account or a public record, nor
+    /// for one `me` may not read or the index does not hold.
+    pub async fn reviewed(&self, group: &str, subject: &str, me: &str) -> Result<Option<Reviewed>> {
+        let Some((space, _)) = space_of(subject) else {
+            return Ok(None);
+        };
+        let Some(hosted) = self.store.space(&space)? else {
+            return Ok(None);
+        };
+        if !self.may(&space, &hosted, Some(me), Access::Read)? {
+            return Ok(None);
+        }
+        // Read as a list of the space is: what the index has not read yet
+        // first, for a few seconds at most.
+        let synced = tokio::time::timeout(SYNC_AT_MOST, self.sync_space(&space)).await;
+        tracing::debug!(space, ?synced, "read before reviewing");
+        let rest = &subject[space.len() + 1..];
+        let (repo, path) = rest.split_once('/').expect("a repo, then a path");
+        let Some(record) = self.store.indexed_one(&space, repo, path)? else {
+            return Ok(None);
+        };
+        let down = self.taken_down(group, &space)?;
+        let taken_down = down.hides(subject, repo, &record.cid.to_string());
+        Ok(Some(Reviewed {
+            space,
+            record,
+            taken_down,
+        }))
+    }
+}
 
 /// The label that takes content down.
 pub const TAKEDOWN: &str = "!takedown";

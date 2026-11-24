@@ -747,6 +747,41 @@
         }
       }
     },
+    "modRecordView": {
+      "type": "object",
+      "description": "A record subject as the host's index of its space holds it, shown to a moderator whom the space lets read it, even when the group has taken it down.",
+      "required": [
+        "uri",
+        "cid",
+        "value",
+        "createdAt",
+        "takenDown"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "The record's URI, in its space."
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "The version the index holds, which may be newer than the one a report names."
+        },
+        "value": {
+          "type": "unknown"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When the index read this version."
+        },
+        "takenDown": {
+          "type": "boolean",
+          "description": "Whether a !takedown label of the group's, in force, keeps this version from everyone reading the space. Its files are then served only through getModSubjectBlob."
+        }
+      }
+    },
     "moderationEvent": {
       "type": "object",
       "description": "One event in the host's private moderation history.",

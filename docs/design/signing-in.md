@@ -225,9 +225,10 @@ are at that moment.
   may change that space, the invites where they hold `invite`, and each
   method where they hold the action that method asks: `admit` for
   `listJoinRequests` and `denyJoinRequest`, `invite` for `listInvites`,
-  `mod.read` for `listModSubjects` and `getModSubjectHistory`,
-  `mod.resolve` for `resolveModSubject`. When what's kept is the whole of
-  a tier, it's kept as that set. So a moderator asked for
+  `mod.read` for `listModSubjects`, `getModSubjectHistory` and
+  `getModSubjectBlob`, `mod.resolve` for `resolveModSubject`. When
+  what's kept is the whole of a tier, it's kept as that set. So a
+  moderator asked for
   `authManageGroup` gives `authModerate`, and a member whose role writes
   the profile and rules by the meta space's policy gives
   `authManageProfile`. Otherwise the parts are kept as scopes.

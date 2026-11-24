@@ -67,6 +67,7 @@
             "fyi.opensocial.listInvites",
             "fyi.opensocial.listModSubjects",
             "fyi.opensocial.getModSubjectHistory",
+            "fyi.opensocial.getModSubjectBlob",
             "fyi.opensocial.resolveModSubject"
           ]
         }

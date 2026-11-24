@@ -197,7 +197,8 @@ The host serves images at `/img/{did}/{cid}` to anyone who may see a
 record holding them. For the public repo that's anyone. Otherwise it's
 anyone signed in to the console who may read the space. For `meta` while
 the group is declared, that's anyone signed in. A switched-off group's
-images aren't served.
+images aren't served, nor is an image the group has taken down in a
+space ([moderation](moderation.md#labels)).
 
 A rule is kept at a TID, so a label citing it keeps its URI however the
 rule changes. When a new rule is written with no key, the host's clock

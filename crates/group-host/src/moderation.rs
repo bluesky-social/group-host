@@ -15,18 +15,22 @@
 use crate::Host;
 use crate::api::{Params, invalid, invalid_cursor, page, param};
 use crate::authority::Access;
+use crate::blobs::blob_refs;
 use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
+use crate::index_api::served;
 use crate::rbac::{LABEL, NS};
 use crate::repo::Write;
 use crate::store::Store;
+use crate::takedown::Reviewed;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
-use atproto::syntax;
+use atproto::{Cid, drisl, syntax};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::Response;
 use rusqlite::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -487,14 +491,15 @@ pub async fn list_mod_subjects(
 }
 
 /// What happened to a subject in the group's queue, oldest first, a page
-/// at a time.
+/// at a time; and a record subject itself, as a moderator reviews it.
 pub async fn get_mod_subject_history(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
     let group = param(&p, "group")?;
-    host.moderator(&headers, "getModSubjectHistory", group, "mod.read")
+    let me = host
+        .moderator(&headers, "getModSubjectHistory", group, "mod.read")
         .await?;
     let subject = param(&p, "subject")?;
     subject_of(group, subject)?;
@@ -517,7 +522,47 @@ pub async fn get_mod_subject_history(
     {
         out["cursor"] = json!(last.seq.to_string());
     }
+    let reviewed = host.reviewed(group, subject, &me).await;
+    if let Some(r) = reviewed.map_err(XrpcError::internal)? {
+        out["record"] = json!({
+            "uri": subject,
+            "cid": r.record.cid.to_string(),
+            "value": value_of(&r),
+            "createdAt": iso(r.record.indexed_at),
+            "takenDown": r.taken_down,
+        });
+    }
     Ok(Json(out))
+}
+
+/// A reviewed record's value, as JSON.
+fn value_of(r: &Reviewed) -> Value {
+    let value = drisl::decode(&r.record.value).expect("a record the host indexed");
+    value.to_json()
+}
+
+/// A file a record subject holds, for a moderator reviewing it, whom its
+/// space lets read it: served though the group took the record down.
+pub async fn get_mod_subject_blob(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+    headers: HeaderMap,
+) -> Result<Response, XrpcError> {
+    let group = param(&p, "group")?;
+    let me = host
+        .moderator(&headers, "getModSubjectBlob", group, "mod.read")
+        .await?;
+    let subject = param(&p, "subject")?;
+    subject_of(group, subject)?;
+    let cid = Cid::parse(param(&p, "cid")?).map_err(|e| invalid(format!("cid: {e}")))?;
+    let gone = || XrpcError::new(StatusCode::BAD_REQUEST, "NotFound", "no such file here");
+    let reviewed = host.reviewed(group, subject, &me).await;
+    let reviewed = reviewed.map_err(XrpcError::internal)?;
+    let holds = |r: &Reviewed| blob_refs(&value_of(r)).contains(&cid);
+    let r = reviewed.filter(holds).ok_or_else(gone)?;
+    let fetched = host.space_blob(group, &r.space, &r.record.did, &cid).await;
+    let (mime, bytes) = fetched.ok_or_else(gone)?;
+    Ok(served(mime, bytes))
 }
 
 /// Resolves or escalates a subject, with a note if one is given; setting

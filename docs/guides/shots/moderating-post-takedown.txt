@@ -1,0 +1,8 @@
+- heading "What was posted" [level=3]
+- paragraph: Taken down Hidden from members in the group's spaces. Only moderators see it here.
+- term: text
+- definition: Six tomato seedlings for a spare trowel. Not you, Max. You never give anything back, you clown.
+- term: createdAt
+- definition: <date>
+- img "Picture posted as image"
+- group: The record as posted

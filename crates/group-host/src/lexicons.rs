@@ -67,6 +67,7 @@ pub const FILES: &[&str] = &[
     lexicon!("fyi/opensocial/getGroupAuth"),
     lexicon!("fyi/opensocial/getJoinRequest"),
     lexicon!("fyi/opensocial/getLogs"),
+    lexicon!("fyi/opensocial/getModSubjectBlob"),
     lexicon!("fyi/opensocial/getModSubjectHistory"),
     lexicon!("fyi/opensocial/getSpaceBlob"),
     lexicon!("fyi/opensocial/getStats"),

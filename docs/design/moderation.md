@@ -16,7 +16,8 @@ Moderating comes down to roles, like everything else a member does in a
 group (see [membership](membership.md)). Three of the host's actions are
 about moderation:
 
-- `mod.read`: see the queue and a subject's history.
+- `mod.read`: see the queue and a subject's history, and a record
+  subject itself, taken down or not.
 - `mod.resolve`: resolve or escalate a subject, with a note.
 - `label`: write a label, of any value, and delete one.
 
@@ -76,14 +77,17 @@ but the queue keeps that it was written, when, and by whom.
 One value has an effect here: `!takedown`, the spaces convention for a
 space's authority taking content down. A record the group takes down,
 with a `!takedown` label beside it, is no longer served from the host's
-index of the space (`listSpaceRecords`), nor are the files it holds
-(`getSpaceBlob`). A label naming a `cid` takes down only that version.
+index of the space (`listSpaceRecords`), nor are the files it holds,
+as files (`getSpaceBlob`) or as pictures (`/img/{did}/{cid}`). A label
+naming a `cid` takes down only that version.
 An account taken down has everything it wrote in that space taken out,
 and, labelled in the members space where an account's labels go, in
 every space of the group. Only the group's own labels count, and one
 past its `exp` counts no more. Deleting the label puts it all back. What
-is taken down stays in its writer's repo; the host only stops serving
-it, and the queue still shows its history. Every other value is for
+is taken down stays in its writer's repo. The host stops serving it to
+everyone reading the space, moderators included, and shows it only in
+the queue, to moderators reviewing it (see [reviewing what was taken
+down](#reviewing-what-was-taken-down)). Every other value is for
 apps: an app that reads a space reads its labels with it, and decides
 what to show. The group says what its values mean in its labeler (see
 [reports](#reports)).
@@ -163,6 +167,28 @@ Details:
 - A page is 50 events or subjects unless `limit` says otherwise, and 100
   at most. The `cursor` an answer gives asks for the next page; one the
   host never gave fails with `InvalidCursor`.
+
+### Reviewing what was taken down
+
+A moderator who judges a report, or an appeal of a takedown, has to see
+what they're judging. A takedown hides it from everyone who reads the
+space, moderators too, so the queue shows it instead. Reading the space
+still leaves it out for everyone, so a takedown never leaks back into
+an app that a moderator uses.
+
+For a subject that's a record in one of the group's spaces,
+`getModSubjectHistory` also answers the `record`, as the host's index
+holds it, with `takenDown` saying whether the group took that version
+down. `getModSubjectBlob` serves the files that record holds, by their
+CID, read from whoever wrote it, as `getSpaceBlob` does. Both need
+`mod.read`. The record and its files only go to a moderator whom the
+space's policy lets read it, so the queue shows nobody anything they
+couldn't read in the space if it were up.
+
+The record is the version the index holds now, which may be newer than
+the one a report names. An account, or a record in a public repo, has
+no record here. Each record of an account taken down is a subject of
+its own, shown the same way when it's reviewed.
 
 ## Reports
 

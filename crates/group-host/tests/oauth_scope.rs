@@ -578,6 +578,7 @@ fn makes_a_permission_set_concrete() {
             format!("rpc:{NS}.listInvites?aud=*"),
             format!("rpc:{NS}.listModSubjects?aud=*"),
             format!("rpc:{NS}.getModSubjectHistory?aud=*"),
+            format!("rpc:{NS}.getModSubjectBlob?aud=*"),
             format!("rpc:{NS}.resolveModSubject?aud=*"),
         ]
     );

@@ -160,6 +160,27 @@ The label `!takedown` shows under **Labels**. Press its × to undo the
 takedown. The label `!hide` works the same way: type it under **Add a
 label**.
 
+## How do I take a post down?
+
+A post's Review shows what was posted: its words, its pictures, and,
+under **The record as posted**, all of it. Once you take a post down,
+members and apps stop seeing it in the group's spaces, and so do you.
+Its Review still shows it, marked **Taken down**, so you can judge a
+report or an appeal about it.
+
+1. On the **Escalated** tab, press **Review** on the post's row. Its
+   words and its picture are under **What was posted**.
+2. Press **Take down**, then **Take down** again in the dialog that asks
+   you to be sure. The post stays under **What was posted**, marked
+   **Taken down**.
+
+   <!-- look /g/gardens.groups.test/moderation?status=escalated --as dan --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --click ':popover-open button[popovertarget$=takedown]' --click '[id$=-takedown]:popover-open button[type=submit]' --element ':popover-open .review-part:has(.reviewed)' -->
+   ![What was posted, in the post's Review: Taken down, then the post's words, its picture and The record as posted](shots/moderating-post-takedown.png)
+
+To put the post back, press the × beside `!takedown` under **Labels**.
+A post shows in its Review only to a moderator whose roles can read the
+space it's in.
+
 ## How do I act on someone nobody reported?
 
 You can label, take down or report anyone in the group, reported or not.

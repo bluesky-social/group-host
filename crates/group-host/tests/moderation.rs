@@ -1188,3 +1188,149 @@ async fn takes_out_of_the_space_what_the_group_takes_down() {
     assert!(events(&h, &bob, &did, &space, None).await.is_empty());
     assert_eq!(the_map().await.error(), (400, "NotFound".into()));
 }
+
+/// How the console's `/img` answers `who`, signed in to it, for `did`'s
+/// picture `cid`: by its status.
+async fn picture(h: &Running, who: &Authority, did: &str, cid: &str) -> u16 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let cookie = h.host.session_cookie(&who.did, now);
+    let name = h.host.cookie_name(group_host::console_login::COOKIE);
+    let req = h.http.get(format!("{}/img/{did}/{cid}", h.url));
+    let res = req
+        .header("cookie", format!("{name}={cookie}"))
+        .send()
+        .await;
+    res.unwrap().status().as_u16()
+}
+
+/// A subject's history, as `who` reviews it in Riders' queue.
+async fn reviewed(h: &Running, who: &Authority, did: &str, subject: &str) -> (u16, Json) {
+    let q = format!("group={did}&subject={}", urlencode(subject));
+    query(h, who, "getModSubjectHistory", &q).await
+}
+
+/// The file `cid` of the record `subject`, as `who` reviews it.
+async fn reviewed_file(h: &Running, who: &Authority, did: &str, subject: &str, cid: &str) -> Read {
+    let lxm = format!("{NS}.getModSubjectBlob");
+    let q = format!("group={did}&subject={}&cid={cid}", urlencode(subject));
+    read(h, &lxm, &q, &[auth(h, who, &lxm)]).await
+}
+
+#[tokio::test]
+async fn shows_a_moderator_what_was_taken_down_where_they_review_it() {
+    let h = start(&[], false).await;
+    let (did, space, _, [alice, bob, carol]) = group(&h).await;
+    // Dan, an account here and a member, posts a ride with a map, which
+    // the group takes down; and a picnic with a flyer, which it leaves.
+    let dan = h.host.create_account("dan.groups.test").await.unwrap();
+    membership(&h, &did, &dan, &["member"]).await;
+    let map = h.host.upload_blob(&dan, b"a map", "image/png").unwrap();
+    let flyer = h.host.upload_blob(&dan, b"a flyer", "image/png").unwrap();
+    let event = |rkey: &str, value: Json| Write::Create {
+        collection: "com.example.event".into(),
+        rkey: rkey.into(),
+        value,
+    };
+    let ride_value = json!({"$type": "com.example.event", "text": "Ride", "map": map});
+    let picnic_value = json!({"$type": "com.example.event", "text": "Picnic", "flyer": flyer});
+    let writes = [
+        event("ride", ride_value.clone()),
+        event("picnic", picnic_value),
+    ];
+    h.host.space_write(&dan, &space, &writes).await.unwrap();
+    let ride = format!("{space}/{dan}/com.example.event/ride");
+    let picnic = format!("{space}/{dan}/com.example.event/picnic");
+    let (status, made) = labelled(&h, &alice, &did, &space, label(&ride, "!takedown")).await;
+    assert_eq!(status, 200, "{made}");
+    let map = map["ref"]["$link"].as_str().unwrap();
+    let flyer = flyer["ref"]["$link"].as_str().unwrap();
+
+    // Read as anyone reads the space, it is gone for a member and for the
+    // moderator alike, and its map with it, as a file and as a picture;
+    // the picnic's flyer, which nothing taken down holds, is not.
+    for who in [&bob, &alice] {
+        assert_eq!(events(&h, who, &did, &space, None).await, [picnic.as_str()]);
+        let lxm = format!("{NS}.getSpaceBlob");
+        let q = format!("group={did}&space={space}&repo={dan}&cid={map}");
+        let file = read(&h, &lxm, &q, &[auth(&h, who, &lxm)]).await;
+        assert_eq!(file.error(), (400, "NotFound".into()));
+        assert_eq!(picture(&h, who, &dan, map).await, 404);
+        assert_eq!(picture(&h, who, &dan, flyer).await, 200);
+    }
+
+    // Reviewed, the moderator sees it as the index holds it, said to be
+    // taken down, and its map.
+    let (status, seen) = reviewed(&h, &alice, &did, &ride).await;
+    assert_eq!(status, 200, "{seen}");
+    let record = &seen["record"];
+    assert_eq!(record["uri"], ride.as_str());
+    assert_eq!(record["value"], ride_value);
+    assert_eq!(record["takenDown"], true);
+    assert!(record["cid"].is_string());
+    assert!(record["createdAt"].is_string());
+    assert_eq!(kinds(&seen), ["labelEvent"]);
+    let got = reviewed_file(&h, &alice, &did, &ride, map).await;
+    assert_eq!(got.status, 200);
+    assert_eq!(got.body, b"a map");
+    assert_eq!(got.header("content-type"), Some("image/png"));
+    assert_eq!(
+        got.header("content-security-policy"),
+        Some("default-src 'none'; sandbox")
+    );
+
+    // What is not taken down is shown as well, said to be up; only the
+    // files the record holds are served, not another of the writer's.
+    let (_, seen) = reviewed(&h, &alice, &did, &picnic).await;
+    assert_eq!(seen["record"]["takenDown"], false);
+    assert!(seen["events"].as_array().unwrap().is_empty());
+    assert_eq!(
+        reviewed_file(&h, &alice, &did, &picnic, flyer).await.status,
+        200
+    );
+    let not_its = reviewed_file(&h, &alice, &did, &ride, flyer).await;
+    assert_eq!(not_its.error(), (400, "NotFound".into()));
+
+    // An account, a record the index does not hold, a public record, and
+    // one in a space not hosted here carry no record, and serve no file.
+    let gone = format!("{space}/{dan}/com.example.event/gone");
+    let public = format!("at://{dan}/com.example.event/ride");
+    let nowhere = format!("at://{did}/space/{CALENDAR}/nowhere/{dan}/com.example.event/ride");
+    for subject in [dan.as_str(), &gone, &public, &nowhere] {
+        let (status, seen) = reviewed(&h, &alice, &did, subject).await;
+        assert_eq!(status, 200, "{seen}");
+        assert!(seen.get("record").is_none(), "{seen}");
+        let none = reviewed_file(&h, &alice, &did, subject, map).await;
+        assert_eq!(none.error(), (400, "NotFound".into()));
+    }
+    let bad = reviewed_file(&h, &alice, &did, &ride, "bafynotacid").await;
+    assert_eq!(bad.error(), (400, "InvalidRequest".into()));
+    let elsewhere = "at://did:plc:x/space/a.b/c/did:plc:y/a.b/c";
+    let elsewhere = reviewed_file(&h, &alice, &did, elsewhere, map).await;
+    assert_eq!(elsewhere.error(), (400, "InvalidSubject".into()));
+
+    // A plain member is refused both.
+    assert_eq!(reviewed(&h, &bob, &did, &ride).await.0, 403);
+    let refused = reviewed_file(&h, &bob, &did, &ride, map).await;
+    assert_eq!(refused.error(), (403, "Forbidden".into()));
+
+    // A moderator the space does not let read sees the history, and
+    // neither the record nor its files.
+    let role = json!({"$type": format!("{NS}.role"), "displayName": "Moderator", "scopes": [format!("rpc:{NS}.listModSubjects?aud=*")], "createdAt": "2026-11-03T00:00:00Z"});
+    let write = Write::Create {
+        collection: format!("{NS}.role"),
+        rkey: "moderator".into(),
+        value: role,
+    };
+    let members = members_space(&did);
+    h.host.space_write(&did, &members, &[write]).await.unwrap();
+    membership(&h, &did, &carol.did, &["moderator"]).await;
+    let (status, seen) = reviewed(&h, &carol, &did, &ride).await;
+    assert_eq!(status, 200, "{seen}");
+    assert_eq!(kinds(&seen), ["labelEvent"]);
+    assert!(seen.get("record").is_none(), "{seen}");
+    let unread = reviewed_file(&h, &carol, &did, &ride, map).await;
+    assert_eq!(unread.error(), (400, "NotFound".into()));
+}

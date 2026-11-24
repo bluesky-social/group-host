@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Get a subject's moderation history, oldest first. Requires mod.read.",
+      "description": "Get a subject's moderation history, oldest first, and for a record in one of the group's spaces, the record itself, taken down or not. Requires mod.read.",
       "parameters": {
         "type": "params",
         "required": [
@@ -55,6 +55,11 @@
                 "type": "ref",
                 "ref": "fyi.opensocial.defs#moderationEvent"
               }
+            },
+            "record": {
+              "type": "ref",
+              "ref": "fyi.opensocial.defs#modRecordView",
+              "description": "The subject, a record in one of the group's spaces, as the host's index holds it: given when the index holds it and the space's policy lets the caller read it, whether or not the group has taken it down."
             }
           }
         }
