@@ -52,7 +52,8 @@ export const SCOPES: Record<(typeof KNOWN)[number], string> = {
 };
 
 const set = (name: string) => `include:fyi.opensocial.${name}`;
-const MODERATES = ['mod.read', 'mod.resolve', 'label', 'invite', 'admit', 'eject', 'role.assign'];
+// Not `label`, labels in every space: the sets label only in the meta and members spaces.
+const MODERATES = ['mod.read', 'mod.resolve', 'invite', 'admit', 'eject', 'role.assign'];
 
 /**
  * The group's permission sets a role may carry, smallest first: each its

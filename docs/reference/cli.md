@@ -134,7 +134,7 @@ is asked for, add `--cid`, the way a label on a record does.
 | `mod list <group> [--status open\|escalated\|resolved] [--limit] [--cursor]`  | shows the moderation queue                                                                        |
 | `mod history <group> <subject> [--cid] [--limit] [--cursor]`                  | shows what was done about a subject                                                               |
 | `mod resolve <group> <subject> --status resolved\|escalated [--note] [--cid]` | resolves or escalates a subject                                                                   |
-| `mod label <group> <subject> <val> [--cid] [--undo]`                          | labels a subject as the group, with a label record beside it. With `--undo`, it deletes the label |
+| `mod label <group> <subject> <val> [--cid] [--undo]`                          | labels a subject as the group, with a label record beside it, where the member's roles write labels. With `--undo`, it deletes the label |
 
 ### account
 

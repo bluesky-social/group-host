@@ -9,6 +9,7 @@
 //! role's scopes and assignable roles, and a membership's roles, which
 //! are strings alone, as the proposal has them.
 
+use crate::oauth_scope::concrete;
 use crate::scopes::{Permissions, decoded};
 use atproto::space::SpaceRef;
 use serde_json::Value;
@@ -183,14 +184,15 @@ const BY_METHOD: [(&str, &str); 2] = [
 ];
 
 /// The actions holding `fyi.opensocial.authModerate` gives, as its
-/// permissions do: memberships, invites, labels, join requests and the
-/// moderation methods. `authManageGroup` gives them, and
+/// permissions do: memberships, invites, join requests and the
+/// moderation methods. Its labels are the meta and members spaces' alone
+/// ([`label_writes`]), so it gives no `label`, which is labels in every
+/// space. `authManageGroup` gives them, and
 /// `group.configure`; `authManageProfile` none, as who writes the
 /// profile and rules is the meta space's policy's to say.
-pub const MODERATES: [&str; 7] = [
+pub const MODERATES: [&str; 6] = [
     "mod.read",
     "mod.resolve",
-    "label",
     "invite",
     "admit",
     "eject",
@@ -374,4 +376,38 @@ pub fn repo_collections_for(grants: &[Grant], roles: &[String]) -> BTreeSet<Stri
         .filter_map(|s| s.strip_prefix("repo:"))
         .map(|c| c.split('?').next().unwrap_or_default().to_string())
         .collect()
+}
+
+/// The writes of labels a holder of `roles` may make as `group` in
+/// `space` by their roles' scopes across the group: those of the
+/// moderation sets in its meta and members spaces, as the sets'
+/// permissions name them; in any of its spaces, by a space scope naming
+/// labels or every collection. A space's policy may grant more there.
+pub fn label_writes(
+    grants: &[Grant],
+    roles: &[String],
+    group: &str,
+    space: &SpaceRef,
+) -> BTreeSet<String> {
+    let scopes: Vec<String> = grants
+        .iter()
+        .filter(|g| roles.contains(&g.role))
+        .flat_map(|g| g.scopes.clone())
+        .collect();
+    let held = Permissions::new(&concrete(&scopes, group), group);
+    let writes = WRITES
+        .into_iter()
+        .filter(|w| held.space(space, Some(LABEL), w));
+    writes.map(String::from).collect()
+}
+
+/// The label writes of [`label_writes`], and those `policy`, the
+/// space's, grants `roles` there.
+pub fn label_writes_in(grants: &[Grant], roles: &[String], policy: &Policy) -> BTreeSet<String> {
+    let space = &policy.space;
+    let mut out = label_writes(grants, roles, &space.authority, space);
+    let granted = policy.writes(roles);
+    let any = ["*", LABEL].iter().filter_map(|c| granted.get(*c));
+    out.extend(any.flatten().cloned());
+    out
 }

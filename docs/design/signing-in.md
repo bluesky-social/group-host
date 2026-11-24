@@ -249,6 +249,13 @@ are at that moment.
   one person's.
 - `space:*?…` becomes one scope per space the roles may read, naming the
   asked collections they may write.
+- The roles write labels in a space where their scopes cover writing
+  `com.atproto.label.record` there: the moderation sets' in the meta and
+  members spaces, `space:*?collection=com.atproto.label.record` or a
+  scope naming every collection in every space, and a scope the space's
+  policy grants them in that space ([moderation](moderation.md#labels)).
+  So a role holding only `authModerate` keeps no labels in any other
+  space.
 - `space:T?…&manage=…` is kept if the roles may do each operation asked
   (`create`, `update`, `delete`) to the group's spaces of type `T`, or of
   every type for `*`. They may by holding `space.create`,
@@ -293,6 +300,8 @@ roles need depends on where the write goes:
   `eject`, as the write creates, changes or deletes one, and then what
   the records' rules ask ([membership](membership.md)).
 - In someone's inbox, `invite` ([membership](membership.md)).
+- For a label, scopes of the roles that write labels in that space, as
+  at approval ([moderation](moderation.md#labels)).
 - Anywhere else, what the scopes the space's policy grants the roles
   allow. A space's published policy and the members space's index of
   spaces are never written as records: only the space methods change
@@ -370,7 +379,9 @@ yet, if their roles hold `space.create`. If they may do nothing there,
 the request fails 403.
 
 For the members space, the token also writes the records there that the
-member's grants allow (roles, and memberships as above). Each gets a
+member's grants allow (roles, and memberships as above). In any space,
+it writes labels where the member's roles' scopes write them, as at
+approval. Each gets a
 space scope and no repo scope. That's how the
 console creates roles, approves requests, gives roles and removes
 members. For someone's inbox, a member who holds `invite` gets a scope

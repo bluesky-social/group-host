@@ -18,10 +18,9 @@ use crate::group_api::{group_of, signed_in};
 use crate::group_invites::{inviting_scope, is_inbox};
 use crate::member_writes::own_scopes;
 use crate::oauth_resource::Refusal;
-use crate::oauth_scope::WRITES;
 use crate::oauth_scope::{may_write, with_labels};
 use crate::oauth_store::{Grant, Tokens};
-use crate::rbac::{LABEL, NS, Policy};
+use crate::rbac::{LABEL, NS, Policy, label_writes};
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
@@ -155,10 +154,13 @@ impl Host {
             true => self.members_writes_of(group, &roles)?,
             false => BTreeMap::new(),
         };
-        // Labels, unless what the space grants holds them already.
-        let labels = policy.is_some() && self.may_do(group, member, "label")?;
-        if !WRITES.iter().all(|w| may_write(&writes, LABEL, w)) {
-            with_labels(&mut own, labels);
+        // Labels, as far as what the space grants does not hold them.
+        if policy.is_some() {
+            let grants = self.role_grants(group).map_err(XrpcError::internal)?;
+            let labels = label_writes(&grants, &roles, group, space);
+            if !labels.iter().all(|w| may_write(&writes, LABEL, w)) {
+                with_labels(&mut own, labels);
+            }
         }
         let manage = self.manage_ops(group, member, &roles, policy.as_ref())?;
         if writes.is_empty() && own.is_empty() && manage.is_empty() {

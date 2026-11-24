@@ -179,7 +179,6 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         "admit",
         "eject",
         "invite",
-        "label",
         "mod.read",
         "mod.resolve",
         "role.assign",

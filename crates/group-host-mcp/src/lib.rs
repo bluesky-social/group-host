@@ -500,8 +500,9 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "mod_label",
         &["subject", "val"],
         "Labels a subject as the group, with a label record (com.atproto.label.record) beside \
-         it: a record's in its space, an account's in the members space. With undo, takes the \
-         label back by deleting it.",
+         it: a record's in its space, an account's in the members space; where the member's \
+         roles write labels, as getGroup's labelSpaces lists. With undo, takes the label back \
+         by deleting it.",
         Made::Label,
     ),
 ];

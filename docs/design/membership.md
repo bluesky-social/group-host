@@ -80,7 +80,11 @@ collection in every space, carries all three.
 
 The group's permission sets carry actions too, as their permissions do.
 `fyi.opensocial.authModerate` carries `admit`, `eject`, `role.assign`,
-`invite`, `label`, `mod.read` and `mod.resolve`.
+`invite`, `mod.read` and `mod.resolve`. It labels too, but only in the
+meta and members spaces, which its permissions name, so it doesn't carry
+`label`, which is labels in every space. Labelling in the group's other
+spaces takes `space:*?collection=com.atproto.label.record`, or a scope a
+space's policy grants there ([moderation](moderation.md#labels)).
 `fyi.opensocial.authManageGroup` carries all of those and
 `group.configure`. `fyi.opensocial.authManageProfile` carries none. Who
 writes the profile and rules is for the meta space's policy to say

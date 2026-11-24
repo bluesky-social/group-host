@@ -551,6 +551,86 @@ async fn holds_each_label_to_the_action_it_needs() {
     assert_eq!(said.body["error"], "Forbidden");
 }
 
+/// The spaces `getGroup` says `who` may label in, as the group, in order.
+async fn label_spaces(h: &Running, who: &Authority, did: &str) -> Vec<String> {
+    let (status, view) = query(h, who, "getGroup", &format!("group={did}")).await;
+    assert_eq!(status, 200, "{view}");
+    let spaces = view["group"]["viewer"]["labelSpaces"].as_array().unwrap();
+    let uri = |s: &Json| s["space"].as_str().unwrap().to_string();
+    let mut spaces: Vec<String> = spaces.iter().map(uri).collect();
+    spaces.sort();
+    spaces
+}
+
+#[tokio::test]
+async fn labels_only_in_the_spaces_the_roles_scopes_reach() {
+    let h = start(&[], false).await;
+    let (did, space, post, [alice, bob, _]) = group(&h).await;
+    let uri = post["uri"].as_str().unwrap();
+    let (meta, members) = (meta_space(&did), members_space(&did));
+    use common::members::{granting, keep};
+    let moderate = format!("include:{NS}.authModerate");
+    let moderator = granting(&h, &did, "moderator", &[&moderate], &[]);
+    keep(&h, &did, "role", "moderator", moderator).await;
+    membership(&h, &did, &bob.did, &["member", "moderator"]).await;
+    // The moderation set labels in the meta and members spaces, as its
+    // permissions say.
+    let rule = format!("{meta}/{did}/{NS}.rule/r");
+    let (status, said) = labelled(&h, &bob, &did, &meta, label(&rule, "x")).await;
+    assert_eq!(status, 200, "{said}");
+    let (status, said) = labelled(&h, &bob, &did, &members, label(&alice.did, "x")).await;
+    assert_eq!(status, 200, "{said}");
+    assert_eq!(
+        label_spaces(&h, &bob, &did).await,
+        [members.clone(), meta.clone()]
+    );
+    // Not in the calendar: no token for it, nothing else being theirs
+    // there.
+    let app = App::new("console");
+    let said = group_token(&h, &app, &bob, &did, &space).await;
+    assert_eq!(said.status, 403, "{}", said.body);
+
+    // With labels in every space, there too, of any value.
+    let every = format!("space:*?collection={LABEL}");
+    let moderator = granting(&h, &did, "moderator", &[&moderate, &every], &[]);
+    keep(&h, &did, "role", "moderator", moderator).await;
+    let token = app.token_for(&h, &bob, &did, &space).await;
+    let write = |val: &str| json!({"repo": did, "space": space, "collection": LABEL, "record": label(uri, val)});
+    let nsid = "com.atproto.space.createRecord";
+    for val in ["spam", "!takedown"] {
+        let said = app.call(&h, nsid, &token, Some(&write(val))).await;
+        assert_eq!(said.status, 200, "{val}: {}", said.body);
+    }
+    let spaces = label_spaces(&h, &bob, &did).await;
+    assert_eq!(spaces.len(), 3);
+    assert!(spaces.contains(&space), "{spaces:?}");
+    // Taken away, the token writes there no more.
+    let moderator = granting(&h, &did, "moderator", &[&moderate], &[]);
+    keep(&h, &did, "role", "moderator", moderator).await;
+    let said = app.call(&h, nsid, &token, Some(&write("spam"))).await;
+    assert_eq!(said.status, 403, "{}", said.body);
+    assert_eq!(said.body["error"], "Forbidden");
+
+    // A space whose policy grants moderators labels: there, and only
+    // there.
+    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+        {"role": "member", "read": true},
+        {"role": "moderator", "read": true, "scopes": [every]},
+    ]});
+    let board = "com.example.board";
+    let board = common::oauth::make_space(&h, &alice, &did, board, "swaps", policy).await;
+    let pinned = format!("{board}/{}/com.example.post/p", alice.did);
+    let (status, said) = labelled(&h, &bob, &did, &board, label(&pinned, "x")).await;
+    assert_eq!(status, 200, "{said}");
+    let said = group_token(&h, &app, &bob, &did, &space).await;
+    assert_eq!(said.status, 403, "{}", said.body);
+    let spaces = label_spaces(&h, &bob, &did).await;
+    assert_eq!(spaces.len(), 3);
+    assert!(spaces.contains(&board), "{spaces:?}");
+    // Those who run the group label in every space.
+    assert_eq!(label_spaces(&h, &alice, &did).await.len(), 4);
+}
+
 /// Sets the group's labeler to take reports of `types` of subject, of
 /// records in `collections`.
 async fn takes(h: &Running, did: &str, types: &[&str], collections: &[&str]) {

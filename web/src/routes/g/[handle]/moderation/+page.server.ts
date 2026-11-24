@@ -6,9 +6,9 @@ import type * as listModSubjects from '#lib/lexicons/fyi/opensocial/listModSubje
 import type * as listSpaceRecords from '#lib/lexicons/fyi/opensocial/listSpaceRecords.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
-import { applyAsGroup, asGroup, membersOf } from '#lib/asGroup.ts';
+import { applyAsGroup, asGroup } from '#lib/asGroup.ts';
 import { act, xrpc } from '#lib/data.ts';
-import type { Event as Happened, Reviewed, Subject } from '#lib/moderation.ts';
+import { besideOf, type Event as Happened, type Reviewed, type Subject } from '#lib/moderation.ts';
 import { m } from '#lib/paraglide/messages.js';
 
 type Handle = `${string}.${string}`;
@@ -132,16 +132,6 @@ const subjectOf = (form: FormData) =>
   form.has('uri')
     ? { uri: String(form.get('uri')), cid: String(form.get('cid')) }
     : { uri: String(form.get('did')) };
-
-/**
- * The space of `group`'s a label on `uri` goes in, beside its subject: a
- * record's own, an account's the members space.
- */
-function besideOf(group: string, uri: string) {
-  if (uri.startsWith('did:')) return membersOf(group);
-  const [authority, , kind, key] = uri.slice('at://'.length).split('/');
-  return `at://${authority}/space/${kind}/${key}`;
-}
 
 export const actions: Actions = {
   resolve: async (event) => {

@@ -25,7 +25,7 @@ use crate::lexicons::{check_record, validation};
 use crate::member_writes::members_writes;
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::{may_write, meta_writes};
-use crate::rbac::{self, LABEL, NS, actions_for, repo_collections_for};
+use crate::rbac::{self, LABEL, NS, actions_for, label_writes, repo_collections_for};
 use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -468,7 +468,7 @@ impl Host {
         if uri == meta_space(group) {
             writable.extend(meta_writes(&held));
         }
-        let labels = held.contains("label");
+        let labels = label_writes(&grants, &roles, group, space);
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.space(space, Some(collection), action(w)) {
@@ -479,7 +479,7 @@ impl Host {
                 )));
             }
             let still = match collection {
-                LABEL => labels,
+                LABEL => labels.contains(action(w)) || may_write(&writable, LABEL, action(w)),
                 _ if uri == members_space(group) => {
                     may_write(&members_writes(&grants, &roles), collection, action(w))
                 }

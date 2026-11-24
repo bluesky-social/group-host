@@ -99,6 +99,18 @@ export function labelsUsed(subjects: Subject[]): string[] {
 /** The version of a record subject its latest event names, if any. */
 export const latestCid = (events: Event[]) => events.findLast((e) => e.cid)?.cid;
 
+/**
+ * The space of `group`'s a label on `key` goes in, beside its subject: a
+ * record in a space, that space; an account, or a record in no space,
+ * the members space, where an account's labels go.
+ */
+export function besideOf(group: string, key: string): string {
+  const [authority, space, kind, skey] = key.slice('at://'.length).split('/');
+  if (key.startsWith('at://') && space === 'space')
+    return `at://${authority}/space/${kind}/${skey}`;
+  return `at://${group}/space/fyi.opensocial.members/self`;
+}
+
 /** A subject's reports, oldest first. */
 export const reports = (s: Subject) => s.events.filter((e) => kindOf(e) === 'reportEvent');
 

@@ -9,7 +9,8 @@ use crate::api::{Params, page, param};
 use crate::group::{Made, NewGroup, members_space, meta_space, rkey_did};
 use crate::member_writes::{expanded, held};
 use crate::rbac::{
-    ACTIONS, Grant, NS, actions_for, actions_of, listed, repo_collections_for, roles_of, scope_of,
+    ACTIONS, Grant, NS, actions_for, actions_of, label_writes_in, listed, repo_collections_for,
+    roles_of, scope_of,
 };
 use crate::scopes::covers;
 use crate::space_api::{service_caller, unauthorized};
@@ -276,6 +277,7 @@ pub async fn get_group(
     if member {
         viewer["accepted"] = json!(accepted(&host, &members, &me).map_err(XrpcError::internal)?);
         viewer["grantable"] = json!(grantable(&granted, &roles, group));
+        viewer["labelSpaces"] = json!(label_spaces(&host, group, &roles, &granted)?);
     }
     // Their own request, while it waits.
     let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
@@ -435,4 +437,24 @@ fn accepted(host: &Host, members: &str, did: &str) -> anyhow::Result<bool> {
     let empty = atproto::space::LtHash::default().digest();
     let writers = host.store.writers(members, None, u32::MAX)?;
     Ok(writers.iter().any(|w| w.did == did && w.data != empty))
+}
+
+/// The spaces of `group`'s where a holder of `roles` may write a label as
+/// it, by their roles' scopes across the group or the space's policy.
+fn label_spaces(
+    host: &Host,
+    group: &str,
+    roles: &[String],
+    grants: &[Grant],
+) -> Result<Vec<Value>, XrpcError> {
+    let spaces = host.store.spaces_of(group).map_err(XrpcError::internal)?;
+    let mut out = Vec::new();
+    for uri in spaces {
+        let policy = host.policy(&uri).map_err(XrpcError::internal)?;
+        let policy = policy.expect("a space the group has");
+        if label_writes_in(grants, roles, &policy).contains("create") {
+            out.push(json!({ "space": uri }));
+        }
+    }
+    Ok(out)
 }

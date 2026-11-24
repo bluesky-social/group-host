@@ -345,6 +345,14 @@
           "type": "boolean",
           "description": "For a group switched off, whose membership cannot be read: whether the viewer held group.configure when it was switched off, and so may switch it back on or delete it. Absent while the group is on."
         },
+        "labelSpaces": {
+          "type": "array",
+          "description": "For a member: the group's spaces where their roles let them write labels as the group, by the scopes their roles hold across it or a space's policy grants them there.",
+          "items": {
+            "type": "ref",
+            "ref": "#spaceRef"
+          }
+        },
         "grantable": {
           "type": "array",
           "description": "For a member: of each action's scope and the group's authManageProfile and authModerate permission sets, those the viewer's roles hold enough of to add to a role. Adding any other is refused with ScopeNotHeld.",
@@ -593,6 +601,19 @@
         "role": {
           "type": "string",
           "maxLength": 64
+        }
+      }
+    },
+    "spaceRef": {
+      "type": "object",
+      "description": "A space, by its URI.",
+      "required": [
+        "space"
+      ],
+      "properties": {
+        "space": {
+          "type": "string",
+          "format": "space-ref"
         }
       }
     },

@@ -150,14 +150,15 @@ fn answers_each_action_by_its_scope() {
         none
     );
     assert_eq!(of("space:fyi.opensocial.members?manage=create"), none);
-    // The tiered sets: moderating gives memberships, invites, labels and
-    // the moderation methods; administering, those and configuring; the
-    // profile, nothing, as the meta space's policy says who writes it.
+    // The tiered sets: moderating gives memberships, invites and the
+    // moderation methods, and labels in the meta and members spaces alone,
+    // not `label`, which is labels in every space; administering, those
+    // and configuring; the profile, nothing, as the meta space's policy
+    // says who writes it.
     let moderates = [
         "admit",
         "eject",
         "invite",
-        "label",
         "mod.read",
         "mod.resolve",
         "role.assign",

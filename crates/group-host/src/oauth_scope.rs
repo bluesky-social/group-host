@@ -13,7 +13,7 @@
 use crate::Host;
 use crate::group::{members_space, meta_space};
 use crate::lexicons::lexicons;
-use crate::rbac::{self, LABEL, NS, actions_for, repo_collections_for};
+use crate::rbac::{self, LABEL, NS, actions_for, label_writes, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
 use serde_json::Value;
@@ -124,11 +124,11 @@ fn manages(want: &SpaceScope, actions: &BTreeSet<&'static str>, rooms: &[Room]) 
     })
 }
 
-/// `writable` with labels, if `labels` and it does not hold every write
-/// of them already.
-pub fn with_labels(writable: &mut BTreeMap<String, BTreeSet<String>>, labels: bool) {
-    if labels && !WRITES.iter().all(|w| may_write(writable, LABEL, w)) {
-        writable.insert(LABEL.into(), WRITES.map(String::from).into());
+/// `writable` with the label writes `labels`, if it does not hold each of
+/// them already.
+pub fn with_labels(writable: &mut BTreeMap<String, BTreeSet<String>>, labels: BTreeSet<String>) {
+    if !labels.iter().all(|w| may_write(writable, LABEL, w)) {
+        writable.entry(LABEL.into()).or_default().extend(labels);
     }
 }
 
@@ -176,11 +176,13 @@ fn managing(actions: &BTreeSet<&'static str>) -> BTreeSet<&'static str> {
 
 impl Host {
     /// The group's spaces, each with what a holder of `roles`, holding
-    /// `actions`, may read and write there as the group, and do to it.
+    /// `actions` by `grants`, may read and write there as the group, and
+    /// do to it.
     fn rooms(
         &self,
         group: &str,
         roles: &[String],
+        grants: &[rbac::Grant],
         actions: &BTreeSet<&'static str>,
     ) -> Result<Vec<Room>, XrpcError> {
         let spaces = self.store.spaces_of(group).map_err(XrpcError::internal)?;
@@ -197,7 +199,10 @@ impl Host {
             if uri == members_space(group) {
                 writable.extend(self.members_writes_of(group, roles)?);
             }
-            with_labels(&mut writable, actions.contains("label"));
+            with_labels(
+                &mut writable,
+                label_writes(grants, roles, group, &policy.space),
+            );
             let mut manages = managing(actions);
             for op in ["update", "delete"] {
                 if policy.manages(roles, op) {
@@ -228,7 +233,7 @@ impl Host {
         if !repo.is_empty() || actions.contains("group.configure") {
             return Ok(true);
         }
-        let rooms = self.rooms(group, roles, &actions)?;
+        let rooms = self.rooms(group, roles, grants, &actions)?;
         Ok(rooms.iter().any(|r| !r.writable.is_empty()))
     }
 
@@ -264,7 +269,7 @@ impl Host {
         let repo = repo_collections_for(&grants, roles);
         let everything = repo.contains("*");
         let held = actions_for(&grants, roles);
-        let rooms = self.rooms(group, roles, &held)?;
+        let rooms = self.rooms(group, roles, &grants, &held)?;
         let invite = format!("{NS}.invite");
         // What each scope asked for gives, in the order asked.
         let mut each: Vec<Vec<String>> = Vec::new();

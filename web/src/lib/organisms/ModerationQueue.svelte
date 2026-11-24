@@ -21,7 +21,8 @@
    * A group's moderation queue of one status: each subject by whose it is,
    * what it is, when and why it was reported, the labels it wears and what
    * the latest report said; what happened to it, folded under it; and, for
-   * one whose roles let them act on it (`can`), a Review of it. `found`,
+   * one whose roles let them act on it (`can`: labelling it, asked of each
+   * subject, and resolving), a Review of it. `found`,
    * someone looked up who is not in this list, and `reviewing`, the
    * subject whose Review opens as the page is drawn. `rules`, the group's
    * rules' titles by record key; `ruleList`, each rule's URI and title;
@@ -41,7 +42,7 @@
   }: {
     subjects: Subject[];
     status: string;
-    can: { label: boolean; resolve: boolean };
+    can: { label: (key: string) => boolean; resolve: boolean };
     rules?: Record<string, string>;
     ruleList?: { uri: string; title: string }[];
     reasons?: string[];
@@ -61,7 +62,8 @@
       body: m.moderation_queue_empty_resolved
     }
   };
-  const acts = $derived(can.label || can.resolve);
+  /** Whether the viewer may act on the subject `key`: label it where its labels go, or resolve it. */
+  const acts = (key: string) => can.label(key) || can.resolve;
   // The labels the group defines, by what they are called, then any other
   // it has used here, by their value.
   const choices = $derived([
@@ -87,7 +89,7 @@
     {id}
     subject={s}
     {choices}
-    {can}
+    can={{ label: can.label(s.key), resolve: can.resolve }}
     {rules}
     {ruleList}
     {reasons}
@@ -112,7 +114,7 @@
                 >{/if}{#each wearing as val (val)}<span class="tag worn">{val}</span>{/each}</span
             >{/if}
         </span>
-        {#if acts}
+        {#if acts(s.key)}
           <span class="row-actions"
             ><button
               class="quiet small"
@@ -134,4 +136,4 @@
     >{EMPTY[status]?.body() ?? m.moderation_queue_empty()}</Empty
   >
 {/if}
-{#if found && acts}{@render review(found, 'review-found')}{/if}
+{#if found && acts(found.key)}{@render review(found, 'review-found')}{/if}

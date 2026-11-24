@@ -18,8 +18,8 @@
     - text: mod.read Comes with moderation
     - checkbox "mod.resolve Comes with moderation" [checked] [disabled]
     - text: mod.resolve Comes with moderation
-    - checkbox "label Comes with moderation" [checked] [disabled]
-    - text: label Comes with moderation
+    - checkbox "label"
+    - text: label
     - checkbox "invite Comes with moderation" [checked] [disabled]
     - text: invite Comes with moderation
     - checkbox "admit Comes with moderation" [checked] [disabled]

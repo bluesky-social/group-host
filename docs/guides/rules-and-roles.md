@@ -94,9 +94,10 @@ under **Running the group** when you create or change a role:
 
 - **Profile and rules** lets them change the group's profile and rules.
   It adds none of the permissions above.
-- **Moderation** brings `mod.read`, `mod.resolve`, `label`, `invite`,
-  `admit`, `eject` and `role.assign`. Its `label` reaches the group's
-  members and profile, not every space.
+- **Moderation** brings `mod.read`, `mod.resolve`, `invite`, `admit`,
+  `eject` and `role.assign`, and labels on the group's members and
+  profile. To label posts everywhere in the group too, tick `label` as
+  well.
 - **The whole group** brings all of that, and `group.configure`.
 
 A role also says which roles its members can give. That list limits
@@ -150,7 +151,7 @@ dialog offers only those.
    role keeps one by one.
 
    <!-- look /g/riders.groups.test/settings/roles --as alice --click '.roles > li:has(strong:text-is("Ride leader")) .action-menu summary' --click '.action-menu[open] .menu button:has-text("Change")' --click ':popover-open input[name=set][value=moderate]' --element ':popover-open' -->
-   ![The Change this role dialog for Ride leader: Moderation ticked under Running the group, and under It may, mod.read, mod.resolve, label, invite, admit, eject and role.assign ticked and greyed, each saying Comes with moderation](shots/rules-change-role.png)
+   ![The Change this role dialog for Ride leader: Moderation ticked under Running the group, and under It may, mod.read, mod.resolve, invite, admit, eject and role.assign ticked and greyed, each saying Comes with moderation, and label not ticked](shots/rules-change-role.png)
 
 4. Press **Save**. The dialog closes, and the role's row shows what it
    lets its members do now.

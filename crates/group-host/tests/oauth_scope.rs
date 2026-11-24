@@ -481,6 +481,60 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
 }
 
 #[tokio::test]
+async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
+    let h = start(&[], false).await;
+    let (did, calendar_uri, _) = group(&h).await;
+    let moderate = format!("include:{NS}.authModerate");
+    let label = "com.atproto.label.record";
+    let every = format!("space:*?collection={label}");
+    define(
+        &h,
+        &did,
+        Grant {
+            role: "moderator".into(),
+            scopes: vec![moderate.clone()],
+            assignable: vec![],
+        },
+    )
+    .await;
+    define(
+        &h,
+        &did,
+        Grant {
+            role: "labeller".into(),
+            scopes: vec![moderate, every.clone()],
+            assignable: vec![],
+        },
+    )
+    .await;
+    let narrow =
+        |r: &[&str], scopes: &[&str]| h.host.narrow(&did, &roles(r), &asked(scopes)).unwrap();
+    let named = format!("space:{CALENDAR}?collection={label}");
+    // The moderation set's labels are the meta and members spaces'.
+    let moderator = narrow(&["member", "moderator"], &[&every]);
+    for kind in ["meta", "members"] {
+        let there = |s: &String| s.contains(&format!("{NS}.{kind}?")) && s.contains(label);
+        assert!(moderator.iter().any(there), "{kind}: {moderator:?}");
+    }
+    assert_eq!(calendar(moderator), Vec::<String>::new());
+    assert_eq!(narrow(&["moderator"], &[&named]), Vec::<String>::new());
+    // Labels in every space reach the calendar.
+    let labeller = narrow(&["member", "labeller"], &[&every]);
+    assert_eq!(calendar(labeller).len(), 1);
+    let kept = narrow(&["labeller"], &[&named]);
+    assert_eq!(kept, std::slice::from_ref(&named));
+    // As does a grant of them in its policy, there only.
+    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+        {"role": "member", "read": true},
+        {"role": "moderator", "read": true, "scopes": [every]},
+    ]});
+    h.host.store.set_policy(&calendar_uri, &policy).unwrap();
+    let moderator = narrow(&["member", "moderator"], &[&every]);
+    assert_eq!(calendar(moderator).len(), 1);
+    assert_eq!(narrow(&["moderator"], &[&named]), [named]);
+}
+
+#[tokio::test]
 async fn a_profile_writer_keeps_the_profile_with_what_it_approved() {
     let h = start(&[], false).await;
     let (did, _, alice) = group(&h).await;

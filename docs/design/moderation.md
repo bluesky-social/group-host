@@ -19,7 +19,8 @@ about moderation:
 - `mod.read`: see the queue and a subject's history, and a record
   subject itself, taken down or not.
 - `mod.resolve`: resolve or escalate a subject, with a note.
-- `label`: write a label, of any value, and delete one.
+- `label`: write a label, of any value, and delete one, in the spaces
+  the role's scopes reach ([labels](#labels)).
 
 A role holds an action through an OAuth scope in the group's permissions
 record, and a member holds the union of their roles' actions. There's no
@@ -41,8 +42,11 @@ Details:
 - `mod.read` is granted by `rpc:fyi.opensocial.listModSubjects`,
   `mod.resolve` by `rpc:fyi.opensocial.resolveModSubject`, and `label` by
   `space:*?collection=com.atproto.label.record`, or any `space:*` scope
-  covering that collection. `include:fyi.opensocial.authModerate` and
-  `include:fyi.opensocial.authManageGroup` carry all three
+  covering that collection, which label in every space of the group's.
+  `include:fyi.opensocial.authModerate` and
+  `include:fyi.opensocial.authManageGroup` carry `mod.read` and
+  `mod.resolve`. They label only in the meta and members spaces, the
+  ones their permissions name, so they don't carry `label`
   ([membership](membership.md#roles-and-what-they-grant)).
 - No caller at all gets `401 AuthMissing`.
 
@@ -94,8 +98,18 @@ what to show. The group says what its values mean in its labeler (see
 
 Details:
 
-- Writing or deleting a label needs `label`. It reaches every space of
-  the group's. The token's scope must cover the write, as for any record.
+- Writing or deleting a label in a space needs the roles' scopes to
+  cover writing `com.atproto.label.record` there: the moderation sets'
+  in the meta and members spaces; `space:*?collection=com.atproto.label.record`,
+  or a scope naming every collection, in every space; or a scope the
+  space's policy grants the role, in that space alone. So a moderator
+  whose role holds only `include:fyi.opensocial.authModerate` labels
+  accounts, and records in the meta and members spaces, but nothing in
+  the group's other spaces. The token's scope must cover the write, as
+  for any record.
+- `getGroup` lists the spaces a member may label in as
+  `viewer.labelSpaces`. The console offers labelling a subject only
+  where its labels go in one of them.
 - The record is checked against its lexicon. A value is 128 bytes at
   most, and `uri`, `val` and `cts` are required.
 - The host doesn't check that the subject exists or that a CID matches.

@@ -154,4 +154,4 @@ does.
 | `mod_list` | `mod list` | `fyi.opensocial.listModSubjects` | shows the moderation queue |
 | `mod_history` | `mod history` | `fyi.opensocial.getModSubjectHistory` | shows what was done about a subject |
 | `mod_resolve` | `mod resolve` | `fyi.opensocial.resolveModSubject` | resolves or escalates a subject |
-| `mod_label` | `mod label` | `com.atproto.space.createRecord` | labels a subject `val` as the group, with a `com.atproto.label.record` record beside it. With `undo`, it deletes the label (`com.atproto.space.deleteRecord`) |
+| `mod_label` | `mod label` | `com.atproto.space.createRecord` | labels a subject `val` as the group, with a `com.atproto.label.record` record beside it, where the member's roles write labels. With `undo`, it deletes the label (`com.atproto.space.deleteRecord`) |

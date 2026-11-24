@@ -6,6 +6,7 @@
   import FindAccount from '#lib/organisms/FindAccount.svelte';
   import ModerationQueue from '#lib/organisms/ModerationQueue.svelte';
   import Page from '#lib/templates/Page.svelte';
+  import { besideOf } from '#lib/moderation.ts';
   import { page } from '$app/state';
   let { data, form } = $props();
   const g = $derived(data.group);
@@ -22,11 +23,13 @@
       text: text()
     }))
   );
+  // Labelling a subject where its labels go, if the viewer's roles label there.
+  const labelling = $derived((g.viewer?.labelSpaces ?? []).map((s): string => s.space));
   const can = $derived({
-    label: data.actions.includes('label'),
+    label: (key: string) => labelling.includes(besideOf(g.did, key)),
     resolve: data.actions.includes('mod.resolve')
   });
-  const finds = $derived(!!data.subjects && can.label);
+  const finds = $derived(!!data.subjects && can.label(g.did));
 </script>
 
 <svelte:head
