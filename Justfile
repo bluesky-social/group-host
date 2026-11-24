@@ -56,6 +56,7 @@ lint:
     {{cargo}} fmt --all --check
     {{oxfmt}} --check {{js}}
     {{cargo}} clippy --workspace --all-targets -- -D warnings
+    {{cargo}} deny check
     node harness/layers.mjs
     node harness/dialogs.mjs
     node harness/strings.mjs

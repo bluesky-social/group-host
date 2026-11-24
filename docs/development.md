@@ -222,11 +222,25 @@ docs-deploy` after a change to the docs lands.
 
 `just lint` runs what `check` and `web` do, except the console's build.
 That's `cargo fmt --check`, `oxfmt --check`, clippy with warnings
-denied, the console's component layers (`harness/layers.mjs`), a check
-that no dialog's title holds a name or anything typed
-(`harness/dialogs.mjs`), a check that no component writes words into
-its markup rather than saying a message (`harness/strings.mjs`), and
-svelte-check.
+denied, `cargo deny check`, the console's component layers
+(`harness/layers.mjs`), a check that no dialog's title holds a name or
+anything typed (`harness/dialogs.mjs`), a check that no component writes
+words into its markup rather than saying a message
+(`harness/strings.mjs`), and svelte-check.
+
+`cargo deny check` holds the dependencies to `deny.toml`: no advisory of
+the RustSec database, unmaintained and unsound crates and yanked
+versions too; a permissive licence for every one; and crates from
+crates.io and the atproto registry alone. An advisory is fixed by an
+upgrade, never ignored. The advisories are read as they are at the run,
+so `check` can fail on `main` the day one is published, with nothing
+changed. It needs `cargo install --locked cargo-deny` once; CI runs
+0.22.0.
+
+No crate has unsafe code: `[workspace.lints.rust]` in `Cargo.toml`
+forbids it, and each crate takes the workspace's lints, so the build
+refuses unsafe code in every target, tests too. A new crate takes them
+with `[lints] workspace = true`.
 
 `just fmt` formats everything the checks hold to a format. It formats
 the Rust with rustfmt, and the console, the harness and the docs site

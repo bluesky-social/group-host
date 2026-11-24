@@ -1,9 +1,9 @@
-# Formatting and lints, as `just lint` checks the Rust, on every pull and
-# push to main; test.yml runs the tests.
+# Formatting, lints and the dependencies, as `just lint` checks the Rust, on
+# every pull and push to main; test.yml runs the tests.
 #
 # The image is the Rust `just lint` runs locally, so a newer release's new
-# lints land on purpose. The build and the toolchain's components are kept
-# between runs, so a push lints only what it changed.
+# lints land on purpose. The build, the toolchain's components and
+# cargo-deny are kept between runs, so a push lints only what it changed.
 image: rust:1.98
 # The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
 runners: [runner.knotless.dev]
@@ -13,7 +13,16 @@ queue: first
 on:
   push: {refs: [refs/heads/main]}
   pull: {base: [refs/heads/main, refs/heads/feature/*]}
-cache: [target, /usr/local/cargo/registry, /usr/local/rustup]
+cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/cargo-deny]
 steps:
   # cargo fmt --check, then clippy over the workspace, warnings denied.
   - uses: chadtmiller.com/steps/rust-lint@1
+  # The dependencies' advisories, licences, bans and sources (deny.toml).
+  # The advisories are RustSec's as they are at the run, so a new one can
+  # fail a push that changed nothing.
+  - name: deny
+    run: |
+      v=0.22.0
+      /opt/cargo-deny/bin/cargo-deny --version 2>/dev/null | grep -qx "cargo-deny $v" ||
+        cargo install --locked --force --version "$v" --root /opt/cargo-deny cargo-deny
+      /opt/cargo-deny/bin/cargo-deny check

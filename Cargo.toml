@@ -7,26 +7,25 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.89"
+# Nothing here goes to a registry; cargo-deny reads this to know the path
+# dependencies between the crates are no wildcards (deny.toml).
+publish = false
+
+# No unsafe code, in any target of any crate.
+[workspace.lints.rust]
+unsafe_code = "forbid"
 
 [workspace.dependencies]
-atproto = { version = "0.2", registry = "atproto" }
+atproto = { version = "0.3", registry = "atproto" }
 group-host = { path = "crates/group-host" }
 group-host-mcp = { path = "crates/group-host-mcp" }
-opensocial = { path = "crates/opensocial" }
 anyhow = "1"
 axum = { version = "0.8", features = ["ws"] }
-base64 = "0.22"
-blake3 = "1"
-bs58 = "0.5"
-ciborium = "0.2"
-ecdsa = { version = "0.16", features = ["signing", "verifying"] }
 futures = "0.3"
 hmac = "0.12"
-k256 = { version = "0.13", features = ["ecdsa"] }
-p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2", "gzip"] }
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
@@ -36,7 +35,6 @@ tower = { version = "0.5", features = ["util"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util", "time", "sync", "net", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "json", "env-filter", "registry"] }
-unicode-segmentation = "1"
 
 # Every worktree keeps its own target/, so debug info is kept small: line
 # tables for our crates, none for dependencies.

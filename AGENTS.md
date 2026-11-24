@@ -203,7 +203,11 @@ by `just shots` from the line above each.
 The workflows in `.knotless/workflows/` run on pushes to `main` and on
 pulls into it or into a `feature/` branch:
 
-- `check`: `cargo fmt --check` and clippy, warnings denied.
+- `check`: `cargo fmt --check`, clippy with warnings denied, and
+  `cargo deny check` (`deny.toml`): no RustSec advisory, unmaintained,
+  unsound or yanked crate, permissive licences only, and crates from
+  crates.io and the atproto registry alone. No crate has unsafe code:
+  `Cargo.toml` forbids it in every target, and the build refuses any.
 - `test`: every test, under the 100% gate of lines and functions.
 - `web`: oxfmt's format, the component layers, dialogs' titles, words
   as messages, svelte-check (failing on any warning), and the build.
