@@ -752,6 +752,13 @@ async fn switches_between_accounts_signed_in_in_one_browser() {
     assert_eq!(others(&viewer(&h, &swapped).await.1), [two.as_str()]);
     let res = switch(&h, &all, &three, "/").await;
     assert_eq!(res.status(), 400);
+    // A browser whose account in use was signed out still switches to one
+    // beside it, and keeps nothing of the one signed out.
+    let res = switch(&h, &all, &one, "/").await;
+    assert_eq!(res.status(), 303);
+    let (_, shown) = viewer(&h, &kept(&all, &res)).await;
+    assert_eq!(shown["actor"]["did"], one);
+    assert_eq!(others(&shown), [two.as_str()]);
 
     // Out of the next, and the last, as no one.
     let res = sign_out(&h, &left).await;

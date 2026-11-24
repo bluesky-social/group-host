@@ -74,3 +74,14 @@ pub async fn view(h: &Running, group: &str, who: Option<&Authority>) -> Json {
     assert_eq!(status, 200, "{view}");
     view
 }
+
+/// Takes `group`'s profile away behind the host's methods, which keep it:
+/// a group as one moved here from a host that kept none would arrive.
+pub async fn drop_profile(h: &Running, group: &str) {
+    let write = group_host::repo::Write::Delete {
+        collection: format!("{NS}.profile"),
+        rkey: "self".into(),
+    };
+    let meta = group_host::group::meta_space(group);
+    h.host.space_write(group, &meta, &[write]).await.unwrap();
+}

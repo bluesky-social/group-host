@@ -728,11 +728,11 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
     )
     .await;
     assert!(said.contains("no move of"), "{said}");
-    // Its own label taken here, it is brought under another, and finished
-    // with the code alone.
-    ok(&plain, &["group", "create", &format!("{name}.groups.test")]).await;
-    let said = fails(&mover, &["account", "import", &handle]).await;
-    assert!(said.contains("can't move here"), "{said}");
+    // Asked for no address, it comes under its own label; started again at
+    // another, it is brought under that one instead, and finished with the
+    // code alone.
+    let said = ok(&mover, &["account", "import", &handle]).await;
+    assert!(said.contains(&format!("as   {name}.groups.test")), "{said}");
     let club = format!("{name}-club");
     let said = ok(&mover, &["account", "import", &handle, "--address", &club]).await;
     assert!(said.contains(&format!("as   {club}.groups.test")), "{said}");

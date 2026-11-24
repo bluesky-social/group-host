@@ -120,13 +120,14 @@ impl Logs {
         let db = self.db.lock().expect("not poisoned");
         let since = crate::time::now_millis() - DAYS * 86_400_000;
         db.execute("DELETE FROM line WHERE at < ?1", [since])?;
-        let last: Option<i64> = db
+        let last = db
             .query_row(
                 "SELECT id FROM line WHERE level <= ?1 ORDER BY id DESC LIMIT 1 OFFSET ?2",
                 params![rank("INFO"), self.keep],
                 |r| r.get(0),
             )
-            .optional()?;
+            .optional();
+        let last: Option<i64> = last?;
         if let Some(last) = last {
             db.execute(
                 "DELETE FROM line WHERE level <= ?1 AND id <= ?2",
@@ -168,9 +169,10 @@ impl Logs {
         let mut stmt = db.prepare_cached(sql)?;
         let p = params![asked.trace, asked.message, level, asked.min_ms, limit];
         let rows = stmt.query_map(p, |r| r.get::<_, String>(0))?;
-        let mut lines: Vec<Value> = rows
+        let lines: rusqlite::Result<Vec<Value>> = rows
             .map(|r| r.map(|text| serde_json::from_str(&text).unwrap_or_default()))
-            .collect::<rusqlite::Result<_>>()?;
+            .collect();
+        let mut lines = lines?;
         lines.reverse();
         Ok(lines)
     }

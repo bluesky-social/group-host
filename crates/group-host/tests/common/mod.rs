@@ -340,11 +340,26 @@ pub async fn start_reachable_by_name(vars: &[(&str, &str)]) -> Running {
     start_on(listener, &vars, false).await
 }
 
+/// Every event the host logs written out, into nothing, as one is when it
+/// serves: with no subscriber, an event's fields are never evaluated, and
+/// coverage counts their lines as never run.
+fn logging() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter("group_host=trace")
+            .with_writer(std::io::sink)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+    });
+}
+
 async fn start_on(
     listener: tokio::net::TcpListener,
     vars: &[(&str, &str)],
     refuse: bool,
 ) -> Running {
+    logging();
     let (plc, plc_url) = start_plc(refuse).await;
     let data = tempfile::tempdir().unwrap();
     let dir = data.path().to_str().unwrap().to_string();

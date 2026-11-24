@@ -730,6 +730,32 @@ async fn signs_in_to_move_only_for_someone_signed_in_to_the_console() {
             .contains("sign in to the console again first")
     );
     assert_eq!(w.call("getAccountMove", None).await, (200, json!({})));
+
+    // An account whose document names no handle is shown by its DID
+    // alone: no handle to show.
+    let rotation = w.old.rotation.lock().unwrap().clone().unwrap();
+    let mut op = Op::atproto(
+        &w.old.key().public().did_key(),
+        &[rotation.public().did_key()],
+        "unnamed",
+        &w.old.base(),
+    );
+    op.also_known_as.clear();
+    let last = *w.old.last.lock().unwrap();
+    let renamed =
+        w.h.http
+            .post(format!("{}/{}", plc_url(&w.h), w.did))
+            .json(&op.sign(last, &rotation).to_json())
+            .send()
+            .await
+            .unwrap();
+    assert!(renamed.status().is_success());
+    w.sign_in_to_move().await;
+    let (status, moving) = w.call("getAccountMove", None).await;
+    assert_eq!(status, 200, "{moving}");
+    assert_eq!(moving["did"], w.did.as_str());
+    assert_eq!(moving["pds"], w.old.base().as_str());
+    assert_eq!(moving.get("handle"), None, "{moving}");
 }
 
 #[tokio::test]

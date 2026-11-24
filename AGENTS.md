@@ -30,9 +30,17 @@ fixed, with `CARGO_BUILD_JOBS=2`: other agents build on this machine too.
 - `cargo fmt` can put a `?` on a line of its own, which coverage then
   counts as a line never run: bind the value first, or use a named
   function, rather than lowering the gate. A call taking a closure ends in
-  `})?;`, the same line. The report may count such a line without naming
-  it, as it counts each function at the build of it with the most lines;
-  `--show-missing-lines` and the HTML then show nothing missed.
+  `})?;`, the same line.
+- An `if` or `if let` with no `else` counts its closing `}` as the path
+  where it does not hold: a test takes that path too, or the branch goes
+  if it cannot happen. CI's Linux toolchain counts it; this Mac's does not,
+  so a line the Mac shows run can still fail the gate.
+- A function built more than once (a crate's unit tests build it again,
+  and each generic copy is its own) is counted by the most lines any one
+  build of it covers: each line must be run in one build, not across
+  them. The report then counts such a line without naming it, and
+  `--show-missing-lines` and the HTML show nothing missed; `cargo llvm-cov
+  report --json` lists each build's counts.
 
 ## Building a part
 

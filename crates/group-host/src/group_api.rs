@@ -117,9 +117,8 @@ fn cid_of(blob: &Value) -> Option<&str> {
     blob["ref"]["$link"].as_str()
 }
 
-/// What a group's profile shows of it.
-fn profile_view(profile: &Value) -> Value {
-    let mut view = json!({});
+/// Puts in `view` what a group's profile shows of it.
+fn show_profile(view: &mut Value, profile: &Value) {
     for key in [
         "displayName",
         "description",
@@ -140,7 +139,6 @@ fn profile_view(profile: &Value) -> Value {
             view[key] = json!(cid);
         }
     }
-    view
 }
 
 /// The group's rules in the order they are presented: by `order`, then as
@@ -182,12 +180,6 @@ fn base(host: &Host, did: &str, handle: &str) -> Result<Value, XrpcError> {
         view["siteDomain"] = json!(domain);
     }
     Ok(view)
-}
-
-fn merge(into: &mut Value, from: Value) {
-    if let (Some(into), Value::Object(from)) = (into.as_object_mut(), from) {
-        into.extend(from);
-    }
 }
 
 fn objects(field: &str, items: impl IntoIterator<Item = impl Into<String>>) -> Value {
@@ -257,7 +249,7 @@ pub async fn get_group(
     let mut view = base(&host, group, &handle)?;
     if reads_meta {
         if let Some(profile) = record(&meta, "profile", "self")? {
-            merge(&mut view, profile_view(&profile));
+            show_profile(&mut view, &profile);
         }
         view["rules"] = json!(rules(&host, group)?);
         let labeler = record(&meta, "labeler", "self")?.unwrap_or_default();

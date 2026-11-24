@@ -89,6 +89,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     let (riders, hikers, [alice, bob, carol]) = groups(&h).await;
     let app = App::loopback(SCOPE);
     let request_uri = app.push(&h, &[]).await;
+    // Hikers' profile gone, so it has no name to show.
+    drop_profile(&h, &hikers).await;
 
     let (status, offered) = offer(&h, &alice, &request_uri).await;
     assert_eq!(status, 200, "{offered}");
@@ -127,6 +129,14 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
         SCOPE.split(' ').collect::<Vec<_>>()
     );
     assert_eq!(at_riders["withheld"], json!([]));
+    let at_hikers = offered["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["did"] == hikers.as_str())
+        .unwrap();
+    assert_eq!(at_hikers["handle"], "hikers.groups.test");
+    assert_eq!(at_hikers.get("displayName"), None);
 
     let (_, offered) = offer(&h, &bob, &request_uri).await;
     assert_eq!(dids(&offered), [riders.as_str()]);

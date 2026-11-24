@@ -445,11 +445,8 @@ impl Host {
             (site["notFound"].as_str(), StatusCode::NOT_FOUND),
         ];
         for (named, status) in missing {
-            if let Some(found) = named
-                .map(|p| self.site_file(did, &site, p))
-                .transpose()?
-                .flatten()
-            {
+            let found = named.map(|p| self.site_file(did, &site, p)).transpose();
+            if let Some(found) = found?.flatten() {
                 return Ok(file(status, found, asking));
             }
         }

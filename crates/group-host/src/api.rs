@@ -345,10 +345,8 @@ pub async fn atproto_did(
         .next()
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let account = host
-        .store
-        .account(&handle)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let account = host.store.account(&handle);
+    let account = account.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     account
         .filter(|a| a.handle == handle)
         .map(|a| a.did)

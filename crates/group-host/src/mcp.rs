@@ -331,10 +331,8 @@ impl Host {
         // Over https, or http for a host on http, as on a dev network.
         let on_http = self.config.public_url.starts_with("http://");
         if client_id.starts_with("https://") || (on_http && client_id.starts_with("http://")) {
-            let doc = self
-                .public_json(client_id, "its client metadata")
-                .await
-                .ok()?;
+            let doc = self.public_json(client_id, "its client metadata").await;
+            let doc = doc.ok()?;
             if doc["client_id"] != client_id {
                 return None;
             }

@@ -7,7 +7,7 @@
 # the harness's packages, the alpha's build, cargo-llvm-cov and the build
 # are kept between runs; each is made again only when what it is made from
 # changes.
-image: rust:1.98
+image: rust:1.100
 # The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
 runners: [runner.knotless.dev]
 # A pre-flight, as check is: the merge queue takes a pull into a batch only
@@ -17,6 +17,9 @@ on:
   push: {refs: [refs/heads/main]}
   pull: {base: [refs/heads/main, refs/heads/feature/*]}
 cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/tools, /opt/node, /opt/atproto, harness/node_modules]
+env:
+  # The image's toolchain, over the cached rustup's default (check.yml).
+  RUSTUP_TOOLCHAIN: "1.100.0"
 steps:
   - uses: chadtmiller.com/steps/node@1
     with: {version: 24.22.1}
@@ -37,5 +40,9 @@ steps:
   - name: test
     run: |
       export PATH=/opt/node/bin:/opt/tools:$PATH GROUP_HOST_DEV_ENV=/opt/atproto/packages/dev-env
+      # Cargo 1.100 builds test binaries under debug/build/; those the cached
+      # target kept in debug/deps from before are stale, and cargo-llvm-cov,
+      # walking the whole directory, would count their lines as never run.
+      rm -rf target/llvm-cov-target/debug/deps
       cargo llvm-cov --workspace --ignore-filename-regex '(tests/|harness/)' \
         --fail-under-lines 100 --fail-under-functions 100 --show-missing-lines

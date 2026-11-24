@@ -2,6 +2,7 @@
 
 mod common;
 
+use atproto::plc::Op;
 use common::groups::*;
 use common::oauth::give_avatar;
 use common::spaces::*;
@@ -48,7 +49,7 @@ fn dids(said: &Json) -> Vec<&str> {
 #[tokio::test]
 async fn says_who_is_asking() {
     let h = start(&[], false).await;
-    let [alice, ..] = people(&h).await;
+    let [alice, _, carol] = people(&h).await;
     // No one, and where someone with no account makes one.
     let signup = json!("https://bsky.social");
     assert_eq!(viewer(&h, None).await, json!({"signUpAt": signup}));
@@ -57,6 +58,21 @@ async fn says_who_is_asking() {
     assert_eq!(said["actor"]["handle"], "authority.test");
     assert_eq!(said["actor"]["canCreateGroup"], true);
     assert_eq!(said["signUpAt"], signup);
+    // One whose document names no handle: by DID alone.
+    let mut op = Op::atproto(
+        &carol.key.public().did_key(),
+        &[carol.rotation.public().did_key()],
+        "authority.test",
+        &carol.pds,
+    );
+    op.also_known_as.clear();
+    let signed = op.sign(carol.last, &carol.rotation);
+    let plc = format!("{}/{}", plc_url(&h), carol.did);
+    let res = h.http.post(plc).json(&signed.to_json()).send().await;
+    assert!(res.unwrap().status().is_success());
+    let said = viewer(&h, Some(&carol)).await;
+    assert_eq!(said["actor"]["did"], carol.did.as_str());
+    assert_eq!(said["actor"].get("handle"), None);
     let h = start(&[("GROUP_FOUNDERS", "did:plc:someone")], false).await;
     let [alice, ..] = people(&h).await;
     assert_eq!(
@@ -128,6 +144,17 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
     assert_eq!(at_quiet.get("displayName"), None);
     let (_, none) = groups_of(&h, &carol, &format!("actor={}", alice.did)).await;
     assert_eq!(none["groups"], json!([]));
+    // One whose profile is gone shows no name.
+    drop_profile(&h, &hikers).await;
+    let (_, mine) = groups_of(&h, &alice, &format!("actor={}", alice.did)).await;
+    let at_hikers = mine["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["did"] == hikers.as_str())
+        .unwrap();
+    assert_eq!(at_hikers["handle"], "hikers.groups.test");
+    assert_eq!(at_hikers.get("displayName"), None);
 
     // A page at a time.
     let (_, first) = groups_of(&h, &alice, &format!("actor={}&limit=2", alice.did)).await;

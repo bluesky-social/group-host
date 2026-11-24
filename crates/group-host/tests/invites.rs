@@ -92,6 +92,12 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
         (None, json!("Ride with us"))
     );
     assert_eq!(bob.told.writes.lock().unwrap()[0].1["space"], inbox);
+    // The group's activity says the write was in Bob's inbox, and about him.
+    let (_, listed) = ask(&h, &alice, "listGroupTokens", &format!("group={did}")).await;
+    let activity = listed["activity"].as_array().unwrap();
+    let wrote = activity.iter().find(|a| a.get("write").is_some()).unwrap();
+    assert_eq!(wrote["write"]["space"], inbox);
+    assert_eq!(wrote["subject"]["did"], bob.did.as_str());
     // Written again, the same one answered, as it is.
     let again = send(&h, &alice, &did, &bob.did, json!({"message": "Hello"})).await;
     assert_eq!(
@@ -329,18 +335,20 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
         json!({"handle": RIDERS, "displayName": "Riders", "joinPolicy": "invite"}),
     )
     .await;
-    // A face, for the invitee's list.
+    // A face, and no name, as a group moved here from a host that kept
+    // none may have: the invitee's list shows the face alone.
     let picture = h.host.upload_blob(&did, b"face", "image/png").unwrap();
     h.host
-        .space_write(&did, &meta_space(&did), &[Write::Update { collection: format!("{NS}.profile"), rkey: "self".into(), value: json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "invite", "avatar": picture}) }])
+        .space_write(&did, &meta_space(&did), &[Write::Update { collection: format!("{NS}.profile"), rkey: "self".into(), value: json!({"$type": format!("{NS}.profile"), "joinPolicy": "invite", "avatar": picture}) }])
         .await
         .unwrap();
     let made = send(&h, &alice, &did, &bob.did, json!({})).await;
     let uri = made.body["uri"].as_str().unwrap().to_string();
-    assert_eq!(
-        ask(&h, &bob, "getActorInvites", "").await.1["invites"][0]["group"]["avatar"],
-        picture["ref"]["$link"]
-    );
+    let shown = ask(&h, &bob, "getActorInvites", "").await.1;
+    let group = &shown["invites"][0]["group"];
+    assert_eq!(group["avatar"], picture["ref"]["$link"]);
+    assert_eq!(group["handle"], RIDERS);
+    assert_eq!(group.get("displayName"), None);
     // Taken back by deleting it; then there is none to take back.
     let said = take_back(&h, &alice, &did, &uri).await;
     assert_eq!((said.status, said.body), (200, json!({})));

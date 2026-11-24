@@ -327,6 +327,15 @@ async fn signs_an_app_in_to_the_groups_repo() {
     );
     let said = xrpc(&h, "com.atproto.server.getSession", Some(access), None).await;
     assert_eq!(said.1["error"], "ExpiredToken");
+
+    // A group the directory cannot answer for still signs in, its session
+    // carrying no document.
+    h.plc.ops.lock().unwrap().remove(&did);
+    let (status, session) = sign_in(&h, RIDERS, &password).await;
+    assert_eq!(status, 200, "{session}");
+    assert_eq!(session["did"], did.as_str());
+    assert_eq!(session["handle"], RIDERS);
+    assert_eq!(session.get("didDoc"), None, "{session}");
 }
 
 #[tokio::test]

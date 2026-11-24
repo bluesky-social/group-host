@@ -1049,8 +1049,8 @@ impl Store {
                     ))
                 },
             )
-            .optional()?;
-        found
+            .optional();
+        found?
             .map(|(did, handle, signing, kem)| {
                 Ok(Account {
                     did,
@@ -1095,8 +1095,8 @@ impl Store {
                     })
                 },
             )
-            .optional()?;
-        Ok(head)
+            .optional();
+        Ok(head?)
     }
 
     /// Every record of `did`'s, by path (`collection/rkey`), with its CID.

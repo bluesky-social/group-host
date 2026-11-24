@@ -377,6 +377,14 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     // Nobody signed in: what anyone can learn of it already, and no more.
     let anyone = view(&h, &did, None).await;
     assert_eq!(anyone, json!({"group": {"did": did, "handle": RIDERS}}));
+    // Its profile gone: no name or face, and the rest as before.
+    drop_profile(&h, &did).await;
+    let theirs = view(&h, &did, Some(&dave)).await;
+    let group = &theirs["group"];
+    assert_eq!(group["handle"], RIDERS);
+    assert_eq!(group.get("displayName"), None);
+    assert_eq!(group.get("avatar"), None);
+    assert_eq!(group["rules"].as_array().unwrap().len(), 3);
 }
 
 fn rule_at(rkey: &str, title: &str, order: Option<i64>, at: &str) -> Write {

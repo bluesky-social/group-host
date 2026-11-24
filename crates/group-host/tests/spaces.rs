@@ -646,20 +646,71 @@ async fn serves_and_lists_a_spaces_blobs() {
     // A listing of blobs carries no MAC.
     assert_eq!(listed.header("signature"), None);
 
-    // Once no record references it, it is gone.
+    // Held by another record too, it stays when one goes; once no record
+    // references it, it is gone.
     f.h.host
         .space_write(
             &f.group,
             &f.space,
-            &[Write::Delete {
-                collection: "fyi.opensocial.profile".into(),
-                rkey: "self".into(),
-            }],
+            &[create("fyi.opensocial.profile", "other", profile(&picture))],
         )
+        .await
+        .unwrap();
+    let delete = |rkey: &str| Write::Delete {
+        collection: "fyi.opensocial.profile".into(),
+        rkey: rkey.into(),
+    };
+    f.h.host
+        .space_write(&f.group, &f.space, &[delete("self")])
+        .await
+        .unwrap();
+    let (kept, _) = f
+        .get(
+            "com.atproto.space.getBlob",
+            &format!("&cid={}", link(&picture)),
+            COMMIT_MAC,
+        )
+        .await;
+    assert_eq!((kept.status, kept.body), (200, b"picture".to_vec()));
+    f.h.host
+        .space_write(&f.group, &f.space, &[delete("other")])
         .await
         .unwrap();
     let cid = Cid::parse(&link(&picture)).unwrap();
     assert_eq!(f.h.host.store.blob(&f.group, &cid).unwrap(), None);
+}
+
+#[tokio::test]
+async fn keeps_a_blob_of_a_deleted_space_its_repo_still_references() {
+    let f = fixture().await;
+    let host = &f.h.host;
+    let picture = host.upload_blob(&f.group, b"picture", "image/png").unwrap();
+    let profile =
+        json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "avatar": picture});
+    let own = host
+        .create_space(&f.group, "fyi.opensocial.content", "own", &open())
+        .unwrap();
+    host.space_write(
+        &f.group,
+        &own,
+        &[create("fyi.opensocial.profile", "self", profile.clone())],
+    )
+    .await
+    .unwrap();
+    host.write(
+        &f.group,
+        &[create("fyi.opensocial.profile", "self", profile)],
+    )
+    .unwrap();
+    host.end_space(&f.group, &own).unwrap();
+    let cid = picture["ref"]["$link"].as_str().unwrap();
+    let url = format!(
+        "{}/xrpc/com.atproto.sync.getBlob?did={}&cid={cid}",
+        f.h.url, f.group
+    );
+    let res = f.h.http.get(url).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.bytes().await.unwrap().as_ref(), b"picture");
 }
 
 /// A read of the fixture's repo with `headers` as given.

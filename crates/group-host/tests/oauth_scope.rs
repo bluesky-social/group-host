@@ -247,6 +247,17 @@ async fn makes_a_scope_for_every_type_one_for_each_space_the_roles_read() {
         narrow(&["member"], "space:*?action=read"),
         [format!("{at}&action=read")]
     );
+    // Asked for one of them as well, it is granted once.
+    let read = format!("{at}&action=read");
+    let twice = h
+        .host
+        .narrow(
+            &did,
+            &roles(&["member"]),
+            &asked(&[&read, "space:*?action=read"]),
+        )
+        .unwrap();
+    assert_eq!(calendar(twice), [read]);
     // Asked for a write the role has not, it gets nothing there.
     assert_eq!(
         narrow(

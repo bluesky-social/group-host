@@ -1186,15 +1186,17 @@ where
 mod tests {
     use super::*;
 
-    /// A union of a lexicon's own defs: each member names itself in full.
+    /// A union of a lexicon's own defs: each object member names itself in
+    /// full; one that is no object, with nowhere to say so, is as it is.
     #[test]
     fn names_a_local_member_of_a_union_in_full() {
-        let doc =
-            json!({"defs": {"a": {"type": "object", "properties": {"x": {"type": "string"}}}}});
+        let a = json!({"type": "object", "properties": {"x": {"type": "string"}}});
+        let doc = json!({"defs": {"a": a, "b": {"type": "string"}}});
         let docs = Docs(HashMap::from([("com.example.thing".to_string(), doc)]));
-        let union = json!({"type": "union", "refs": ["#a"]});
+        let union = json!({"type": "union", "refs": ["#a", "#b"]});
         let schema = docs.schema("com.example.thing", &union, DEPTH);
         let member = &schema["anyOf"][0]["properties"]["$type"]["const"];
         assert_eq!(member, "com.example.thing#a");
+        assert_eq!(schema["anyOf"][1], json!({"type": "string"}));
     }
 }

@@ -66,10 +66,9 @@ impl Host {
     /// name and picture as they may read them, and how many are in it.
     fn group_view_basic(&self, group: &str, viewer: &str) -> Answer {
         let handle = group_of(self, group)?;
-        let mut view = json!({"did": group, "handle": handle});
-        if let Some(address) = self.store.address(group).map_err(XrpcError::internal)? {
-            view["address"] = json!(address);
-        }
+        let address = self.store.address(group).map_err(XrpcError::internal)?;
+        let address = address.expect("a group has an address");
+        let mut view = json!({"did": group, "handle": handle, "address": address});
         let roles = self.roles(group, viewer).map_err(XrpcError::internal)?;
         let meta = meta_space(group);
         if self.reads_space(&meta, &roles)? {

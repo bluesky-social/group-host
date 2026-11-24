@@ -827,6 +827,19 @@ async fn sends_a_declined_mcp_client_back_saying_so() {
     let back = query(declined["redirectUrl"].as_str().unwrap());
     assert_eq!(back["error"], "access_denied");
     assert_eq!(back["state"], "s1");
+    // Asked with no state, it is sent back with none.
+    let res = authorize(&h, &client, &challenge, &[("state", "")]).await;
+    let stateless = query(&location(&res))["request_uri"].clone();
+    let (_, declined) = call(
+        &h,
+        &alice,
+        "declineAuthorization",
+        json!({"requestUri": stateless}),
+    )
+    .await;
+    let back = query(declined["redirectUrl"].as_str().unwrap());
+    assert_eq!(back["error"], "access_denied");
+    assert_eq!(back.get("state"), None);
     // Answered, it is gone.
     for (method, body) in [
         (
@@ -892,7 +905,9 @@ async fn refuses_a_request_it_cannot_trust() {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let uri = requested(&h, &client, &challenge).await;
+    // Asked with no state, it is sent back with none.
+    let res = authorize(&h, &client, &challenge, &[("state", "")]).await;
+    let uri = query(&location(&res))["request_uri"].clone();
     let (_, approved) = call(
         &h,
         &alice,
@@ -900,7 +915,9 @@ async fn refuses_a_request_it_cannot_trust() {
         json!({"requestUri": uri, "group": group}),
     )
     .await;
-    let code = query(approved["redirectUrl"].as_str().unwrap())["code"].clone();
+    let back = query(approved["redirectUrl"].as_str().unwrap());
+    assert_eq!(back.get("state"), None);
+    let code = back["code"].clone();
     let exchange = |client: &str, verifier: &str| {
         vec![
             ("grant_type".to_string(), "authorization_code".to_string()),
@@ -953,16 +970,21 @@ async fn refuses_a_request_it_cannot_trust() {
             .unwrap();
         assert_eq!(res.status(), 400, "{uris}");
     }
-    let res = h
-        .http
-        .post(format!("{}/mcp/register", h.url))
-        .json(&json!({"redirect_uris": ["cursor://anysphere.cursor-retrieval/oauth/callback"]}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(res.status(), 201);
-    let said: Json = res.json().await.unwrap();
-    assert_eq!(said["client_name"], "An AI app");
+    for uris in [
+        json!(["cursor://anysphere.cursor-retrieval/oauth/callback"]),
+        json!(["https://app.test/cb"]),
+    ] {
+        let res = h
+            .http
+            .post(format!("{}/mcp/register", h.url))
+            .json(&json!({"redirect_uris": uris}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 201, "{uris}");
+        let said: Json = res.json().await.unwrap();
+        assert_eq!(said["client_name"], "An AI app");
+    }
 }
 
 /// A client metadata document, served at a URL `make` is given: the URL.

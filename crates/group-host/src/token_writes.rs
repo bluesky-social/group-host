@@ -406,10 +406,11 @@ pub async fn apply_writes(
     let made = host.write_asked(group, &writes, &asked)?;
     let (committed, made) = made.expect("writes that are not puts make a commit");
     host.wrote(&acting, None, &made)?;
-    let results: Vec<Value> = writes
+    let results: Result<Vec<Value>, _> = writes
         .iter()
         .map(|w| result("repo", repo_uri(group, w.path().0, w.path().1), w))
-        .collect::<Result<_, _>>()?;
+        .collect();
+    let results = results?;
     Ok(Json(
         json!({"commit": commit_view(&committed), "results": results}),
     ))
@@ -647,10 +648,11 @@ pub async fn space_apply_writes(
     let make = |h: &Host| listed(h, "space", &body);
     let nsid = "com.atproto.space.applyWrites";
     let (uri, group, writes, _) = space_writes(&host, nsid, &headers, &body, make, false).await?;
-    let results: Vec<Value> = writes
+    let results: Result<Vec<Value>, _> = writes
         .iter()
         .map(|w| result("space", space_uri(&uri, &group, w.path().0, w.path().1), w))
-        .collect::<Result<_, _>>()?;
+        .collect();
+    let results = results?;
     Ok(Json(json!({ "results": results })))
 }
 

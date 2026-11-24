@@ -22,7 +22,7 @@ The commit is compiled into the host, so a running host can tell you which build
 
 Details:
 
-- The Rust stage uses `rust:1.98-bookworm`, the toolchain CI tests with, and builds with `--locked` in the `deploy` profile. That's `release` without LTO and with 16 codegen units, so a rebuild is quick and uses every core. The cargo registry and `target/` are cache mounts, so a second build on the same machine rebuilds only the crates that changed.
+- The Rust stage uses `rust:1.100-bookworm`, the toolchain CI tests with, and builds with `--locked` in the `deploy` profile. That's `release` without LTO and with 16 codegen units, so a rebuild is quick and uses every core. The cargo registry and `target/` are cache mounts, so a second build on the same machine rebuilds only the crates that changed.
 - The console stage and the final image use `node:24.22.1-bookworm-slim`, the version `.node-version` names. The console stage runs `npm ci` and `npm run build`. adapter-node bundles the console's dependencies, so no `node_modules` is copied.
 - The final image adds `ca-certificates` and `tini`, which runs as PID 1. It runs as uid 1000, with `DATA_DIR=/data`, `PORT=2600`, and `group-host` as its default command.
 

@@ -100,11 +100,11 @@ impl Store {
     pub fn may_export(&self, group: &str, hash: &str, now: i64) -> Result<bool> {
         let sql =
             "SELECT 1 FROM migration_export WHERE did = ?1 AND token_hash = ?2 AND expires_at > ?3";
-        let found: Option<i64> = self
+        let found = self
             .conn()
-            .query_row(sql, params![group, hash, now], |r| r.get(0))
-            .optional()?;
-        Ok(found.is_some())
+            .query_row(sql, params![group, hash, now], |r| r.get::<_, i64>(0))
+            .optional();
+        Ok(found?.is_some())
     }
 
     /// `did`'s files that records hold, and their types.

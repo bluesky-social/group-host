@@ -7,7 +7,7 @@
 #   docker build --build-arg GROUP_HOST_COMMIT=$(git rev-parse HEAD) -t group-host:current .
 
 # The toolchain CI tests with (.knotless/workflows/test.yml).
-FROM rust:1.98-bookworm AS host
+FROM rust:1.100-bookworm AS host
 WORKDIR /src
 COPY . .
 # The cache mounts keep the registry and the build between builds on the
