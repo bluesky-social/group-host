@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Records in one of a group's content spaces, from the host's index of it: one collection or every collection, newest first, a page at a time. Only for someone signed in whom the space's own access record lets read, checked on every call, a space open to anyone included.",
+      "description": "Records in one of a group's content spaces, from the host's index of it: one collection or every collection, newest first, a page at a time. Only for someone signed in whom the space's policy lets read, checked on every call, a space open to anyone included.",
       "parameters": {
         "type": "params",
         "required": ["group", "space"],
@@ -73,7 +73,7 @@
         },
         {
           "name": "NotAuthorized",
-          "description": "A space the caller may not read, by its access record."
+          "description": "A space the caller may not read, by its policy."
         }
       ]
     },

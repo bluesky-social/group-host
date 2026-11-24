@@ -10,7 +10,7 @@
 //! ask again and the group need not say.
 
 use crate::Host;
-use crate::api::{Params, invalid, page, param};
+use crate::api::{Params, invalid_cursor, page, param};
 use crate::group::meta_space;
 use crate::group_api::{group_of, signed_in};
 use crate::group_invites::invite_uri;
@@ -137,10 +137,7 @@ pub async fn list_join_requests(
     let limit = page(&p, 50, 100)?;
     let before = match p.get("cursor") {
         None => None,
-        Some(c) => Some(
-            c.parse::<i64>()
-                .map_err(|_| invalid("a cursor this host gave"))?,
-        ),
+        Some(c) => Some(c.parse::<i64>().map_err(|_| invalid_cursor())?),
     };
     let waiting = host
         .store

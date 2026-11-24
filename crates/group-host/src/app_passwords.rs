@@ -15,13 +15,12 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
-use crate::group::members_space;
 use crate::group_api::{group_of, signed_in};
 use crate::limits::{Client, SESSIONS, key};
 use crate::oauth_dpop::hmac;
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_store::{AppPassword, Grant, Tokens, app_password_client};
-use crate::rbac::{NS, grants, repo_collections_for};
+use crate::rbac::{NS, repo_collections_for};
 use crate::scopes::Permissions;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -83,16 +82,8 @@ impl Host {
     /// anything as it, every repo collection.
     pub fn may_issue(&self, group: &str, member: &str) -> Result<bool, XrpcError> {
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
-        let permissions = self.group_record(
-            group,
-            &members_space(group),
-            &format!("{NS}.permissions"),
-            "self",
-        );
-        let permissions = permissions
-            .map_err(XrpcError::internal)?
-            .unwrap_or_default();
-        Ok(repo_collections_for(&grants(&permissions), &roles).contains("*"))
+        let granted = self.role_grants(group).map_err(XrpcError::internal)?;
+        Ok(repo_collections_for(&granted, &roles).contains("*"))
     }
 
     /// Whether a session's app password still stands: there, and its

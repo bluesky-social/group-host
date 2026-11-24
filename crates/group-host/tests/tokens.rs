@@ -17,7 +17,7 @@ const CALENDAR: &str = "com.example.calendar";
 const EVENT: &str = "com.example.event";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
+    let value = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let rkey = who.to_string();
     let exists = h
         .host
@@ -54,24 +54,13 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let lxm = format!("{NS}.createSpace");
-    let body = json!({
-        "group": did,
-        "type": CALENDAR,
-        "skey": "rides",
-        "access": {"grants": [
-            {"role": "member", "scopes": [format!("space:{CALENDAR}?action=read&collection={EVENT}&action=create")]},
-            {"role": "admin", "scopes": [format!("space:{CALENDAR}?collection=*")]},
-        ]},
-    });
-    let (status, made) = post(h, &lxm, &body, &[auth(h, &alice, &lxm)]).await;
-    assert_eq!(status, 200, "{made}");
+    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+        {"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
+        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+    ]});
+    let made = make_space(h, &alice, &did, CALENDAR, "rides", policy).await;
     membership(h, &did, &bob.did, &["member"]).await;
-    (
-        did,
-        made["space"].as_str().unwrap().to_string(),
-        [alice, bob, carol],
-    )
+    (did, made, [alice, bob, carol])
 }
 
 /// A token for `app`, `who` approving it for `group`.
@@ -467,7 +456,7 @@ async fn writes_only_what_its_member_still_may() {
     let (did, calendar, [_, bob, _]) = group(&h).await;
     membership(&h, &did, &bob.did, &["member", "admin"]).await;
     let scope = format!(
-        "atproto repo:{POST} include:fyi.opensocial.configure space:{CALENDAR}?collection=*"
+        "atproto repo:{POST} include:fyi.opensocial.authManageGroup space:{CALENDAR}?collection=*"
     );
     let app = App::loopback(&scope);
     let access = token(&h, &app, &bob, &did).await;
@@ -534,13 +523,9 @@ async fn uploads_only_while_its_member_may_write_and_the_group_is_on() {
     // the app may upload; once he may write nothing as the group, not.
     membership(&h, &did, &bob.did, &["member"]).await;
     assert_eq!(upload().await.status, 200);
-    let access_record = json!({"$type": format!("{NS}.access"), "grants": [{"role": "member", "scopes": ["space:*?action=read"]}]});
-    let write = Write::Update {
-        collection: format!("{NS}.access"),
-        rkey: "self".into(),
-        value: access_record,
-    };
-    h.host.space_write(&did, &calendar, &[write]).await.unwrap();
+    let readers =
+        json!({"$type": format!("{NS}.policy"), "grants": [{"role": "member", "read": true}]});
+    h.host.store.set_policy(&calendar, &readers).unwrap();
     let said = upload().await;
     assert_eq!(said.status, 403, "{}", said.body);
 }
@@ -631,38 +616,27 @@ async fn writes_the_groups_spaces_within_its_scope() {
         None
     );
     assert_eq!(call("deleteRecord", gone).await.body, json!({}));
-    // Never the record that says who reads it.
-    let access_record = json!({"repo": did, "space": calendar, "collection": format!("{NS}.access"), "rkey": "self", "record": {"$type": format!("{NS}.access"), "grants": []}});
-    assert_eq!(
-        call("putRecord", access_record).await.error(),
-        (403, "Forbidden")
-    );
+    // Never the record that says who reads it, nor the index.
+    let policy = json!({"repo": did, "space": calendar, "collection": "com.atproto.space.policy", "rkey": "self", "record": {"$type": "com.atproto.space.policy", "policy": {"$type": format!("{NS}.policy"), "grants": []}}});
+    assert_eq!(call("putRecord", policy).await.error(), (403, "Forbidden"));
 }
 
 #[tokio::test]
-async fn in_a_space_for_chosen_people_writes_for_those_of_them_who_may_do_anything() {
+async fn writes_in_a_space_as_its_policy_grants_now() {
     let h = start(&[], false).await;
-    let (did, calendar, [alice, bob, _]) = group(&h).await;
-    membership(&h, &did, &bob.did, &["member", "admin"]).await;
+    let (did, calendar, [alice, _, _]) = group(&h).await;
     let scope = format!("atproto space:{CALENDAR}?collection=*");
     let app = App::loopback(&scope);
-    // Both admins sign the app in while the calendar is the members'.
     let alices = token(&h, &app, &alice, &did).await;
-    let bobs = token(&h, &app, &bob, &did).await;
-    let access =
-        json!({"$type": format!("{NS}.access"), "grants": [], "people": [{"did": alice.did}]});
-    let write = Write::Update {
-        collection: format!("{NS}.access"),
-        rkey: "self".into(),
-        value: access,
-    };
-    h.host.space_write(&did, &calendar, &[write]).await.unwrap();
     let body =
         json!({"repo": did, "space": calendar, "collection": EVENT, "record": record(EVENT, "x")});
     let create = "com.atproto.space.createRecord";
     assert_eq!(app.call(&h, create, &alices, Some(&body)).await.status, 200);
-    // Bob is not one of its people now.
-    let said = app.call(&h, create, &bobs, Some(&body)).await;
+    // Once its policy grants admins nothing there, the token writes nothing.
+    let readers =
+        json!({"$type": format!("{NS}.policy"), "grants": [{"role": "admin", "read": true}]});
+    h.host.store.set_policy(&calendar, &readers).unwrap();
+    let said = app.call(&h, create, &alices, Some(&body)).await;
     assert_eq!(said.status, 403, "{}", said.body);
 }
 
@@ -670,7 +644,7 @@ async fn in_a_space_for_chosen_people_writes_for_those_of_them_who_may_do_anythi
 async fn configures_the_group_as_its_methods_would() {
     let h = start(&[], false).await;
     let (did, _, [alice, ..]) = group(&h).await;
-    let app = App::loopback("atproto include:fyi.opensocial.configure");
+    let app = App::loopback("atproto include:fyi.opensocial.authManageGroup");
     let access = token(&h, &app, &alice, &did).await;
     let (meta, members) = (meta_space(&did), members_space(&did));
     let c = |n: &str| format!("{NS}.{n}");
@@ -775,25 +749,16 @@ async fn configures_the_group_as_its_methods_would() {
             delete(&members, &c("role"), "admin").await,
             (400, "RoleInUse"),
         ),
+        // What the set doesn't name: a member's own acceptance.
         (
             put(
                 &members,
-                &c("membership"),
+                &c("acceptance"),
                 "x",
-                json!({"$type": c("membership")}),
+                json!({"$type": c("acceptance")}),
             )
             .await,
             (403, "ScopeMissing"),
-        ),
-        (
-            put(
-                &members,
-                &c("permissions"),
-                "self",
-                json!({"$type": c("permissions")}),
-            )
-            .await,
-            (400, "InvalidRequest"),
         ),
         (
             put(&meta, &c("access"), "self", json!({"$type": c("access")})).await,

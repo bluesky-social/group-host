@@ -77,8 +77,6 @@ const SAID: Record<string, (op: string) => Say | undefined> = {
     })[op],
   'fyi.opensocial.profile': (op) =>
     op === 'delete' ? m.activity_profile_delete : m.activity_profile_change,
-  'fyi.opensocial.permissions': () => m.activity_permissions_change,
-  'fyi.opensocial.access': () => m.activity_access_change,
   'com.atproto.label.record': (op) =>
     op === 'delete' ? m.activity_label_delete : m.activity_label_create,
   'app.bsky.feed.post': (op) =>
@@ -96,11 +94,21 @@ const DONE: Record<string, (inputs: { doer: string; collection: string }) => str
   delete: m.activity_record_delete
 };
 
+/** What a space's making, change or end is said as, from the log's `<verb> space <uri>`. */
+const SPACE: Record<string, (inputs: { doer: string }) => string> = {
+  created: m.activity_space_create,
+  updated: m.activity_space_update,
+  deleted: m.activity_space_delete
+};
+
 /** What was done, as a sentence: who did it, and what the write did ("@alice changed the profile"). */
 export function line(a: Act): string {
   const who = doer(a);
   const w = a.write;
-  if (!w) return m.activity_action({ doer: who, action: a.action });
+  if (!w) {
+    const space = SPACE[a.action.match(/^(\w+) space /)?.[1] ?? ''];
+    return space ? space({ doer: who }) : m.activity_action({ doer: who, action: a.action });
+  }
   const said = SAID[w.collection]?.(w.operation);
   if (said) return said({ doer: who, who: named(a.subject) });
   const done = DONE[w.operation];

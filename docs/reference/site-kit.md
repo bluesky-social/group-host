@@ -34,16 +34,16 @@ A site declares what its pages may ask in its `fyi.opensocial.site` record. Give
 
 `acts` is a list of `{method}`, each a procedure `os.act` may ask, always of the site's own group:
 
-| Act | What it does for the visitor |
-| --- | --- |
-| `fyi.opensocial.createReport` | reports what they see, or appeals what was done to them ([moderation](../design/moderation.md)) |
-| `fyi.opensocial.requestJoin` | joins the group, or asks to, as its join policy says. It answers `status`, `admitted` or `pending`, and redeems an invite waiting for them |
-| `fyi.opensocial.cancelJoinRequest` | cancels their request to join while it waits |
-| `fyi.opensocial.leaveGroup` | takes them out of the group. The host refuses with `LastConfigurer` if nobody would be left able to configure it |
+| Act                                | What it does for the visitor                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fyi.opensocial.createReport`      | reports what they see, or appeals what was done to them ([moderation](../design/moderation.md))                                            |
+| `fyi.opensocial.requestJoin`       | joins the group, or asks to, as its join policy says. It answers `status`, `admitted` or `pending`, and redeems an invite waiting for them |
+| `fyi.opensocial.cancelJoinRequest` | cancels their request to join while it waits                                                                                               |
+| `fyi.opensocial.leaveGroup`        | takes them out of the group. The host refuses with `LastConfigurer` if nobody would be left able to configure it                           |
 
 Whether they're a member, or have a request waiting, is in `getGroup`'s `viewer` (`member`, `request`).
 
-`writes` is a list of `{space, key, collection}`, where `space` is a type of the group's spaces, `key` is optional, and `collection` is an NSID. An entry lets a space's `create`, `put` and `delete` ([`os.space`](#osspace)) write records of that collection in the group's space of that type with that key, or in any space of the type if it has no key. A site with at least one entry in `writes` may also `os.upload` pictures. The space's access record still decides whether a given visitor may write in a given space.
+`writes` is a list of `{space, key, collection}`, where `space` is a type of the group's spaces, `key` is optional, and `collection` is an NSID. An entry lets a space's `create`, `put` and `delete` ([`os.space`](#osspace)) write records of that collection in the group's space of that type with that key, or in any space of the type if it has no key. A site with at least one entry in `writes` may also `os.upload` pictures. The space's policy still decides whether a given visitor may write in a given space.
 
 A site usually keeps what its members write in spaces of `fyi.opensocial.siteSpace`, one per part of the site under its own key ([sites](../design/sites.md#a-space-for-a-site)).
 
@@ -85,7 +85,7 @@ It's refused the same way `os.call` is. If the visitor's sign-in doesn't cover t
 
 `space.sync()` brings the records the page holds of the space up to date, and answers `{failed}`. The host's page reads the records itself, in the visitor's browser. It reads every writer's repo in the space from that writer's own PDS, and checks each against the commit it comes with. It keeps what it read for as long as the page is open, and in the browser between visits. So the first sync reads every writer's repo in full, and each later one fetches only what changed. `failed` lists the writers whose PDS didn't answer, as `{repo, error}`. They keep the records last read from them, and the next sync reads them again.
 
-It's refused, unlocked, if `uri` is none of this group's spaces or no entry of `spaces` covers it: one with its type and either no key or its key. It's refused locked with `sign in` if nobody is signed in, and locked with `not for you` if the space's access record doesn't let the visitor read it.
+It's refused, unlocked, if `uri` is none of this group's spaces or no entry of `spaces` covers it: one with its type and either no key or its key. It's refused locked with `sign in` if nobody is signed in, and locked with `not for you` if the space's policy doesn't let the visitor read it.
 
 #### space.records
 
@@ -133,12 +133,12 @@ The visitor confirms and goes to their PDS to approve what the site declared. Wh
 
 A refused ask rejects with an `Error` with these fields:
 
-| Field | Value |
-| --- | --- |
-| `message` | What was refused, in words. |
-| `name` | The method's own error name when it refused with one, such as `AlreadyMember` or `LastConfigurer`, as its lexicon lists them. Otherwise `'Error'`. |
-| `locked` | `true` if the visitor may not have this now, and `false` otherwise. |
-| `reason` | `'sign in'` or `'not for you'` when `locked`, and `undefined` otherwise. |
+| Field     | Value                                                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message` | What was refused, in words.                                                                                                                        |
+| `name`    | The method's own error name when it refused with one, such as `AlreadyMember` or `LastConfigurer`, as its lexicon lists them. Otherwise `'Error'`. |
+| `locked`  | `true` if the visitor may not have this now, and `false` otherwise.                                                                                |
+| `reason`  | `'sign in'` or `'not for you'` when `locked`, and `undefined` otherwise.                                                                           |
 
 A page tests `locked`, `reason` and `name`. It shouldn't test `message`.
 
@@ -176,7 +176,7 @@ It has no shadow DOM, so the page's CSS styles it with selectors such as `os-sig
 This page lists the members to those who may see them, and lets a member take up their place:
 
 ```html
-<!doctype html><title>Riders' rides</title>
+<!doctype html> <title>Riders' rides</title>
 <script src="/_os/kit.js"></script>
 <os-sign-in></os-sign-in>
 <a href="rides/">Rides</a>

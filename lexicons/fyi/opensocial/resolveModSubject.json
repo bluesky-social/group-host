@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "fyi.opensocial.resolveSubject",
+  "id": "fyi.opensocial.resolveModSubject",
   "defs": {
     "main": {
       "type": "procedure",
@@ -21,11 +21,14 @@
               "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
             },
             "subject": {
-              "type": "union",
-              "refs": [
-                "fyi.opensocial.defs#accountSubject",
-                "fyi.opensocial.defs#recordSubject"
-              ]
+              "type": "string",
+              "format": "uri",
+              "description": "An account DID or record URI."
+            },
+            "cid": {
+              "type": "string",
+              "format": "cid",
+              "description": "If set, a specific version of the record."
             },
             "status": {
               "type": "string",
@@ -46,7 +49,7 @@
         "encoding": "application/json",
         "schema": {
           "type": "ref",
-          "ref": "fyi.opensocial.defs#subjectView"
+          "ref": "fyi.opensocial.defs#modSubjectView"
         }
       },
       "errors": [

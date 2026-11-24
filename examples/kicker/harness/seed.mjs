@@ -74,18 +74,13 @@ export function make(run, handle) {
     '--description',
     'Hosts sessions and events.'
   );
-  run('role', 'grant', handle, 'admin', '--assignable', 'host');
-  const read = (kind) => ({
-    role: 'member',
-    scopes: [`space:${SITE_SPACE}?skey=${kind}&action=read`]
-  });
-  for (const [kind, name, writableBy] of [
-    ['room', 'Room', null],
-    ['calendar', 'Calendar', ['host', 'admin']]
+  // The room its members read and write; the calendar they read, its hosts and admins write.
+  const member = { role: 'member', read: true };
+  for (const [kind, grants] of [
+    ['room', [{ ...member, write: true }]],
+    ['calendar', [member, ...['host', 'admin'].map((role) => ({ role, read: true, write: true }))]]
   ]) {
-    const access = { grants: [read(kind)] };
-    if (writableBy) access.writableBy = writableBy.map((role) => ({ role }));
-    const args = ['--access', JSON.stringify(access), '--name', name, '--skey', kind];
+    const args = ['--policy', JSON.stringify({ grants }), '--skey', kind];
     run('space', 'create', handle, SITE_SPACE, ...args);
   }
   run(
@@ -251,8 +246,9 @@ export async function seed(world, { handleDomain = '.groups.test' } = {}) {
       },
       body: JSON.stringify({
         group: place,
-        subject: { $type: 'fyi.opensocial.defs#recordSubject', uri: record.uri, cid: record.cid },
-        reasonType: `com.atproto.moderation.defs#${reason}`,
+        subject: record.uri,
+        cid: record.cid,
+        reasonType: reason,
         reason: words
       })
     });
@@ -263,7 +259,7 @@ export async function seed(world, { handleDomain = '.groups.test' } = {}) {
     'Selling my old road bike, 54cm, barely ridden. 200 dollars, message me.',
     'offer'
   );
-  await reportAs(who.bob, bike, 'reasonOther', 'A sale, not about skating.');
+  await reportAs(who.bob, bike, 'other', 'A sale, not about skating.');
   opensocial(who.alice, 'mod', 'label', handle, bike.uri, 'off-topic', '--cid', bike.cid);
   opensocial(
     who.alice,
@@ -281,10 +277,10 @@ export async function seed(world, { handleDomain = '.groups.test' } = {}) {
     'Whoever keeps walking off with the good skate tool: stop it. You know who you are.',
     'notice'
   );
-  await reportAs(who.carol, scissors, 'reasonRude', 'Sharp, for a note to everyone.');
+  await reportAs(who.carol, scissors, 'rude', 'Sharp, for a note to everyone.');
   // bob's ad, which dan reports as spam and alice hides from members.
   const ink = await note(who.bob, 'Cheap bearings, any brand, link in my bio.', 'offer');
-  await reportAs(who.dan, ink, 'reasonSpam', 'An ad.');
+  await reportAs(who.dan, ink, 'spam', 'An ad.');
   opensocial(who.alice, 'mod', 'label', handle, ink.uri, '!hide', '--cid', ink.cid);
 
   // Two discussions, their replies under what each answers.

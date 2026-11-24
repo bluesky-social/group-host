@@ -153,7 +153,7 @@ async fn refuses_before_it_makes_anything() {
 async fn gives_the_app_what_it_declares_and_the_founder_may() {
     let h = start(&[("PROVISIONING_CLIENTS", "*")], false).await;
     let [alice, bob, _] = people(&h).await;
-    let app = App::loopback(&format!("{SCOPE} rpc:fyi.opensocial.listSubjects?aud=*"));
+    let app = App::loopback(&format!("{SCOPE} rpc:fyi.opensocial.listModSubjects?aud=*"));
     for (scope, refused) in [
         ("repo:app.bsky.feed.post", "the scope must include atproto"),
         (
@@ -172,7 +172,7 @@ async fn gives_the_app_what_it_declares_and_the_founder_may() {
         assert_eq!(said.body["message"], refused);
     }
     // A method of this host's is the founder's own to call, never the app's.
-    let scope = format!("{SCOPE} rpc:fyi.opensocial.listSubjects?aud=*");
+    let scope = format!("{SCOPE} rpc:fyi.opensocial.listModSubjects?aud=*");
     let said = provision(
         &h,
         &app,

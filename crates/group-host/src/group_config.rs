@@ -8,8 +8,8 @@
 use crate::Host;
 use crate::api::invalid;
 use crate::blobs::PROFILE_IMAGES;
-use crate::group::{join_policy, members_space, meta_space};
-use crate::rbac::{Access, NS, actions_for, grants, roles_of};
+use crate::group::{join_policy, members_space, meta_space, rkey_did};
+use crate::rbac::{NS, actions_for, roles_of};
 use crate::repo::Write;
 use crate::xrpc::XrpcError;
 use atproto::Cid;
@@ -50,28 +50,22 @@ impl Host {
 
     /// Whether `did`'s roles in `group` carry `action`.
     pub fn may_do(&self, group: &str, did: &str, action: &str) -> Result<bool, XrpcError> {
-        let members = members_space(group);
-        let permissions = self
-            .group_record(group, &members, &format!("{NS}.permissions"), "self")
-            .map_err(XrpcError::internal)?;
+        let granted = self.role_grants(group).map_err(XrpcError::internal)?;
         let roles = self.roles(group, did).map_err(XrpcError::internal)?;
-        Ok(actions_for(&grants(&permissions.unwrap_or_default()), &roles).contains(action))
+        Ok(actions_for(&granted, &roles).contains(action))
     }
 
     /// Everyone whose roles in `group` carry `group.configure`.
     pub fn configurers(&self, group: &str) -> Result<Vec<String>, XrpcError> {
         let members = members_space(group);
-        let permissions = self
-            .group_record(group, &members, &format!("{NS}.permissions"), "self")
-            .map_err(XrpcError::internal)?;
-        let granted = grants(&permissions.unwrap_or_default());
+        let granted = self.role_grants(group).map_err(XrpcError::internal)?;
         let memberships = self
             .group_records(group, &members, &format!("{NS}.membership"))
             .map_err(XrpcError::internal)?;
         Ok(memberships
             .iter()
             .filter(|(_, m)| actions_for(&granted, &roles_of(m)).contains("group.configure"))
-            .filter_map(|(_, m)| m["member"].as_str().map(String::from))
+            .map(|(k, _)| rkey_did(k))
             .collect())
     }
 }
@@ -281,9 +275,8 @@ impl Host {
             let named = format!("a group's declaration names its meta space, {meta}");
             return Err(invalid(named));
         }
-        let access = self.group_record(group, &meta, &format!("{NS}.access"), "self");
-        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        if !Access::of(&access, &meta).public {
+        let public = self.hosted_space(&meta)?.public_read;
+        if !public {
             let hidden = "a group is declared only while anyone may read its meta space";
             return Err(invalid(hidden));
         }

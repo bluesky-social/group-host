@@ -12,7 +12,9 @@ import {
   approve,
   didKey,
   hydrating,
+  inboxWriters,
   joins,
+  makeInbox,
   signIn,
   signInDialog,
   signedInAs,
@@ -93,7 +95,7 @@ test('coming to the host signed out', async () => {
 });
 
 test("a group's page signed out", async () => {
-  // Its handle alone, and the way in, wherever its access record lets
+  // Its handle alone, and the way in, wherever its policy lets
   // anyone signed in read it.
   await page.goto(url('/g/riders.groups.test'));
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('riders.groups.test');
@@ -228,6 +230,9 @@ async function send() {
 }
 
 test('inviting someone from the dialog', async () => {
+  // Bob's app has made his inbox, where groups write their invites to
+  // him. A PDS that does not speak the space alpha keeps no space.
+  const inbox = world.spaces ? await makeInbox(who.bob) : undefined;
   await page.goto(url('/g/hikers.groups.test'));
   const dialog = page.getByRole('dialog', { name: 'Invite someone' });
   const invite = page.getByRole('button', { name: 'Invite someone' });
@@ -252,6 +257,13 @@ test('inviting someone from the dialog', async () => {
   await page.getByRole('button', { name: 'Cancel invite' }).click();
   await expect(page.locator('.invites', { hasText: 'bob.test' })).toHaveCount(0);
   await send();
+  // His PDS took Hikers' invite: the group writes in his inbox.
+  if (inbox) {
+    const resolved = await fetch(
+      `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=hikers.groups.test`
+    ).then((r) => r.json());
+    await expect.poll(() => inboxWriters(who.bob, inbox)).toContain(resolved.did);
+  }
 });
 
 test("turning down an invitation from the group's page", async () => {
@@ -628,12 +640,14 @@ test("a site's page reaches the console without the session of whoever opens it"
   await page.getByRole('button', { name: 'Publish a site' }).click();
   const publishing = page.getByRole('dialog', { name: 'Publish a site' });
   await publishing.getByLabel('Folder').setInputFiles(dir);
+  // Published, the page loads its data again (who is looking, then their
+  // invites), which must be done before its requests are counted.
+  const reloaded = page.waitForResponse((r) =>
+    r.url().endsWith('/xrpc/fyi.opensocial.getActorInvites')
+  );
   await publishing.getByRole('button', { name: 'Publish' }).click();
   await expect(publishing).toBeHidden();
-  // The page drawn again once published asks the host for what it shows
-  // (the viewer, their invites): settled first, so none of those is taken
-  // for the site's.
-  await page.waitForLoadState('networkidle');
+  await reloaded;
 
   // Each request the browser sends the console, with its cookies, until
   // the one signing out.

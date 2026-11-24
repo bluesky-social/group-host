@@ -12,7 +12,7 @@
     - text: spam
   - button "Add"
   - paragraph: Apps that follow the group's labels decide what each one does.
-  - paragraph: Asks apps that follow the group's labels to hide everything this account posted. They stay in the group.
+  - paragraph: Hides everything this account posted in the group's spaces, and asks apps that follow the group's labels to hide it too. They stay in the group.
   - button "Take down"
   - heading "Decision" [level=3]
   - text: Note (optional)

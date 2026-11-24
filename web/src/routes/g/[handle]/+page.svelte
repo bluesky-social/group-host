@@ -20,18 +20,17 @@
   const member = $derived(g.viewer?.member ?? false);
   // What the page calls the group: its name, or its handle where its profile is not to be read.
   const name = $derived(g.displayName ?? g.handle);
-  // The roles the person looking may give: those their roles' grants say.
-  const assignable = $derived(
-    may.includes('role.assign')
-      ? [
-          ...new Set(
-            (data.bindings ?? [])
-              .filter((b) => g.viewer?.roles.some((r) => r.role === b.role))
-              .flatMap((b) => b.assignable.map((a) => a.role))
-          )
-        ]
-      : []
-  );
+  // The roles the person looking may give: those their roles' grants say,
+  // or every role, where one says `*`.
+  const assignable = $derived.by(() => {
+    if (!may.includes('role.assign')) return [];
+    const given = new Set(
+      (data.bindings ?? [])
+        .filter((b) => g.viewer?.roles.some((r) => r.role === b.role))
+        .flatMap((b) => b.assignable.map((a) => a.role))
+    );
+    return given.has('*') ? (data.roles ?? []).map((r) => r.key) : [...given];
+  });
   const joining: Record<string, () => string> = {
     approval: m.route_group_joining_approval,
     open: m.route_group_joining_open,

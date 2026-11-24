@@ -52,9 +52,11 @@ label
                          stop defining one of the group's own labels
 role
   role set <group> <role> --display-name <name> [--description <words>] [--default] [--bot]
-                         write a role
+          [--scopes <scope,…>] [--assignable <role,…>]
+                         write a role, with what it may do across the group and the
+                         roles its holders may give (* for every role)
   role delete <group> <role>
-                         delete a role nobody holds or is granted
+                         delete a role nobody holds
   role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
                          add to what a role may do, or with --undo take it away
 site
@@ -92,8 +94,8 @@ invite
   invite list <group> [--limit <n>] [--cursor <cursor>]
                          the invites waiting
 space
-  space create <group> <type> --access <json> [--name <name>] [--skey <key>] [--no-index]
-                         add a space to the group
+  space create <group> <type> --policy <json> [--skey <key>]
+                         add a space to the group, under the policy given
   space records <group> <space> [--collection <nsid>] [--field <path> --equals <value>] …
                          the records in one of the group's spaces
 mod
@@ -894,19 +896,6 @@ fn query_of(input: &Value) -> Vec<(String, String)> {
     fields.map(|(k, v)| (k.clone(), text(v))).collect()
 }
 
-/// The permissions record as getGroup shows it: each role's grant.
-fn permissions_of(view: &Value) -> Value {
-    let listed = |v: &Value, field: &str| -> Vec<Value> {
-        let items = v.as_array().into_iter().flatten();
-        items.map(|i| i[field].clone()).collect()
-    };
-    let bindings = view["bindings"].as_array().into_iter().flatten();
-    let grants: Vec<Value> = bindings
-        .map(|b| json!({"role": b["role"], "scopes": listed(&b["scopes"], "scope"), "assignable": listed(&b["assignable"], "role")}))
-        .collect();
-    json!({ "grants": grants })
-}
-
 /// Carries out `plan` as `me`, in `group`: a method asked with a service
 /// token, a record written with a group token for its space, as an app
 /// writes as the group.
@@ -1018,10 +1007,23 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             assignable,
             undo,
         } => {
-            let view = me.query(host, &m("getGroup"), &[("group", group)]).await?;
-            let kept = permissions_of(&view);
-            let write = group_host_mcp::regrant(&kept, &role, &scopes, &assignable, undo);
+            // The role's record as it is, as the space's records are listed.
+            let uri = members_of(group);
+            let record = format!("{uri}/{group}/{}/{role}", m("role"));
+            let asked = [("group", group), ("space", &uri), ("uri", &record)];
+            let listed = me.query(host, &m("listSpaceRecords"), &asked).await?;
+            let kept = &listed["records"][0]["value"];
+            let write = group_host_mcp::regrant(kept, &role, &scopes, &assignable, undo);
+            let write = write.map_err(anyhow::Error::msg)?;
             Box::pin(carry_out(me, host, group, write)).await
+        }
+        Plan::Space { kind, skey, policy } => {
+            // A key of its own, so that the token is for the space it makes.
+            let skey = skey.unwrap_or_else(|| atproto::tid::TidClock::new(0).next());
+            let uri = format!("at://{group}/space/{kind}/{skey}");
+            let session = GroupSession::start(me, host, group, &uri).await?;
+            let body = json!({"spaceType": kind, "skey": skey, "policy": policy});
+            session.call("com.atproto.space.createSpace", &body).await
         }
     }
 }
@@ -1376,58 +1378,30 @@ const RULES: [(&str, &str); 2] = [
     ("Stay on topic", "Post what the group is for."),
 ];
 
-/// What a seeded group's moderator may do: read the moderation queue,
-/// resolve what is in it, and label, in any of the group's spaces.
-const MODERATES: [&str; 3] = [
-    "rpc:fyi.opensocial.listSubjects?aud=*",
-    "rpc:fyi.opensocial.resolveSubject?aud=*",
+/// What a seeded group's moderator may do: moderate it, as the group's
+/// moderation permission set has it (members, invites, join requests,
+/// the moderation queue), and label in any of its spaces.
+const MODERATES: [&str; 2] = [
+    "include:fyi.opensocial.authModerate",
     "space:*?collection=com.atproto.label.record",
 ];
 
-/// Makes `group` a moderator role, as the group: the role, its grant, and
-/// the roles that run the group able to give it.
+/// Makes `group` a moderator role, as the group, which its admins, who may
+/// give every role, may give.
 async fn moderator(me: &Client, host: &Host, group: &str) -> Result<()> {
-    let view = me.query(host, &m("getGroup"), &[("group", group)]).await?;
-    let listed = |v: &Value, field: &str| -> Vec<String> {
-        let items = v.as_array().into_iter().flatten();
-        items.map(|i| text(&i[field]).to_string()).collect()
-    };
-    let runs = json!("group.configure");
-    let bindings = view["bindings"].as_array().into_iter().flatten();
-    let mut grants: Vec<Value> = bindings
-        .map(|b| {
-            let mut assignable = listed(&b["assignable"], "role");
-            if b["actions"].as_array().is_some_and(|a| a.contains(&runs)) {
-                assignable.push("moderator".into());
-            }
-            json!({"role": b["role"], "scopes": listed(&b["scopes"], "scope"), "assignable": assignable})
-        })
-        .collect();
-    grants.push(json!({"role": "moderator", "scopes": MODERATES, "assignable": []}));
-    let now = now_iso();
     let role = json!({
         "$type": m("role"),
         "displayName": "Moderator",
         "description": "Keeps the group to its rules.",
-        "createdAt": now,
+        "scopes": MODERATES,
+        "createdAt": now_iso(),
     });
-    let permissions = json!({"$type": m("permissions"), "grants": grants, "createdAt": now});
-    let write = |action: &str, collection: &str, rkey: &str, value: Value| {
-        json!({
-            "$type": format!("com.atproto.space.applyWrites#{action}"),
-            "collection": m(collection),
-            "rkey": rkey,
-            "value": value,
-        })
-    };
-    let writes = [
-        write("create", "role", "moderator", role),
-        write("update", "permissions", "self", permissions),
-    ];
     let members = members_of(group);
     let session = GroupSession::start(me, host, group, &members).await?;
-    let body = json!({"repo": group, "space": members, "writes": writes});
-    session.call("com.atproto.space.applyWrites", &body).await?;
+    let body = json!({"repo": group, "space": members, "collection": m("role"), "rkey": "moderator", "record": role});
+    session
+        .call("com.atproto.space.createRecord", &body)
+        .await?;
     Ok(())
 }
 

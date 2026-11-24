@@ -105,12 +105,12 @@ command. It makes a plan of one of four kinds:
   way the member's own session for the group would. It uses the scope a
   group token for that space carries, the member's current roles, and
   the same rules as any write of that record
-  ([membership](membership.md#writing-roles-grants-and-memberships)).
+  ([membership](membership.md#writing-roles-and-memberships)).
 - An invite, written as the group in the invitee's inbox, or taken back
   the same way. It uses the scope a group token for that inbox carries
   ([membership](membership.md#invites)).
-- A role's grant, set or dropped in the permissions record. The rest of
-  the record stays as it was.
+- A role's grant, added to or taken from in the role's own record. The
+  rest of the record stays as it was.
 
 The safest way to keep an MCP client within the member's power is to
 give it no path but the member's own, and each kind is that path. A

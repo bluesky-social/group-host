@@ -1039,7 +1039,7 @@ async fn brings_its_spaces_and_tells_them_once_it_is_switched_on() {
     )
     .await;
     let calendar = host
-        .create_space(&elsewhere, "com.example.calendar", "main", false)
+        .create_space(&elsewhere, "com.example.calendar", "main", &closed())
         .unwrap();
     host.grant(&calendar, &w.did, true, true).unwrap();
     let event = [("com.example.note/1", note("a ride on Saturday"))];
@@ -1050,7 +1050,7 @@ async fn brings_its_spaces_and_tells_them_once_it_is_switched_on() {
     assert!(writers(&calendar).is_empty());
     // And in one that lets it write no more: its authority turns it away.
     let closed = host
-        .create_space(&elsewhere, "com.example.calendar", "old", false)
+        .create_space(&elsewhere, "com.example.calendar", "old", &closed())
         .unwrap();
     let said = w
         .bring(dana, "repo", space_repo(&w.did, &closed, &event, None))

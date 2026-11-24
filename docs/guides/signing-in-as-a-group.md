@@ -30,8 +30,9 @@ them too if one of their roles may write every collection as the group.
 That permission isn't among those in
 [Rules and roles](rules-and-roles.md), since the console can't give it.
 You give it from a terminal, with `--scopes 'repo:*'` on
-`opensocial role grant`. In **Settings**, such a member sees only the
-**App passwords** card, with the passwords they made.
+`opensocial role set` or `opensocial role grant`. In **Settings**, such
+a member sees only the **App passwords** card, with the passwords they
+made.
 
 ## How do I create an app password?
 

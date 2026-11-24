@@ -42,7 +42,13 @@
             }
           }
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "InvalidCursor",
+          "description": "The cursor isn't one this host gave."
+        }
+      ]
     }
   }
 }

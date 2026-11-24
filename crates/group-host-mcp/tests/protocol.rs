@@ -103,7 +103,7 @@ fn makes_each_schema_from_the_lexicons() {
         Action::Put {
             collection: "fyi.opensocial.membership".into(),
             space: "fyi.opensocial.members".into(),
-            key: Key::Field("member".into()),
+            key: Key::Named("member".into()),
             stamp: true,
         }
     );
@@ -140,14 +140,25 @@ fn makes_each_schema_from_the_lexicons() {
         json!(["rule"])
     );
     assert_eq!(tool("role_delete").args, ["role"]);
+    // A role's scopes and the roles it may give, as its record has them.
+    let set = tool("role_set");
+    let fields = &set.input_schema["properties"];
+    assert_eq!(fields["scopes"]["maxItems"], 100);
+    assert_eq!(fields["assignable"]["items"]["type"], "string");
 
     // A role's grant: its scopes plain strings; with undo, dropped.
     let grant = tool("role_grant");
     let fields = &grant.input_schema["properties"];
+    assert_eq!(fields["role"]["format"], "record-key");
     assert_eq!(fields["scopes"]["items"]["type"], "string");
     assert_eq!(fields["assignable"]["items"]["type"], "string");
     assert_eq!(fields["undo"]["type"], "boolean");
     assert_eq!(grant.input_schema["required"], json!(["role"]));
+    assert!(
+        grant
+            .description
+            .contains("A group role and its group-wide grants")
+    );
 
     // An invite: the record's fields but when it was made, and whom for.
     let send = tool("invite_send");
@@ -178,8 +189,9 @@ fn makes_each_schema_from_the_lexicons() {
     assert_eq!(label.input_schema["required"], json!(["subject", "val"]));
     assert_eq!(label.args, ["subject", "val"]);
     assert!(label.description.contains("com.atproto.label.record"));
+    // The methods' own subject, a DID or a URI, with its version apart.
     let resolve = &tool("mod_resolve").input_schema["properties"];
-    assert_eq!(resolve["subject"]["type"], "string");
+    assert_eq!(resolve["subject"]["format"], "uri");
     assert_eq!(resolve["cid"]["format"], "cid");
     let history = &tool("mod_history").input_schema["properties"]["subject"];
     assert_eq!(history["format"], "uri");
@@ -283,30 +295,17 @@ fn plans_a_method_asked_with_its_arguments() {
         panic!()
     };
     assert_eq!(nsid, "fyi.opensocial.deleteLabelDefinition");
-    // An account, or a record at a version, as the union it is sent as.
+    // A subject and its version, sent as they are given.
     let call = |args: Value| match planned("mod_resolve", args).unwrap() {
-        Plan::Call { input, .. } => input,
+        Plan::Call { nsid, input, .. } => (nsid, input),
         other => panic!("{other:?}"),
     };
-    let input = call(json!({"subject": "did:plc:a", "status": "resolved"}));
-    assert_eq!(
-        input["subject"],
-        json!({"$type": "fyi.opensocial.defs#accountSubject", "did": "did:plc:a"})
-    );
     let post = "at://did:plc:g/space/x/self/did:plc:a/com.example.post/1";
-    let input = call(json!({"subject": post, "cid": "bafy", "status": "resolved"}));
+    let asked = json!({"subject": post, "cid": "bafy", "status": "resolved"});
     assert_eq!(
-        input["subject"],
-        json!({"$type": "fyi.opensocial.defs#recordSubject", "uri": post, "cid": "bafy"})
+        call(asked.clone()),
+        ("fyi.opensocial.resolveModSubject".into(), asked)
     );
-    let input = call(json!({"subject": post, "status": "resolved"}));
-    assert_eq!(
-        input["subject"],
-        json!({"$type": "fyi.opensocial.defs#recordSubject", "uri": post})
-    );
-    // Nothing to make a subject of, nothing made.
-    let input = call(json!({"status": "resolved"}));
-    assert_eq!(input, json!({"status": "resolved"}));
 }
 
 #[test]
@@ -376,7 +375,7 @@ fn plans_a_record_written_as_the_group() {
             "membership",
             Some("did:plc:b"),
             Some(
-                json!({"$type": "fyi.opensocial.membership", "member": "did:plc:b", "roles": ["member"], "createdAt": NOW})
+                json!({"$type": "fyi.opensocial.membership", "roles": ["member"], "createdAt": NOW})
             )
         ))
     );
@@ -440,9 +439,28 @@ fn plans_an_invite_and_a_grant() {
 }
 
 #[test]
-fn regrants_one_role_keeping_the_rest() {
-    let grant = |role: &str, scopes: &[&str], assignable: &[&str]| json!({"role": role, "scopes": scopes, "assignable": assignable});
-    let written = |plan: Plan| match plan {
+fn plans_a_space_under_its_policy() {
+    let grants = json!([{"role": "member", "read": true}]);
+    assert_eq!(
+        planned(
+            "space_create",
+            json!({"type": "com.example.calendar", "skey": "rides", "policy": {"grants": grants}})
+        ),
+        Ok(Plan::Space {
+            kind: "com.example.calendar".into(),
+            skey: Some("rides".into()),
+            policy: json!({"$type": "fyi.opensocial.policy", "grants": grants}),
+        })
+    );
+    assert_eq!(
+        planned("space_create", json!({"type": "com.example.calendar"})),
+        Err("policy is required, as an object".into())
+    );
+}
+
+#[test]
+fn regrants_one_role_keeping_the_rest_of_its_record() {
+    let written = |plan: Result<Plan, String>| match plan.unwrap() {
         Plan::Write {
             space,
             collection,
@@ -453,8 +471,8 @@ fn regrants_one_role_keeping_the_rest() {
                 (space.as_str(), collection.as_str(), rkey.as_deref()),
                 (
                     "fyi.opensocial.members",
-                    "fyi.opensocial.permissions",
-                    Some("self")
+                    "fyi.opensocial.role",
+                    Some("leader")
                 )
             );
             record.unwrap()
@@ -462,45 +480,40 @@ fn regrants_one_role_keeping_the_rest() {
         other => panic!("{other:?}"),
     };
     let names = |n: &[&str]| n.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    let kept = json!({"$type": "fyi.opensocial.permissions", "grants": [grant("admin", &["a"], &[]), grant("leader", &["b"], &["member"]), grant("leader", &["c"], &[])], "createdAt": NOW});
-    // What is named is added to what the role had, once, in its place;
-    // the rest as they were.
-    let record = written(regrant(&kept, "leader", &names(&["d", "b"]), &[], false));
-    assert_eq!(
-        record["grants"],
-        json!([
-            grant("admin", &["a"], &[]),
-            grant("leader", &["b", "c", "d"], &["member"])
-        ])
-    );
-    assert_eq!(record["createdAt"], NOW);
-    // With undo, what is named is taken away; with nothing named, or
-    // nothing left, the grant goes.
-    let record = written(regrant(&kept, "leader", &names(&["b"]), &[], true));
-    assert_eq!(
-        record["grants"],
-        json!([
-            grant("admin", &["a"], &[]),
-            grant("leader", &["c"], &["member"])
-        ])
-    );
-    let record = written(regrant(&kept, "leader", &[], &[], true));
-    assert_eq!(record["grants"], json!([grant("admin", &["a"], &[])]));
-    let record = written(regrant(&kept, "admin", &names(&["a"]), &[], true));
-    let roles: Vec<&Value> = record["grants"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|g| &g["role"])
-        .collect();
-    assert_eq!(roles, ["leader", "leader"]);
-    let record = written(regrant(&kept, "mod", &names(&["e"]), &[], false));
-    assert_eq!(record["grants"][3], grant("mod", &["e"], &[]));
-    // A group with none yet has one.
-    let record = written(regrant(&Value::Null, "mod", &names(&["e"]), &[], false));
+    let kept = json!({"$type": "fyi.opensocial.role", "displayName": "Leader", "scopes": ["b", "c", "b"], "assignable": ["member"], "createdAt": NOW});
+    // What is named is added to what the role had, once; the rest of the
+    // record as it was.
+    let record = written(regrant(
+        &kept,
+        "leader",
+        &names(&["d", "b"]),
+        &names(&["*"]),
+        false,
+    ));
     assert_eq!(
         record,
-        json!({"$type": "fyi.opensocial.permissions", "grants": [grant("mod", &["e"], &[])]})
+        json!({"$type": "fyi.opensocial.role", "displayName": "Leader", "scopes": ["b", "c", "d"], "assignable": ["member", "*"], "createdAt": NOW})
+    );
+    // With undo, what is named is taken away, a list left empty with it;
+    // with nothing named, both lists go.
+    let record = written(regrant(
+        &kept,
+        "leader",
+        &names(&["b"]),
+        &names(&["member"]),
+        true,
+    ));
+    assert_eq!(record["scopes"], json!(["c"]));
+    assert!(record.get("assignable").is_none());
+    let record = written(regrant(&kept, "leader", &[], &[], true));
+    assert_eq!(
+        record,
+        json!({"$type": "fyi.opensocial.role", "displayName": "Leader", "createdAt": NOW})
+    );
+    // A role the group does not have is not granted anything.
+    assert_eq!(
+        regrant(&Value::Null, "mod", &names(&["e"]), &[], false),
+        Err("no such role: mod".into())
     );
 }
 

@@ -77,12 +77,19 @@ fn reads_a_commands_words_as_its_tools_arguments() {
     );
     let (_, args) = read("join_list", &["g", "--limit", "5"]).unwrap();
     assert_eq!(args, json!({"limit": 5}));
-    let access = r#"{"grants": []}"#;
-    let flags = ["g", "com.example.forum", "--access", access, "--no-index"];
+    let policy = r#"{"grants": []}"#;
+    let flags = [
+        "g",
+        "com.example.forum",
+        "--policy",
+        policy,
+        "--skey",
+        "main",
+    ];
     let (_, args) = read("space_create", &flags).unwrap();
     assert_eq!(
         args,
-        json!({"type": "com.example.forum", "access": {"grants": []}, "index": false})
+        json!({"type": "com.example.forum", "policy": {"grants": []}, "skey": "main"})
     );
 
     let wrong = |name: &str, words: &[&str]| format!("{}", read(name, words).unwrap_err());
@@ -96,8 +103,8 @@ fn reads_a_commands_words_as_its_tools_arguments() {
         wrong("join_list", &["g", "--limit"]),
         "--limit wants a value"
     );
-    let flags = ["g", "t", "--access", "{"];
-    assert_eq!(wrong("space_create", &flags), "--access wants JSON");
+    let flags = ["g", "t", "--policy", "{"];
+    assert_eq!(wrong("space_create", &flags), "--policy wants JSON");
     assert!(wrong("join_list", &["g", "--colour", "red"]).starts_with("no option --colour"));
     assert!(wrong("join_list", &["g", "--no-limit"]).starts_with("no option --no-limit"));
     // What it takes in order is never a flag.

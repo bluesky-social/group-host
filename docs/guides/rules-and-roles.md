@@ -92,7 +92,8 @@ each. They show by their short names:
 A role also says which roles its members can give. That list limits
 three things. They can change only the roles on it. They can remove only
 members whose roles are all on it. Everyone they let in gets Member, so
-a role that admits people needs Member on its list.
+a role that admits people needs Member on its list. Admin's list is
+every role, even ones made later, so admins can give any role.
 
 ## How do I create a role?
 
@@ -103,7 +104,8 @@ a role that admits people needs Member on its list.
 4. Under **It may**, tick what the role lets its members do. A ride
    leader here gets `mod.read`, `invite` and `admit`.
 5. Under **People with it can give**, tick the roles its members can
-   give. Here, **Member**.
+   give. Here, **Member**. If you can give every role yourself, **Any
+   role, even ones made later** lets its members give every role too.
 6. Tick **Every new member gets it** if everyone let in should have this
    role too.
 
@@ -180,9 +182,9 @@ The [`opensocial` command](../reference/cli.md) does each of these:
   sets its place.
 - Delete a rule: `opensocial rule delete <group> <rule>`.
 - Create a role: `opensocial role set <group> <role> --display-name
-  <name>`, with `--default` if every new member gets it, then
-  `opensocial role grant <group> <role> --scopes <permission,…>
-  --assignable <role,…>`.
+  <name> --scopes <permission,…> --assignable <role,…>`, with
+  `--default` if every new member gets it. `opensocial role grant
+  <group> <role> --scopes <permission,…>` adds to what a role has.
 - Give or take roles: `opensocial member assign <group> <member>
   <role,role…>`, naming all the roles they keep, `member` among them.
 - Delete a role: `opensocial role delete <group> <role>`.

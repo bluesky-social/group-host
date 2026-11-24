@@ -17,7 +17,7 @@ const LABEL: &str = "com.atproto.label.record";
 const GET_GROUP_AUTH: &str = "fyi.opensocial.getGroupAuth";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
+    let value = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
         collection: format!("{NS}.membership"),
         rkey: who.into(),
@@ -39,24 +39,17 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let lxm = format!("{NS}.createSpace");
-    let body = json!({
-        "group": did,
-        "type": CALENDAR,
-        "skey": "rides",
-        "access": {"grants": [
-            {"role": "member", "scopes": [format!("space:{CALENDAR}?action=read&collection={EVENT}&action=create")]},
-            {"role": "admin", "scopes": [format!("space:{CALENDAR}?collection=*")]},
-        ]},
-    });
-    let (status, made) = post(h, &lxm, &body, &[auth(h, &alice, &lxm)]).await;
-    assert_eq!(status, 200, "{made}");
+    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+        {"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
+        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+    ]});
+    // Made by the host directly, so that no token of Alice's shows below.
+    let made = h
+        .host
+        .create_space(&did, CALENDAR, "rides", &policy)
+        .unwrap();
     membership(h, &did, &bob.did, &["member"]).await;
-    (
-        did,
-        made["space"].as_str().unwrap().to_string(),
-        [alice, bob, carol],
-    )
+    (did, made, [alice, bob, carol])
 }
 
 /// Asks for a group token as `who`, proved by `app`'s key, once more with
@@ -150,10 +143,9 @@ async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them()
     let app = App::new("console");
     let said = group_auth(&h, &app, &alice, &json!({"group": did, "space": members})).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    // Labels, roles, the permissions record and memberships, kept there
-    // alone.
+    // Labels, roles and memberships, kept there alone.
     let c = |n: &str| format!("{NS}.{n}");
-    let mut names: Vec<Json> = ["membership", "permissions", "role"]
+    let mut names: Vec<Json> = ["membership", "role"]
         .iter()
         .map(|n| json!({"collection": c(n)}))
         .collect();
@@ -177,7 +169,8 @@ async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them()
     assert_eq!(said.status, 200, "{}", said.body);
     // Bob made a member with it; the log says each write in its parts,
     // and whom a membership is about.
-    let made = json!({"$type": c("membership"), "member": bob.did, "roles": ["member"], "createdAt": "2026-11-05T00:00:00Z"});
+    let made =
+        json!({"$type": c("membership"), "roles": ["member"], "createdAt": "2026-11-05T00:00:00Z"});
     let body = json!({"repo": did, "space": members, "collection": c("membership"), "rkey": bob.did, "record": made});
     let said = app
         .call(&h, "com.atproto.space.putRecord", token, Some(&body))
@@ -363,22 +356,17 @@ async fn shows_its_configurers_who_acts_as_the_group_and_lets_them_end_it() {
 async fn publishes_only_as_the_role_may_write_in_the_space() {
     let h = start(&[], false).await;
     let (did, calendar, [alice, bob, _]) = group(&h).await;
-    let access_of = |scope: String| {
+    let policy_of = |scope: String| {
         json!({
-            "$type": format!("{NS}.access"),
-            "grants": [{"role": "member", "scopes": [format!("space:{CALENDAR}?action=read"), scope]}],
+            "$type": format!("{NS}.policy"),
+            "grants": [{"role": "member", "read": true, "scopes": [scope]}],
         })
     };
-    let set = async |access: Json| {
-        let write = Write::Update {
-            collection: format!("{NS}.access"),
-            rkey: "self".into(),
-            value: access,
-        };
-        h.host.space_write(&did, &calendar, &[write]).await.unwrap();
+    let set = async |policy: Json| {
+        h.host.store.set_policy(&calendar, &policy).unwrap();
     };
     // Bob may write events every way, and takes a token while he may.
-    set(access_of(format!("space:{CALENDAR}?collection={EVENT}"))).await;
+    set(policy_of(format!("space:{CALENDAR}?collection={EVENT}"))).await;
     let app = App::new("console");
     let said = group_auth(&h, &app, &bob, &json!({"group": did, "space": calendar})).await;
     let token = said.body["accessJwt"].as_str().unwrap().to_string();
@@ -388,7 +376,7 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
     // Now only add them: in the repo too.
-    set(access_of(format!(
+    set(policy_of(format!(
         "space:{CALENDAR}?collection={EVENT}&action=create"
     )))
     .await;
@@ -413,39 +401,30 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
 }
 
 #[tokio::test]
-async fn in_a_space_for_chosen_people_gives_those_of_them_who_may_do_anything() {
+async fn gives_a_token_to_change_a_space_to_one_its_policy_lets() {
     let h = start(&[], false).await;
-    let (did, calendar, [alice, bob, carol]) = group(&h).await;
-    membership(&h, &did, &carol.did, &["admin"]).await;
-    // Alice and Bob its people, members given events though its people
-    // decide; Carol an admin but not one of them.
-    let access = json!({
-        "$type": format!("{NS}.access"),
-        "grants": [{"role": "member", "scopes": [format!("space:{CALENDAR}?collection={EVENT}")]}],
-        "people": [{"did": alice.did}, {"did": bob.did}],
-    });
-    let write = Write::Update {
-        collection: format!("{NS}.access"),
-        rkey: "self".into(),
-        value: access,
-    };
-    h.host.space_write(&did, &calendar, &[write]).await.unwrap();
+    let (did, calendar, [_, bob, _]) = group(&h).await;
+    // Bob, a member, writes events, and so has a token, but no say over
+    // the space itself until its policy gives him one.
     let app = App::new("console");
     let body = json!({"group": did, "space": calendar});
-    let said = group_auth(&h, &app, &alice, &body).await;
+    let said = group_auth(&h, &app, &bob, &body).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    assert_eq!(said.body["collections"], json!([{"collection": "*"}]));
-    let token = said.body["accessJwt"].as_str().unwrap();
-    let in_space =
-        json!({"repo": did, "space": calendar, "collection": EVENT, "record": record(EVENT)});
-    let said = app
-        .call(&h, "com.atproto.space.createRecord", token, Some(&in_space))
-        .await;
+    assert!(!said.body["scope"].as_str().unwrap().contains("manage="));
+    let policy = json!({"$type": format!("{NS}.policy"), "grants": [
+        {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=update")]},
+    ]});
+    h.host.store.set_policy(&calendar, &policy).unwrap();
+    let said = group_auth(&h, &app, &bob, &body).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    // Bob is one of its people, but may not do anything as the group;
-    // Carol may, but is not one of them.
-    for who in [&bob, &carol] {
-        let said = group_auth(&h, &app, who, &body).await;
-        assert_eq!(said.error(), (403, "Forbidden"), "{}", said.body);
-    }
+    assert!(
+        said.body["scope"]
+            .as_str()
+            .unwrap()
+            .contains("manage=update")
+    );
+    // A space not made yet: a token only for one who may make it.
+    let later = json!({"group": did, "space": format!("at://{did}/space/{CALENDAR}/later")});
+    let said = group_auth(&h, &app, &bob, &later).await;
+    assert_eq!(said.error(), (403, "Forbidden"), "{}", said.body);
 }

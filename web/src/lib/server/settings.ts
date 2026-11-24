@@ -13,14 +13,7 @@ import { act, xrpc, type Answer } from '#lib/data.ts';
 import { refusal, refused } from '#lib/errors.ts';
 import { m } from '#lib/paraglide/messages.js';
 import { getLocale } from '#lib/paraglide/runtime.js';
-import {
-  applyAsGroup,
-  membersOf,
-  withGroup,
-  type Done,
-  type GroupSession,
-  type Write
-} from '#lib/asGroup.ts';
+import { applyAsGroup, membersOf, withGroup, type Done, type GroupSession } from '#lib/asGroup.ts';
 import { SCOPES } from '#lib/actions.ts';
 import { ADDRESS, type Place } from '#lib/places.ts';
 
@@ -73,7 +66,7 @@ export async function settings(event: Event) {
 /** Whether the group is listed: while anyone may read its profile, its meta space public. */
 export function listed(view: Answer<typeof getGroup.main>) {
   const meta = view.spaces?.find((s) => s.uri === view.group.meta);
-  return meta?.public ?? false;
+  return meta?.policy?.publicRead ?? false;
 }
 
 /** The apps acting as the group, and what they did lately: to one who configures it. */
@@ -137,23 +130,6 @@ function whereFrom(form: FormData, was?: Place): Place | string | undefined {
 }
 
 type Did = `did:${string}:${string}`;
-type Bindings = Answer<typeof getGroup.main>['bindings'];
-
-/** The grants of the group's permissions record, as getGroup shows them. */
-const grantsOf = (bindings: Bindings) =>
-  (bindings ?? []).map((b) => ({
-    role: b.role,
-    scopes: b.scopes?.map((s) => s.scope) ?? [],
-    assignable: b.assignable.map((a) => a.role)
-  }));
-
-/** The permissions record holding `grants`, written in place of the one there. */
-const permissions = (grants: ReturnType<typeof grantsOf>): Write => ({
-  action: 'update',
-  collection: 'fyi.opensocial.permissions',
-  rkey: 'self',
-  value: { $type: 'fyi.opensocial.permissions', grants, createdAt: new Date().toISOString() }
-});
 
 /**
  * A picture the profile names by its CID, as the record holds it: its
@@ -245,19 +221,16 @@ const all = {
       { group }
     );
     const meta = spaces?.find((s) => s.uri === now.meta);
-    // Members read it either way: as anyone signed in, or by their grant.
-    const read = 'space:fyi.opensocial.meta?action=read';
-    const member = meta?.grants?.find((g) => g.role === 'member');
-    const grants = [
-      ...(meta?.grants ?? []).filter((g) => g !== member),
-      { role: 'member', scopes: [...new Set([...(member?.scopes ?? []), read])] }
-    ];
-    const access = {
-      public: text(form, 'seen') === 'public',
-      grants,
-      writableBy: meta?.writableBy
+    // The rest of the policy is kept: only whether anyone may read it changes.
+    const policy = {
+      grants: [],
+      ...meta?.policy,
+      $type: 'fyi.opensocial.policy',
+      publicRead: text(form, 'seen') === 'public'
     };
-    return act(event, 'fyi.opensocial.updateSpace', { group, space: now.meta, access });
+    return withGroup(event, group, now.meta ?? '', (session) =>
+      session.write('com.atproto.space.updateSpace', { policy })
+    );
   },
   profile: async (event) => {
     const { group, form } = await asked(event);
@@ -353,65 +326,43 @@ const all = {
   role: async (event) => {
     const { group, form } = await asked(event);
     const key = text(form, 'role');
-    const {
-      group: now,
-      roles,
-      bindings
-    } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', { group: group as Did });
+    const { roles, bindings } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', {
+      group: group as Did
+    });
     const was = roles?.find((r) => r.key === key);
-    // What the role's record does not show here stays as it was.
-    const record = {
-      ...(was?.description ? { description: was.description } : {}),
-      ...(was?.bot ? { bot: true } : {})
-    };
-    const role = {
-      $type: 'fyi.opensocial.role',
-      ...record,
-      displayName: text(form, 'name'),
-      default: form.get('default') === 'on',
-      createdAt: new Date().toISOString()
-    };
-    // Its grant: the actions as their scopes, beside any other scope it held.
+    // What the form does not show stays as it was: among its scopes, any
+    // that is no action's.
     const named = new Set(Object.values(SCOPES));
     const kept =
-      grantsOf(bindings)
-        .find((g) => g.role === key)
-        ?.scopes.filter((s) => !named.has(s)) ?? [];
+      bindings
+        ?.find((b) => b.role === key)
+        ?.scopes?.map((s) => s.scope)
+        .filter((s) => !named.has(s)) ?? [];
     const actions = form.getAll('action').map((a) => SCOPES[String(a) as keyof typeof SCOPES]);
-    const grant = {
-      role: key,
-      scopes: [...kept, ...actions],
-      assignable: form.getAll('assignable').map(String)
+    const role = {
+      $type: 'fyi.opensocial.role',
+      ...(was?.description ? { description: was.description } : {}),
+      ...(was?.bot ? { bot: true } : {}),
+      displayName: text(form, 'name'),
+      default: form.get('default') === 'on',
+      scopes: [...new Set([...kept, ...actions])],
+      assignable: form.getAll('assignable').map(String),
+      createdAt: new Date().toISOString()
     };
-    // A new role is given by those who run the group, as they run it.
-    const mine = now.viewer?.roles.map((r) => r.role) ?? [];
-    const grants = grantsOf(bindings)
-      .filter((g) => g.role !== key)
-      .map((g) =>
-        !was && mine.includes(g.role) && g.scopes.includes(SCOPES['group.configure'])
-          ? { ...g, assignable: [...g.assignable, key] }
-          : g
-      );
     return applyAsGroup(event, group, membersOf(group), [
       {
         action: was ? 'update' : 'create',
         collection: 'fyi.opensocial.role',
         rkey: key,
         value: role
-      },
-      permissions([...grants, grant])
+      }
     ]);
   },
   unrole: async (event) => {
     const { group, form } = await asked(event);
     const key = text(form, 'role');
-    const { bindings } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.getGroup', {
-      group: group as Did
-    });
-    // The role and its grant go together.
     return applyAsGroup(event, group, membersOf(group), [
-      { action: 'delete', collection: 'fyi.opensocial.role', rkey: key },
-      permissions(grantsOf(bindings).filter((g) => g.role !== key))
+      { action: 'delete', collection: 'fyi.opensocial.role', rkey: key }
     ]);
   },
   revoke: async (event) => {

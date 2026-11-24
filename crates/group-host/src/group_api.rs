@@ -6,8 +6,8 @@
 
 use crate::Host;
 use crate::api::{Params, page, param};
-use crate::group::{Made, NewGroup, members_space, meta_space};
-use crate::rbac::{Access, NS, actions_for, grants, listed, repo_collections_for, roles_of};
+use crate::group::{Made, NewGroup, members_space, meta_space, rkey_did};
+use crate::rbac::{NS, actions_for, listed, repo_collections_for, roles_of};
 use crate::space_api::{service_caller, unauthorized};
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -73,7 +73,7 @@ pub(crate) fn new_group(body: &Value, founder: String) -> Result<NewGroup, XrpcE
         display_name: text("displayName").expect("its lexicon requires it"),
         description: text("description"),
         join_policy: text("joinPolicy"),
-        meta_readable_by: strings(body, "metaReadableBy", "role"),
+        meta_public_read: body["metaPublicRead"].as_bool(),
     })
 }
 
@@ -201,7 +201,7 @@ fn signed_out(did: &str, handle: String) -> Value {
 /// One group in full, as the caller may see it: what its meta space
 /// holds for whoever may read it, the caller's own standing, and for a
 /// member, how many are in it, its roles and spaces. To no one signed in,
-/// only its DID and handle, whatever its access record says.
+/// only its DID and handle, whatever its meta space's policy says.
 pub async fn get_group(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
@@ -230,14 +230,10 @@ pub async fn get_group(
     };
     let (meta, members) = (meta_space(group), members_space(group));
     let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
-    let reads = |space: &str| -> Result<bool, XrpcError> {
-        let access = record(space, "access", "self")?;
-        Ok(access.is_some_and(|a| Access::of(&a, space).can_read(&roles, &me)))
-    };
+    let reads = |space: &str| host.reads_space(space, &roles);
     let reads_meta = reads(&meta)?;
     let reads_members = reads(&members)?;
-    let permissions = record(&members, "permissions", "self")?.unwrap_or_default();
-    let granted = grants(&permissions);
+    let granted = host.role_grants(group).map_err(XrpcError::internal)?;
     let actions = actions_for(&granted, &roles);
 
     let mut view = base(&host, group, &handle)?;
@@ -309,23 +305,25 @@ pub async fn get_group(
         })
         .collect();
     let mut spaces = Vec::new();
-    for (_, entry) in records("space")? {
-        let uri = entry["space"].as_str().unwrap_or_default();
+    // Those in its index, in its order, then those left out of it to
+    // whoever reads them; each with its policy, to whoever reads the space.
+    let mut uris: Vec<String> = records("space")?
+        .into_iter()
+        .filter_map(|(_, e)| e["space"].as_str().map(String::from))
+        .collect();
+    let unlisted = host.store.spaces_of(group).map_err(XrpcError::internal)?;
+    let unlisted: Vec<String> = unlisted.into_iter().filter(|u| !uris.contains(u)).collect();
+    uris.extend(unlisted);
+    for uri in uris {
+        let kept = host.hosted_space(&uri)?;
+        let readable = reads(&uri)?;
+        if kept.policy["unlisted"] == true && !readable {
+            continue;
+        }
         let kind = uri.split('/').nth(4).unwrap_or_default();
         let mut space = json!({"uri": uri, "spaceType": kind});
-        if let Some(name) = entry.get("name") {
-            space["name"] = name.clone();
-        }
-        // Its access record, to whoever it lets read the space.
-        let access = host
-            .group_record(group, uri, &format!("{NS}.access"), "self")
-            .map_err(XrpcError::internal)?;
-        if let Some(access) = access.filter(|a| Access::of(a, uri).can_read(&roles, &me)) {
-            for key in ["public", "grants", "people", "writableBy"] {
-                if let Some(v) = access.get(key) {
-                    space[key] = v.clone();
-                }
-            }
+        if readable {
+            space["policy"] = kept.policy;
         }
         spaces.push(space);
     }
@@ -366,10 +364,7 @@ pub async fn list_members(
     let me = signed_in(&host, &headers, &format!("{NS}.listMembers")).await?;
     let members = members_space(group);
     let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
-    let access = host
-        .group_record(group, &members, &format!("{NS}.access"), "self")
-        .map_err(XrpcError::internal)?;
-    if !access.is_some_and(|a| Access::of(&a, &members).can_read(&roles, &me)) {
+    if !host.reads_space(&members, &roles)? {
         let closed = "only those who may read its members space see them";
         return Err(XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", closed));
     }
@@ -390,9 +385,8 @@ pub async fn list_members(
     // read at once rather than in turn, until a page and one are found.
     let mut found: Vec<(String, Value)> = Vec::new();
     for some in left.chunks(limit + 1) {
-        let actors = some
-            .iter()
-            .map(|(_, m)| host.actor_view(m["member"].as_str().unwrap_or_default()));
+        let dids: Vec<String> = some.iter().map(|(k, _)| rkey_did(k)).collect();
+        let actors = dids.iter().map(|did| host.actor_view(did));
         let actors = futures::future::join_all(actors).await;
         for ((rkey, m), actor) in some.iter().zip(actors) {
             let named = |at: &str| actor[at].as_str().unwrap_or_default().to_lowercase();

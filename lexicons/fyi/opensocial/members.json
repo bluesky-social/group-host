@@ -5,16 +5,14 @@
     "main": {
       "type": "space",
       "key": "literal:self",
-      "name": "Group: members",
-      "description": "Roles, who holds them, the authz config, and the space index. Usually gated to members.",
+      "title": "Group: members",
+      "description": "Roles and their group-wide grants, who holds them, and the space index. Usually gated to members.",
       "collections": [
-        "fyi.opensocial.permissions",
         "fyi.opensocial.space",
         "fyi.opensocial.role",
         "fyi.opensocial.membership",
         "fyi.opensocial.acceptance",
-        "com.atproto.label.record",
-        "fyi.opensocial.access"
+        "com.atproto.label.record"
       ]
     }
   }

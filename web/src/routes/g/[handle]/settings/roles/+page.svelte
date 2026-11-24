@@ -5,6 +5,13 @@
   import { ACTIONS } from '#lib/actions.ts';
   let { data, form } = $props();
   const g = $derived(data.group);
+  // Whether the person looking may give any role: one of their roles' grants says `*`.
+  const anyRole = $derived(
+    (data.bindings ?? []).some(
+      (b) =>
+        g.viewer?.roles.some((r) => r.role === b.role) && b.assignable.some((a) => a.role === '*')
+    )
+  );
 </script>
 
 <svelte:head
@@ -18,5 +25,5 @@
       >{m.route_group_settings_roles_create()}</button
     >{/snippet}
   {#snippet intro()}{m.route_group_settings_roles_intro()}{/snippet}
-  <RolesEditor roles={data.roles} bindings={data.bindings} actions={ACTIONS} />
+  <RolesEditor roles={data.roles} bindings={data.bindings} actions={ACTIONS} {anyRole} />
 </Section>

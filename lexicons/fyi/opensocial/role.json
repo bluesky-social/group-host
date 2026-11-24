@@ -5,10 +5,12 @@
     "main": {
       "type": "record",
       "key": "any",
-      "description": "Declares that a role exists, in the members space. The record key is the role id, of 64 characters at most. A role is deleted only once no member holds it and the permissions record grants it nothing.",
+      "description": "A group role and its group-wide grants, in the members space, keyed by role ID, of 64 characters at most. Grants within a space live in that space's policy. A role is deleted only once no member holds it.",
       "record": {
         "type": "object",
-        "required": ["displayName"],
+        "required": [
+          "displayName"
+        ],
         "properties": {
           "displayName": {
             "type": "string",
@@ -27,6 +29,26 @@
           "bot": {
             "type": "boolean",
             "description": "People with this role are bots: accounts that act on their own, not a person. A member is a bot if any of their roles says so."
+          },
+          "scopes": {
+            "type": "array",
+            "maxLength": 100,
+            "description": "Group-wide OAuth scopes, one per item. For scopes not tied to one space, such as manage=create, rpc: scopes, and space:* grants.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "assignable": {
+            "type": "array",
+            "maxLength": 100,
+            "description": "Keys of roles this role may assign, or * for every role.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
           },
           "createdAt": {
             "type": "string",

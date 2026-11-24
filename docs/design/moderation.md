@@ -37,10 +37,12 @@ with the `mod_*` tools, which mirror the `opensocial mod` commands (see
 
 Details:
 
-- `mod.read` is granted by `rpc:fyi.opensocial.listSubjects`,
-  `mod.resolve` by `rpc:fyi.opensocial.resolveSubject`, and `label` by
+- `mod.read` is granted by `rpc:fyi.opensocial.listModSubjects`,
+  `mod.resolve` by `rpc:fyi.opensocial.resolveModSubject`, and `label` by
   `space:*?collection=com.atproto.label.record`, or any `space:*` scope
-  covering that collection.
+  covering that collection. `include:fyi.opensocial.authModerate` and
+  `include:fyi.opensocial.authManageGroup` carry all three
+  ([membership](membership.md#roles-and-what-they-grant)).
 - No caller at all gets `401 AuthMissing`.
 
 ## Labels
@@ -71,16 +73,25 @@ group is also allowed.
 You take a label back by deleting it. The record is gone from the space,
 but the queue keeps that it was written, when, and by whom.
 
-The host gives no value an effect of its own, so it hides and removes
-nothing. An app that reads a space reads its labels with it, and decides
+One value has an effect here: `!takedown`, the spaces convention for a
+space's authority taking content down. A record the group takes down,
+with a `!takedown` label beside it, is no longer served from the host's
+index of the space (`listSpaceRecords`), nor are the files it holds
+(`getSpaceBlob`). A label naming a `cid` takes down only that version.
+An account taken down has everything it wrote in that space taken out,
+and, labelled in the members space where an account's labels go, in
+every space of the group. Only the group's own labels count, and one
+past its `exp` counts no more. Deleting the label puts it all back. What
+is taken down stays in its writer's repo; the host only stops serving
+it, and the queue still shows its history. Every other value is for
+apps: an app that reads a space reads its labels with it, and decides
 what to show. The group says what its values mean in its labeler (see
 [reports](#reports)).
 
 Details:
 
 - Writing or deleting a label needs `label`. It reaches every space of
-  the group's, but in a space for chosen people only those of them who
-  hold it. The token's scope must cover the write, as for any record.
+  the group's. The token's scope must cover the write, as for any record.
 - The record is checked against its lexicon. A value is 128 bytes at
   most, and `uri`, `val` and `cts` are required.
 - The host doesn't check that the subject exists or that a CID matches.
@@ -94,10 +105,9 @@ already done about it. The queue answers that. It's the host's own, kept
 in its database instead of published in the group's repo, and only
 people with `mod.read` see it.
 
-A subject is either an account or a record. An account is sent and
-answered as `fyi.opensocial.defs#accountSubject` with its `did`. A
-record is sent as `fyi.opensocial.defs#recordSubject` with its `uri` and,
-optionally, the `cid` of one version. The record is one in a space, or
+A subject is either an account or a record, sent and answered as one
+`subject`: an account's DID, or a record's URI, with the `cid` of one
+version beside it, if it names one. The record is one in a space, or
 one in a public repo, `at://<did>/<collection>/<rkey>`, and it's a
 subject of its own, separate from its author's account. The queue keeps
 a record as a whole, by its URI. The version a report or label names
@@ -115,7 +125,7 @@ names one, and one of four kinds as `event`:
 
 - `reportEvent`: someone reported it, with a `reasonType`, an optional
   `reason` and the `rule` it cites, if any. An appeal is a report too,
-  with the `reasonType` `com.atproto.moderation.defs#reasonAppeal`.
+  with the `reasonType` `appeal`.
 - `statusEvent`: a moderator set its `status`, with an optional `note`.
 - `labelEvent`: a label was written, by the label record's `uri` and its
   `val`. With `deleted: true`, the label was deleted, which takes it
@@ -126,11 +136,11 @@ names one, and one of four kinds as `event`:
 A subject enters the queue with its first report, label or ejection, and
 starts out open.
 
-`listSubjects` lists the subjects of one status (`open` by default),
+`listModSubjects` lists the subjects of one status (`open` by default),
 latest changed first. Every event moves a subject to the top.
-`getSubjectHistory` answers a subject's events, oldest first, a page at
-a time. With a `cid` it answers only those about that version. A subject
-nothing has happened to has no events. `resolveSubject` sets a subject
+`getModSubjectHistory` answers a subject's events, oldest first, a page
+at a time. With a `cid` it answers only those about that version. A
+subject nothing has happened to has no events. `resolveModSubject` sets a subject
 already in the queue to `resolved` or `escalated`, with an optional note
 of 2,000 characters at most. Setting the status a subject already has
 keeps the note, so that's how you add a note. It answers the subject as
@@ -151,15 +161,18 @@ Details:
   a record in a public repo fails with `InvalidSubject`. Resolving one
   that was never in the queue fails with `SubjectNotFound`.
 - A page is 50 events or subjects unless `limit` says otherwise, and 100
-  at most. The `cursor` an answer gives asks for the next page.
+  at most. The `cursor` an answer gives asks for the next page; one the
+  host never gave fails with `InvalidCursor`.
 
 ## Reports
 
 A report comes from someone who can see what they report. So a group
 hears from the people its content reaches, and strangers can't report.
 A report arrives at `fyi.opensocial.createReport`, by service auth or the
-console's session. It names the `group`, the subject, a `reasonType`,
-and optionally a `reason` and the `rule` it cites. It needs no role.
+console's session. It names the `group`, the `subject` and its `cid`,
+a `reasonType`, and optionally a `reason` and the `rule` it cites. It
+needs no role. A reason is a word: `spam`, `violation`, `misleading`,
+`nsfw`, `rude`, `other`, or `appeal`.
 
 The subject is an account that's a member of the group, a record in one
 of the group's spaces hosted here, or a record in the public repo of a
@@ -181,8 +194,7 @@ reasons and appeals, of any collection.
 
 Someone a group moderated should be able to answer it, and the
 moderators should hear it where they hear everything else. So an appeal
-is a report with the `reasonType`
-`com.atproto.moderation.defs#reasonAppeal`, filed by its subject. That's
+is a report with the `reasonType` `appeal`, filed by its subject. That's
 an account for itself, or a record's author for the record (the DID its
 URI is in). The host refuses anyone else's appeal with `InvalidRequest`,
 saying only its subject may appeal. It goes into the queue as a

@@ -31,6 +31,16 @@ pub fn rule(title: &str) -> Json {
     json!({"$type": RULE, "title": title, "createdAt": "2026-11-03T00:00:00Z"})
 }
 
+/// A group space's policy that grants nobody anything.
+pub fn closed() -> Json {
+    json!({"$type": "fyi.opensocial.policy", "grants": []})
+}
+
+/// A group space's policy that lets anyone read.
+pub fn open() -> Json {
+    json!({"$type": "fyi.opensocial.policy", "publicRead": true, "grants": []})
+}
+
 pub fn create(collection: &str, rkey: &str, value: Json) -> Write {
     Write::Create {
         collection: collection.into(),

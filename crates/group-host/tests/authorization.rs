@@ -10,10 +10,10 @@ use common::spaces::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const SCOPE: &str = "atproto repo:app.bsky.feed.post include:fyi.opensocial.configure include:fyi.opensocial.moderate";
+const SCOPE: &str = "atproto repo:app.bsky.feed.post include:fyi.opensocial.authManageGroup include:fyi.opensocial.authModerate";
 
 async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
-    let membership = json!({"$type": format!("{NS}.membership"), "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
+    let membership = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let write = group_host::repo::Write::Create {
         collection: format!("{NS}.membership"),
         rkey: who.into(),
@@ -36,7 +36,7 @@ async fn groups(h: &Running) -> (String, String, [Authority; 3]) {
     let hikers = start_group(
         h,
         &alice,
-        json!({"handle": "hikers.groups.test", "displayName": "Hikers", "metaReadableBy": [{"role": "member"}]}),
+        json!({"handle": "hikers.groups.test", "displayName": "Hikers", "metaPublicRead": false}),
     )
     .await;
     join(h, &riders, &bob.did, &["member"]).await;
@@ -101,8 +101,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     assert_eq!(
         offered["labels"],
         json!([
-            {"scope": "include:fyi.opensocial.configure", "title": "Group settings", "text": "Edit the group's profile, rules, and roles, and decide what each role can do."},
-            {"scope": "include:fyi.opensocial.moderate", "title": "Group moderation", "text": "Review reports and moderation history, and label members."},
+            {"scope": "include:fyi.opensocial.authManageGroup", "title": "Group administration", "text": "Manage everything in the group's info and member list, including its roles and what each role can do."},
+            {"scope": "include:fyi.opensocial.authModerate", "title": "Group moderation", "text": "Approve, invite, label, and remove members, change their roles, and review reports."},
         ])
     );
     let mut theirs = dids(&offered);
@@ -136,8 +136,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
         scopes(&at_riders["withheld"]),
         [
             "repo:app.bsky.feed.post",
-            "include:fyi.opensocial.configure",
-            "include:fyi.opensocial.moderate"
+            "include:fyi.opensocial.authManageGroup",
+            "include:fyi.opensocial.authModerate"
         ]
     );
 
@@ -149,6 +149,47 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     assert_eq!(status, 200, "{off}");
     let (_, offered) = offer(&h, &alice, &request_uri).await;
     assert_eq!(dids(&offered), [riders.as_str()]);
+}
+
+#[tokio::test]
+async fn offers_the_tier_a_moderator_holds_of_the_one_asked() {
+    let h = start(&[], false).await;
+    let (riders, _, [_, bob, _]) = groups(&h).await;
+    let role = json!({"$type": format!("{NS}.role"), "displayName": "Moderator", "scopes": [format!("include:{NS}.authModerate")], "createdAt": "2026-11-03T00:00:00Z"});
+    let write = group_host::repo::Write::Create {
+        collection: format!("{NS}.role"),
+        rkey: "moderator".into(),
+        value: role,
+    };
+    let space = group_host::group::members_space(&riders);
+    h.host.space_write(&riders, &space, &[write]).await.unwrap();
+    let write = group_host::repo::Write::Update {
+        collection: format!("{NS}.membership"),
+        rkey: bob.did.clone(),
+        value: json!({"$type": format!("{NS}.membership"), "roles": ["member", "moderator"], "createdAt": "2026-11-03T00:00:00Z"}),
+    };
+    h.host.space_write(&riders, &space, &[write]).await.unwrap();
+    let app = App::loopback("atproto include:fyi.opensocial.authManageGroup");
+    let request_uri = app.push(&h, &[]).await;
+    let (status, offered) = offer(&h, &bob, &request_uri).await;
+    assert_eq!(status, 200, "{offered}");
+    let at_riders = &offered["groups"][0];
+    assert_eq!(
+        scopes(&at_riders["granted"]),
+        ["atproto", "include:fyi.opensocial.authModerate"]
+    );
+    assert_eq!(
+        scopes(&at_riders["withheld"]),
+        ["include:fyi.opensocial.authManageGroup"]
+    );
+    // Both named, for the page to say what each is.
+    assert_eq!(
+        scopes(&offered["labels"]),
+        [
+            "include:fyi.opensocial.authManageGroup",
+            "include:fyi.opensocial.authModerate"
+        ]
+    );
 }
 
 #[tokio::test]
@@ -324,7 +365,7 @@ async fn gives_each_permission_set_as_the_scopes_it_lists() {
     assert!(!scope.contains("include:"), "{scope}");
     assert!(scope.contains(&format!("space:fyi.opensocial.meta?authority={riders}&skey=self&collection=fyi.opensocial.profile")), "{scope}");
     assert!(
-        scope.contains("rpc:fyi.opensocial.listSubjects?aud=*"),
+        scope.contains("rpc:fyi.opensocial.listModSubjects?aud=*"),
         "{scope}"
     );
 }

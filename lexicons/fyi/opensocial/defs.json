@@ -36,46 +36,6 @@
         }
       }
     },
-    "roleId": {
-      "type": "string",
-      "format": "record-key",
-      "maxLength": 512,
-      "description": "The rkey of a role record in the group's members space."
-    },
-    "groupGrant": {
-      "type": "object",
-      "description": "Scopes a role is granted across the group, and the roles its holders may assign.",
-      "required": [
-        "role",
-        "scopes",
-        "assignable"
-      ],
-      "properties": {
-        "role": {
-          "type": "ref",
-          "ref": "fyi.opensocial.defs#roleId"
-        },
-        "scopes": {
-          "type": "array",
-          "maxLength": 100,
-          "description": "OAuth scopes, one per item. May include permission sets. `repo:` scopes are the public-repo collections holders may write as the group.",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
-        },
-        "assignable": {
-          "type": "array",
-          "maxLength": 100,
-          "description": "Roles holders may grant or revoke, and whose holders they may eject.",
-          "items": {
-            "type": "ref",
-            "ref": "fyi.opensocial.defs#roleId"
-          }
-        }
-      }
-    },
     "joinPolicy": {
       "type": "string",
       "knownValues": [
@@ -220,7 +180,7 @@
     },
     "groupViewDetailed": {
       "type": "object",
-      "description": "A group in full, as its viewer may see it. To a caller not signed in, only its did and handle.",
+      "description": "A group in full, as the viewer may see it. Profile fields and rules are present only when the viewer may read the meta space.",
       "required": [
         "did",
         "handle"
@@ -343,8 +303,7 @@
           "type": "ref",
           "ref": "#viewerState"
         }
-      },
-      "description": "A group in full, as the viewer may see it. Profile fields and rules are present only when the viewer may read the meta space."
+      }
     },
     "viewerState": {
       "type": "object",
@@ -485,6 +444,7 @@
     },
     "spaceView": {
       "type": "object",
+      "description": "One of the group's spaces: those in its index, and those left out of it (unlisted) to whoever may read them.",
       "required": [
         "uri",
         "spaceType"
@@ -494,40 +454,14 @@
           "type": "string",
           "format": "space-ref"
         },
-        "name": {
-          "type": "string"
-        },
-        "public": {
-          "type": "boolean",
-          "description": "Whether anyone signed in may read it, when the viewer may read the space."
-        },
-        "grants": {
-          "type": "array",
-          "description": "The scopes each role is granted there, when the viewer may read the space.",
-          "items": {
-            "type": "ref",
-            "ref": "#spaceGrant"
-          }
-        },
-        "people": {
-          "type": "array",
-          "description": "For chosen people: who they are, when the viewer is one of them. Only they read it or write in it.",
-          "items": {
-            "type": "ref",
-            "ref": "#accountRef"
-          }
-        },
-        "writableBy": {
-          "type": "array",
-          "description": "Who may write there in their own name, when the viewer may read the space. Absent is every member whose roles grant read.",
-          "items": {
-            "type": "ref",
-            "ref": "#audience"
-          }
-        },
         "spaceType": {
           "type": "string",
           "format": "nsid"
+        },
+        "policy": {
+          "type": "ref",
+          "ref": "fyi.opensocial.policy",
+          "description": "Its policy, when the viewer may read the space."
         }
       }
     },
@@ -633,7 +567,7 @@
         },
         "scopes": {
           "type": "array",
-          "description": "The role's grant as the permissions record has it.",
+          "description": "The role's scopes, as its role record has them.",
           "items": {
             "type": "ref",
             "ref": "#scopeRef"
@@ -651,23 +585,6 @@
         "role": {
           "type": "string",
           "maxLength": 64
-        }
-      }
-    },
-    "audience": {
-      "type": "object",
-      "description": "Who may read or write a space: a role, by its id, or everyone signed in.",
-      "required": [
-        "role"
-      ],
-      "properties": {
-        "role": {
-          "type": "string",
-          "maxLength": 64,
-          "knownValues": [
-            "public"
-          ],
-          "description": "A role id, or public for anyone signed in."
         }
       }
     },
@@ -766,105 +683,9 @@
         }
       }
     },
-    "spaceGrant": {
+    "modSubjectView": {
       "type": "object",
-      "description": "Scopes a role is granted in one space.",
-      "required": [
-        "role",
-        "scopes"
-      ],
-      "properties": {
-        "role": {
-          "type": "string",
-          "format": "record-key",
-          "maxLength": 512,
-          "description": "A role id: the record key of a fyi.opensocial.role record."
-        },
-        "scopes": {
-          "type": "array",
-          "maxLength": 100,
-          "description": "OAuth scopes, one per item: space scopes, read against this space. One granting read lets the role read the space; one naming collections lets it write those as the group here.",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
-        }
-      }
-    },
-    "accessConfig": {
-      "type": "object",
-      "description": "Contents of an access record.",
-      "required": [
-        "grants"
-      ],
-      "properties": {
-        "public": {
-          "type": "boolean",
-          "default": false
-        },
-        "grants": {
-          "type": "array",
-          "maxLength": 100,
-          "items": {
-            "type": "ref",
-            "ref": "#spaceGrant"
-          }
-        },
-        "writableBy": {
-          "type": "array",
-          "maxLength": 50,
-          "description": "Who may write into the space in their own name, when not every member whose roles grant read: role ids, or 'public' for anyone signed in. Absent or empty is every such member.",
-          "items": {
-            "type": "ref",
-            "ref": "#audience"
-          }
-        }
-      }
-    },
-    "accountSubject": {
-      "type": "object",
-      "description": "An account, as a moderation subject.",
-      "required": [
-        "did"
-      ],
-      "properties": {
-        "did": {
-          "type": "string",
-          "format": "did"
-        }
-      }
-    },
-    "recordSubject": {
-      "type": "object",
-      "description": "A record, as a moderation subject.",
-      "required": [
-        "uri"
-      ],
-      "properties": {
-        "uri": {
-          "type": "string",
-          "format": "at-uri",
-          "description": "A record in one of the group's spaces, or in a public repo."
-        },
-        "cid": {
-          "type": "string",
-          "format": "cid",
-          "description": "A specific version. Omit for the record as a whole."
-        }
-      }
-    },
-    "subjectStatus": {
-      "type": "string",
-      "enum": [
-        "open",
-        "escalated",
-        "resolved"
-      ],
-      "description": "Where a subject stands in the moderation queue."
-    },
-    "subjectView": {
-      "type": "object",
+      "description": "A subject in the moderation queue.",
       "required": [
         "subject",
         "status",
@@ -874,11 +695,14 @@
       ],
       "properties": {
         "subject": {
-          "type": "union",
-          "refs": [
-            "fyi.opensocial.defs#accountSubject",
-            "fyi.opensocial.defs#recordSubject"
-          ]
+          "type": "string",
+          "format": "uri",
+          "description": "An account DID or record URI."
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "If set, a specific version of the record."
         },
         "actor": {
           "type": "ref",
@@ -886,8 +710,12 @@
           "description": "The account the subject is, or whose record it is, as a view names them."
         },
         "status": {
-          "type": "ref",
-          "ref": "fyi.opensocial.defs#subjectStatus"
+          "type": "string",
+          "enum": [
+            "open",
+            "escalated",
+            "resolved"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -949,14 +777,22 @@
     },
     "reportEvent": {
       "type": "object",
-      "description": "Someone reported the subject; with reasonType com.atproto.moderation.defs#reasonAppeal, the subject appealed.",
+      "description": "Someone reported the subject; with reasonType appeal, the subject appealed.",
       "required": [
         "reasonType"
       ],
       "properties": {
         "reasonType": {
-          "type": "ref",
-          "ref": "com.atproto.moderation.defs#reasonType"
+          "type": "string",
+          "knownValues": [
+            "spam",
+            "violation",
+            "misleading",
+            "nsfw",
+            "rude",
+            "other",
+            "appeal"
+          ]
         },
         "reason": {
           "type": "string",
@@ -978,8 +814,12 @@
       ],
       "properties": {
         "status": {
-          "type": "ref",
-          "ref": "fyi.opensocial.defs#subjectStatus"
+          "type": "string",
+          "enum": [
+            "open",
+            "escalated",
+            "resolved"
+          ]
         },
         "note": {
           "type": "string",
@@ -1016,30 +856,6 @@
       "type": "object",
       "description": "The subject's membership was deleted.",
       "properties": {}
-    },
-    "labelerPolicies": {
-      "type": "object",
-      "required": [
-        "labelValues"
-      ],
-      "properties": {
-        "labelValues": {
-          "type": "array",
-          "items": {
-            "type": "ref",
-            "ref": "com.atproto.label.defs#labelValue"
-          },
-          "description": "The label values it applies."
-        },
-        "labelValueDefinitions": {
-          "type": "array",
-          "items": {
-            "type": "ref",
-            "ref": "com.atproto.label.defs#labelValueDefinition"
-          },
-          "description": "Its own label values, defined."
-        }
-      }
     }
   }
 }

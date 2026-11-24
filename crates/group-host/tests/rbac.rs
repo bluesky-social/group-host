@@ -1,10 +1,13 @@
 //! What a group's records let each of its people do.
 
-use group_host::group::join_policy;
+use atproto::space::SpaceRef;
+use group_host::group::{did_rkey, join_policy, rkey_did};
 use group_host::rbac::{
-    ACTIONS, Access, Grant, actions_for, actions_of, grants, listed, repo_collections_for, scope_of,
+    ACTIONS, Grant, Policy, actions_for, actions_of, assigns, grants, listed, repo_collections_for,
+    scope_of,
 };
-use serde_json::json;
+use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn roles(names: &[&str]) -> Vec<String> {
     names.iter().map(|r| r.to_string()).collect()
@@ -12,79 +15,59 @@ fn roles(names: &[&str]) -> Vec<String> {
 
 const CALENDAR: &str = "at://did:plc:g/space/xyz.app.calendar/rides";
 
-#[test]
-fn reads_and_writes_by_the_access_record() {
-    let read = "space:xyz.app.calendar?action=read";
-    let members = Access::of(
-        &json!({"grants": [{"role": "member", "scopes": [read]}, {"role": "guest", "scopes": []}]}),
-        CALENDAR,
-    );
-    assert!(members.can_read(&roles(&["member"]), "did:plc:a"));
-    assert!(!members.can_read(&[], "did:plc:a"));
-    assert!(!members.can_read(&roles(&["guest"]), "did:plc:a"));
-    // A member whose roles grant read writes, unless it says who.
-    assert!(members.can_write_own(&roles(&["member"]), "did:plc:a"));
-    assert!(!members.can_write_own(&roles(&["guest"]), "did:plc:a"));
-    assert!(!members.can_write_own(&[], "did:plc:a"));
-    // Public: anyone signed in reads; members granted nothing write nothing.
-    let public = Access::of(&json!({"public": true, "grants": []}), CALENDAR);
-    assert!(public.can_read(&[], "did:plc:a"));
-    assert!(!public.can_write_own(&roles(&["member"]), "did:plc:a"));
-    let open = Access::of(
-        &json!({"public": true, "grants": [], "writableBy": [{"role": "public"}]}),
-        CALENDAR,
-    );
-    assert!(open.can_write_own(&[], "did:plc:a"));
-    let mods = Access::of(
-        &json!({"grants": [{"role": "member", "scopes": [read]}], "writableBy": [{"role": "mod"}]}),
-        CALENDAR,
-    );
-    assert!(mods.can_write_own(&roles(&["mod"]), "did:plc:a"));
-    assert!(!mods.can_write_own(&roles(&["member"]), "did:plc:a"));
+fn policy(value: serde_json::Value) -> Policy {
+    Policy::of(&value, &SpaceRef::parse(CALENDAR).unwrap())
+}
 
-    // A grant counts in its own space: read of another type, or of
-    // another skey, is no read here, and nothing counts where no space is.
+#[test]
+fn reads_writes_and_manages_by_the_policy() {
+    let members = policy(json!({"grants": [
+        {"role": "member", "read": true},
+        {"role": "mod", "read": true, "write": true},
+        {"role": "guest"},
+    ]}));
+    assert!(members.can_read(&roles(&["member"])));
+    assert!(!members.can_read(&[]));
+    assert!(!members.can_read(&roles(&["guest"])));
+    // Reading is not writing: only roles granted `write` write.
+    assert!(!members.writes_own(&roles(&["member"])));
+    assert!(members.writes_own(&roles(&["member", "mod"])));
+    assert!(!members.writes_own(&[]));
+    // publicRead: anyone reads; nobody writes for it.
+    let public = policy(json!({"publicRead": true, "unlisted": true, "grants": []}));
+    assert!(public.can_read(&[]));
+    assert!(public.unlisted);
+    assert!(!public.writes_own(&roles(&["member"])));
+    assert_eq!(members.grant("mod").map(|g| g.write), Some(true));
+    assert_eq!(members.grant("admin"), None);
+
+    // Scopes act as the group, and count only here: a scope for another
+    // type, skey or authority manages nothing here.
     for elsewhere in [
-        "space:xyz.app.forum?action=read",
-        "space:xyz.app.calendar?skey=laps&action=read",
-        "space:xyz.app.calendar?authority=did:plc:other&action=read",
+        "space:xyz.app.forum?manage=update",
+        "space:xyz.app.calendar?skey=laps&manage=update",
+        "space:xyz.app.calendar?authority=did:plc:other&manage=update",
         "repo:xyz.event",
     ] {
-        let access = Access::of(
-            &json!({"grants": [{"role": "member", "scopes": [elsewhere]}]}),
-            CALENDAR,
-        );
-        assert!(
-            !access.can_read(&roles(&["member"]), "did:plc:a"),
-            "{elsewhere}"
-        );
+        let p = policy(json!({"grants": [{"role": "member", "scopes": [elsewhere]}]}));
+        assert!(!p.manages(&roles(&["member"]), "update"), "{elsewhere}");
     }
     for here in [
-        "space:*?action=read",
-        "space:xyz.app.calendar?skey=rides",
-        "space:xyz.app.calendar?authority=did:plc:g&action=read",
+        "space:*?manage=update",
+        "space:xyz.app.calendar?skey=rides&manage=update&manage=delete",
+        "space:xyz.app.calendar?authority=did:plc:g&manage=update",
     ] {
-        let access = Access::of(
-            &json!({"grants": [{"role": "member", "scopes": [here]}]}),
-            CALENDAR,
-        );
-        assert!(access.can_read(&roles(&["member"]), "did:plc:a"), "{here}");
+        let p = policy(json!({"grants": [{"role": "member", "scopes": [here]}]}));
+        assert!(p.manages(&roles(&["member"]), "update"), "{here}");
+        assert!(!p.manages(&roles(&["guest"]), "update"), "{here}");
     }
-    let nowhere = Access::of(
-        &json!({"grants": [{"role": "member", "scopes": [read]}]}),
-        "nowhere",
-    );
-    assert!(!nowhere.can_read(&roles(&["member"]), "did:plc:a"));
 
     // What a role writes as the group: each collection a scope names, as
     // its actions say, every write when it names none.
-    let writers = Access::of(
-        &json!({"grants": [
-            {"role": "admin", "scopes": ["space:xyz.app.calendar?collection=xyz.event&collection=xyz.rsvp", "space:xyz.app.forum?collection=xyz.post"]},
-            {"role": "member", "scopes": ["space:xyz.app.calendar?collection=xyz.rsvp&action=create", read]},
-        ]}),
-        CALENDAR,
-    );
+    let writers = policy(json!({"grants": [
+        {"role": "admin", "scopes": ["space:xyz.app.calendar?collection=xyz.event&collection=xyz.rsvp", "space:xyz.app.forum?collection=xyz.post"]},
+        {"role": "member", "read": true, "scopes": ["space:xyz.app.calendar?collection=xyz.rsvp&action=create"]},
+    ]}));
     let writes = writers.writes(&roles(&["admin", "member"]));
     let as_lists: Vec<(&str, Vec<&str>)> = writes
         .iter()
@@ -99,25 +82,7 @@ fn reads_and_writes_by_the_access_record() {
     );
     let member = writers.writes(&roles(&["member"]));
     assert_eq!(member["xyz.rsvp"].len(), 1);
-    assert!(writers.can_read(&roles(&["admin"]), "did:plc:b"));
-
-    // For chosen people: them while they are members, and the roles
-    // granted read.
-    let chosen = Access::of(
-        &json!({
-            "public": true,
-            "grants": [{"role": "admin", "scopes": [read]}],
-            "people": [{"did": "did:plc:a"}],
-        }),
-        CALENDAR,
-    );
-    assert!(chosen.can_read(&roles(&["member"]), "did:plc:a"));
-    assert!(!chosen.can_read(&[], "did:plc:a"));
-    assert!(!chosen.can_read(&roles(&["member"]), "did:plc:b"));
-    assert!(chosen.can_read(&roles(&["admin"]), "did:plc:b"));
-    assert!(chosen.can_write_own(&roles(&["member"]), "did:plc:a"));
-    assert!(!chosen.can_write_own(&roles(&["admin"]), "did:plc:b"));
-    assert_eq!(Access::of(&json!({}), "nowhere"), Access::default());
+    assert_eq!(writers.scopes(&roles(&["member"])).len(), 1);
     assert_eq!(
         listed(&json!({"x": [{"role": 1}, {"role": "a"}]}), "x", "role"),
         ["a"]
@@ -151,15 +116,19 @@ fn answers_each_action_by_its_scope() {
             "{nothing}"
         );
     }
-    // A space scope over every collection labels, configures and writes
-    // memberships; one managing makes and deletes spaces.
+    // A space scope over every collection labels and writes memberships;
+    // one managing makes, changes and deletes spaces.
     let every = actions_of(&["space:*".into()]);
     assert_eq!(
         every.into_iter().collect::<Vec<_>>(),
-        ["admit", "eject", "label", "role.assign", "space.configure",]
+        ["admit", "eject", "label", "role.assign"]
     );
     let star = actions_of(&["space:*?collection=*".into()]);
-    assert_eq!(star.len(), 5);
+    assert_eq!(star.len(), 4);
+    assert_eq!(
+        of_scope("space:*?manage=update&manage=delete"),
+        ["space.configure", "space.delete"]
+    );
     // Labels, written in any of the group's spaces, label.
     assert_eq!(
         of_scope("space:*?collection=com.atproto.label.record"),
@@ -181,10 +150,24 @@ fn answers_each_action_by_its_scope() {
         none
     );
     assert_eq!(of("space:fyi.opensocial.members?manage=create"), none);
+    // The tiered sets: moderating gives memberships, invites, labels and
+    // the moderation methods; administering, those and configuring; the
+    // profile, nothing, as the meta space's policy says who writes it.
+    let moderates = [
+        "admit",
+        "eject",
+        "invite",
+        "label",
+        "mod.read",
+        "mod.resolve",
+        "role.assign",
+    ];
+    assert_eq!(of("include:fyi.opensocial.authModerate"), moderates);
     assert_eq!(
-        of("include:fyi.opensocial.manageMembers"),
-        ["admit", "eject", "invite", "role.assign"]
+        of("include:fyi.opensocial.authManageGroup"),
+        [&["admit", "eject", "group.configure"][..], &moderates[2..]].concat()
     );
+    assert_eq!(of("include:fyi.opensocial.authManageProfile"), none);
     let manage = actions_of(&["space:*?manage=create&manage=delete".into()]);
     assert_eq!(
         manage.into_iter().collect::<Vec<_>>(),
@@ -200,14 +183,25 @@ fn of_scope(scope: &str) -> Vec<&'static str> {
 
 #[test]
 fn roles_compose_by_union() {
-    let record = json!({"grants": [
-        Grant::with("admin", &["invite", "admit"], &["member"], &["*"]).to_json(),
-        Grant::with("mod", &["label"], &[], &["xyz.post?action=create"]).to_json(),
-        {"role": "odd"},
-    ]});
-    let granted = grants(&record);
+    let admin = Grant::with("admin", &["invite", "admit"], &["member"], &["*"]);
+    let record =
+        |g: &Grant| json!({"displayName": g.role, "scopes": g.scopes, "assignable": g.assignable});
+    let records: Vec<(String, Value)> = vec![
+        ("admin".into(), record(&admin)),
+        (
+            "mod".into(),
+            record(&Grant::with(
+                "mod",
+                &["label"],
+                &[],
+                &["xyz.post?action=create"],
+            )),
+        ),
+        ("odd".into(), json!({"displayName": "Odd"})),
+    ];
+    let granted = grants(&records);
     assert_eq!(granted.len(), 3);
-    assert_eq!(granted[0].assignable, ["member"]);
+    assert_eq!(granted[0], admin);
     assert_eq!(granted[2].scopes, Vec::<String>::new());
     let both = roles(&["admin", "mod"]);
     assert_eq!(
@@ -221,7 +215,47 @@ fn roles_compose_by_union() {
         ["*", "xyz.post"]
     );
     assert!(actions_for(&granted, &[]).is_empty());
-    assert!(grants(&json!({})).is_empty());
+    assert!(grants(&[]).is_empty());
+}
+
+#[test]
+fn every_role_is_assigned_by_a_star() {
+    let named: BTreeSet<String> = ["member".to_string()].into();
+    assert!(assigns(&named, "member"));
+    assert!(!assigns(&named, "later"));
+    let every: BTreeSet<String> = ["*".to_string()].into();
+    assert!(assigns(&every, "member"));
+    assert!(assigns(&every, "later"));
+}
+
+#[test]
+fn keys_a_membership_by_its_member_s_did() {
+    for did in [
+        "did:plc:abc",
+        "did:web:example.com",
+        "did:web:localhost%3A2583",
+        "did:web:localhost%3A2583:users:alice",
+    ] {
+        assert_eq!(rkey_did(&did_rkey(did)), did);
+    }
+    // A path's first part that is not a port stays one.
+    assert_eq!(
+        rkey_did("did:web:example.com:users"),
+        "did:web:example.com:users"
+    );
+    assert_eq!(rkey_did("did:web:example.com:"), "did:web:example.com:");
+}
+
+#[test]
+fn grants_the_queue_by_the_moderation_methods() {
+    let rpc = |m: &str| format!("rpc:fyi.opensocial.{m}?aud=*");
+    assert_eq!(scope_of("mod.read").unwrap(), rpc("listModSubjects"));
+    assert_eq!(scope_of("mod.resolve").unwrap(), rpc("resolveModSubject"));
+    let scopes = [rpc("listModSubjects"), rpc("resolveModSubject")];
+    assert_eq!(
+        actions_of(&scopes).into_iter().collect::<Vec<_>>(),
+        ["mod.read", "mod.resolve"]
+    );
 }
 
 #[test]

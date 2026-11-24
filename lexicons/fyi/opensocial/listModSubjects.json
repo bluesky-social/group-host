@@ -1,15 +1,14 @@
 {
   "lexicon": 1,
-  "id": "fyi.opensocial.getSubjectHistory",
+  "id": "fyi.opensocial.listModSubjects",
   "defs": {
     "main": {
       "type": "query",
-      "description": "Get a subject's moderation history, oldest first. Requires mod.read.",
+      "description": "List subjects in the moderation queue. Requires mod.read.",
       "parameters": {
         "type": "params",
         "required": [
-          "group",
-          "subject"
+          "group"
         ],
         "properties": {
           "group": {
@@ -17,15 +16,14 @@
             "format": "did",
             "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
           },
-          "subject": {
+          "status": {
             "type": "string",
-            "format": "uri",
-            "description": "An account DID or record URI."
-          },
-          "cid": {
-            "type": "string",
-            "format": "cid",
-            "description": "Narrow a record subject to one version."
+            "enum": [
+              "open",
+              "escalated",
+              "resolved"
+            ],
+            "default": "open"
           },
           "limit": {
             "type": "integer",
@@ -43,17 +41,17 @@
         "schema": {
           "type": "object",
           "required": [
-            "events"
+            "subjects"
           ],
           "properties": {
             "cursor": {
               "type": "string"
             },
-            "events": {
+            "subjects": {
               "type": "array",
               "items": {
                 "type": "ref",
-                "ref": "fyi.opensocial.defs#moderationEvent"
+                "ref": "fyi.opensocial.defs#modSubjectView"
               }
             }
           }
@@ -61,8 +59,8 @@
       },
       "errors": [
         {
-          "name": "InvalidSubject",
-          "description": "The subject isn't an account, a record in this group, or a record in a public repo."
+          "name": "InvalidCursor",
+          "description": "The cursor isn't one this host gave."
         }
       ]
     }

@@ -39,7 +39,8 @@ fn query(url: &str) -> HashMap<String, String> {
 
 async fn make_member(h: &Running, group: &str, who: &str) {
     let collection = format!("{NS}.membership");
-    let value = json!({"$type": collection, "member": who, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
+    let value =
+        json!({"$type": collection, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
         collection,
         rkey: who.to_string(),
@@ -371,25 +372,36 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     };
     let leader = kept("role", "leader").unwrap();
     assert_eq!(leader.get("rkey"), None);
-    let grants = |p: Json| p["grants"].as_array().unwrap().clone();
-    let before = grants(kept("permissions", "self").unwrap());
+    // Its grant added to, in its record; and taken away again.
+    let label = group_host::rbac::scope_of("label").unwrap();
     let got = tool(
         &h,
         access,
         "role_grant",
-        json!({"role": "leader", "assignable": []}),
+        json!({"role": "leader", "scopes": [label], "assignable": ["member"]}),
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
-    let mut after = before.clone();
-    after.push(json!({"role": "leader", "scopes": [], "assignable": []}));
-    assert_eq!(grants(kept("permissions", "self").unwrap()), after);
-    // Dropped, it would be a grant of a role she may not assign: refused,
-    // as any write of the record is.
+    let leader = kept("role", "leader").unwrap();
+    assert_eq!(
+        (
+            &leader["displayName"],
+            &leader["scopes"],
+            &leader["assignable"]
+        ),
+        (&json!("Ride leader"), &json!([label]), &json!(["member"]))
+    );
     let undo = json!({"role": "leader", "undo": true});
     let got = tool(&h, access, "role_grant", undo).await;
-    refused(&got, "NotAssignable");
-    assert_eq!(grants(kept("permissions", "self").unwrap()), after);
+    assert!(got.get("isError").is_none(), "{got}");
+    let leader = kept("role", "leader").unwrap();
+    assert_eq!(
+        (leader.get("scopes"), leader.get("assignable")),
+        (None, None)
+    );
+    // A role the group does not have is granted nothing.
+    let got = tool(&h, access, "role_grant", json!({"role": "ghost"})).await;
+    refused(&got, "no such role: ghost");
     // What a tool is not given, it says it wants.
     let got = tool(&h, access, "role_grant", json!({})).await;
     refused(&got, "role is required");
@@ -600,11 +612,16 @@ async fn labels_as_the_group_beside_what_it_labels() {
     );
     let got = tool(&h, access, "mod_label", undo).await;
     assert_eq!(got["isError"], true, "{got}");
-    // A record's, in the space it is in.
-    let made = json!({"group": group, "type": "com.example.calendar", "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
-    let (status, made) = call(&h, &alice, "createSpace", made).await;
-    assert_eq!(status, 200, "{made}");
-    let space = made["space"].as_str().unwrap();
+    // A record's, in the space it is in: one the tool makes, at a key of
+    // the clock's.
+    let readers = json!({"grants": [{"role": "member", "read": true, "write": true}]});
+    let made = json!({"type": "com.example.calendar", "policy": readers});
+    let got = tool(&h, access, "space_create", made).await;
+    let space = got["structuredContent"]["space"].as_str().unwrap();
+    let calendars = format!("at://{group}/space/com.example.calendar/");
+    assert!(space.starts_with(&calendars), "{got}");
+    let kept = h.host.store.space(space).unwrap().unwrap();
+    assert_eq!(kept.policy["$type"], "fyi.opensocial.policy");
     let post = format!("{space}/{}/com.example.event/ride", bob.did);
     let got = tool(&h, access, "mod_label", json!({"subject": post, "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm", "val": "!hide"})).await;
     assert!(got.get("isError").is_none(), "{got}");

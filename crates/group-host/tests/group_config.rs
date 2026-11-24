@@ -29,17 +29,12 @@ async fn group() -> (common::Running, String, [Authority; 3]) {
             &[Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: bob.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await
         .unwrap();
     (h, did, [alice, bob, carol])
-}
-
-async fn call(h: &common::Running, who: &Authority, method: &str, body: Json) -> (u16, Json) {
-    let lxm = format!("{NS}.{method}");
-    post(h, &lxm, &body, &[auth(h, who, &lxm)]).await
 }
 
 fn profile(h: &common::Running, did: &str) -> Json {
@@ -377,15 +372,25 @@ async fn declares_the_group_while_anyone_may_read_its_meta() {
     assert_eq!(said.error(), (400, "InvalidRequest"));
 
     // Once only members read its meta, it is unlisted, and stays so.
-    let meta = meta_space(&did);
-    let hide = json!({"group": did, "space": meta, "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
-    assert_eq!(call(&h, &alice, "updateSpace", hide).await.0, 200);
+    hide(&h, &alice, &did).await;
     assert!(!declared());
     assert_eq!(
         put("self", declaration).await.error(),
         (400, "InvalidRequest")
     );
     assert!(!declared());
+}
+
+/// Puts `did`'s meta space under a policy only its members read, as
+/// `who`.
+async fn hide(h: &common::Running, who: &Authority, did: &str) {
+    let meta = meta_space(did);
+    let policy =
+        json!({"$type": format!("{NS}.policy"), "grants": [{"role": "member", "read": true}]});
+    let body = json!({"space": meta, "policy": policy});
+    let nsid = "com.atproto.space.updateSpace";
+    let said = as_group(h, who, did, &meta, nsid, Some(&body)).await;
+    assert_eq!(said.status, 200, "{}", said.body);
 }
 
 /// An image of `did`'s, `cid`, as a page asks for it, as `who` if anyone:
@@ -458,9 +463,7 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
 
     // Unlisted, its profile is its readers' alone: a member's, not a
     // stranger's.
-    let meta = meta_space(&did);
-    let hide = json!({"group": did, "space": meta, "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
-    assert_eq!(call(&h, &alice, "updateSpace", hide).await.0, 200);
+    hide(&h, &alice, &did).await;
     assert_eq!(image(&h, &did, &cid(&avatar), None).await.0, 404);
     assert_eq!(image(&h, &did, &cid(&avatar), Some(&carol)).await.0, 404);
     assert_eq!(image(&h, &did, &cid(&avatar), Some(&bob)).await.0, 200);

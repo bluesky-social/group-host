@@ -43,13 +43,23 @@ async fn starts_a_group_with_its_spaces() {
     assert_eq!(profile["displayName"], "Riders");
     assert_eq!(profile["joinPolicy"], "approval");
     // Meta is public, its profile and rules written by admins; members
-    // read the members space.
+    // read the members space and write there. Each policy is published.
+    let published = |space: &str| {
+        h.host
+            .group_record(did, space, "com.atproto.space.policy", "self")
+            .unwrap()
+            .unwrap()["policy"]
+            .clone()
+    };
     assert_eq!(
-        record(&meta, "access", "self"),
+        published(&meta),
         json!({
-            "$type": format!("{NS}.access"),
-            "public": true,
-            "grants": [{"role": "admin", "scopes": [format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule")]}],
+            "$type": format!("{NS}.policy"),
+            "publicRead": true,
+            "grants": [
+                {"role": "member", "read": true},
+                {"role": "admin", "read": true, "scopes": [format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule")]},
+            ],
         })
     );
     assert_eq!(
@@ -57,8 +67,8 @@ async fn starts_a_group_with_its_spaces() {
         json!(["account", "record"])
     );
     assert_eq!(
-        record(&members, "access", "self")["grants"],
-        json!([{"role": "member", "scopes": [format!("space:{NS}.members?action=read")]}])
+        published(&members)["grants"],
+        json!([{"role": "member", "read": true, "write": true}])
     );
     assert_eq!(record(&members, "role", "member")["default"], true);
     // The founder and stewards run it from the start.
@@ -162,36 +172,56 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     let admin = &mine["bindings"][0];
     assert_eq!(admin["role"], "admin");
     assert_eq!(admin["actions"], json!(every));
-    assert_eq!(
-        admin["assignable"],
-        json!([{"role": "admin"}, {"role": "member"}])
-    );
+    assert_eq!(admin["assignable"], json!([{"role": "*"}]));
     assert_eq!(admin["repoCollections"], json!([{"collection": "*"}]));
-    assert_eq!(mine["bindings"][1]["actions"], json!([]));
+    // Each role's grant in its own record: the founders administer the
+    // group, label, make, change and end spaces, write any record as the
+    // group in its repo and its spaces, and give every role; and the
+    // members' role, the default, nothing more.
+    let members = members_space(&did);
+    let role = |key: &str| {
+        let found = h
+            .host
+            .group_record(&did, &members, &format!("{NS}.role"), key);
+        found.unwrap().unwrap()
+    };
+    let scopes = json!([
+        format!("include:{NS}.authManageGroup"),
+        "space:*?collection=com.atproto.label.record",
+        "space:*?manage=update",
+        "space:*?manage=create&manage=delete",
+        "space:*?collection=*",
+        "repo:*",
+    ]);
+    let founders = role("admin");
+    assert_eq!(
+        (&founders["scopes"], &founders["assignable"]),
+        (&scopes, &json!(["*"]))
+    );
+    let everyone = role("member");
+    assert_eq!(everyone["default"], true);
+    assert_eq!(
+        (everyone.get("scopes"), everyone.get("assignable")),
+        (None, None)
+    );
+    let held = h
+        .host
+        .group_record(&did, &members, &format!("{NS}.membership"), &bob.did);
+    assert_eq!(held.unwrap().unwrap()["roles"], json!(["admin", "member"]));
     assert_eq!(mine["spaces"][0]["uri"], meta);
     assert_eq!(mine["spaces"][0]["spaceType"], format!("{NS}.meta"));
-    assert_eq!(mine["spaces"][0]["public"], true);
-    assert!(mine["spaces"][0]["grants"].is_array());
-    assert_eq!(mine["spaces"][1].get("public"), None);
-    assert_eq!(mine["spaces"][1]["grants"][0]["role"], "member");
+    assert_eq!(mine["spaces"][0]["policy"]["publicRead"], true);
+    assert!(mine["spaces"][0]["policy"]["grants"].is_array());
+    assert_eq!(mine["spaces"][1]["policy"].get("publicRead"), None);
+    assert_eq!(mine["spaces"][1]["policy"]["grants"][0]["role"], "member");
 
-    // A member who is no admin is shown a space only admins read, by its
-    // name, but not who reads it.
+    // A member who is no admin is shown a space only admins read, but not
+    // its policy.
+    let only =
+        json!({"$type": format!("{NS}.policy"), "grants": [{"role": "admin", "read": true}]});
     let admins = h
         .host
-        .create_space(&did, "fyi.opensocial.board", "self", false)
-        .unwrap();
-    h.host
-        .space_write(
-            &did,
-            &admins,
-            &[Write::Create {
-                collection: format!("{NS}.access"),
-                rkey: "self".into(),
-                value: json!({"$type": format!("{NS}.access"), "grants": [{"role": "admin", "scopes": ["space:*?action=read"]}]}),
-            }],
-        )
-        .await
+        .create_space(&did, "fyi.opensocial.board", "self", &only)
         .unwrap();
     h.host
         .space_write(
@@ -201,12 +231,12 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
                 Write::Create {
                     collection: format!("{NS}.space"),
                     rkey: "3l5mz5mkbn22z".into(),
-                    value: json!({"$type": format!("{NS}.space"), "space": admins, "name": "Board", "createdAt": "2026-11-03T00:00:00Z"}),
+                    value: json!({"$type": format!("{NS}.space"), "space": admins, "createdAt": "2026-11-03T00:00:00Z"}),
                 },
                 Write::Create {
                     collection: format!("{NS}.membership"),
                     rkey: carol.did.clone(),
-                    value: json!({"$type": format!("{NS}.membership"), "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+                    value: json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
                 },
             ],
         )
@@ -215,14 +245,26 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     let hers = view(&h, &did, Some(&carol)).await;
     let spaces = hers["spaces"].as_array().unwrap();
     let board = spaces.iter().find(|s| s["uri"] == admins).unwrap();
-    assert_eq!(board["name"], "Board");
-    assert_eq!(board.get("grants"), None);
+    assert_eq!(board.get("policy"), None);
     assert_eq!(hers["group"]["viewer"]["actions"], json!([]));
     let theirs = spaces
         .iter()
         .find(|s| s["uri"] == members_space(&did))
         .unwrap();
-    assert_eq!(theirs["grants"][0]["role"], "member");
+    assert_eq!(theirs["policy"]["grants"][0]["role"], "member");
+    // An unlisted space is shown only to those who read it.
+    let hidden = json!({"$type": format!("{NS}.policy"), "unlisted": true, "grants": [{"role": "admin", "read": true}]});
+    let vault = h
+        .host
+        .create_space(&did, "fyi.opensocial.board", "vault", &hidden)
+        .unwrap();
+    let hers = view(&h, &did, Some(&carol)).await;
+    let shown = |view: &Json| {
+        let spaces = view["spaces"].as_array().unwrap();
+        spaces.iter().any(|s| s["uri"] == vault)
+    };
+    assert!(!shown(&hers));
+    assert!(shown(&view(&h, &did, Some(&alice)).await));
 
     // Once they write their acceptance, they have accepted.
     h.host
@@ -274,7 +316,7 @@ async fn a_group_for_its_members_shows_strangers_nothing() {
     let did = start_group(
         &h,
         &alice,
-        json!({"handle": RIDERS, "displayName": "Riders", "metaReadableBy": [{"role": "member"}], "joinPolicy": "invite"}),
+        json!({"handle": RIDERS, "displayName": "Riders", "metaPublicRead": false, "joinPolicy": "invite"}),
     )
     .await;
     let theirs = view(&h, &did, Some(&carol)).await;
@@ -294,7 +336,7 @@ async fn a_group_for_its_members_shows_strangers_nothing() {
 }
 
 #[tokio::test]
-async fn its_access_records_say_who_reads_and_writes_its_spaces() {
+async fn its_policies_say_who_reads_and_writes_its_spaces() {
     let h = start(&[], false).await;
     let [alice, bob, carol] = people(&h).await;
     let did = start_group(

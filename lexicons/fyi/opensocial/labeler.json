@@ -9,27 +9,39 @@
       "record": {
         "type": "object",
         "required": [
-          "policies",
-          "createdAt"
+          "policies"
         ],
         "properties": {
           "policies": {
             "type": "ref",
-            "ref": "fyi.opensocial.defs#labelerPolicies"
+            "ref": "#policies"
           },
           "reasonTypes": {
             "type": "array",
             "items": {
-              "type": "ref",
-              "ref": "com.atproto.moderation.defs#reasonType"
+              "type": "string",
+              "maxLength": 256,
+              "knownValues": [
+                "spam",
+                "violation",
+                "misleading",
+                "nsfw",
+                "rude",
+                "other",
+                "appeal"
+              ]
             },
             "description": "Accepted report reasons. Omit to accept all."
           },
           "subjectTypes": {
             "type": "array",
             "items": {
-              "type": "ref",
-              "ref": "com.atproto.moderation.defs#subjectType"
+              "type": "string",
+              "maxLength": 64,
+              "knownValues": [
+                "account",
+                "record"
+              ]
             },
             "description": "Accepted report subject types. Omit to accept all."
           },
@@ -40,11 +52,32 @@
               "type": "string",
               "format": "nsid"
             }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "datetime"
           }
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "description": "The group's label values and their definitions.",
+      "required": [
+        "labelValues"
+      ],
+      "properties": {
+        "labelValues": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValue"
+          },
+          "description": "The label values it applies."
+        },
+        "labelValueDefinitions": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValueDefinition"
+          },
+          "description": "Its own label values, defined."
         }
       }
     }

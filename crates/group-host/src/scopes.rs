@@ -145,32 +145,36 @@ impl Permissions {
             })
     }
 
+    /// Whether the space scope `s` is for `space`: of its type, under its
+    /// authority, at its key, each named or `*`.
+    fn at(&self, s: &str, space: &SpaceRef) -> bool {
+        let Some(kind) = named(s, "space") else {
+            return false;
+        };
+        let kind = if kind.is_empty() {
+            query(s, "spaceType").first().copied()
+        } else {
+            Some(kind)
+        };
+        let one =
+            |name: &str, default: &'static str| query(s, name).first().copied().unwrap_or(default);
+        let authority = match one("authority", "self") {
+            "self" => self.group.as_str(),
+            a => a,
+        };
+        kind.is_some_and(|k| k == "*" || k == space.kind)
+            && (authority == "*" || authority == space.authority)
+            && ["*", space.skey.as_str()].contains(&one("skey", "*"))
+    }
+
     /// May it `action` (`read`, `read_self`, `create`, `update`,
     /// `delete`) in `space`, on a `collection` record for a write?
     pub fn space(&self, space: &SpaceRef, collection: Option<&str>, action: &str) -> bool {
         self.scopes.iter().any(|s| {
-            let Some(kind) = named(s, "space") else {
-                return false;
-            };
-            let kind = if kind.is_empty() {
-                query(s, "spaceType").first().copied()
-            } else {
-                Some(kind)
-            };
-            let one = |name: &str, default: &'static str| {
-                query(s, name).first().copied().unwrap_or(default)
-            };
-            let authority = match one("authority", "self") {
-                "self" => self.group.as_str(),
-                a => a,
-            };
-            let at = kind.is_some_and(|k| k == "*" || k == space.kind)
-                && (authority == "*" || authority == space.authority)
-                && ["*", space.skey.as_str()].contains(&one("skey", "*"));
             let granted = actions(s, &SPACE_ACTIONS, &SPACE_DEFAULT);
             let may =
                 granted.contains(&action) || (action == "read_self" && granted.contains(&"read"));
-            if !at || !may {
+            if !self.at(s, space) || !may {
                 return false;
             }
             if action == "read" || action == "read_self" {
@@ -179,6 +183,12 @@ impl Permissions {
             let collections = query(s, "collection");
             collection.is_some_and(|c| collections.iter().any(|x| *x == "*" || *x == c))
         })
+    }
+
+    /// May it `op` (`create`, `update`, `delete`) `space` itself?
+    pub fn manages(&self, space: &SpaceRef, op: &str) -> bool {
+        let manage = |s: &String| query(s, "manage").contains(&op);
+        self.scopes.iter().any(|s| manage(s) && self.at(s, space))
     }
 }
 

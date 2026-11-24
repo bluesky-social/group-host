@@ -103,27 +103,14 @@ describe(GroupClient, () => {
 
     await club.join({ message: 'Hello' });
     await club.leave();
-    await club.report({
-      subject: {
-        $type: 'fyi.opensocial.defs#accountSubject',
-        did: 'did:plc:mallory'
-      },
-      reasonType: 'com.atproto.moderation.defs#reasonSpam'
-    });
+    await club.report({ subject: 'did:plc:mallory', reasonType: 'spam' });
     expect(asked.slice(1).map(({ nsid, proxy, body }) => [nsid, proxy, body])).toEqual([
       ['fyi.opensocial.requestJoin', SERVICE, { group: GROUP, message: 'Hello' }],
       ['fyi.opensocial.leaveGroup', SERVICE, { group: GROUP }],
       [
         'fyi.opensocial.createReport',
         SERVICE,
-        {
-          group: GROUP,
-          subject: {
-            $type: 'fyi.opensocial.defs#accountSubject',
-            did: 'did:plc:mallory'
-          },
-          reasonType: 'com.atproto.moderation.defs#reasonSpam'
-        }
+        { group: GROUP, subject: 'did:plc:mallory', reasonType: 'spam' }
       ]
     ]);
   });

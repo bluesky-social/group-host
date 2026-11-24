@@ -5,7 +5,7 @@ use crate::Host;
 use crate::api::{Params, page, param};
 use crate::group::{members_space, meta_space};
 use crate::group_api::{caller, group_of, signed_in};
-use crate::rbac::{Access, NS};
+use crate::rbac::NS;
 use crate::store::Store;
 use crate::xrpc::XrpcError;
 use atproto::did;
@@ -72,9 +72,7 @@ impl Host {
         }
         let roles = self.roles(group, viewer).map_err(XrpcError::internal)?;
         let meta = meta_space(group);
-        let access = self.group_record(group, &meta, &format!("{NS}.access"), "self");
-        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        if Access::of(&access, &meta).can_read(&roles, viewer) {
+        if self.reads_space(&meta, &roles)? {
             let profile = self.group_record(group, &meta, &format!("{NS}.profile"), "self");
             let profile = profile.map_err(XrpcError::internal)?.unwrap_or_default();
             if let Some(name) = profile.get("displayName") {

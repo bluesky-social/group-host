@@ -19,9 +19,10 @@ changes from.
 
 The move takes the group's public repo, its files (blobs), and each space
 the group governs. For a space, that's the group's own repo there and
-what the authority keeps about it (whether anyone may read it, its
-writers, and its grants). A space the group only writes in stays behind,
-since another group governs it.
+what the authority keeps about it, as a space meta archive: its policy,
+each account's grant beside the policy (as
+`com.atproto.memberspace.member/<did>`), and its writers. A space the
+group only writes in stays behind, since another group governs it.
 
 Members' repos in the group's spaces stay on their own PDSes. The new
 host keeps the writer set, with each writer's revision and digest. So it
@@ -178,10 +179,15 @@ stops before the account's identity moves.
 
 For each space the account governs, its state comes first, then its
 files, then the account's repo there. A repo the account keeps in
-another's space comes too. A personal space stays the account's alone,
-and a member space's members become this host's grants. Any other
-policy, public writing, or a list of allowed apps fails with
-`UnsupportedPolicy`, since this host's spaces have no such rules.
+another's space comes too. Each space's policy becomes an
+`fyi.opensocial.policy` that sets `unlisted`, so it's out of the group's
+index. A personal space stays the account's alone. A member space's
+public reading becomes `publicRead`, and its members become grants of
+their own beside the policy, each reading and writing as before. Any
+other policy, public writing, or a list of allowed apps fails with
+`UnsupportedPolicy`, since this host's spaces have no such rules. The
+host publishes each policy in its space once the group's members space
+exists.
 
 While the account is switched off, its space repos tell their spaces
 nothing. An authority elsewhere would check them against the key the

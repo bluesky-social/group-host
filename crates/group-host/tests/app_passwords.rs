@@ -17,7 +17,7 @@ const POST: &str = "app.bsky.feed.post";
 
 async fn put_membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let collection = format!("{NS}.membership");
-    let value = json!({"$type": collection, "member": who, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
+    let value = json!({"$type": collection, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
     let rkey = who.to_string();
     let exists = h
         .host
@@ -52,21 +52,12 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let collection = format!("{NS}.permissions");
-    let mut permissions = h
-        .host
-        .group_record(&did, &members_space(&did), &collection, "self")
-        .unwrap()
-        .unwrap();
-    let publisher = json!({"role": "publisher", "scopes": ["repo:*"], "assignable": []});
-    permissions["grants"]
-        .as_array_mut()
-        .unwrap()
-        .push(publisher);
-    let write = Write::Update {
-        collection,
-        rkey: "self".into(),
-        value: permissions,
+    let publisher =
+        json!({"$type": format!("{NS}.role"), "displayName": "Publisher", "scopes": ["repo:*"]});
+    let write = Write::Create {
+        collection: format!("{NS}.role"),
+        rkey: "publisher".into(),
+        value: publisher,
     };
     h.host
         .space_write(&did, &members_space(&did), &[write])

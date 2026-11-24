@@ -46,13 +46,12 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("listJoinRequests"),
     lexicon!("denyJoinRequest"),
     lexicon!("listInvites"),
-    lexicon!("createSpace"),
     lexicon!("listSpaceRecords"),
-    lexicon!("listSubjects"),
-    lexicon!("getSubjectHistory"),
+    lexicon!("listModSubjects"),
+    lexicon!("getModSubjectHistory"),
     lexicon!("putLabelDefinition"),
     lexicon!("deleteLabelDefinition"),
-    lexicon!("resolveSubject"),
+    lexicon!("resolveModSubject"),
     lexicon!("putSite"),
     lexicon!("deleteSite"),
     lexicon!("putSiteDomain"),
@@ -60,10 +59,9 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("profile"),
     lexicon!("rule"),
     lexicon!("role"),
-    lexicon!("permissions"),
     lexicon!("membership"),
     lexicon!("defs"),
-    lexicon!("access"),
+    lexicon!("policy"),
     lexicon!("invite"),
     (
         "com.atproto.admin.defs",
@@ -85,9 +83,6 @@ const MEMBERS: &str = "fyi.opensocial.members";
 pub enum Key {
     /// At the key this argument names, which the tool requires.
     Named(String),
-    /// At the key this field of the record names, which the tool
-    /// requires: a membership's member.
-    Field(String),
     /// At the key this argument names if given; else a new one.
     New(String),
 }
@@ -96,13 +91,11 @@ pub enum Key {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     /// Asks a method of the host's, a query or a procedure; with `undo`,
-    /// its opposite. A method whose `subject` is a union of an account and
-    /// a record takes it as text, a DID or an `at://` URI, with a `cid`.
+    /// its opposite.
     Method {
         nsid: String,
         procedure: bool,
         undo: Option<String>,
-        subject: Option<[String; 2]>,
     },
     /// Puts a record of the group's, of the kind `collection`, in its
     /// space of the type `space`, replacing it whole; saying when it was
@@ -129,12 +122,15 @@ pub enum Action {
     /// Writes an invite as the group in the invitee's inbox; with `undo`,
     /// takes back the one waiting.
     Invite,
-    /// Adds to a role's grant in the permissions record; with `undo`,
-    /// takes away from it.
+    /// Adds to a role's scopes and the roles it may assign, in its record;
+    /// with `undo`, takes away from them.
     Grant,
     /// Writes a label as the group beside its subject; with `undo`,
     /// deletes the labels of that value there.
     Label,
+    /// Makes a space of the type `type` under the group, with the policy
+    /// given, as the group (`com.atproto.space.createSpace`).
+    Space,
 }
 
 /// A tool, asked in the group the MCP client was connected to; and a
@@ -292,8 +288,8 @@ const DEPTH: u8 = 6;
 enum At {
     /// At the key this argument names, which is not the record's own.
     Named(&'static str),
-    /// At the key this field of the record names: a membership's member.
-    Field(&'static str),
+    /// At the key this argument, a member's DID, names: a membership's.
+    Did(&'static str),
     /// At the key this argument names if given; else a new one.
     New(&'static str),
 }
@@ -310,6 +306,7 @@ enum Made {
     Invite,
     Grant,
     Label,
+    Space,
 }
 
 /// The tools, by group: each its name, the arguments its command takes in
@@ -378,15 +375,15 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "role_delete",
         &["role"],
-        "Deletes a role nobody holds or is granted, as the group.",
+        "Deletes a role nobody holds, as the group.",
         Made::Delete("role", MEMBERS, At::Named("role")),
     ),
     (
         "role_grant",
         &["role"],
-        "Adds to what a role may do, as the group: the scopes given, and the roles given that its \
-         holders may assign, to what its grant in the permissions record has; with undo, takes \
-         them away, or with none given drops its grant.",
+        "Adds to what a role may do across the group, as the group: the scopes given, and the \
+         roles given that its holders may assign (* for every role), to those its record has; \
+         with undo, takes them away, or with none given takes away all of both.",
         Made::Grant,
     ),
     (
@@ -433,13 +430,13 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         &["member", "roles"],
         "Gives a member these roles in place of theirs, as the group (`member` among them), or \
          lets in someone waiting to join.",
-        Made::Put("membership", MEMBERS, At::Field("member")),
+        Made::Put("membership", MEMBERS, At::Did("member")),
     ),
     (
         "member_eject",
         &["member"],
         "Puts a member out, as the group.",
-        Made::Delete("membership", MEMBERS, At::Field("member")),
+        Made::Delete("membership", MEMBERS, At::Did("member")),
     ),
     (
         "join_list",
@@ -470,8 +467,9 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "space_create",
         &["type"],
-        "Adds a space to the group.",
-        Made::Method("createSpace", None),
+        "Adds a space of a type to the group, under the policy given, as the group \
+         (com.atproto.space.createSpace).",
+        Made::Space,
     ),
     (
         "space_records",
@@ -483,19 +481,19 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "mod_list",
         &[],
         "The moderation queue.",
-        Made::Method("listSubjects", None),
+        Made::Method("listModSubjects", None),
     ),
     (
         "mod_history",
         &["subject"],
         "What was done about a subject.",
-        Made::Method("getSubjectHistory", None),
+        Made::Method("getModSubjectHistory", None),
     ),
     (
         "mod_resolve",
         &["subject"],
         "Resolves or escalates a subject.",
-        Made::Method("resolveSubject", None),
+        Made::Method("resolveModSubject", None),
     ),
     (
         "mod_label",
@@ -594,26 +592,10 @@ impl Docs {
                 };
                 let mut input = self.object(&nsid, taken, DEPTH);
                 drop(&mut input, "group");
-                // A union of an account and a record, as text.
-                let union = &taken["properties"]["subject"];
-                let subject = (union["type"] == "union").then(|| {
-                    let refs = union["refs"].as_array().expect("a union has refs");
-                    let text = |i: usize| refs[i].as_str().expect("a ref").to_string();
-                    [text(0), text(1)]
-                });
-                if subject.is_some() {
-                    let said = "An account's DID, or a record's at:// URI.";
-                    let text = json!({"type": "string", "description": said});
-                    add(&mut input, "subject", text, true);
-                    let said = "The record's version, its CID, if about that one.";
-                    let cid = json!({"type": "string", "format": "cid", "description": said});
-                    add(&mut input, "cid", cid, false);
-                }
                 let action = Action::Method {
                     nsid,
                     procedure,
                     undo: opposite.map(|o| format!("{NS}.{o}")),
-                    subject,
                 };
                 (action, input, main["description"].as_str())
             }
@@ -633,10 +615,11 @@ impl Docs {
                         add(&mut input, n, rkey(said), true);
                         Key::Named(n.to_string())
                     }
-                    At::Field(n) => {
-                        drop(&mut input, n);
-                        add(&mut input, n, whole["properties"][*n].clone(), true);
-                        Key::Field(n.to_string())
+                    At::Did(n) => {
+                        let said = format!("Whose {kind}: their DID.");
+                        let did = json!({"type": "string", "format": "did", "description": said});
+                        add(&mut input, n, did, true);
+                        Key::Named(n.to_string())
                     }
                     At::New(n) => {
                         let said = format!(
@@ -699,12 +682,37 @@ impl Docs {
                 add(&mut input, "cid", cid, false);
                 (Action::Label, input, None)
             }
+            Made::Space => {
+                let policy = format!("{NS}.policy");
+                let main = self.main(&policy);
+                let mut input = json!({"type": "object", "properties": {}, "required": []});
+                let said = "The space's type: an NSID, as fyi.opensocial.siteSpace.";
+                let kind = json!({"type": "string", "format": "nsid", "description": said});
+                add(&mut input, "type", kind, true);
+                add(
+                    &mut input,
+                    "policy",
+                    self.object(&policy, main, DEPTH),
+                    true,
+                );
+                let said = "Its key. Left out, a new one.";
+                add(&mut input, "skey", rkey(said.into()), false);
+                (Action::Space, input, main["description"].as_str())
+            }
             Made::Grant => {
-                let defs = format!("{NS}.defs");
-                let grant = &self.0[&defs]["defs"]["groupGrant"];
-                let mut input = self.object(&defs, grant, DEPTH);
-                input["required"] = json!(["role"]);
-                let main = self.main(&format!("{NS}.permissions"));
+                let collection = format!("{NS}.role");
+                let main = self.main(&collection);
+                let whole = self.object(&collection, &main["record"], DEPTH);
+                let mut input = json!({"type": "object", "properties": {}, "required": []});
+                add(
+                    &mut input,
+                    "role",
+                    rkey("Which role: its record's key.".into()),
+                    true,
+                );
+                for field in ["scopes", "assignable"] {
+                    add(&mut input, field, whole["properties"][field].clone(), false);
+                }
                 (Action::Grant, input, main["description"].as_str())
             }
         };
@@ -782,14 +790,21 @@ pub enum Plan {
         val: String,
         undo: bool,
     },
-    /// Add `scopes` and `assignable` to `role`'s grant in the permissions
-    /// record; with `undo`, take them away, or with none drop its grant.
-    /// `regrant` makes the write, from the record as it is.
+    /// Add `scopes` and `assignable` to those of the role `role`; with
+    /// `undo`, take them away, or with none take away all of both.
+    /// `regrant` makes the write, from the role's record as it is.
     Grant {
         role: String,
         scopes: Vec<String>,
         assignable: Vec<String>,
         undo: bool,
+    },
+    /// Make a space of the type `kind`, at `skey` (a new key if none),
+    /// under `policy`, as the group.
+    Space {
+        kind: String,
+        skey: Option<String>,
+        policy: Value,
     },
 }
 
@@ -817,23 +832,7 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             nsid,
             procedure,
             undo: opposite,
-            subject,
         } => {
-            if let (Some([account, record]), Some(Value::String(s))) =
-                (subject, input.get("subject"))
-            {
-                let made = match s.starts_with("did:") {
-                    true => json!({"$type": account, "did": s}),
-                    false => {
-                        let mut made = json!({"$type": record, "uri": s});
-                        if let Some(cid) = input.remove("cid") {
-                            made["cid"] = cid;
-                        }
-                        made
-                    }
-                };
-                input.insert("subject".into(), made);
-            }
             let nsid = match (undo, opposite) {
                 (true, Some(opposite)) => opposite,
                 _ => nsid,
@@ -857,11 +856,6 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
         } => {
             let rkey = match key {
                 Key::Named(n) => Some(given(&mut input, n)?),
-                Key::Field(n) => {
-                    let named = given(&mut input, n)?;
-                    input.insert(n.clone(), json!(named));
-                    Some(named)
-                }
                 Key::New(n) => given(&mut input, n).ok(),
             };
             let record = match &tool.action {
@@ -900,6 +894,16 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             val: given(&mut input, "val")?,
             undo,
         },
+        Action::Space => {
+            let kind = given(&mut input, "type")?;
+            let skey = given(&mut input, "skey").ok();
+            let mut policy = input.remove("policy").unwrap_or_default();
+            if !policy.is_object() {
+                return Err("policy is required, as an object".into());
+            }
+            policy["$type"] = json!(format!("{NS}.policy"));
+            Plan::Space { kind, skey, policy }
+        }
         Action::Grant => {
             let role = given(&mut input, "role")?;
             let list = |name: &str| -> Vec<String> {
@@ -949,75 +953,54 @@ pub fn labels(record: &Value, subject: &str, val: &str) -> bool {
     record["uri"] == subject && record["val"] == val
 }
 
-/// The write that adds `scopes` and `assignable` to `role`'s grant, or
-/// with `undo` takes them away, in `permissions`, the group's permissions
-/// record as it is (none if it has none): the grant dropped if nothing is
-/// named to take away, or nothing is left; each other role's as it was.
+/// The write that adds `scopes` and `assignable` to those of the role
+/// `role`, in `kept`, its record as it is, or with `undo` takes them away,
+/// or with none named takes away all of both: the rest of the record as
+/// it was. Refused for a role the group does not have.
 pub fn regrant(
-    permissions: &Value,
+    kept: &Value,
     role: &str,
     scopes: &[String],
     assignable: &[String],
     undo: bool,
-) -> Plan {
-    let mut record = match permissions {
-        Value::Object(_) => permissions.clone(),
-        _ => json!({}),
+) -> Result<Plan, String> {
+    let Value::Object(record) = kept else {
+        return Err(format!("no such role: {role}"));
     };
-    let old = record["grants"].as_array().cloned().unwrap_or_default();
-    let had = |field: &str| -> Vec<String> {
-        let theirs = old.iter().filter(|g| g["role"] == role);
-        let items = theirs.flat_map(|g| g[field].as_array().cloned().unwrap_or_default());
-        let mut out: Vec<String> = Vec::new();
-        for item in items.filter_map(|i| i.as_str().map(String::from)) {
-            if !out.contains(&item) {
-                out.push(item);
-            }
-        }
-        out
-    };
-    let changed = |mut list: Vec<String>, named: &[String]| {
-        match undo {
-            true => list.retain(|i| !named.contains(i)),
-            false => list.extend(
-                named
-                    .iter()
-                    .filter(|n| !list.contains(n))
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            ),
-        }
-        list
-    };
-    let scopes_now = changed(had("scopes"), scopes);
-    let assignable_now = changed(had("assignable"), assignable);
+    let mut record = record.clone();
     let named = !scopes.is_empty() || !assignable.is_empty();
-    let gone = undo && (!named || (scopes_now.is_empty() && assignable_now.is_empty()));
-    let grant =
-        (!gone).then(|| json!({"role": role, "scopes": scopes_now, "assignable": assignable_now}));
-    let mut grants = Vec::new();
-    let mut placed = false;
-    for g in old {
-        match g["role"] == role {
-            true if !placed => {
-                placed = true;
-                grants.extend(grant.clone());
+    for (field, given) in [("scopes", scopes), ("assignable", assignable)] {
+        let had = record.get(field).and_then(Value::as_array).into_iter();
+        let mut list: Vec<String> = Vec::new();
+        for item in had.flatten().filter_map(Value::as_str).map(String::from) {
+            if !list.contains(&item) {
+                list.push(item);
             }
-            true => {}
-            false => grants.push(g),
         }
+        match undo {
+            true if !named => list.clear(),
+            true => list.retain(|i| !given.contains(i)),
+            false => {
+                let new: Vec<String> = given
+                    .iter()
+                    .filter(|g| !list.contains(g))
+                    .cloned()
+                    .collect();
+                list.extend(new);
+            }
+        }
+        match list.is_empty() {
+            true => record.remove(field),
+            false => record.insert(field.into(), json!(list)),
+        };
     }
-    if !placed {
-        grants.extend(grant);
-    }
-    record["$type"] = json!(format!("{NS}.permissions"));
-    record["grants"] = json!(grants);
-    Plan::Write {
+    record.insert("$type".into(), json!(format!("{NS}.role")));
+    Ok(Plan::Write {
         space: MEMBERS.into(),
-        collection: format!("{NS}.permissions"),
-        rkey: Some("self".into()),
-        record: Some(record),
-    }
+        collection: format!("{NS}.role"),
+        rkey: Some(role.into()),
+        record: Some(Value::Object(record)),
+    })
 }
 
 /// The write that changes `kept`, the record of the kind `collection` at

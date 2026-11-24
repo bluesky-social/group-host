@@ -399,6 +399,44 @@ pub async fn inbox_write(
     app.call(h, nsid, token, Some(&body)).await
 }
 
+/// `nsid` as `group`, for `who` with a group token for `space`: `body`
+/// as JSON (a POST), or none (a GET, its query in `nsid`). What it
+/// answered, or why there was no token.
+pub async fn as_group(
+    h: &Running,
+    who: &Authority,
+    group: &str,
+    space: &str,
+    nsid: &str,
+    body: Option<&Json>,
+) -> Said {
+    let app = App::new("console");
+    let given = group_token(h, &app, who, group, space).await;
+    if given.status != 200 {
+        return given;
+    }
+    let token = given.body["accessJwt"].as_str().unwrap();
+    app.call(h, nsid, token, body).await
+}
+
+/// Makes `group`'s space of `kind` at `skey` under `policy`, as `who`
+/// would from the console: its URI.
+pub async fn make_space(
+    h: &Running,
+    who: &Authority,
+    group: &str,
+    kind: &str,
+    skey: &str,
+    policy: Json,
+) -> String {
+    let uri = format!("at://{group}/space/{kind}/{skey}");
+    let body = json!({"spaceType": kind, "skey": skey, "policy": policy});
+    let nsid = "com.atproto.space.createSpace";
+    let said = as_group(h, who, group, &uri, nsid, Some(&body)).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    uri
+}
+
 /// `member` approves `request_uri` for `group`.
 pub async fn approve(
     h: &Running,

@@ -4,48 +4,50 @@
 //! is read later.
 //!
 //! No lexicon is resolved: the only permission sets a token keeps are
-//! this host's own for a group's session (`fyi.opensocial.configure`,
-//! `manageMembers`, `manageSpaces`, `moderate`), read from their lexicons
-//! here, and a space scope naming no collection keeps every one, which
+//! this host's own for a group's session (`fyi.opensocial.authManageProfile`
+//! within `authModerate` within `authManageGroup`), read from their
+//! lexicons here, each an upper bound: the parts of it the roles grant
+//! are kept. A space scope naming no collection keeps every one, which
 //! narrowing allowed only to roles that may write every one there.
 
 use crate::Host;
-use crate::group::members_space;
+use crate::group::{members_space, meta_space};
 use crate::lexicons::lexicons;
-use crate::rbac::{self, Access, LABEL, NS, actions_for, grants, repo_collections_for};
+use crate::rbac::{self, LABEL, NS, actions_for, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
-use atproto::space::SpaceRef;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub use crate::rbac::WRITES;
 
-/// This host's permission sets for a group's session, each by its name,
-/// with the actions a member's roles must hold, every one, to give it.
-pub const SETS: [(&str, &[&str]); 4] = [
-    ("configure", &["group.configure"]),
-    (
-        "manageMembers",
-        &["admit", "eject", "role.assign", "invite"],
-    ),
-    ("manageSpaces", &["space.configure"]),
-    ("moderate", &["mod.read", "mod.resolve", "label"]),
+/// This host's permission sets for a group's session, by name, each
+/// within the next.
+pub const TIERS: [&str; 3] = ["authManageProfile", "authModerate", "authManageGroup"];
+
+/// The action each of the host's methods a permission set lists asks of
+/// the member who signed the app in.
+const ASKS: [(&str, &str); 6] = [
+    ("listJoinRequests", "admit"),
+    ("denyJoinRequest", "admit"),
+    ("listInvites", "invite"),
+    ("listModSubjects", "mod.read"),
+    ("getModSubjectHistory", "mod.read"),
+    ("resolveModSubject", "mod.resolve"),
 ];
 
 /// The permission set of this host's that `scope` includes, from its
-/// lexicon, if it is one: `include:fyi.opensocial.manageMembers`.
+/// lexicon, if it is one: `include:fyi.opensocial.authModerate`.
 pub fn set_of(scope: &str) -> Option<&'static Value> {
     let name = scope.strip_prefix(&format!("include:{NS}."))?;
     let set = lexicons().def(&format!("{NS}.{name}"));
     set.filter(|d| d["type"] == "permission-set")
 }
 
-/// The actions a member's roles must hold to give an app `scope`, if it
-/// is one of [`SETS`].
-fn needs(scope: &str) -> Option<&'static [&'static str]> {
+/// The permission set `scope` includes, if it is one of [`TIERS`].
+fn tier_of(scope: &str) -> Option<&'static Value> {
     let name = scope.strip_prefix(&format!("include:{NS}."))?;
-    SETS.iter().find(|(n, _)| *n == name).map(|(_, a)| *a)
+    TIERS.contains(&name).then(|| set_of(scope)).flatten()
 }
 
 /// The parts of a `space:` scope that decide whether a role may have it.
@@ -59,6 +61,9 @@ pub struct SpaceScope {
     pub writes: Vec<String>,
     /// Whether it asks only to read.
     pub read_only: bool,
+    /// What it asks to do to the spaces themselves: `create`, `update`,
+    /// `delete`.
+    pub manage: Vec<String>,
 }
 
 impl SpaceScope {
@@ -83,7 +88,8 @@ impl SpaceScope {
         } else {
             named
         };
-        let read_only = all("manage").is_empty()
+        let manage: Vec<String> = all("manage").iter().map(|m| m.to_string()).collect();
+        let read_only = manage.is_empty()
             && !actions.is_empty()
             && actions.iter().all(|a| *a == "read" || *a == "read_self");
         Some(SpaceScope {
@@ -93,6 +99,7 @@ impl SpaceScope {
             collections: all("collection").iter().map(|c| c.to_string()).collect(),
             writes,
             read_only,
+            manage,
         })
     }
 
@@ -102,31 +109,18 @@ impl SpaceScope {
     }
 }
 
-/// What a holder of `roles`, `member`, may write as the group in a space
-/// whose access record is `access`, by collection, `everything` being
-/// whether they may do anything as the group. A space for chosen people
-/// is written as the group by those of them who may do anything as it;
-/// any other, as its grants say.
-pub fn writes_in(
-    access: &Access,
-    roles: &[String],
-    member: &str,
-    everything: bool,
-) -> BTreeMap<String, BTreeSet<String>> {
-    match access.people {
-        Some(_) if everything && access.can_read(roles, member) => {
-            BTreeMap::from([("*".into(), WRITES.map(String::from).into())])
-        }
-        Some(_) => BTreeMap::new(),
-        None => access.writes(roles),
-    }
-}
-
-/// Whether a holder of `roles`, `member`, labelling (`labels`), writes
-/// labels as the group in a space of `access`: in any of the group's
-/// spaces, but one for chosen people only as one of them.
-pub fn labels_in(access: &Access, roles: &[String], member: &str, labels: bool) -> bool {
-    labels && (access.people.is_none() || access.can_read(roles, member))
+/// Whether a holder of `actions`, with `rooms`, may have the scope `want`,
+/// which manages spaces: each thing it asks to do to spaces of its type
+/// they may do to any of the group's spaces, or, for one of a type named,
+/// by the policy of one of that type it names.
+fn manages(want: &SpaceScope, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> bool {
+    let across = managing(actions);
+    let named =
+        |room: &&Room| room.kind == want.kind && (want.skey == "*" || room.skey == want.skey);
+    want.manage.iter().all(|op| {
+        let by_policy = |room: &Room| room.manages.contains(op.as_str());
+        across.contains(op.as_str()) || rooms.iter().filter(named).any(by_policy)
+    })
 }
 
 /// `writable` with labels, if `labels` and it does not hold every write
@@ -161,73 +155,88 @@ struct Room {
     skey: String,
     readable: bool,
     writable: BTreeMap<String, BTreeSet<String>>,
+    /// What they may do to the space itself (`update`, `delete`), by
+    /// their roles across the group or its policy's grants.
+    manages: BTreeSet<&'static str>,
+}
+
+/// What `actions` let their holder do to any of the group's spaces itself.
+fn managing(actions: &BTreeSet<&'static str>) -> BTreeSet<&'static str> {
+    let by = [
+        ("space.create", "create"),
+        ("space.configure", "update"),
+        ("space.delete", "delete"),
+    ];
+    by.iter()
+        .filter(|(a, _)| actions.contains(a))
+        .map(|(_, op)| *op)
+        .collect()
 }
 
 impl Host {
-    /// The group's spaces, each with what a holder of `roles`, `member`,
-    /// may read and write there as the group.
+    /// The group's spaces, each with what a holder of `roles`, holding
+    /// `actions`, may read and write there as the group, and do to it.
     fn rooms(
         &self,
         group: &str,
         roles: &[String],
-        member: &str,
-        everything: bool,
-        labels: bool,
+        actions: &BTreeSet<&'static str>,
     ) -> Result<Vec<Room>, XrpcError> {
-        let entries = self
-            .group_records(group, &members_space(group), &format!("{NS}.space"))
-            .map_err(XrpcError::internal)?;
-        let spaces = entries.iter().filter_map(|(_, entry)| {
-            let uri = entry["space"].as_str()?;
-            Some((uri, SpaceRef::parse(uri).ok()?))
-        });
+        let spaces = self.store.spaces_of(group).map_err(XrpcError::internal)?;
         let mut rooms = Vec::new();
-        for (uri, space) in spaces {
-            let access = self
-                .group_record(group, uri, &format!("{NS}.access"), "self")
-                .map_err(XrpcError::internal)?
-                .unwrap_or_default();
-            let access = Access::of(&access, uri);
-            let mut writable = writes_in(&access, roles, member, everything);
-            // The members space's own records, as the group grants them.
+        for uri in spaces {
+            let policy = self.policy(&uri).map_err(XrpcError::internal)?;
+            let policy = policy.expect("a space the group has");
+            let mut writable = policy.writes(roles);
+            // The meta and members spaces' own records, as the group's
+            // roles grant them.
+            if uri == meta_space(group) {
+                writable.extend(meta_writes(actions));
+            }
             if uri == members_space(group) {
                 writable.extend(self.members_writes_of(group, roles)?);
             }
-            with_labels(&mut writable, labels_in(&access, roles, member, labels));
+            with_labels(&mut writable, actions.contains("label"));
+            let mut manages = managing(actions);
+            for op in ["update", "delete"] {
+                if policy.manages(roles, op) {
+                    manages.insert(op);
+                }
+            }
             rooms.push(Room {
-                kind: space.kind,
-                skey: space.skey,
-                readable: access.can_read(roles, member),
+                readable: policy.can_read(roles),
+                kind: policy.space.kind,
+                skey: policy.space.skey,
                 writable,
+                manages,
             });
         }
         Ok(rooms)
     }
 
-    /// Whether a holder of `roles` under `grants`, `member`, may write
-    /// anything as `group` now: in its repo, its own spaces, or another.
+    /// Whether a holder of `roles` under `grants` may write anything as
+    /// `group` now: in its repo, its own spaces, or another.
     pub fn writes_anything(
         &self,
         group: &str,
         roles: &[String],
         grants: &[rbac::Grant],
-        member: &str,
     ) -> Result<bool, XrpcError> {
         let repo = repo_collections_for(grants, roles);
-        if !repo.is_empty() || actions_for(grants, roles).contains("group.configure") {
+        let actions = actions_for(grants, roles);
+        if !repo.is_empty() || actions.contains("group.configure") {
             return Ok(true);
         }
-        let labels = actions_for(grants, roles).contains("label");
-        let rooms = self.rooms(group, roles, member, false, labels)?;
+        let rooms = self.rooms(group, roles, &actions)?;
         Ok(rooms.iter().any(|r| !r.writable.is_empty()))
     }
 
-    /// The scopes of `requested` a holder of `roles` in `group`, `member`,
-    /// may give an app acting as the group:
+    /// The scopes of `requested` a holder of `roles` in `group` may give
+    /// an app acting as the group:
     ///
     /// - `atproto`, always;
-    /// - one of this host's permission sets for a group's session, for
-    ///   roles holding every action it needs ([`SETS`]);
+    /// - one of this host's permission sets for a group's session
+    ///   ([`TIERS`]), as far as the roles grant it ([`parts`]);
     /// - `repo:C`, for roles whose grants hold `repo:C` or `repo:*`;
     /// - `rpc:M`, a method of another service, for roles with `repo:*`,
     ///   never one of this host's own;
@@ -238,6 +247,9 @@ impl Host {
     ///   may invite, as far as it asks for invites;
     /// - `space:*?…`, made into one scope for each of the group's spaces
     ///   the roles read, writing there what they may of what it asks;
+    /// - `space:T?…&manage=…`, managing spaces of type `T` (or of every
+    ///   type, `*`), for roles that may do each to the group's spaces
+    ///   across it, or by a space's own policy, one of type `T`;
     /// - `blob:`, beside anything above that writes.
     ///
     /// Everything else is withheld.
@@ -245,69 +257,142 @@ impl Host {
         &self,
         group: &str,
         roles: &[String],
-        member: &str,
         requested: &[String],
     ) -> Result<Vec<String>, XrpcError> {
-        let permissions = self
-            .group_record(
-                group,
-                &members_space(group),
-                &format!("{NS}.permissions"),
-                "self",
-            )
-            .map_err(XrpcError::internal)?
-            .unwrap_or_default();
-        let grants = grants(&permissions);
+        let grants = self.role_grants(group).map_err(XrpcError::internal)?;
         let repo = repo_collections_for(&grants, roles);
         let everything = repo.contains("*");
         let held = actions_for(&grants, roles);
-        let rooms = self.rooms(group, roles, member, everything, held.contains("label"))?;
+        let rooms = self.rooms(group, roles, &held)?;
         let invite = format!("{NS}.invite");
-        let (mut kept, mut made) = (Vec::new(), Vec::new());
+        // What each scope asked for gives, in the order asked.
+        let mut each: Vec<Vec<String>> = Vec::new();
         for s in requested {
             let space = SpaceScope::parse(s).filter(|w| w.for_group(group));
             let keep = if s == "atproto" {
                 true
-            } else if let Some(needs) = needs(s) {
-                needs.iter().all(|a| held.contains(a))
+            } else if let Some(set) = tier_of(s) {
+                each.push(parts(set, &held, &rooms));
+                continue;
             } else if let Some(named) = repo_collections(s) {
                 let each = !named.is_empty() && named.iter().all(|c| repo.contains(c));
                 everything || each
             } else if let Some(m) = s.strip_prefix("rpc:") {
                 let method = m.split('?').next().unwrap_or_default();
                 everything && method != "*" && !method.starts_with(&format!("{NS}."))
+            } else if let Some(want) = space.as_ref().filter(|w| !w.manage.is_empty()) {
+                manages(want, &held, &rooms)
             } else if let Some(want) = inbox_scope(s) {
                 held.contains("invite") && want.collections.iter().all(|c| *c == invite)
             } else if let Some(want) = space.as_ref().filter(|w| w.kind == "*") {
-                made.extend(any_kind(group, want, &rooms));
-                false
+                each.push(any_kind(group, want, &rooms));
+                continue;
             } else if let Some(want) = &space {
                 rooms.iter().any(|room| allows(want, room))
             } else {
                 false
             };
-            if keep {
-                kept.push(s.clone());
-            }
+            each.push(keep.then(|| s.clone()).into_iter().collect());
         }
         let writes = |s: &String| {
-            needs(s).is_some()
+            tier_of(s).is_some()
                 || repo_collections(s).is_some()
                 || SpaceScope::parse(s).is_some_and(|w| !w.read_only)
         };
-        let any_write = kept.iter().chain(&made).any(writes);
-        let mut out: Vec<String> = requested
-            .iter()
-            .filter(|s| kept.contains(s) || (any_write && is_blob(s)))
-            .cloned()
-            .collect();
-        for m in made {
-            if !out.contains(&m) {
-                out.push(m);
+        let any_write = each.iter().flatten().any(writes);
+        let mut out: Vec<String> = Vec::new();
+        for (s, mut gives) in requested.iter().zip(each) {
+            if any_write && is_blob(s) {
+                gives.push(s.clone());
+            }
+            for g in gives {
+                if !out.contains(&g) {
+                    out.push(g);
+                }
             }
         }
         Ok(out)
     }
+}
+
+/// What a holder of `actions` may write as the group in its meta space,
+/// by collection, beyond what its policy grants: every record of it, if
+/// they run the group.
+pub fn meta_writes(actions: &BTreeSet<&'static str>) -> BTreeMap<String, BTreeSet<String>> {
+    let all: BTreeSet<String> = WRITES.map(String::from).into();
+    let records = ["profile", "rule", "labeler"].map(|r| (format!("{NS}.{r}"), all.clone()));
+    match actions.contains("group.configure") {
+        true => records.into(),
+        false => BTreeMap::new(),
+    }
+}
+
+/// Of `set`, one of [`TIERS`], what holders of `actions`, with `rooms`,
+/// grant: each of its methods whose action they hold; of its space
+/// permissions, what they may write of each collection it names, and do
+/// to the space itself. All they grant of a tier is that tier.
+fn parts(set: &Value, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> Vec<String> {
+    let mut out = Vec::new();
+    for scope in scopes_of(set) {
+        if let Some(rpc) = scope.strip_prefix(&format!("rpc:{NS}.")) {
+            let method = rpc.split('?').next().unwrap_or_default();
+            let asks = ASKS.iter().find(|(m, _)| *m == method);
+            if asks.is_some_and(|(_, a)| actions.contains(a)) {
+                out.push(scope);
+            }
+            continue;
+        }
+        let want = SpaceScope::parse(&scope).expect("a set's permissions are rpc or space");
+        let whole = if !want.manage.is_empty() {
+            manages(&want, actions, rooms)
+        } else if want.kind == format!("{NS}.invites") {
+            actions.contains("invite")
+        } else {
+            let room = rooms.iter().find(|r| r.kind == want.kind);
+            out.extend(room.map(|r| written(&want, r)).into_iter().flatten());
+            false
+        };
+        if whole {
+            out.push(scope);
+        }
+    }
+    let tier = TIERS.iter().map(|t| format!("include:{NS}.{t}")).find(|t| {
+        let set = set_of(t).expect("each tier has its lexicon");
+        scopes_of(set) == out
+    });
+    match tier {
+        Some(tier) => vec![tier],
+        None => out,
+    }
+}
+
+/// Of the space permission `want`, a set's, what `room` lets the roles
+/// write of each collection it names, as one scope for each set of
+/// writes, naming the collections written so.
+fn written(want: &SpaceScope, room: &Room) -> Vec<String> {
+    let mut by: Vec<(Vec<&String>, Vec<&String>)> = Vec::new();
+    for c in &want.collections {
+        let may = |w: &&String| may_write(&room.writable, c, w);
+        let writes: Vec<&String> = want.writes.iter().filter(may).collect();
+        match by.iter_mut().find(|(w, _)| *w == writes) {
+            _ if writes.is_empty() => {}
+            Some((_, collections)) => collections.push(c),
+            None => by.push((writes, vec![c])),
+        }
+    }
+    let at = format!(
+        "space:{}?authority={}&skey={}",
+        want.kind, want.authority, want.skey
+    );
+    let listed = |key: &str, values: &[&String]| -> String {
+        values.iter().map(|v| format!("&{key}={v}")).collect()
+    };
+    by.iter()
+        .map(|(writes, collections)| {
+            let (c, w) = (listed("collection", collections), listed("action", writes));
+            format!("{at}{c}&action=read{w}")
+        })
+        .collect()
 }
 
 /// `scope`, if it is for people's inboxes, where a group writes its
@@ -401,7 +486,8 @@ pub fn concrete(granted: &[String], group: &str) -> String {
         };
         for s in scopes {
             let mut s = s.replace("authority=self", &format!("authority={group}"));
-            if SpaceScope::parse(&s).is_some_and(|w| w.collections.is_empty() && !w.read_only) {
+            let every = |w: SpaceScope| w.collections.is_empty() && !w.read_only;
+            if SpaceScope::parse(&s).is_some_and(|w| w.manage.is_empty() && every(w)) {
                 s.push_str(if s.contains('?') {
                     "&collection=*"
                 } else {
@@ -417,7 +503,9 @@ pub fn concrete(granted: &[String], group: &str) -> String {
 }
 
 /// The scopes a permission set lists: a space permission as a space
-/// scope, and an rpc one as a scope for each of its methods.
+/// scope, or two where it both writes records and manages the space (the
+/// second reading, and managing), and an rpc one as a scope for each of
+/// its methods.
 pub(crate) fn scopes_of(set: &Value) -> Vec<String> {
     let mut out = Vec::new();
     for p in set["permissions"].as_array().into_iter().flatten() {
@@ -427,14 +515,22 @@ pub(crate) fn scopes_of(set: &Value) -> Vec<String> {
             out.extend(strings(&p["lxm"]).map(|m| format!("rpc:{m}?aud={aud}")));
             continue;
         }
-        let mut q = vec![
+        let space = |q: &[String]| format!("space:{}?{}", text("spaceType"), q.join("&"));
+        let listed = move |key: &'static str| strings(&p[key]).map(move |v| format!("{key}={v}"));
+        let at = vec![
             format!("authority={}", text("authority")),
             format!("skey={}", text("skey")),
         ];
-        for key in ["collection", "action", "manage"] {
-            q.extend(strings(&p[key]).map(|v| format!("{key}={v}")));
+        let mut q = at.clone();
+        q.extend(listed("collection").chain(listed("action")));
+        let manage: Vec<String> = listed("manage").collect();
+        if !manage.is_empty() && p["collection"].is_array() {
+            out.push(space(&q));
+            q = at;
+            q.push("action=read".into());
         }
-        out.push(format!("space:{}?{}", text("spaceType"), q.join("&")));
+        q.extend(manage);
+        out.push(space(&q));
     }
     out
 }

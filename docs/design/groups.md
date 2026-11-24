@@ -38,10 +38,11 @@ with its session cookie. Every signed-in method here takes either.
 empty, the host starts them for anyone
 ([configuration](../reference/config.md)).
 
-Starting a group writes its profile (display name, description, join
-policy), labeler and access record in `meta`. In `members` it writes an
-access record readable by `member`, the roles `admin` and `member`, the
-permissions record, and index entries for `meta` and `members`. It also
+Starting a group makes its `meta` and `members` spaces, each under a
+policy, and writes its profile (display name, description, join policy)
+and labeler in `meta`. In `members` it writes the roles `admin` and
+`member` with what each may do. The host publishes each space's policy
+there and lists both spaces in the index in `members`. It also
 writes a membership with both roles for the founder and for each
 steward. Stewards are the people named at the start to run the group
 beside the founder. If anyone may read `meta`, the host writes a
@@ -53,7 +54,8 @@ Details:
 
 - The join policy is `open`, `approval` or `invite`. It's `approval`
   when not given.
-- A membership's record key is the member's DID.
+- A membership's record key is the member's DID, and it names nobody
+  else.
 - Text is held to its lexicon's length, here and in every method that
   writes it. Past that, the host refuses it with `InvalidRequest`. A
   group's display name is 64 graphemes at most, and its description
@@ -81,41 +83,42 @@ There's no owner to ask, so the group's records answer "may this person
 do that?"
 
 A member's roles are the `roles` list of their membership in `members`. A
-space's access record grants each role OAuth scopes in that space
-(`grants`, one entry a role). It may also make the space `public`, which
-means anyone signed in. A role granted `read` in a space reads it. Its
-members write there in their own name, unless `writableBy` names who
-may. A role granted a space scope naming collections writes those as the
-group there. An access record can also name `people` by DID. They're the
-chosen people a space is for, and the roles granted `read` there read it
-too.
+space's policy, `fyi.opensocial.policy`, gives each role a grant there,
+one entry a role. A role granted `read` reads the space, and one granted
+`write` writes there in its members' own names. A role granted a space
+scope naming collections writes those as the group there. The policy
+may also set `publicRead`, so anyone at all may read the space, signed
+in or not ([spaces](spaces.md#deciding-who-reads-and-writes)).
 
-The permissions record in `members` grants each role OAuth scopes and the
-roles it may assign. One scope answers each of the host's eleven
-actions, such as `invite`, `eject`, `space.create` or `group.configure`.
-Roles compose by union. A person may do anything any of their roles
-grants, and there's no deny, precedence or hierarchy. The same scopes
-bound an app or MCP client a member signs in
-([signing in](signing-in.md)).
+Each role's record in `members` grants it OAuth scopes across the group
+and names the roles it may assign, `*` for every role. One scope answers
+each of the host's eleven actions, such as `invite`, `eject`,
+`space.create` or `group.configure`. Roles compose by union. A person
+may do anything any of their roles grants, and there's no deny,
+precedence or hierarchy. The same scopes bound an app or MCP client a
+member signs in ([signing in](signing-in.md)).
 
 When a group is made, `admin` holds every action, may write any
-public-repo collection as the group, and may assign `admin` and
-`member`. `member` holds nothing. A group changes this by writing its
-permissions record as the group
-([membership](membership.md#writing-roles-grants-and-memberships)).
+public-repo collection as the group, and may assign every role, those
+made later too. `member` holds nothing. A group changes this by writing
+its role records as the group
+([membership](membership.md#writing-roles-and-memberships)).
 
 The host, as authority, decides every read and write in a group's spaces.
-The group itself always may. Anyone else may if their roles fit the
-space's access record, or if they hold an explicit grant. Nobody reads or
-writes in the spaces of a group that's switched off.
+The group itself always may. Anyone else may if the space's policy lets
+their roles, or if they hold a grant of their own that came with the
+space when it moved here. Nobody reads or writes in the spaces of a group
+that's switched off.
 
 Details:
 
-- When a group is made, `meta` is public unless `createGroup` names its
-  readers. Its access record grants `admin`
+- When a group is made, anyone may read `meta` unless `createGroup` sets
+  `metaPublicRead: false`. Its policy grants `member` `read`, and `admin`
+  `read` and
   `space:fyi.opensocial.meta?collection=fyi.opensocial.profile&collection=fyi.opensocial.rule`,
-  so admins write the profile and rules as the group. `members` grants
-  `member` `space:fyi.opensocial.members?action=read`.
+  so admins write the profile and rules as the group. The policy of
+  `members` grants `member` `read` and `write`, so members' own records
+  there sync.
 - The host reads a grant's scopes the way it reads a token's. A scope
   naming another type, key or authority grants nothing in the space. One
   naming no collection writes nothing as the group.
@@ -126,8 +129,7 @@ Details:
 
 If you aren't signed in, you learn only what anyone can already learn
 from the group's DID document, which is its DID and handle. `getGroup`
-tells you that and nothing more, whatever the group's access records
-say, since `public` means anyone signed in.
+tells you that and nothing more, even when anyone may read `meta`.
 
 `getGroup` gives more to callers allowed more. Everyone signed in gets
 the group's DID, handle, address, and the URIs of its two spaces. A
@@ -136,8 +138,10 @@ A signed-in caller gets `viewer`. It says whether they're a member, their
 roles and actions, and for a member whether their own repo in `members`
 holds anything yet. A caller who may read `members` gets how many
 members it has (`listMembers` names them, a page at a time), the roles
-and what each may do, and the spaces. A space's access shows only to
-callers who may read it. A holder of `admit` also gets the join requests.
+and what each may do, and the spaces: those in the index, in its order,
+then the unlisted ones the caller may read. A space's policy shows only
+to callers who may read the space. A holder of `admit` also gets the
+join requests.
 A switched-off group shows only the first part and `deactivated: true`.
 To a signed-in caller it also shows `viewer.steward`, which says whether
 they may switch it back on, since the host reads nothing else of their
@@ -145,8 +149,8 @@ standing.
 
 A group that wants to be found says so with its declaration. That's a
 `fyi.opensocial.declaration` record in its public repo pointing at
-`meta`. The host writes it when `public` is among `meta`'s readers and
-removes it when it isn't. The host keeps no list of its groups for
+`meta`. The host writes it while the policy of `meta` sets `publicRead`
+and removes it when it doesn't. The host keeps no list of its groups for
 people to browse. How groups are found across the network is still to
 be decided, and the declaration is what such a list would read.
 
@@ -217,8 +221,8 @@ Details:
   Its text is required and is 2,000 characters at most.
 - The console's settings write the profile, pictures and rules this way,
   with a token `getGroupAuth` gives for `meta`. They set visibility by
-  making `meta` public or not through `updateSpace`, and members are
-  granted `read` there either way.
+  changing `publicRead` in the policy of `meta` through
+  `com.atproto.space.updateSpace`, and members read it either way.
 - An MCP client changes them with the `profile_set`, `rule_set` and
   `rule_delete` tools, and you can with the `opensocial` commands of the
   same names. Both make the same writes as their member
@@ -226,32 +230,16 @@ Details:
 
 ## More spaces
 
-A group may want more places, such as one only its admins read. Each
-further space has an access record and, unless it's left out, an index
-entry in `members` that apps read to find it. `createSpace` (for
-`space.create`) makes one from a `type` and its `access` (its grants,
-whether it's public, and who writes there in their own name). It
-optionally takes its key, a name for its entry, and `index: false` to
-leave it out of the index. It answers the space and strong references to
-the access record and the index entry it wrote.
+A group may want more places, such as one only its admins read. A
+member makes, changes and ends them through atproto's own space
+methods, `com.atproto.space.createSpace`, `updateSpace` and
+`deleteSpace`, called as the group. Each further space is kept under a
+policy, and listed in the index in `members` unless its policy sets
+`unlisted`. How the host checks each call, and what it refuses, is in
+[spaces](spaces.md#making-changing-and-ending-a-space).
 
-A space is made whole or not at all. If its access record or its index
-entry can't be written, the host ends it again, and its key is free to
-use. `updateSpace` (for `space.configure`) replaces the access record
-whole and renames the entry. When it can't change them all, it changes
-nothing. Both refuse a grant of a role the group doesn't have
-(`UnknownRole`), a grant that's no space scope (`InvalidScope`), and two
-grants of one role. They also refuse an access record that lets nobody
-but the group read, and a name over 64 characters. `deleteSpace` (for
-`space.delete`) removes the index entry if there is one, tells the
-space's syncers, and deletes the space and the group's repo in it. What
-members wrote there stays theirs at their PDSes.
-
-Two spaces carry the group itself, so their rules are fixed. `meta` and
-`members` can't be made again or deleted (`ReservedSpace`). `members`
-must keep granting `member` `read`, and who joins it by writing there
-can't change. A space for chosen people is theirs, and the group can't
-change or delete it.
+Two spaces carry the group itself. `meta` and `members` can't be made
+again, and nobody may delete them: they go when the group does.
 
 ## A handle on its own domain
 

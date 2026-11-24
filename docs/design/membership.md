@@ -11,17 +11,17 @@ The group writes its roster in its members space,
 `at://<group>/space/fyi.opensocial.members/self`. A space is a private
 record store whose authority (here the group) decides who may read and
 write it ([spaces](spaces.md)). Any member's tools can read the roster
-there, and no one outside the group can. The group writes three kinds of
+there, and no one outside the group can. The group writes two kinds of
 record:
 
 - `fyi.opensocial.membership`, one per member, keyed by their DID. It
   holds the `roles` they have, each by its id (`["member", "admin"]`),
-  at most 100.
+  at most 100. The key alone says whose it is.
 - `fyi.opensocial.role`, one per role, keyed by its id. It holds the
   role's name, description, and whether it's a `default` or `bot` role.
-- `fyi.opensocial.permissions`, one record at `self`. It holds a grant
-  per role, with the scopes it carries and the roles it may assign
-  (`defs#groupGrant`, each a list of strings).
+  It also holds the role's grant across the group: the `scopes` it
+  carries and the roles it may assign (`assignable`), each a list of at
+  most 100 strings.
 
 Anyone who may read the members space can see who's in it with
 `listMembers`. It answers each member and their roles, named by the
@@ -32,14 +32,14 @@ ignoring case. That's how the console finds a member as you type their
 handle.
 
 A member is anyone with a membership record. Every member holds
-`member`, the role the members space lets read, and no membership leaves
-it out. Who may read the members space is fixed, and `updateSpace` won't
-change it.
+`member`, and no membership leaves it out. A new group's members space
+grants `member` reading and writing there in their own name
+([spaces](spaces.md#deciding-who-reads-and-writes)). Nobody else reads
+it, and `updateSpace` won't change either (`MembersSpaceFixed`).
 
 Apps change these records the way they change any of the group's, by
 writing them as the group with `com.atproto.space.*` (see the next
-sections). The host has no method of its own for roles, grants or
-memberships.
+sections). The host has no method of its own for roles or memberships.
 
 A member may also write an `fyi.opensocial.acceptance` record in their
 own repo there. It's their side of membership, for apps that show only
@@ -50,46 +50,58 @@ may do. `getGroup` reports it to them as `viewer.accepted`.
 
 The host's methods ask about eleven actions, such as `invite`, `admit`,
 `eject`, `role.assign` and `group.configure`. Each is answered by exactly
-one scope, in atproto's permission syntax
-(`space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite`,
-`space:*?manage=create`). A
+one scope, in atproto's permission syntax (`space:*?manage=create`,
+`include:fyi.opensocial.authManageGroup` for `group.configure`). A
 member may do what any of their roles grants. Roles add up, with no
-deny, precedence or hierarchy, so every "may they?" is a lookup. A grant
+deny, precedence or hierarchy, so every "may they?" is a lookup. A role
 may also carry `repo:<collection>` scopes, the collections of the
 group's public repo its holders may write as the group.
 
 The console takes what each person may change from `getGroup`. Its
 settings are for a member whose roles grant `group.configure`, or who
-may make app passwords (a grant of `repo:*`). It shows those members only
+may make app passwords (a role with `repo:*`). It shows those members only
 the parts that are theirs. Anyone else sees no way to the settings, and
 an address under them says there's nothing there for them to change.
 
-Power over other members needs its own limit. A grant's `assignable`
+Power over other members needs its own limit. A role's `assignable`
 lists the roles its holders may give or take, and whose holders they may
-eject. It counts only through the grant that carries the action. A
-member's roles granting `role.assign` say whom they may assign, their
-roles granting `eject` say whom they may eject, and their roles granting
-`admit` say what roles they may admit someone with.
+eject. `*` there is every role, including roles made later. It counts
+only through the role that carries the action. A member's roles granting
+`role.assign` say whom they may assign, their roles granting `eject` say
+whom they may eject, and their roles granting `admit` say what roles they
+may admit someone with.
 
 The actions over members are writes of memberships in the members space,
 and their scopes say so. `admit` is
 `space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=create`,
 `role.assign` the same with `action=update`, and `eject` with
 `action=delete`. A scope naming every write of memberships, or of every
-collection in every space, carries all three. So does the
-`fyi.opensocial.manageMembers` permission set, along with `invite`.
+collection in every space, carries all three.
 
-A new group has two roles. `admin` grants every action and `repo:*`, and
-may assign `admin` and `member`. `member` is the default role and grants
-nothing. The founder and each steward named at creation hold both
-([groups](groups.md)).
+The group's permission sets carry actions too, as their permissions do.
+`fyi.opensocial.authModerate` carries `admit`, `eject`, `role.assign`,
+`invite`, `label`, `mod.read` and `mod.resolve`.
+`fyi.opensocial.authManageGroup` carries all of those and
+`group.configure`. `fyi.opensocial.authManageProfile` carries none. Who
+writes the profile and rules is for the meta space's policy to say
+([spaces](spaces.md)).
+
+A new group has two roles. `admin` carries
+`include:fyi.opensocial.authManageGroup`,
+`space:*?collection=com.atproto.label.record` (labels in every space),
+`space:*?manage=update` and `space:*?manage=create&manage=delete`
+(changing, making and ending spaces), `repo:*` and `space:*?collection=*`
+(any record as the group in any of its spaces), and may assign every
+role (`*`). That's every action. `member` is the default role and
+carries nothing. The founder and each steward named at creation hold
+both ([groups](groups.md)).
 
 Some member must always hold a role that grants `group.configure`, or
 no one could run the group. The host refuses any write that would leave
 nobody holding one with `LastConfigurer`, and refuses `leaveGroup` for
 the last holder the same way.
 
-## Writing roles, grants and memberships
+## Writing roles and memberships
 
 An app writes these records as the group through `createRecord`,
 `putRecord`, `deleteRecord` or `applyWrites` of `com.atproto.space.*`,
@@ -97,7 +109,7 @@ with a session for the group ([signing in](signing-in.md)). The
 session's scope must name each write. At the time of each write, the
 member who signed the app in must hold:
 
-- `group.configure` for roles and the permissions record.
+- `group.configure` for roles.
 - `admit` to create a membership, `role.assign` to change one, and
   `eject` to delete one.
 
@@ -108,24 +120,23 @@ against the member's roles as they were before any of the writes. The
 writes all happen together or not at all.
 
 A role (`fyi.opensocial.role`) is keyed by its id, 64 characters at
-most. It can only go once no member holds it and the permissions record
-grants it nothing (`RoleInUse`). So an app deletes the role and writes
-the permissions record without its grant at once. Its name is 64
-characters at most, and its description 2,000.
+most. It can only go once no member holds it (`RoleInUse`), its grant
+with it. Its name is 64 characters at most, and its description 2,000.
 
-The permissions record is kept at `self` and never deleted. It holds at
-most one grant per role, for a role the group defines. In it a member
-changes only:
+In a role's grant a member changes only:
 
-- the grants of roles their own grants may assign, or of a new role that
-  nobody holds and no grant names (`NotAssignable`).
+- the grant of a role their own roles may assign, or of one the same
+  write makes (`NotAssignable`). A role's name, description and flags
+  aren't its grant.
 - scopes their own roles hold, as written or within one they hold. A
   permission set of ours counts as the scopes it lists (`ScopeNotHeld`).
-- `assignable` lists, adding only roles they may assign themselves, or a
-  new role (`NotAssignable`), each defined.
+- `assignable` lists, adding only roles they may assign themselves, each
+  defined, and `*` only if they may assign every role (`NotAssignable`).
 
-So nobody gives a role more than they hold. And the founder can grant a
-role they've just made and add it to what their own role may assign.
+So nobody gives a role more than they hold. A member who may assign
+every role can make a role and give it at once. One who can't may make a
+role and grant it what they hold, but nobody can give it until someone
+who may assign it adds it to a role's `assignable`.
 
 A membership (`fyi.opensocial.membership`) is kept at its member's DID,
 holds `member` (`MemberRole`), and names only roles the group defines.
@@ -136,7 +147,9 @@ holds `member` (`MemberRole`), and names only roles the group defines.
   made a member this way (`JoinRequestNotFound`).
 - Writing one for a member changes their roles. Each role added or taken
   away must be one the writer's `role.assign` grants may assign. Any
-  request of theirs that's still waiting goes away.
+  request of theirs that's still waiting goes away. They leave the
+  writer set of each space whose policy no longer grants their roles
+  `write`.
 - Deleting one puts the member out, if each role they hold is one the
   writer's `eject` grants may assign ([below](#leaving-and-being-removed)).
 
@@ -189,18 +202,17 @@ where they already look. That's their inbox,
 `at://<invitee>/space/fyi.opensocial.invites/self`, a space of their own
 at their PDS. The invite is an `fyi.opensocial.invite` record in the
 group's repo there, with a `createdAt` and an optional `message` and
-`expiresAt`. An inbox's policy is `com.atproto.managedspace.policy`,
-which names this host as its managing app (`<host DID>#opensocial`). So
-the host answers `com.atproto.managedspace.checkAccess` for it, when the
-inbox's authority asks with service auth. A group on this host may write
-one and its owner may read it. With no account named, nobody may do
-either.
+`expiresAt`. The invitee's own app makes the inbox, with atproto's
+baseline `com.atproto.memberspace.policy`, `publicWrite` set and no
+members. So any group may write an invite there and only the invitee
+reads the space. The invitee's PDS keeps each group that writes there
+among the inbox's writers.
 
 An app invites someone by writing that record as the group, through
 `com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
 one write) with a session for the group. It takes the invite back by
 deleting it (`deleteRecord`). A session gets there through the
-`manageMembers` permission set, a `space:fyi.opensocial.invites` scope,
+`authModerate` or `authManageGroup` permission set, a `space:fyi.opensocial.invites` scope,
 or a group token for the inbox from `getGroupAuth`, which the console
 uses ([signing in](signing-in.md)). In every case, the member who signed
 the app in must hold `invite` at the time of each write. The host checks
@@ -214,9 +226,11 @@ each write the same way it would check its own:
 - The host refuses to delete an invite that isn't waiting
   (`InviteNotFound`).
 
-The group tells the invitee's PDS about the write at once. If that
-fails, it retries with the wait doubling from 10 seconds up to an hour,
-and gives up after a day.
+The group tells the invitee's PDS about the write at once, with
+`com.atproto.space.notifyRepoUpdate`. If that fails, it retries with the
+wait doubling from 10 seconds up to an hour, and gives up after a day. A
+PDS that refuses it outright isn't asked again, and the invite still
+waits on the host's list.
 
 The inbox is the invitee's to read. So the host keeps its own list of
 invites sent, one per group and invitee, kept in step with each write,
@@ -264,7 +278,7 @@ already gone changes nothing and does nothing more. A credential lasts
 ten minutes, and the group keeps each one it issues until it lapses, so
 it can revoke it at once. For writers on other PDSes it sends
 `com.atproto.space.notifyCredentialsRevoked`, best effort. With no
-membership they hold no roles, so the access records grant them nothing.
+membership they hold no roles, so no space's policy grants them anything.
 
 The group then keeps an ejection in its [moderation](moderation.md)
 queue, as an `ejectEvent` on the member's DID, with who removed them.

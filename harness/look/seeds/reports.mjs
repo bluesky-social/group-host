@@ -35,8 +35,8 @@ export default async ({ world, who, opensocial }) => {
     'com.example.forum',
     '--skey',
     'talk',
-    '--access',
-    JSON.stringify({ grants: [{ role: 'member', scopes: ['space:*?action=read'] }] })
+    '--policy',
+    JSON.stringify({ grants: [{ role: 'member', read: true }] })
   );
   // Two labels of the group's own, for moderators to choose.
   for (const [label, name, description, shown] of [
@@ -56,21 +56,21 @@ export default async ({ world, who, opensocial }) => {
       '--default-setting',
       shown
     );
-  const reason = (r) => `com.atproto.moderation.defs#${r}`;
-  const report = (name, subject, why, words, cites) =>
+  // What a report is about: its subject, and the version of a record.
+  const report = (name, about, reasonType, words, cites) =>
     call(name, 'fyi.opensocial.createReport', {
       group: did,
-      subject,
-      reasonType: reason(why),
+      ...about,
+      reasonType,
       ...(words ? { reason: words } : {}),
       ...(cites ? { rule: cites } : {})
     });
-  const account = (name) => ({ $type: 'fyi.opensocial.defs#accountSubject', did: who[name].did });
-  await report('bob', account('dan'), 'reasonSpam', 'Posts the same shop link in every thread.');
+  const account = (name) => ({ subject: who[name].did });
+  await report('bob', account('dan'), 'spam', 'Posts the same shop link in every thread.');
   await report(
     'erin',
     account('dan'),
-    'reasonRude',
+    'rude',
     'Told a new member to stay home if they cannot keep up.',
     rule
       ? `at://${did}/space/fyi.opensocial.meta/self/${did}/fyi.opensocial.rule/${rule.rkey}`
@@ -79,20 +79,19 @@ export default async ({ world, who, opensocial }) => {
   await report(
     'carol',
     {
-      $type: 'fyi.opensocial.defs#recordSubject',
-      uri: `${space}/${who.frank.did}/com.example.forum.post/3mzoijrblxc2j`,
+      subject: `${space}/${who.frank.did}/com.example.forum.post/3mzoijrblxc2j`,
       // The version reported, as an app names it.
       cid: 'bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm'
     },
-    'reasonMisleading',
+    'misleading',
     'Says the north ridge trail is open. It has been closed since the rockfall in September.'
   );
-  await report('dan', account('erin'), 'reasonOther');
-  await report('frank', account('bob'), 'reasonSpam', 'Sells headlamps.');
+  await report('dan', account('erin'), 'other');
+  await report('frank', account('bob'), 'spam', 'Sells headlamps.');
   const resolve = (name, key, status, note) =>
-    call(name, 'fyi.opensocial.resolveSubject', {
+    call(name, 'fyi.opensocial.resolveModSubject', {
       group: did,
-      subject: account(key),
+      ...account(key),
       status,
       ...(note ? { note } : {})
     });

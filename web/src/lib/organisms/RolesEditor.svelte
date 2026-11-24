@@ -7,15 +7,17 @@
    * A group's roles: each, what it may do, to delete (asked to be sure
    * of); and the dialog creating a new one, opened by a button whose
    * `popovertarget` is `define-role`: what it may do, the roles its
-   * holders may give, and whether members get it on joining.
+   * holders may give (any role, even ones made later, for one who may
+   * give any: `anyRole`), and whether members get it on joining.
    */
   type Role = { key: string; name?: string; description?: string };
   type Binding = { role: string; actions: string[] };
   let {
     roles = [],
     bindings = [],
-    actions
-  }: { roles?: Role[]; bindings?: Binding[]; actions: string[] } = $props();
+    actions,
+    anyRole = false
+  }: { roles?: Role[]; bindings?: Binding[]; actions: string[]; anyRole?: boolean } = $props();
   const may = (key: string) => bindings.find((b) => b.role === key)?.actions ?? [];
 </script>
 
@@ -93,6 +95,9 @@
     {#each roles as r (r.key)}<label
         ><input type="checkbox" name="assignable" value={r.key} /> {r.name ?? r.key}</label
       >{/each}
+    {#if anyRole}<label
+        ><input type="checkbox" name="assignable" value="*" /> {m.roles_editor_any_role()}</label
+      >{/if}
   </fieldset>
   <label><input type="checkbox" name="default" /> {m.roles_editor_default()}</label>
 </FormDialog>

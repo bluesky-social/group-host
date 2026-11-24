@@ -13,11 +13,11 @@
     "test": "npm run lex && vitest run"
   },
   "dependencies": {
-    "@atproto/lex": "0.0.0-spaces-alpha-20261113224550",
-    "@atproto/lex-space": "0.0.0-spaces-alpha-20261113224550"
+    "@atproto/lex": "0.0.0-spaces-alpha-20261117141222",
+    "@atproto/lex-space": "0.0.0-spaces-alpha-20261117141222"
   },
   "devDependencies": {
-    "@atproto/lex-builder": "0.0.0-spaces-alpha-20261113224550",
+    "@atproto/lex-builder": "0.0.0-spaces-alpha-20261117141222",
     "typescript": "^6.0.3",
     "vitest": "^4.0.0"
   }

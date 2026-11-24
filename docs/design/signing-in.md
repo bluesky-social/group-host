@@ -11,12 +11,12 @@ its member's roles. Roles are in [membership](membership.md), spaces in
 
 ## Who signs in to what
 
-| Who | Signs in as | How | Holds |
-| --- | --- | --- | --- |
-| A person, in the console | themselves | OAuth at their own PDS | a session cookie |
-| An app | a group | OAuth at this host, or an app password | a group grant |
-| The console | a group | `fyi.opensocial.getGroupAuth` | a 15-minute group token |
-| An MCP client | a member | OAuth at `/mcp` | an MCP grant |
+| Who                      | Signs in as | How                                    | Holds                   |
+| ------------------------ | ----------- | -------------------------------------- | ----------------------- |
+| A person, in the console | themselves  | OAuth at their own PDS                 | a session cookie        |
+| An app                   | a group     | OAuth at this host, or an app password | a group grant           |
+| The console              | a group     | `fyi.opensocial.getGroupAuth`          | a 15-minute group token |
+| An MCP client            | a member    | OAuth at `/mcp`                        | an MCP grant            |
 
 Members keep their accounts on their own PDSes, so the host only needs
 to learn who a person is. A group's repo is here, so this host is its
@@ -187,7 +187,8 @@ and lists them as that page's rows, in its order (Bluesky, chat, each
 permission set, the repository, calling services, spaces). Each row's
 details are a dialog away, and the scopes as asked sit behind "Technical
 details". Each of the host's permission sets is named in its own words,
-the `title` and `detail` of its lexicon.
+the `title` and `detail` of its lexicon, both those asked for and any
+tier a group would give in place of one.
 
 `approveAuthorization` requires the member to hold a role in the chosen
 group. If the app named a group, the chosen group must be that one. The
@@ -208,48 +209,67 @@ are at that moment.
 ### Narrowing at approval
 
 - `atproto` is always kept.
-- One of the host's permission sets for a group's session is kept if
-  the roles hold every action it covers:
+- The host's permission sets for a group's session are three tiers, each
+  holding the one before it:
 
-  | Set | Kept for roles holding |
-  | --- | --- |
-  | `include:fyi.opensocial.configure` | `group.configure` |
-  | `include:fyi.opensocial.manageMembers` | `admit`, `eject`, `role.assign` and `invite` |
-  | `include:fyi.opensocial.manageSpaces` | `space.configure` |
-  | `include:fyi.opensocial.moderate` | `mod.read`, `mod.resolve` and `label` |
+  | Set                                        | Title                | Covers                                                                                                                       |
+  | ------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+  | `include:fyi.opensocial.authManageProfile` | Group profile        | the profile and rules in the meta space                                                                                      |
+  | `include:fyi.opensocial.authModerate`      | Group moderation     | memberships and labels in the members space, labels in the meta space, invites in people's inboxes, join requests, the queue |
+  | `include:fyi.opensocial.authManageGroup`   | Group administration | all of that, the labeler, roles, and changing the meta and members spaces (`manage=update`)                                  |
 
-  `include:fyi.opensocial.participate` is for a person's own session, at
-  their PDS, and it's never kept for a group's.
+  A set is an upper bound: of one asked for, the token keeps the parts
+  the roles grant. Of each space permission, it keeps the collections
+  the roles write there as the group, with the writes they may make (one
+  scope for each set of writes). It keeps `manage=update` where the roles
+  may change that space, the invites where they hold `invite`, and each
+  method where they hold the action that method asks: `admit` for
+  `listJoinRequests` and `denyJoinRequest`, `invite` for `listInvites`,
+  `mod.read` for `listModSubjects` and `getModSubjectHistory`,
+  `mod.resolve` for `resolveModSubject`. When what's kept is the whole of
+  a tier, it's kept as that set. So a moderator asked for
+  `authManageGroup` gives `authModerate`, and a member whose role writes
+  the profile and rules by the meta space's policy gives
+  `authManageProfile`. Otherwise the parts are kept as scopes.
+
+  `include:fyi.opensocial.authParticipate` is for a person's own
+  session, at their PDS, and it's never kept for a group's.
+
 - `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
 - `rpc:M` is kept only if the roles hold `repo:*` and `M` is neither
   `*` nor a `fyi.opensocial.*` method.
 - `space:T?…` is kept if some space of type `T` lets the roles write
   what's asked there. For a scope that only reads, reading it there is
-  enough. In the members space, the roles write its roles and
-  permissions record if they hold `group.configure`. They write
-  memberships as they hold `admit` (create), `role.assign` (update) and
-  `eject` (delete).
+  enough. In the members space, the roles write its roles if they hold
+  `group.configure`. They write memberships as they hold `admit`
+  (create), `role.assign` (update) and `eject` (delete).
 - `space:fyi.opensocial.invites?…` (people's inboxes) is kept if the
   roles hold `invite` and it asks for invites alone, in anyone's inbox or
   one person's.
 - `space:*?…` becomes one scope per space the roles may read, naming the
   asked collections they may write.
+- `space:T?…&manage=…` is kept if the roles may do each operation asked
+  (`create`, `update`, `delete`) to the group's spaces of type `T`, or of
+  every type for `*`. They may by holding `space.create`,
+  `space.configure` or `space.delete`, or, for `update` and `delete`, by
+  a `manage=` scope a space's policy grants them there.
 - `blob:…` is kept only if something kept writes.
 
 The host withholds everything else: other `include:` sets,
 `transition:*`, `identity:` and `account:` scopes, and space scopes for
 another authority. It then makes the kept scope concrete. Each
 permission set becomes the scopes its lexicon lists, compiled into the
-host. That's a space scope for each space permission and an `rpc:` scope
-for each method. `authority=self` becomes the group's DID.
+host. That's a space scope for each space permission, or two where it
+both writes records and changes the space (one writing, one reading and
+changing), and an `rpc:` scope for each method. `authority=self` becomes
+the group's DID.
 
 A token calls none of the host's own methods, since those take a
-member's service auth. Of the four sets, a token can make configure's
-writes and manageMembers' writes (memberships, and invites in people's
-inboxes). The other sets' scopes say what an app was given, as the
-opensocial proposal lists them. A grant keeps this scope through every
-refresh. Refreshing doesn't ask the roles again, because each write
-does.
+member's service auth. Of the sets, a token makes their writes in the
+meta and members spaces and in people's inboxes. Their `rpc:` and
+`manage=` scopes say what an app was given, as the opensocial proposal
+lists them. A grant keeps this scope through every refresh. Refreshing
+doesn't ask the roles again, because each write does.
 
 ### Checking each write
 
@@ -265,14 +285,17 @@ roles need depends on where the write goes:
 
 - For a repo write, a repo grant for the collection, or the right to
   write it as the group in one of its open spaces.
-- In the meta space, `group.configure`. The same goes for roles and the
-  permissions record in the members space.
+- In the meta space, what its policy grants the roles, and every record
+  for `group.configure`. Roles in the members space need
+  `group.configure`.
 - For memberships in the members space, `admit`, `role.assign` or
   `eject`, as the write creates, changes or deletes one, and then what
   the records' rules ask ([membership](membership.md)).
 - In someone's inbox, `invite` ([membership](membership.md)).
-- In a space for chosen people, being one of them and holding `repo:*`.
-- Anywhere else, what the space's access record grants.
+- Anywhere else, what the scopes the space's policy grants the roles
+  allow. A space's published policy and the members space's index of
+  spaces are never written as records: only the space methods change
+  them ([spaces](spaces.md#making-changing-and-ending-a-space)).
 
 The host checks both under the group's write lock. The group makes all
 its commits under that lock, one at a time, to its public repo and its
@@ -293,8 +316,8 @@ Details:
 - `applyWrites` takes at most 200 writes. Repo writes honour
   `swapCommit` and `swapRecord`.
 - The meta space takes only a profile, rules and the labeler, and the
-  members space only roles, the permissions record and memberships. An
-  inbox takes invites, one write at a time.
+  members space only roles and memberships. An inbox takes invites, one
+  write at a time.
 - The host keeps a write of the profile, a rule or the declaration only
   as the group would keep it. A profile needs a name, a known join
   policy and pictures that are the group's own images, at `self`, and
@@ -306,16 +329,16 @@ Details:
 
 ## Lifetimes
 
-| What | Lasts | Then |
-| --- | --- | --- |
-| A pushed request | 5 minutes | swept on a later push |
-| A code | 60 seconds | deleted when exchanged |
-| An OAuth access token | 1 hour | refreshed |
-| A grant, public client | 14 days unrefreshed | each refresh extends it |
-| A grant, confidential client | 90 days unrefreshed | each refresh extends it |
-| A group token | 15 minutes | never refreshed |
-| An app password's access token | 2 hours | refreshed |
-| An app password's session | 90 days unrefreshed | each refresh extends it |
+| What                           | Lasts               | Then                    |
+| ------------------------------ | ------------------- | ----------------------- |
+| A pushed request               | 5 minutes           | swept on a later push   |
+| A code                         | 60 seconds          | deleted when exchanged  |
+| An OAuth access token          | 1 hour              | refreshed               |
+| A grant, public client         | 14 days unrefreshed | each refresh extends it |
+| A grant, confidential client   | 90 days unrefreshed | each refresh extends it |
+| A group token                  | 15 minutes          | never refreshed         |
+| An app password's access token | 2 hours             | refreshed               |
+| An app password's session      | 90 days unrefreshed | each refresh extends it |
 
 A refresh replaces both tokens atomically. If one token is refreshed
 twice, one refresh fails, and the old pair stops working.
@@ -337,15 +360,17 @@ storing one.
 The console acts as a group too. It doesn't run OAuth against the host
 it's part of. Instead it asks `fyi.opensocial.getGroupAuth` for a group
 and one of its spaces, as the member, with a DPoP proof. For each
-collection the member's roles may write in that space, the token's scope
-holds a space scope and a repo scope, plus blob uploads. In a space for
-chosen people, that's every collection for those of them who hold
-`repo:*`, and nothing for anyone else. If they write nothing there, the
-request fails 403.
+collection the member's roles may write in that space as the group, by
+the scopes its policy grants them, the token's scope holds a space scope
+and a repo scope, plus blob uploads. It also holds the `manage=`
+operations the member may use on that space: `update` and `delete` by
+their roles or the policy's grants, or `create` for a space not made
+yet, if their roles hold `space.create`. If they may do nothing there,
+the request fails 403.
 
 For the members space, the token also writes the records there that the
-member's grants allow (roles and the permissions record, and memberships
-as above). Each gets a space scope and no repo scope. That's how the
+member's grants allow (roles, and memberships as above). Each gets a
+space scope and no repo scope. That's how the
 console creates roles, approves requests, gives roles and removes
 members. For someone's inbox, a member who holds `invite` gets a scope
 for writing invites there and nothing else. That's how the console

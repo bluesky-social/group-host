@@ -17,8 +17,8 @@ use tempfile::TempDir;
 
 /// Two scopes a role may be granted: reading the moderation queue, and
 /// inviting.
-const MOD_READ: &str = "rpc:fyi.opensocial.listSubjects?aud=*";
-const INVITE: &str = "space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite";
+const MOD_READ: &str = "rpc:fyi.opensocial.listModSubjects?aud=*";
+const INVITE: &str = "space:fyi.opensocial.invites?authority=*&skey=self&collection=fyi.opensocial.invite&action=read_self&action=create&action=update&action=delete";
 
 /// A host at a free port, on the reference directory, resolving
 /// handles at the reference PDS.
@@ -278,7 +278,7 @@ async fn writes_the_groups_rules_roles_and_profile() {
     ok(&alice, &["rule", "delete", group, &rkey]).await;
     assert_eq!(kept(&meta, "rule", &rkey), None);
 
-    // A role, a bot's; what it may do; and back.
+    // A role, a bot's, with what it may do and give; added to, and back.
     let role = [
         "role",
         "set",
@@ -288,62 +288,52 @@ async fn writes_the_groups_rules_roles_and_profile() {
         "Ride leader",
         "--bot",
         "--no-default",
+        "--scopes",
+        INVITE,
+        "--assignable",
+        "member",
     ];
     ok(&alice, &role).await;
-    let leader = kept(&members, "role", "leader").unwrap();
+    let leader = || kept(&members, "role", "leader").unwrap();
     assert_eq!(
-        (leader["bot"].clone(), leader["default"].clone()),
+        (leader()["bot"].clone(), leader()["default"].clone()),
         (json!(true), json!(false))
     );
-    let grants = || kept(&members, "permissions", "self").unwrap()["grants"].clone();
-    let before = grants();
-    let leaders = || -> Vec<Value> {
-        let all = grants();
-        let all = all.as_array().unwrap().iter();
-        all.filter(|g| g["role"] == "leader").cloned().collect()
-    };
-    ok(
-        &alice,
-        &["role", "grant", group, "leader", "--assignable", ""],
-    )
-    .await;
     assert_eq!(
-        leaders(),
-        [json!({"role": "leader", "scopes": [], "assignable": []})]
+        (leader()["scopes"].clone(), leader()["assignable"].clone()),
+        (json!([INVITE]), json!(["member"]))
     );
-    // Each added to what it had; one taken away, the rest kept.
-    let of_members = || -> Value {
-        let all = grants();
-        let all = all.as_array().unwrap();
-        let found = all.iter().find(|g| g["role"] == "member");
-        found.cloned().unwrap()
-    };
-    let had = of_members()["scopes"].as_array().unwrap().clone();
+    // Each added to what it had, once; one taken away, the rest kept.
     for scope in [MOD_READ, INVITE] {
         ok(
             &alice,
-            &["role", "grant", group, "member", "--scopes", scope],
+            &["role", "grant", group, "leader", "--scopes", scope],
         )
         .await;
     }
-    let mut want = had.clone();
-    for scope in [MOD_READ, INVITE] {
-        if !want.contains(&json!(scope)) {
-            want.push(json!(scope));
-        }
-    }
-    assert_eq!(of_members()["scopes"], json!(want));
+    assert_eq!(leader()["scopes"], json!([INVITE, MOD_READ]));
     let undo = [
-        "role", "grant", group, "member", "--scopes", MOD_READ, "--undo",
+        "role", "grant", group, "leader", "--scopes", MOD_READ, "--undo",
     ];
     ok(&alice, &undo).await;
-    want.retain(|s| s != MOD_READ);
-    assert_eq!(of_members()["scopes"], json!(want));
-    let said_so = fails(&alice, &["role", "grant", group, "leader", "--undo"]).await;
-    assert!(said_so.contains("NotAssignable"), "{said_so}");
-    assert_ne!(grants(), before);
-    let said_so = fails(&alice, &["role", "delete", group, "leader"]).await;
+    assert_eq!(leader()["scopes"], json!([INVITE]));
+    // With nothing named, all of both; the rest of the role as it was.
+    ok(&alice, &["role", "grant", group, "leader", "--undo"]).await;
+    assert_eq!(
+        (leader().get("scopes"), leader().get("assignable")),
+        (None, None)
+    );
+    assert_eq!(leader()["displayName"], "Ride leader");
+    let said_so = fails(
+        &alice,
+        &["role", "grant", group, "ghost", "--scopes", INVITE],
+    )
+    .await;
+    assert!(said_so.contains("no such role: ghost"), "{said_so}");
+    let said_so = fails(&alice, &["role", "delete", group, "member"]).await;
     assert!(said_so.contains("RoleInUse"), "{said_so}");
+    ok(&alice, &["role", "delete", group, "leader"]).await;
+    assert_eq!(kept(&members, "role", "leader"), None);
 
     // The profile, changed in what is given; given empty, taken away.
     let before = kept(&meta, "profile", "self").unwrap();
@@ -426,7 +416,25 @@ async fn writes_the_groups_rules_roles_and_profile() {
     ];
     let resolved = said(&ok(&alice, &resolve).await);
     assert_eq!(resolved["status"], "resolved", "{resolved}");
-    assert_eq!(resolved["subject"]["did"], bob.as_str(), "{resolved}");
+    assert_eq!(resolved["subject"], bob.as_str(), "{resolved}");
+
+    // A space, made as the group under the policy given, at a key of the
+    // clock's.
+    let policy = r#"{"grants": [{"role": "member", "read": true}]}"#;
+    let make = [
+        "space",
+        "create",
+        group,
+        "com.example.calendar",
+        "--policy",
+        policy,
+    ];
+    let made = said(&ok(&alice, &make).await);
+    let space = made["space"].as_str().unwrap();
+    let calendars = format!("at://{did}/space/com.example.calendar/");
+    assert!(space.starts_with(&calendars), "{made}");
+    let kept = h.host.store.space(space).unwrap().unwrap();
+    assert_eq!(kept.policy["grants"][0]["role"], "member");
 }
 
 #[tokio::test]
@@ -513,6 +521,20 @@ async fn seeds_a_group_to_try_things_on() {
         .map(|(_, r)| r["title"].as_str().unwrap())
         .collect();
     assert_eq!(titles, ["Be kind", "Stay on topic"]);
+    // Its moderator's role, which its admins give, as they give any.
+    let members = group_host::group::members_space(&trial.did);
+    let moderator = h
+        .host
+        .group_record(&trial.did, &members, "fyi.opensocial.role", "moderator")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        moderator["scopes"],
+        serde_json::json!([
+            "include:fyi.opensocial.authModerate",
+            "space:*?collection=com.atproto.label.record"
+        ])
+    );
     let h2 = host().await;
     let alice = env(&h2, 0);
     ok(&alice, &["group", "create", "quiet.groups.test"]).await;
@@ -743,8 +765,13 @@ async fn moves_an_account_and_its_spaces_here_to_become_a_group() {
         store.granted(&forum, &alice.did).unwrap(),
         Some((true, false))
     );
+    // Its records in each space; in the forum, which is now a group's, its
+    // policy too, published. Alice's calendar has hers.
     let paths = store.space_paths(did, &forum).unwrap();
-    assert_eq!(paths.keys().collect::<Vec<_>>(), ["com.example.note/ride"]);
+    assert_eq!(
+        paths.keys().collect::<Vec<_>>(),
+        ["com.atproto.space.policy/self", "com.example.note/ride"]
+    );
     let held = store.space_paths(did, &calendar).unwrap();
     assert_eq!(
         held.keys().collect::<Vec<_>>(),

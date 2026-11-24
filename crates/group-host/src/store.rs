@@ -475,6 +475,11 @@ pub const MIGRATIONS: &[&str] = &[
     "
     CREATE INDEX IF NOT EXISTS space_record_path ON space_record (path);
 ",
+    // Each space's policy, the source of what its authority decides; its
+    // `publicRead` kept beside it as `public_read`.
+    "
+    ALTER TABLE space ADD COLUMN policy TEXT NOT NULL DEFAULT '{}';
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -528,8 +533,9 @@ const REVOKE: &str =
 const FORGET_REVOKED: &str = "DELETE FROM revoked_credential WHERE expires_at <= ?1";
 const REVOKED: &str =
     "SELECT 1 FROM revoked_credential WHERE space = ?1 AND jti = ?2 AND expires_at > ?3";
-const NEW_SPACE: &str = "INSERT INTO space (uri, authority, public_read, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (uri) DO NOTHING";
-const SPACE: &str = "SELECT authority, public_read FROM space WHERE uri = ?1";
+const NEW_SPACE: &str = "INSERT INTO space (uri, authority, public_read, created_at, policy) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (uri) DO NOTHING";
+const SPACE: &str = "SELECT authority, public_read, policy FROM space WHERE uri = ?1";
+const SET_POLICY: &str = "UPDATE space SET policy = ?2, public_read = ?3 WHERE uri = ?1";
 const PUT_GRANT: &str = "INSERT INTO space_grant (space, did, read, write) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (space, did) DO UPDATE SET read = ?3, write = ?4";
 const GRANT: &str = "SELECT read, write FROM space_grant WHERE space = ?1 AND did = ?2";
 const UNGRANT: &str = "DELETE FROM space_grant WHERE space = ?1 AND did = ?2";
@@ -755,11 +761,13 @@ pub struct SpaceOp {
 }
 
 /// A space whose authority is an account here: the authority, and
-/// whether anyone may read it.
+/// whether anyone may read it, and its policy.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Space {
     pub authority: String,
     pub public_read: bool,
+    /// Its policy, `$type` and all.
+    pub policy: serde_json::Value,
 }
 
 /// A repo's last write in a space, as its authority knows it: its
@@ -1495,22 +1503,32 @@ impl Store {
         Ok(found.optional()?.is_some())
     }
 
-    /// Keeps a new space of `authority`'s, no longer deleted if it was;
-    /// `false` if there is one at `uri`.
+    /// Keeps a new space of `authority`'s under `policy`, no longer
+    /// deleted if it was; `false` if there is one at `uri`.
     pub fn create_space(
         &self,
         uri: &str,
         authority: &str,
-        public_read: bool,
+        policy: &serde_json::Value,
         now: i64,
     ) -> Result<bool> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
-        let added = tx.execute(NEW_SPACE, params![uri, authority, public_read, now])?;
+        let public = policy["publicRead"] == true;
+        let made = params![uri, authority, public, now, policy.to_string()];
+        let added = tx.execute(NEW_SPACE, made)?;
         let undeleted = tx.execute(UNDELETE_SPACE, [uri]);
         undeleted?;
         tx.commit()?;
         Ok(added > 0)
+    }
+
+    /// Puts the space at `uri` under `policy`.
+    pub fn set_policy(&self, uri: &str, policy: &serde_json::Value) -> Result<()> {
+        let public = policy["publicRead"] == true;
+        let set = params![uri, policy.to_string(), public];
+        self.conn().execute(SET_POLICY, set)?;
+        Ok(())
     }
 
     /// Whether the space at `uri` was deleted, and not made again since.
@@ -1524,9 +1542,11 @@ impl Store {
     pub fn space(&self, uri: &str) -> Result<Option<Space>> {
         let conn = self.conn();
         let found = conn.query_row(SPACE, [uri], |r| {
+            let policy: String = r.get(2)?;
             Ok(Space {
                 authority: r.get(0)?,
                 public_read: r.get(1)?,
+                policy: serde_json::from_str(&policy).unwrap_or_default(),
             })
         });
         Ok(found.optional()?)

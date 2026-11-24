@@ -11,7 +11,7 @@ use group_host::repo::Write;
 use serde_json::{Value as Json, json};
 
 async fn join(h: &Running, did: &str, who: &str) {
-    let value = json!({"$type": format!("{NS}.membership"), "member": who, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
+    let value = json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
         collection: format!("{NS}.membership"),
         rkey: who.into(),
@@ -81,7 +81,17 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
-    let quiet = start_group(&h, &alice, json!({"handle": "quiet.groups.test", "displayName": "Quiet", "metaReadableBy": [{"role": "admin"}]})).await;
+    let quiet = start_group(
+        &h,
+        &alice,
+        json!({"handle": "quiet.groups.test", "displayName": "Quiet", "metaPublicRead": false}),
+    )
+    .await;
+    // Its face for admins alone.
+    let admins =
+        json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "admin", "read": true}]});
+    let meta = group_host::group::meta_space(&quiet);
+    h.host.store.set_policy(&meta, &admins).unwrap();
     join(&h, &riders, &bob.did).await;
     join(&h, &quiet, &bob.did).await;
 

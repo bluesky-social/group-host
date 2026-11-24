@@ -1,12 +1,13 @@
 //! What a group's records let each of its people do, as pure functions
-//! over those records: a space's access record says who reads it and who
-//! writes in it; the permissions record grants each role OAuth scopes, and
+//! over those records: a space's policy says who reads it, who writes in
+//! it in their own name, and what each role may do there as the group;
+//! each role record grants its role OAuth scopes across the group, and
 //! each action the host's methods ask about is answered by one scope.
 //! Roles compose by union: no deny, no precedence, no hierarchy.
 //!
-//! The records' lists are of objects (`{role}`, `{did}`), but for the
-//! scopes and assignable roles of a grant, and a membership's roles,
-//! which are strings alone, as the proposal has them.
+//! The records' lists are of objects (`{role}`, `{did}`), but for a
+//! role's scopes and assignable roles, and a membership's roles, which
+//! are strings alone, as the proposal has them.
 
 use crate::scopes::{Permissions, decoded};
 use atproto::space::SpaceRef;
@@ -16,8 +17,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const NS: &str = "fyi.opensocial";
 /// A label, as a record the group writes beside its subject.
 pub const LABEL: &str = "com.atproto.label.record";
-/// Anyone signed in, as an audience.
-pub const PUBLIC: &str = "public";
+/// The space policy group spaces are kept under, as a policy's `$type`.
+pub const POLICY: &str = "fyi.opensocial.policy";
 
 /// The actions the host's methods ask about.
 pub const ACTIONS: [&str; 11] = [
@@ -55,67 +56,89 @@ pub fn roles_of(membership: &Value) -> Vec<String> {
     roles.filter_map(Value::as_str).map(String::from).collect()
 }
 
-/// A role's grant in a space's access record: the OAuth scopes it holds
-/// there, which count only in that space.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SpaceGrant {
+/// A role's grant in a space's policy: whether its holders read the space
+/// and write in it in their own name, and the OAuth scopes they hold there
+/// acting as the group, which count only in that space.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PolicyGrant {
     pub role: String,
+    pub read: bool,
+    pub write: bool,
     pub scopes: Vec<String>,
 }
 
-/// A space's access record, as read, for the space it is in.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Access {
-    /// The space it is the record of; a grant counts in no other.
-    pub space: Option<SpaceRef>,
-    /// Whether anyone signed in reads it, member or not.
-    pub public: bool,
-    pub grants: Vec<SpaceGrant>,
-    /// The people it is for, by DID, when it is for chosen people.
-    pub people: Option<Vec<String>>,
-    /// Who may write in it in their own name, when not every member whose
-    /// roles grant `read`.
-    pub writable_by: Option<Vec<String>>,
+/// A space's policy (`fyi.opensocial.policy`), as read, for the space it
+/// is the policy of.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Policy {
+    /// The space it is the policy of; a grant counts in no other.
+    pub space: SpaceRef,
+    /// Whether anyone reads it, member or not, signed in or not.
+    pub public_read: bool,
+    /// Whether it is left out of the group's index.
+    pub unlisted: bool,
+    pub grants: Vec<PolicyGrant>,
 }
 
-impl Access {
-    /// The access record `record` of the space at `space`.
-    pub fn of(record: &Value, space: &str) -> Access {
-        let maybe = |key: &str, field: &str| record.get(key).map(|_| listed(record, key, field));
-        let grants = record["grants"].as_array().into_iter().flatten();
-        Access {
-            space: SpaceRef::parse(space).ok(),
-            public: record["public"] == true,
+impl Policy {
+    /// The policy `policy` of `space`.
+    pub fn of(policy: &Value, space: &SpaceRef) -> Policy {
+        let grants = policy["grants"].as_array().into_iter().flatten();
+        Policy {
+            space: space.clone(),
+            public_read: policy["publicRead"] == true,
+            unlisted: policy["unlisted"] == true,
             grants: grants
-                .map(|g| SpaceGrant {
+                .map(|g| PolicyGrant {
                     role: g["role"].as_str().unwrap_or_default().into(),
+                    read: g["read"] == true,
+                    write: g["write"] == true,
                     scopes: strings(&g["scopes"]),
                 })
                 .collect(),
-            people: maybe("people", "did"),
-            writable_by: maybe("writableBy", "role"),
         }
+    }
+
+    /// The grant of `role`, if it has one.
+    pub fn grant(&self, role: &str) -> Option<&PolicyGrant> {
+        self.grants.iter().find(|g| g.role == role)
+    }
+
+    fn theirs<'a>(&'a self, roles: &'a [String]) -> impl Iterator<Item = &'a PolicyGrant> {
+        self.grants.iter().filter(|g| roles.contains(&g.role))
     }
 
     /// The scopes a holder of `roles` is granted here, by union.
     pub fn scopes(&self, roles: &[String]) -> Vec<String> {
-        let mine = self.grants.iter().filter(|g| roles.contains(&g.role));
-        mine.flat_map(|g| g.scopes.clone()).collect()
-    }
-
-    /// Whether `scopes` let their holder `action` here, on `collection`
-    /// for a write.
-    fn lets(&self, scopes: &[String], collection: Option<&str>, action: &str) -> bool {
-        let Some(space) = &self.space else {
-            return false;
-        };
-        let held = Permissions::new(&scopes.join(" "), &space.authority);
-        held.space(space, collection, action)
+        self.theirs(roles).flat_map(|g| g.scopes.clone()).collect()
     }
 
     /// Whether `roles` are granted `read` here.
     pub fn reads(&self, roles: &[String]) -> bool {
-        self.lets(&self.scopes(roles), None, "read")
+        self.theirs(roles).any(|g| g.read)
+    }
+
+    /// Whether `roles` are granted `write` here: their own records in the
+    /// space are in its writer set.
+    pub fn writes_own(&self, roles: &[String]) -> bool {
+        self.theirs(roles).any(|g| g.write)
+    }
+
+    /// May a holder of `roles` read the space? Anyone, if it is public;
+    /// else those whose roles grant `read`.
+    pub fn can_read(&self, roles: &[String]) -> bool {
+        self.public_read || self.reads(roles)
+    }
+
+    /// `scopes`, as a token's would be read in this space.
+    fn held(&self, scopes: &[String]) -> Permissions {
+        Permissions::new(&scopes.join(" "), &self.space.authority)
+    }
+
+    /// Whether a holder of `roles` may `op` (`update`, `delete`) the space
+    /// itself, by a scope its grant here holds.
+    pub fn manages(&self, roles: &[String], op: &str) -> bool {
+        self.held(&self.scopes(roles)).manages(&self.space, op)
     }
 
     /// What a holder of `roles` may write here as the group, by collection
@@ -124,10 +147,10 @@ impl Access {
     pub fn writes(&self, roles: &[String]) -> BTreeMap<String, BTreeSet<String>> {
         let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for scope in self.scopes(roles) {
-            let one = [scope.clone()];
+            let held = self.held(std::slice::from_ref(&scope));
             for collection in query_of(&decoded(&scope), "collection") {
                 for action in WRITES {
-                    if self.lets(&one, Some(&collection), action) {
+                    if held.space(&self.space, Some(&collection), action) {
                         out.entry(collection.clone())
                             .or_default()
                             .insert(action.into());
@@ -136,30 +159,6 @@ impl Access {
             }
         }
         out
-    }
-
-    /// May `did`, holding `roles`, read the space? Anyone signed in, if it
-    /// is public; else those whose roles grant `read`. One for chosen
-    /// people is for them while they are members, and those whose roles
-    /// grant `read`.
-    pub fn can_read(&self, roles: &[String], did: &str) -> bool {
-        if let Some(people) = &self.people {
-            let theirs = !roles.is_empty() && people.iter().any(|p| p == did);
-            return theirs || self.reads(roles);
-        }
-        self.public || self.reads(roles)
-    }
-
-    /// May `did`, holding `roles`, write in the space in their own name?
-    /// A member whose roles grant `read`, unless the record names who.
-    pub fn can_write_own(&self, roles: &[String], did: &str) -> bool {
-        if let Some(people) = &self.people {
-            return !roles.is_empty() && people.iter().any(|p| p == did);
-        }
-        match &self.writable_by {
-            None => !roles.is_empty() && self.reads(roles),
-            Some(by) => by.iter().any(|r| r == PUBLIC || roles.contains(r)),
-        }
     }
 }
 
@@ -179,8 +178,23 @@ fn query_of(scope: &str, name: &str) -> Vec<String> {
 
 /// The actions a host method's `rpc:` scope grants, by method.
 const BY_METHOD: [(&str, &str); 2] = [
-    ("listSubjects", "mod.read"),
-    ("resolveSubject", "mod.resolve"),
+    ("listModSubjects", "mod.read"),
+    ("resolveModSubject", "mod.resolve"),
+];
+
+/// The actions holding `fyi.opensocial.authModerate` gives, as its
+/// permissions do: memberships, invites, labels, join requests and the
+/// moderation methods. `authManageGroup` gives them, and
+/// `group.configure`; `authManageProfile` none, as who writes the
+/// profile and rules is the meta space's policy's to say.
+pub const MODERATES: [&str; 7] = [
+    "mod.read",
+    "mod.resolve",
+    "label",
+    "invite",
+    "admit",
+    "eject",
+    "role.assign",
 ];
 
 /// The scope that grants each action.
@@ -190,16 +204,18 @@ pub fn scope_of(action: &str) -> Option<String> {
         format!("space:{NS}.members?skey=self&collection={NS}.membership&action={write}")
     };
     Some(match action {
-        "group.configure" => format!("include:{NS}.configure"),
+        "group.configure" => format!("include:{NS}.authManageGroup"),
         "space.create" => "space:*?manage=create".into(),
         "space.delete" => "space:*?manage=delete".into(),
-        "space.configure" => format!("space:*?collection={NS}.access"),
+        "space.configure" => "space:*?manage=update".into(),
         "admit" => membership("create"),
         "role.assign" => membership("update"),
         "eject" => membership("delete"),
-        "invite" => format!("space:{NS}.invites?authority=*&collection={NS}.invite"),
-        "mod.read" => rpc("listSubjects"),
-        "mod.resolve" => rpc("resolveSubject"),
+        "invite" => format!(
+            "space:{NS}.invites?authority=*&skey=self&collection={NS}.invite&action=read_self&action=create&action=update&action=delete"
+        ),
+        "mod.read" => rpc("listModSubjects"),
+        "mod.resolve" => rpc("resolveModSubject"),
         "label" => format!("space:*?collection={LABEL}"),
         _ => return None,
     })
@@ -252,10 +268,11 @@ pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
     let mut out = BTreeSet::new();
     for scope in scopes {
         membership_actions(scope, &mut out);
-        if *scope == format!("include:{NS}.configure") {
+        if *scope == format!("include:{NS}.authManageGroup") {
+            out.extend(MODERATES);
             out.insert("group.configure");
-        } else if *scope == format!("include:{NS}.manageMembers") {
-            out.extend(["admit", "eject", "role.assign", "invite"]);
+        } else if *scope == format!("include:{NS}.authModerate") {
+            out.extend(MODERATES);
         } else if let Some(rpc) = scope.strip_prefix("rpc:") {
             let method = rpc.split('?').next().unwrap_or_default();
             let action = BY_METHOD
@@ -274,6 +291,9 @@ pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
             if manage.contains(&"create") {
                 out.insert("space.create");
             }
+            if manage.contains(&"update") {
+                out.insert("space.configure");
+            }
             if manage.contains(&"delete") {
                 out.insert("space.delete");
             }
@@ -282,9 +302,6 @@ pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
             }
             let collections = query(scope, "collection");
             let every = collections.is_empty() || collections.contains(&"*");
-            if every || collections.contains(&format!("{NS}.access").as_str()) {
-                out.insert("space.configure");
-            }
             if every || collections.contains(&LABEL) {
                 out.insert("label");
             }
@@ -293,8 +310,11 @@ pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
     out
 }
 
-/// A role's grant in the permissions record: its scopes and the roles its
-/// holders may assign.
+/// Every role, as a role's `assignable` names them: those made later too.
+pub const EVERY_ROLE: &str = "*";
+
+/// A role's group-wide grant, as its record has it: its scopes and the
+/// roles its holders may assign.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Grant {
     pub role: String,
@@ -314,31 +334,25 @@ impl Grant {
         }
     }
 
-    /// As the permissions record keeps it (`defs#groupGrant`).
-    pub fn to_json(&self) -> Value {
-        serde_json::json!({
-            "role": self.role,
-            "scopes": self.scopes,
-            "assignable": self.assignable,
-        })
+    /// The grant of the role `role` keys, by its `record`.
+    pub fn of(role: &str, record: &Value) -> Grant {
+        Grant {
+            role: role.into(),
+            scopes: strings(&record["scopes"]),
+            assignable: strings(&record["assignable"]),
+        }
     }
 }
 
-/// The grants a permissions record holds.
-pub fn grants(permissions: &Value) -> Vec<Grant> {
-    permissions["grants"]
-        .as_array()
-        .map(|grants| {
-            grants
-                .iter()
-                .map(|g| Grant {
-                    role: g["role"].as_str().unwrap_or_default().into(),
-                    scopes: strings(&g["scopes"]),
-                    assignable: strings(&g["assignable"]),
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+/// Whether `assignable`, a union of roles' lists, covers `role`: by
+/// naming it, or every role.
+pub fn assigns(assignable: &BTreeSet<String>, role: &str) -> bool {
+    assignable.contains(EVERY_ROLE) || assignable.contains(role)
+}
+
+/// The grants of a group's role records, each with its key.
+pub fn grants(roles: &[(String, Value)]) -> Vec<Grant> {
+    roles.iter().map(|(key, r)| Grant::of(key, r)).collect()
 }
 
 /// Every action a holder of `roles` has, by union.

@@ -226,9 +226,9 @@ export class App {
   }
 }
 
-/// A new P-256 key, as a did:key: what a steward holds as a recovery key.
-export const didKey = () => {
-  const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+/// A new P-256 key: its private half, and its public half as a did:key.
+const p256 = () => {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const point = publicKey.export({ format: 'der', type: 'spki' }).subarray(-65);
   const compressed = Buffer.concat([Buffer.from([point[64] & 1 ? 3 : 2]), point.subarray(1, 33)]);
   const bytes = Buffer.concat([Buffer.from([0x80, 0x24]), compressed]);
@@ -239,7 +239,87 @@ export const didKey = () => {
     out = alphabet[Number(n % 58n)] + out;
     n /= 58n;
   }
-  return `did:key:z${out}`;
+  return { privateKey, did: `did:key:z${out}` };
+};
+
+/// A new P-256 key, as a did:key: what a steward holds as a recovery key.
+export const didKey = () => p256().did;
+
+/// `account`'s session at their own PDS, signed in with their password.
+const pdsSession = async (account) => {
+  const res = await fetch(`${world.pds}/xrpc/com.atproto.server.createSession`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identifier: account.handle, password: account.password })
+  });
+  if (!res.ok) throw new Error(`createSession: ${await res.text()}`);
+  return (await res.json()).accessJwt;
+};
+
+/// Makes `account`'s inbox at their PDS as their app does: a memberspace
+/// that keeps anyone's writes and names no members, so any group may
+/// write an invite there and only they read it. Its URI.
+export const makeInbox = async (account) => {
+  const res = await fetch(`${world.pds}/xrpc/com.atproto.space.createSpace`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${await pdsSession(account)}`
+    },
+    body: JSON.stringify({
+      spaceType: 'fyi.opensocial.invites',
+      skey: 'self',
+      policy: { $type: 'com.atproto.memberspace.policy', publicWrite: true }
+    })
+  });
+  if (!res.ok) throw new Error(`createSpace: ${await res.text()}`);
+  return (await res.json()).space;
+};
+
+/// The order of P-256, whose upper half a signature's `s` is kept out of.
+const ORDER = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+
+/// The repos in the writer set of `account`'s `inbox`, as their PDS keeps
+/// it, read as their app syncs it: a credential for a key of its own,
+/// from their delegation token, and the request signed with that key.
+export const inboxWriters = async (account, inbox) => {
+  const space = encodeURIComponent(inbox);
+  const delegated = await fetch(
+    `${world.pds}/xrpc/com.atproto.space.getDelegationToken?space=${space}`,
+    { headers: { authorization: `Bearer ${await pdsSession(account)}` } }
+  );
+  if (!delegated.ok) throw new Error(`getDelegationToken: ${await delegated.text()}`);
+  const key = p256();
+  const issued = await fetch(`${world.pds}/xrpc/com.atproto.space.authorizeSpaceSync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      space: inbox,
+      credentialKey: key.did,
+      delegationToken: (await delegated.json()).token
+    })
+  });
+  if (!issued.ok) throw new Error(`authorizeSpaceSync: ${await issued.text()}`);
+  const authorization = `Atproto-Space-Credential ${(await issued.json()).credential}`;
+  const input = '("authorization" "atproto-space-audience");tag="atproto-space-credential"';
+  const base = `"authorization": ${authorization}\n"atproto-space-audience": ${account.did}\n"@signature-params": ${input}`;
+  const signature = sign('sha256', Buffer.from(base), {
+    key: key.privateKey,
+    dsaEncoding: 'ieee-p1363'
+  });
+  const s = BigInt(`0x${signature.subarray(32).toString('hex')}`);
+  if (s > ORDER / 2n)
+    signature.set(Buffer.from((ORDER - s).toString(16).padStart(64, '0'), 'hex'), 32);
+  const res = await fetch(`${world.pds}/xrpc/com.atproto.space.listWriters?space=${space}`, {
+    headers: {
+      authorization,
+      'atproto-space-audience': account.did,
+      'signature-input': `sig=${input}`,
+      signature: `sig=:${signature.toString('base64')}:`
+    }
+  });
+  if (!res.ok) throw new Error(`listWriters: ${await res.text()}`);
+  return (await res.json()).repos.map((r) => r.repo);
 };
 
 /// An MCP client on this machine, as an AI app signs in: it finds the

@@ -1,20 +1,22 @@
 //! The members space's records, written as the group with a token: its
-//! roles, what each may do (the permissions record), and who holds which
+//! roles, each with what it may do across the group, and who holds which
 //! (memberships). The host makes each write only as it keeps the group
 //! whole, and does what the write means.
 //!
 //! - A role is a key of 64 characters at most. It goes only once nobody
-//!   holds it and the permissions record grants it nothing.
-//! - The permissions record is the configurers'. In it a writer changes
-//!   the grants only of roles they may assign, adds no scope their own
-//!   roles do not hold, and lets no role assign one they may not. A new
-//!   role, which nobody holds and no grant names, is theirs to grant and
-//!   to list.
+//!   holds it.
+//! - Roles are the configurers'. In a role a writer changes the grant
+//!   (its scopes and `assignable`) only of a role they may assign, or one
+//!   the batch makes; adds no scope their own roles do not hold, a
+//!   permission set as the scopes it lists; and lets the role assign only
+//!   roles they may assign. `*` in `assignable` is every role, those made
+//!   later too, and only one who may assign every role may give it.
 //! - Writing a membership for someone waiting to join admits them, with
 //!   roles the writer's `admit` grants may give, and their request goes.
 //!   Writing one for a member changes their roles, each one added or taken
 //!   away one the writer's `role.assign` grants may give. Everyone in the
-//!   group holds `member`.
+//!   group holds `member`. Whoever's roles a write changes leaves the
+//!   writer set of each space whose policy no longer grants them `write`.
 //! - Deleting a membership puts the member out, for one whose `eject`
 //!   grants may give each of their roles: their credentials are revoked,
 //!   the apps they signed in as the group end, their app passwords go,
@@ -29,17 +31,18 @@
 
 use crate::Host;
 use crate::api::invalid;
-use crate::group::did_rkey;
+use crate::group::{did_rkey, rkey_did};
 use crate::group_members::Members;
 use crate::moderation::Event;
 use crate::oauth_resource::Acting;
 use crate::oauth_scope::{scopes_of, set_of};
-use crate::rbac::{Grant, NS, actions_for, actions_of, roles_of};
+use crate::rbac::{EVERY_ROLE, Grant, NS, actions_for, actions_of, assigns, roles_of};
 use crate::repo::Write;
 use crate::scopes::covers;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
+use atproto::syntax::is_did;
 use axum::http::StatusCode;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -56,23 +59,18 @@ const ROLE_KEY_AT_MOST: usize = 64;
 fn kind(write: &Write) -> Option<&'static str> {
     let (collection, _) = write.path();
     let name = collection.strip_prefix(NS)?.strip_prefix('.')?;
-    ["role", "permissions", "membership"]
-        .into_iter()
-        .find(|k| *k == name)
+    ["role", "membership"].into_iter().find(|k| *k == name)
 }
 
 /// What a holder of `roles` may write in the members space, as the group,
-/// by collection: roles and the permissions record if they configure the
-/// group; memberships as they may admit (create), give roles (update) and
-/// put out (delete).
+/// by collection: roles if they configure the group; memberships as they
+/// may admit (create), give roles (update) and put out (delete).
 pub fn members_writes(grants: &[Grant], roles: &[String]) -> BTreeMap<String, BTreeSet<String>> {
     let actions = actions_for(grants, roles);
     let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     if actions.contains("group.configure") {
-        for c in ["role", "permissions"] {
-            let all = ["create", "update", "delete"].map(String::from);
-            out.insert(format!("{NS}.{c}"), all.into());
-        }
+        let all = ["create", "update", "delete"].map(String::from);
+        out.insert(format!("{NS}.role"), all.into());
     }
     let by = [
         ("admit", "create"),
@@ -109,74 +107,68 @@ pub(crate) fn own_scopes(
 }
 
 /// The roles holders of `roles` may give or take, for `action`, or for
-/// any if none is named.
-fn assignable(grants: &[Grant], roles: &[String], action: Option<&str>) -> BTreeSet<String> {
+/// any if none is named: `*` among them for every role.
+pub(crate) fn assignable(
+    grants: &[Grant],
+    roles: &[String],
+    action: Option<&str>,
+) -> BTreeSet<String> {
     let theirs = grants.iter().filter(|g| roles.contains(&g.role));
     let doing = theirs.filter(|g| action.is_none_or(|a| actions_of(&g.scopes).contains(a)));
     doing.flat_map(|g| g.assignable.iter().cloned()).collect()
 }
 
 /// The scopes `scope` is, a permission set of ours as those it lists.
-fn expanded(scope: &str) -> Vec<String> {
+pub(crate) fn expanded(scope: &str) -> Vec<String> {
     match set_of(scope) {
         Some(set) => scopes_of(set),
         None => vec![scope.to_string()],
     }
 }
 
+/// The scopes holders of `roles` hold across the group, each permission
+/// set as the scopes it lists.
+pub(crate) fn held(grants: &[Grant], roles: &[String]) -> Vec<String> {
+    let theirs = grants.iter().filter(|g| roles.contains(&g.role));
+    theirs
+        .flat_map(|g| g.scopes.iter().flat_map(|s| expanded(s)))
+        .collect()
+}
+
 /// The members space as the writes of a batch leave it.
 #[derive(Clone)]
 struct Book {
-    roles: BTreeSet<String>,
-    grants: Vec<Grant>,
-    /// Each membership by its key: whose it is, and their roles.
-    members: BTreeMap<String, (String, Vec<String>)>,
+    /// Each role by its key, and its grant.
+    roles: BTreeMap<String, Grant>,
+    /// Each membership by its key, its member's DID: their roles.
+    members: BTreeMap<String, Vec<String>>,
 }
 
 impl Book {
     fn of(members: &Members) -> Result<Book, XrpcError> {
-        let roles = members.records("role")?.into_iter().map(|(k, _)| k);
-        let held = members.records("membership")?.into_iter().map(|(k, m)| {
-            let did = m["member"].as_str().unwrap_or_default().to_string();
-            (k, (did, roles_of(&m)))
-        });
+        let roles = members.grants.iter().map(|g| (g.role.clone(), g.clone()));
+        let held = members.records("membership")?.into_iter();
         Ok(Book {
             roles: roles.collect(),
-            grants: members.grants.clone(),
-            members: held.collect(),
+            members: held.map(|(k, m)| (k, roles_of(&m))).collect(),
         })
     }
 
     /// Whether anyone holds a role that configures the group.
     fn run(&self) -> bool {
-        let configuring: BTreeSet<&String> = self
-            .grants
-            .iter()
-            .filter(|g| actions_of(&g.scopes).contains("group.configure"))
-            .map(|g| &g.role)
-            .collect();
-        let holds = |roles: &Vec<String>| roles.iter().any(|r| configuring.contains(r));
-        self.members.values().any(|(_, roles)| holds(roles))
-    }
-
-    /// The roles defined that nobody holds and no grant names: new, and
-    /// so anyone's who configures the group to grant and to give.
-    fn fresh(&self) -> BTreeSet<String> {
-        let named = |r: &String| {
-            let granted = self
-                .grants
-                .iter()
-                .any(|g| &g.role == r || g.assignable.contains(r));
-            granted || self.members.values().any(|(_, roles)| roles.contains(r))
+        let configuring = |r: &String| {
+            let grant = self.roles.get(r);
+            grant.is_some_and(|g| actions_of(&g.scopes).contains("group.configure"))
         };
-        self.roles.iter().filter(|r| !named(r)).cloned().collect()
+        let mut held = self.members.values().flatten();
+        held.any(configuring)
     }
 
     /// Refuses `roles` unless each is defined.
     fn defined<'a>(&self, roles: impl IntoIterator<Item = &'a String>) -> Result<(), XrpcError> {
         let undefined: Vec<&String> = roles
             .into_iter()
-            .filter(|r| !self.roles.contains(*r))
+            .filter(|r| !self.roles.contains_key(*r))
             .collect();
         if !undefined.is_empty() {
             return Err(invalid(format!("no such roles: {undefined:?}")));
@@ -195,10 +187,10 @@ struct Writer<'a> {
 
 impl Writer<'_> {
     /// Refuses a membership whose key is not its member's DID, or which
-    /// leaves out `member`.
+    /// leaves out `member`: their DID, and their roles.
     fn membership(&self, rkey: &str, value: &Value) -> Result<(String, Vec<String>), XrpcError> {
-        let did = value["member"].as_str().unwrap_or_default().to_string();
-        if did_rkey(&did) != rkey {
+        let did = rkey_did(rkey);
+        if !is_did(&did) || did_rkey(&did) != rkey {
             return Err(invalid("a membership is kept at its member's DID"));
         }
         let roles = roles_of(value);
@@ -219,7 +211,7 @@ impl Writer<'_> {
         action: &str,
     ) -> Result<(), XrpcError> {
         let mine = assignable(self.grants, self.roles, Some(action));
-        let blocked: Vec<&String> = changed.into_iter().filter(|r| !mine.contains(*r)).collect();
+        let blocked: Vec<&String> = changed.into_iter().filter(|r| !assigns(&mine, r)).collect();
         if !blocked.is_empty() {
             return Err(bad(
                 "NotAssignable",
@@ -229,72 +221,53 @@ impl Writer<'_> {
         Ok(())
     }
 
-    /// Refuses a new permissions record, in place of `was`, that changes a
-    /// grant of a role the writer may not assign, adds a scope their roles
-    /// do not hold, or lets a role assign one they may not.
-    fn permissions(
+    /// Refuses a write of the role `key`, its grant `was` before and `now`
+    /// after (none for none, as one made or deleted), that changes the
+    /// grant of a role the writer may not assign unless the batch makes
+    /// it (`new`), adds a scope their roles do not hold, or lets the role
+    /// assign one they may not. The roles it lets the role assign anew.
+    fn role(
         &self,
-        was: &[Grant],
-        now: &[Grant],
-        fresh: &BTreeSet<String>,
+        key: &str,
+        was: Option<&Grant>,
+        now: Option<&Grant>,
+        new: bool,
     ) -> Result<Vec<String>, XrpcError> {
-        let mut seen = BTreeSet::new();
-        if let Some(twice) = now.iter().find(|g| !seen.insert(&g.role)) {
-            return Err(invalid(format!(
-                "one grant for each role: {} has two",
-                twice.role
-            )));
+        let none = Grant::of(key, &Value::Null);
+        let (before, after) = (was.unwrap_or(&none), now.unwrap_or(&none));
+        if (&before.scopes, &before.assignable) == (&after.scopes, &after.assignable) {
+            return Ok(Vec::new());
         }
         let union = assignable(self.grants, self.roles, None);
-        let mine = |r: &String| union.contains(r) || fresh.contains(r);
-        let held: Vec<String> = self
-            .grants
-            .iter()
-            .filter(|g| self.roles.contains(&g.role))
-            .flat_map(|g| g.scopes.iter().flat_map(|s| expanded(s)))
-            .collect();
-        let find = |grants: &[Grant], role: &str| grants.iter().find(|g| g.role == role).cloned();
-        let roles: BTreeSet<&String> = was.iter().chain(now).map(|g| &g.role).collect();
-        let mut named = Vec::new();
-        for role in roles {
-            let (before, after) = (find(was, role), find(now, role));
-            if before == after {
-                continue;
-            }
-            if !mine(role) {
+        if !new && !assigns(&union, key) {
+            return Err(bad(
+                "NotAssignable",
+                format!("not yours to change: {key}'s grant"),
+            ));
+        }
+        let held = held(self.grants, self.roles);
+        let added = after.scopes.iter().filter(|s| !before.scopes.contains(s));
+        for scope in added {
+            let covered = expanded(scope).iter().all(|s| covers(&held, s, self.group));
+            if !covered {
                 return Err(bad(
-                    "NotAssignable",
-                    format!("not yours to change: {role}'s grant"),
+                    "ScopeNotHeld",
+                    format!("your roles do not hold {scope}, to give it"),
                 ));
             }
-            let Some(after) = after else { continue };
-            let before = before.unwrap_or(Grant {
-                role: role.clone(),
-                scopes: Vec::new(),
-                assignable: Vec::new(),
-            });
-            let added = after.scopes.iter().filter(|s| !before.scopes.contains(s));
-            for scope in added {
-                let covered = expanded(scope).iter().all(|s| covers(&held, s, self.group));
-                if !covered {
-                    return Err(bad(
-                        "ScopeNotHeld",
-                        format!("your roles do not hold {scope}, to give it"),
-                    ));
-                }
-            }
-            let listed = after
-                .assignable
-                .iter()
-                .filter(|r| !before.assignable.contains(r));
-            let listed: Vec<&String> = listed.collect();
-            if let Some(r) = listed.iter().find(|r| !mine(r)) {
-                return Err(bad("NotAssignable", format!("not yours to give: {r}")));
-            }
-            named.push(role.clone());
-            named.extend(listed.into_iter().cloned());
         }
-        Ok(named)
+        let listed = after.assignable.iter();
+        let listed: Vec<&String> = listed.filter(|r| !before.assignable.contains(r)).collect();
+        // Every role only from one who may give every role.
+        let mine = |r: &&String| match r.as_str() {
+            EVERY_ROLE => union.contains(EVERY_ROLE),
+            _ => assigns(&union, r),
+        };
+        if let Some(r) = listed.iter().find(|r| !mine(r)) {
+            return Err(bad("NotAssignable", format!("not yours to give: {r}")));
+        }
+        let named = listed.into_iter().filter(|r| *r != EVERY_ROLE);
+        Ok(named.cloned().collect())
     }
 }
 
@@ -334,35 +307,26 @@ impl Host {
             let (_, rkey) = w.path();
             match (kind(w), w) {
                 (Some("role"), Write::Delete { .. }) => {
-                    book.roles.remove(rkey);
+                    let was = book.roles.remove(rkey);
+                    let new = !before.roles.contains_key(rkey);
+                    writer.role(rkey, was.as_ref(), None, new)?;
                 }
-                (Some("role"), _) => {
+                (Some("role"), Write::Create { value, .. } | Write::Update { value, .. }) => {
                     if rkey.len() > ROLE_KEY_AT_MOST {
                         return Err(invalid(format!(
                             "a role is a key of {ROLE_KEY_AT_MOST} characters at most"
                         )));
                     }
-                    book.roles.insert(rkey.to_string());
-                }
-                (Some("permissions"), Write::Delete { .. }) => {
-                    return Err(invalid("the group keeps its permissions"));
-                }
-                (
-                    Some("permissions"),
-                    Write::Create { value, .. } | Write::Update { value, .. },
-                ) => {
-                    if rkey != "self" {
-                        return Err(invalid("the permissions record is kept at self"));
-                    }
-                    let now = crate::rbac::grants(value);
-                    let names = writer.permissions(&book.grants, &now, &book.fresh())?;
+                    let now = Grant::of(rkey, value);
+                    let new = !before.roles.contains_key(rkey);
+                    let names = writer.role(rkey, book.roles.get(rkey), Some(&now), new)?;
                     named.extend(names);
-                    book.grants = now;
+                    book.roles.insert(rkey.to_string(), now);
                 }
                 // The rest are memberships: the members space takes no other
                 // record of ours (`guard`).
                 (_, Write::Delete { .. }) => {
-                    let (_, theirs) = book.members.remove(rkey).unwrap_or_default();
+                    let theirs = book.members.remove(rkey).unwrap_or_default();
                     writer.may_give(&theirs, "eject")?;
                 }
                 (_, Write::Create { value, .. }) => {
@@ -376,33 +340,29 @@ impl Host {
                     }
                     book.defined(&roles)?;
                     writer.may_give(&roles, "admit")?;
-                    book.members.insert(rkey.to_string(), (did, roles));
+                    book.members.insert(rkey.to_string(), roles);
                 }
                 (_, Write::Update { value, .. }) => {
-                    let (did, roles) = writer.membership(rkey, value)?;
+                    let (_, roles) = writer.membership(rkey, value)?;
                     book.defined(&roles)?;
-                    let (_, current) = book.members.get(rkey).cloned().unwrap_or_default();
+                    let current = book.members.get(rkey).cloned().unwrap_or_default();
                     let added = roles.iter().filter(|r| !current.contains(r));
                     let taken = current.iter().filter(|r| !roles.contains(r));
                     writer.may_give(added.chain(taken), "role.assign")?;
-                    book.members.insert(rkey.to_string(), (did, roles));
+                    book.members.insert(rkey.to_string(), roles);
                 }
             }
         }
-        // A role goes only once nothing holds or grants it.
-        for gone in before.roles.difference(&book.roles) {
-            let held = book.members.values().any(|(_, r)| r.contains(gone));
-            let granted = book.grants.iter().any(|g| &g.role == gone);
-            if held || granted {
-                let what = if held {
-                    "someone holds it"
-                } else {
-                    "it still has a grant"
-                };
-                return Err(bad("RoleInUse", format!("{gone} stays while {what}")));
+        // A role goes only once nobody holds it.
+        for gone in before.roles.keys().filter(|r| !book.roles.contains_key(*r)) {
+            if book.members.values().any(|r| r.contains(gone)) {
+                return Err(bad(
+                    "RoleInUse",
+                    format!("{gone} stays while someone holds it"),
+                ));
             }
         }
-        // A grant changed is of a role defined, and gives roles defined.
+        // A role is let assign only roles defined.
         book.defined(&named)?;
         if before.run() && !book.run() {
             return Err(bad(
@@ -431,11 +391,10 @@ impl Host {
         for w in deletes.filter(|w| kind(w) == Some("membership")) {
             let (collection, rkey) = w.path();
             let record = self.group_record(group, uri, collection, rkey);
-            let Some(record) = record.map_err(XrpcError::internal)? else {
+            if record.map_err(XrpcError::internal)?.is_none() {
                 continue;
-            };
-            let did = record["member"].as_str().unwrap_or(rkey);
-            out.insert(rkey.to_string(), did.to_string());
+            }
+            out.insert(rkey.to_string(), rkey_did(rkey));
             gone.push(w.clone());
         }
         // Asked of the deletes alone: the write asks again of them all.
@@ -474,10 +433,13 @@ impl Host {
                     let noted = self.store.moderate(group, member, &event);
                     noted.map_err(XrpcError::internal)?;
                 }
-                Write::Create { value, .. } | Write::Update { value, .. } => {
-                    let did = value["member"].as_str().unwrap_or_default();
-                    let decided = self.store.decide(group, did);
+                Write::Create { rkey, .. } | Write::Update { rkey, .. } => {
+                    let did = rkey_did(rkey);
+                    let decided = self.store.decide(group, &did);
                     decided.map_err(XrpcError::internal)?;
+                    // Roles taken away may take writing in a space with them.
+                    let pruned = self.prune_writer_of(group, &did);
+                    pruned.map_err(XrpcError::internal)?;
                 }
             }
         }

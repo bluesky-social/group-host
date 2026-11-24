@@ -28,16 +28,16 @@ rooms are routes of one page: moving between them changes the address
 (the kit shows it in the bar) and nothing loads again, and a room opens
 with what it held last time while it reads afresh.
 
-|       | What                                           | How                                                                                                                                |
-| ----- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Read  | the group, its members and their roles         | `os.call('fyi.opensocial.getGroup' / 'listMembers')`                                                                               |
-| Read  | everything members wrote in the place's spaces | `os.space(uri)`, synced by the host's page with each writer's repo and held whole; each room works out what it shows (`site/src/lib/views.js`) |
-| Write | a note, an answer, a card, an event | the space's `create` / `put` / `delete` (`os.space`), at the visitor's own PDS, in their own repo in one of the place's spaces |
-| Write | an event's poster, or a picture on a member's card | `os.upload`, to the visitor's own PDS, the record pointing to it |
-| Read | those pictures | `os.call('fyi.opensocial.getSpaceBlob')`, which the host reads from whoever uploaded it |
-| Act | a report of a note, or an appeal of one's own | `os.act('fyi.opensocial.createReport')`, into the group host's moderation queue |
-| Join | joining, asking to with a note, cancelling the request, and leaving | `os.act` with `requestJoin`, `cancelJoinRequest` and `leaveGroup`, each of this group alone, as the host's page sets it |
-| Read | the moderators' labels on notes | the group's own `com.atproto.label.record` records in the same spaces, shown as the group defines each (`getGroup`'s `labels`) |
+|       | What                                                                | How                                                                                                                                            |
+| ----- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read  | the group, its members and their roles                              | `os.call('fyi.opensocial.getGroup' / 'listMembers')`                                                                                           |
+| Read  | everything members wrote in the place's spaces                      | `os.space(uri)`, synced by the host's page with each writer's repo and held whole; each room works out what it shows (`site/src/lib/views.js`) |
+| Write | a note, an answer, a card, an event                                 | the space's `create` / `put` / `delete` (`os.space`), at the visitor's own PDS, in their own repo in one of the place's spaces                 |
+| Write | an event's poster, or a picture on a member's card                  | `os.upload`, to the visitor's own PDS, the record pointing to it                                                                               |
+| Read  | those pictures                                                      | `os.call('fyi.opensocial.getSpaceBlob')`, which the host reads from whoever uploaded it                                                        |
+| Act   | a report of a note, or an appeal of one's own                       | `os.act('fyi.opensocial.createReport')`, into the group host's moderation queue                                                                |
+| Join  | joining, asking to with a note, cancelling the request, and leaving | `os.act` with `requestJoin`, `cancelJoinRequest` and `leaveGroup`, each of this group alone, as the host's page sets it                        |
+| Read  | the moderators' labels on notes                                     | the group's own `com.atproto.label.record` records in the same spaces, shown as the group defines each (`getGroup`'s `labels`)                 |
 
 The site declares those reads, and its writes (each a space, by its type
 and key, and a collection), when it is published; the visitor's sign-in
@@ -47,10 +47,10 @@ its lexicons, so the site publishes nothing for a PDS to read: its
 collections never need it. What each person may write is the spaces' to
 say:
 
-| Space                               | Holds                         | Who writes                      |
-| ----------------------------------- | ----------------------------- | ------------------------------- |
-| `fyi.opensocial.siteSpace/room`     | notes, answers, cards         | any member                      |
-| `fyi.opensocial.siteSpace/calendar` | events, each with its picture | hosts and admins (`writableBy`) |
+| Space                               | Holds                         | Who writes                                      |
+| ----------------------------------- | ----------------------------- | ----------------------------------------------- |
+| `fyi.opensocial.siteSpace/room`     | notes, answers, cards         | any member                                      |
+| `fyi.opensocial.siteSpace/calendar` | events, each with its picture | hosts and admins (its policy grants them write) |
 
 Every member reads each. Moderation is the group host's own. A member
 reports a note from the site; a moderator decides in the group host's

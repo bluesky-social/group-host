@@ -31,6 +31,16 @@ pub(crate) fn invalid(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, "InvalidRequest", message)
 }
 
+/// A cursor this host never gave, as a list whose lexicon names
+/// `InvalidCursor` refuses it.
+pub(crate) fn invalid_cursor() -> XrpcError {
+    XrpcError::new(
+        StatusCode::BAD_REQUEST,
+        "InvalidCursor",
+        "a cursor this host gave",
+    )
+}
+
 /// The parameter `name`, which the method needs.
 pub(crate) fn param<'a>(params: &'a Params, name: &str) -> Result<&'a str, XrpcError> {
     params

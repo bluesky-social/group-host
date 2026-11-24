@@ -19,9 +19,9 @@ use crate::group_invites::{inviting_scope, is_inbox};
 use crate::member_writes::own_scopes;
 use crate::oauth_resource::Refusal;
 use crate::oauth_scope::WRITES;
-use crate::oauth_scope::{labels_in, may_write, with_labels, writes_in};
+use crate::oauth_scope::{may_write, with_labels};
 use crate::oauth_store::{Grant, Tokens};
-use crate::rbac::{Access, LABEL, NS};
+use crate::rbac::{LABEL, NS, Policy};
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
@@ -64,18 +64,12 @@ impl Host {
         group: &str,
         roles: &[String],
     ) -> Result<BTreeMap<String, BTreeSet<String>>, XrpcError> {
-        let entries = self
-            .group_records(group, &members_space(group), &format!("{NS}.space"))
-            .map_err(XrpcError::internal)?;
+        let spaces = self.store.spaces_of(group).map_err(XrpcError::internal)?;
         let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        for (_, entry) in entries {
-            let uri = entry["space"].as_str().unwrap_or_default();
-            let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
-            let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-            // A space for chosen people is theirs, not the group's to publish.
-            let access = Access::of(&access, uri);
-            let open = access.people.is_none();
-            for (collection, actions) in access.writes(roles).into_iter().filter(|_| open) {
+        for uri in spaces {
+            let policy = self.policy(&uri).map_err(XrpcError::internal)?;
+            let policy = policy.expect("a space the group has");
+            for (collection, actions) in policy.writes(roles) {
                 out.entry(collection).or_default().extend(actions);
             }
         }
@@ -139,9 +133,11 @@ type Writable = BTreeMap<String, BTreeSet<String>>;
 
 impl Host {
     /// What `member`'s roles in `group` may write as it in `space`, at
-    /// `uri`: each kind of record with its writes, as the space's access
-    /// record grants them and, in the members space, as the group grants
-    /// them its own records there; and the scope of a token for them.
+    /// `uri`: each kind of record with its writes, as the space's policy
+    /// grants them and, in the members space, as the group grants them
+    /// its own records there; and the scope of a token for them, and for
+    /// what they may do to the space itself (making it, if it is not yet
+    /// made, changing and ending it).
     pub(crate) fn group_scope(
         &self,
         group: &str,
@@ -150,32 +146,61 @@ impl Host {
         space: &SpaceRef,
     ) -> Result<(Writable, Writable, String), XrpcError> {
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
-        let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
-        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        let everything = self.may_issue(group, member)?;
-        let access = Access::of(&access, uri);
-        let writes = writes_in(&access, &roles, member, everything);
+        let policy = self.policy(uri).map_err(XrpcError::internal)?;
+        let writes = policy
+            .as_ref()
+            .map(|p| p.writes(&roles))
+            .unwrap_or_default();
         let mut own = match uri == members_space(group) {
             true => self.members_writes_of(group, &roles)?,
             false => BTreeMap::new(),
         };
         // Labels, unless what the space grants holds them already.
-        let labels = labels_in(
-            &access,
-            &roles,
-            member,
-            self.may_do(group, member, "label")?,
-        );
+        let labels = policy.is_some() && self.may_do(group, member, "label")?;
         if !WRITES.iter().all(|w| may_write(&writes, LABEL, w)) {
             with_labels(&mut own, labels);
         }
-        if writes.is_empty() && own.is_empty() {
+        let manage = self.manage_ops(group, member, &roles, policy.as_ref())?;
+        if writes.is_empty() && own.is_empty() && manage.is_empty() {
             let none = "no role of yours may act as the group in this space";
             return Err(forbidden(none));
         }
         let mut scope = scopes_for(space, &writes);
         scope.extend(own_scopes(space, &own));
+        if !manage.is_empty() {
+            let ops: Vec<String> = manage.iter().map(|op| format!("&manage={op}")).collect();
+            scope.push(format!(
+                "space:{}?authority={}&skey={}&action=read{}",
+                space.kind,
+                space.authority,
+                space.skey,
+                ops.concat()
+            ));
+        }
         Ok((writes, own, scope.join(" ")))
+    }
+
+    /// What `member`, holding `roles`, may do to the space under `policy`
+    /// itself, or, if there is none yet, make it: by their roles across
+    /// the group, or the policy's grants.
+    fn manage_ops(
+        &self,
+        group: &str,
+        member: &str,
+        roles: &[String],
+        policy: Option<&Policy>,
+    ) -> Result<Vec<&'static str>, XrpcError> {
+        let Some(policy) = policy else {
+            let creates = self.may_do(group, member, "space.create")?;
+            return Ok(creates.then_some("create").into_iter().collect());
+        };
+        let mut ops = Vec::new();
+        for (op, action) in [("update", "space.configure"), ("delete", "space.delete")] {
+            if self.may_do(group, member, action)? || policy.manages(roles, op) {
+                ops.push(op);
+            }
+        }
+        Ok(ops)
     }
 }
 

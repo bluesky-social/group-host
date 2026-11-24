@@ -306,23 +306,23 @@ A page loads `/_os/kit.js`, which gives it `os`. Each ask is a message to
 the host's page, which answers it. [The site kit](../reference/site-kit.md)
 gives each ask's parameters, answers and refusals, and an example page:
 
-| Ask | Answer |
-| --- | --- |
-| `os.group()` | `{did, handle, console}` of the group whose site it is, where `console` is the address of the host's console |
-| `os.me()` | `{signedIn, did, handle}` of the visitor |
-| `os.call(method, params)` | the method's answer, asked as the visitor. That's its JSON, or a `Blob` for a method that answers with a file (`getSpaceBlob`) |
-| `os.act(method, input)` | the procedure's answer, asked as the visitor with `input` as its JSON, its `group` the site's own. For `createReport` that's its `id` and `createdAt`; for `requestJoin`, its `status` |
-| `os.space(uri)` | one of the group's spaces (`at://<group>/space/<type>/<skey>`), with the SDK's `GroupSpace` methods below. The same `uri` gives the same object |
-| `space.sync()` | `{failed}`, once the page's records of a space are up to date as the visitor may read them. The site must name the space in `spaces`, by its type alone or by its type and key. `failed` lists the writers whose PDS didn't answer |
-| `space.records({collections})` | every record held, right away, each as `{uri, repo, collection, rkey, cid, value}`. Given `collections`, only those collections' records |
-| `space.onChange(fn)` | calls `fn` with every record held after each sync that changes them |
-| `space.create(collection, value, {rkey})` | the `uri` and `cid` of `value`, written in the visitor's own repo in the space |
-| `space.put(collection, value, {rkey})` | the same, at `rkey`, replacing what's there |
-| `space.delete(collection, {rkey})` | deletes the visitor's record at `rkey` |
-| `os.upload(file)` | the blob reference of `file`, a picture uploaded to the visitor's own PDS for a record the site writes to point to |
-| `os.signIn({hint})` | opens the sign-in dialog, with `hint` filled in as the handle |
-| `os.signOut()` | signs the visitor out |
-| `os.onChange(fn)` | calls `fn` with `os.me()`'s answer when it changes in place, as on signing out. Signing in loads the page again |
+| Ask                                       | Answer                                                                                                                                                                                                                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `os.group()`                              | `{did, handle, console}` of the group whose site it is, where `console` is the address of the host's console                                                                                                                       |
+| `os.me()`                                 | `{signedIn, did, handle}` of the visitor                                                                                                                                                                                           |
+| `os.call(method, params)`                 | the method's answer, asked as the visitor. That's its JSON, or a `Blob` for a method that answers with a file (`getSpaceBlob`)                                                                                                     |
+| `os.act(method, input)`                   | the procedure's answer, asked as the visitor with `input` as its JSON, its `group` the site's own. For `createReport` that's its `id` and `createdAt`; for `requestJoin`, its `status`                                             |
+| `os.space(uri)`                           | one of the group's spaces (`at://<group>/space/<type>/<skey>`), with the SDK's `GroupSpace` methods below. The same `uri` gives the same object                                                                                    |
+| `space.sync()`                            | `{failed}`, once the page's records of a space are up to date as the visitor may read them. The site must name the space in `spaces`, by its type alone or by its type and key. `failed` lists the writers whose PDS didn't answer |
+| `space.records({collections})`            | every record held, right away, each as `{uri, repo, collection, rkey, cid, value}`. Given `collections`, only those collections' records                                                                                           |
+| `space.onChange(fn)`                      | calls `fn` with every record held after each sync that changes them                                                                                                                                                                |
+| `space.create(collection, value, {rkey})` | the `uri` and `cid` of `value`, written in the visitor's own repo in the space                                                                                                                                                     |
+| `space.put(collection, value, {rkey})`    | the same, at `rkey`, replacing what's there                                                                                                                                                                                        |
+| `space.delete(collection, {rkey})`        | deletes the visitor's record at `rkey`                                                                                                                                                                                             |
+| `os.upload(file)`                         | the blob reference of `file`, a picture uploaded to the visitor's own PDS for a record the site writes to point to                                                                                                                 |
+| `os.signIn({hint})`                       | opens the sign-in dialog, with `hint` filled in as the handle                                                                                                                                                                      |
+| `os.signOut()`                            | signs the visitor out                                                                                                                                                                                                              |
+| `os.onChange(fn)`                         | calls `fn` with `os.me()`'s answer when it changes in place, as on signing out. Signing in loads the page again                                                                                                                    |
 
 `<os-sign-in>` is a button in the page's own markup, styled by the
 page's own styles. It shows "Sign in" while nobody's signed in, and the
@@ -340,7 +340,7 @@ the rest.
 A read goes through the visitor's PDS to the host, as any app's call
 does ([signing in](signing-in.md)). The host answers it just as it
 answers that person anywhere else. A write is made at the visitor's PDS,
-as any app's write in a space is. The space's access record still says
+as any app's write in a space is. The space's policy still says
 whether they may write there ([spaces](spaces.md)), so `writes` asks no
 more of the visitor than the group lets them do. The host hears of the
 write as it hears of any member's, so it's in the next
@@ -361,7 +361,7 @@ whole with `os.space`, and works those out itself. The host's page reads
 each writer's repo in the space from their own PDS, as any app reading a
 space does. It uses the visitor's credential from the space's authority,
 and checks each repo against its commit. So the host keeps no copy of a
-space for the page to ask, and the access record decides what each
+space for the page to ask, and the space's policy decides what each
 visitor reads, just as it does at every repo. What the page read is kept
 in the browser at the address's origin. So a later read, on this visit
 or the next, fetches only what changed. That holds up for a group whose

@@ -33,19 +33,20 @@ const members = (write: string) =>
   `space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=${write}`;
 
 /**
- * The scope that grants each action, as a role's grant in the group's
- * permissions record holds it: what the host reads it as.
+ * The scope that grants each action, as a role's record holds it among
+ * its scopes: what the host reads it as.
  */
 export const SCOPES: Record<(typeof KNOWN)[number], string> = {
-  'mod.read': rpc('listSubjects'),
-  'mod.resolve': rpc('resolveSubject'),
+  'mod.read': rpc('listModSubjects'),
+  'mod.resolve': rpc('resolveModSubject'),
   label: 'space:*?collection=com.atproto.label.record',
-  invite: 'space:fyi.opensocial.invites?authority=*&collection=fyi.opensocial.invite',
+  invite:
+    'space:fyi.opensocial.invites?authority=*&skey=self&collection=fyi.opensocial.invite&action=read_self&action=create&action=update&action=delete',
   admit: members('create'),
   eject: members('delete'),
   'role.assign': members('update'),
   'space.create': 'space:*?manage=create',
-  'space.configure': 'space:*?collection=fyi.opensocial.access',
+  'space.configure': 'space:*?manage=update',
   'space.delete': 'space:*?manage=delete',
-  'group.configure': 'include:fyi.opensocial.configure'
+  'group.configure': 'include:fyi.opensocial.authManageGroup'
 };

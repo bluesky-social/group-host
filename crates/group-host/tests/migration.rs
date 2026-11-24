@@ -7,13 +7,13 @@ mod common;
 use atproto::mst::Tree;
 use atproto::plc::{Op, Signed, tombstone};
 use atproto::service_auth::{self, Claims};
-use atproto::space::{Commit as SpaceCommit, star};
+use atproto::space::{Commit as SpaceCommit, SPACE_META, SPACE_META_VERSION, star, write_star};
 use atproto::{Cid, Commit, Curve, Keypair, car, drisl};
 use axum::Router;
 use axum::extract::{Query, State};
 use axum::routing::get as route;
 use common::groups::*;
-use common::oauth::{App, give_avatar};
+use common::oauth::{App, give_avatar, make_space};
 use common::spaces::*;
 use common::{Running, serve, start_reachable};
 use group_host::group::meta_space;
@@ -61,19 +61,8 @@ async fn two_hosts_with(
         .call(&a, "com.atproto.space.createRecord", &token, Some(&rule))
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
-    let calls = [(
-        "createSpace",
-        json!({"group": did, "type": "com.example.calendar", "skey": "rides", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}}),
-    )];
-    let mut calendar = String::new();
-    for (method, body) in calls {
-        let lxm = format!("{NS}.{method}");
-        let (status, said) = post(&a, &lxm, &body, &[auth(&a, &alice, &lxm)]).await;
-        assert_eq!(status, 200, "{method}: {said}");
-        if method == "createSpace" {
-            calendar = said["space"].as_str().unwrap().to_string();
-        }
-    }
+    let readers = json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "member", "read": true, "write": true}]});
+    let calendar = make_space(&a, &alice, &did, "com.example.calendar", "rides", readers).await;
     let post = group_host::repo::Write::Create {
         collection: "app.bsky.feed.post".into(),
         rkey: "ride".into(),
@@ -81,7 +70,7 @@ async fn two_hosts_with(
     };
     a.host.write(&did, &[post]).unwrap();
     a.host
-        .record_writer(&calendar, &carol.did, "3lzrev", &[7u8; 32])
+        .record_writer(&calendar, &carol.did, "3lzrevzzzzzzz", &[7u8; 32])
         .unwrap();
     a.host.grant(&calendar, &bob.did, true, true).unwrap();
     (a, b, did, calendar, [alice, bob, carol])
@@ -147,7 +136,7 @@ async fn moves_a_group_whole_to_another_host() {
     assert!(
         writers
             .iter()
-            .any(|w| w.did == carol.did && w.repo_rev == "3lzrev" && w.data == [7u8; 32])
+            .any(|w| w.did == carol.did && w.repo_rev == "3lzrevzzzzzzz" && w.data == [7u8; 32])
     );
     assert_eq!(
         b.host.store.granted(&calendar, &bob.did).unwrap(),
@@ -625,13 +614,19 @@ async fn from_fake(b: &Running, alice: &Authority, fake: Arc<Fake>, key: &Keypai
         },
     );
     let space = format!("at://{did}/space/com.example.calendar/rides");
-    // Its space's repo, as its commit says, unless a test says otherwise.
+    // Its space's meta archive and repo, as its commit says, unless a test
+    // says otherwise.
     {
         let mut said = fake.said.lock().unwrap();
         said.entry("blobs".into())
             .or_insert_with(|| br#"{"blobs": []}"#.to_vec());
+        // Under a policy granting nobody anything, unless a test gives one.
+        let policy = said.get("policy").map_or_else(
+            || json!({"$type": "fyi.opensocial.policy", "grants": []}),
+            |p| serde_json::from_slice(p).unwrap(),
+        );
         said.entry("meta".into())
-            .or_insert_with(|| br#"{"writers": [], "grants": []}"#.to_vec());
+            .or_insert_with(|| space_meta_of(&space, &policy));
         if !said.contains_key("repo-space") {
             let record = drisl::encode(
                 &drisl::Value::from_json(&json!({"$type": "c.d.e", "x": 1})).unwrap(),
@@ -661,6 +656,17 @@ async fn from_fake(b: &Running, alice: &Authority, fake: Arc<Fake>, key: &Keypai
     }
     let body = json!({"did": did, "serviceJwt": jwt, "exportToken": "t", "snapshot": {"handle": "faked.groups.test", "spaces": [space]}});
     call(b, alice, RECEIVE, body).await
+}
+
+/// The meta archive of `space`, a space under `policy`, with no writers.
+fn space_meta_of(space: &str, policy: &Json) -> Vec<u8> {
+    let meta = BTreeMap::from([
+        ("$type".to_string(), drisl::Value::String(SPACE_META.into())),
+        ("ver".to_string(), drisl::Value::Integer(SPACE_META_VERSION)),
+        ("space".to_string(), drisl::Value::String(space.into())),
+    ]);
+    let policy = drisl::encode(&drisl::Value::from_json(policy).unwrap());
+    write_star(&meta, [(b"policy".as_slice(), policy.as_slice())])
 }
 
 /// A repo of one record, as `did`, signed by `key`.
@@ -744,6 +750,16 @@ async fn takes_in_nothing_it_cannot_check() {
         "{}",
         said.1
     );
+    // A space under a policy of this host's that is not as its lexicon
+    // has it.
+    let fake = Arc::new(Fake::default());
+    let policy = json!({"$type": "fyi.opensocial.policy", "grants": "everyone"});
+    fake.said
+        .lock()
+        .unwrap()
+        .insert("policy".into(), policy.to_string().into_bytes());
+    let said = from_fake(&b, &alice, fake, &key).await;
+    assert_eq!(error(&said), (400, "InvalidArchive"), "{}", said.1);
 }
 
 #[tokio::test]

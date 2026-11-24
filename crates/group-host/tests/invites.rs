@@ -1,7 +1,6 @@
 //! Invites: written as the group in the invitee's inbox, through
 //! `com.atproto.space.*` with a group token, listed, taken back by
-//! deleting them, turned down, and redeemed by asking to join; and who
-//! may read and write an inbox, as its authority asks.
+//! deleting them, turned down, and redeemed by asking to join.
 
 mod common;
 
@@ -302,7 +301,7 @@ async fn a_token_writes_invites_only_as_far_as_it_and_its_member_may() {
     assert_eq!(said.error(), (400, "InvalidRequest"));
 
     // Its member no longer able to invite, it writes no invite.
-    let founder = json!({"$type": format!("{NS}.membership"), "member": alice.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
+    let founder = json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
     let rkey_of = |d: &str| group_host::group::did_rkey(d);
     h.host
         .space_write(
@@ -444,83 +443,6 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
         .unwrap();
     assert_eq!(h.host.sweep_invites(now_millis()).await.unwrap(), 0);
     assert!(h.host.store.invited(&did, erin).unwrap().is_some());
-}
-
-const CHECK: &str = "com.atproto.managedspace.checkAccess";
-
-async fn check(h: &Running, asker: &Authority, space: &str, repo: Option<&str>) -> (u16, Json) {
-    let repo = repo.map(|r| format!("&repo={r}")).unwrap_or_default();
-    get(
-        h,
-        CHECK,
-        &format!("space={space}{repo}&clientId=https://app.test/client.json"),
-        &[auth(h, asker, CHECK)],
-    )
-    .await
-}
-
-#[tokio::test]
-async fn an_inbox_is_its_owners_to_read_and_groups_here_to_write() {
-    let h = start(&[], false).await;
-    let [alice, bob, carol] = people(&h).await;
-    let did = start_group(
-        &h,
-        &alice,
-        json!({"handle": RIDERS, "displayName": "Riders"}),
-    )
-    .await;
-    let inbox = inbox_of(&bob.did);
-    let access = |read: bool, write: bool| (200, json!({"read": read, "write": write}));
-    assert_eq!(
-        check(&h, &bob, &inbox, Some(&did)).await,
-        access(false, true)
-    );
-    assert_eq!(
-        check(&h, &bob, &inbox, Some(&carol.did)).await,
-        access(false, false)
-    );
-    let plain = h.host.create_account("plain.groups.test").await.unwrap();
-    assert_eq!(
-        check(&h, &bob, &inbox, Some(&plain)).await,
-        access(false, false)
-    );
-    assert_eq!(
-        check(&h, &bob, &inbox, Some(&bob.did)).await,
-        access(true, false)
-    );
-    // Asked for no repo, it answers what anyone may do: nothing.
-    assert_eq!(check(&h, &bob, &inbox, None).await, access(false, false));
-    // A space that is no inbox, this host manages nothing in.
-    let other = format!("at://{}/space/xyz.app.board/self", bob.did);
-    assert_eq!(
-        check(&h, &bob, &other, Some(&did)).await,
-        access(false, false)
-    );
-    assert_eq!(
-        check(&h, &bob, &other, Some(&bob.did)).await,
-        access(false, false)
-    );
-    // Only its authority asks.
-    assert_eq!(
-        error(&check(&h, &carol, &inbox, Some(&did)).await),
-        (403, "Forbidden")
-    );
-    assert_eq!(
-        error(&check(&h, &bob, "nope", Some(&did)).await),
-        (400, "InvalidRequest")
-    );
-    // Its authority asks with a token for this method alone.
-    let wrong = "com.atproto.managedspace.checkUserAccess";
-    let (status, _) = get(
-        &h,
-        CHECK,
-        &format!("space={inbox}&repo={did}"),
-        &[auth(&h, &bob, wrong)],
-    )
-    .await;
-    assert!(status == 401 || status == 403, "{status}");
-    let (status, _) = get(&h, CHECK, &format!("space={inbox}&repo={did}"), &[]).await;
-    assert_eq!(status, 401);
 }
 
 #[test]

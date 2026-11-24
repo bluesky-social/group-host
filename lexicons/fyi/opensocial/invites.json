@@ -5,8 +5,8 @@
     "main": {
       "type": "space",
       "key": "literal:self",
-      "name": "Group invites",
-      "description": "Each person's own inbox, hosted by them rather than by a group: where groups' invites arrive.",
+      "title": "Group invites",
+      "description": "A user's inbox for group invites, under their own DID. Created with a memberspace policy that sets publicWrite, so groups may write invites here and read only their own.",
       "collections": [
         "fyi.opensocial.invite"
       ]

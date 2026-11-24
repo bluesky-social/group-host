@@ -1,9 +1,9 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
 import type * as getActor from '#lib/lexicons/fyi/opensocial/getActor.ts';
 import type * as getGroup from '#lib/lexicons/fyi/opensocial/getGroup.ts';
-import type * as getSubjectHistory from '#lib/lexicons/fyi/opensocial/getSubjectHistory.ts';
+import type * as getModSubjectHistory from '#lib/lexicons/fyi/opensocial/getModSubjectHistory.ts';
+import type * as listModSubjects from '#lib/lexicons/fyi/opensocial/listModSubjects.ts';
 import type * as listSpaceRecords from '#lib/lexicons/fyi/opensocial/listSpaceRecords.ts';
-import type * as listSubjects from '#lib/lexicons/fyi/opensocial/listSubjects.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { applyAsGroup, asGroup, membersOf } from '#lib/asGroup.ts';
@@ -17,9 +17,7 @@ type Event = { fetch: typeof fetch; params: { handle?: string } };
 type Status = 'open' | 'escalated' | 'resolved';
 const STATUSES: string[] = ['open', 'escalated', 'resolved'];
 /** The reasons a moderator's report gives: a new group's labeler's, but an appeal, only its subject's. */
-const REASONS = ['Spam', 'Misleading', 'Rude', 'Sexual', 'Violation', 'Other'].map(
-  (r) => `com.atproto.moderation.defs#reason${r}`
-);
+const REASONS = ['spam', 'misleading', 'rude', 'nsfw', 'violation', 'other'];
 
 async function groupOf(event: Event) {
   const handle = (event.params.handle ?? '') as Handle;
@@ -28,17 +26,11 @@ async function groupOf(event: Event) {
   ).did;
 }
 
-/** A subject as the queue names it: an account's DID, or a record's URI. */
-function keyOf(subject: object): `${string}:${string}` {
-  const { did, uri } = subject as { did?: `did:${string}:${string}`; uri?: `at://${string}` };
-  return did ?? uri ?? 'did:none:none';
-}
-
-/** What happened to `key` in `group`'s queue, oldest first. */
+/** What happened to `key`, an account's DID or a record's URI, in `group`'s queue, oldest first. */
 async function history(event: Event, group: Did, key: `${string}:${string}`) {
-  const { events } = await xrpc<typeof getSubjectHistory.main>(
+  const { events } = await xrpc<typeof getModSubjectHistory.main>(
     event,
-    'fyi.opensocial.getSubjectHistory',
+    'fyi.opensocial.getModSubjectHistory',
     { group, subject: key }
   );
   return events as Happened[];
@@ -58,13 +50,14 @@ export const load: PageServerLoad = async (event) => {
   const asked = event.url.searchParams.get('status') ?? '';
   const status = (STATUSES.includes(asked) ? asked : 'open') as Status;
   if (!actions.includes('mod.read')) return { group: view, actions, status, subjects: null };
-  const { subjects } = await xrpc<typeof listSubjects.main>(event, 'fyi.opensocial.listSubjects', {
-    group,
-    status
-  });
+  const { subjects } = await xrpc<typeof listModSubjects.main>(
+    event,
+    'fyi.opensocial.listModSubjects',
+    { group, status }
+  );
   const listed: Subject[] = await Promise.all(
     subjects.map(async (s) => {
-      const key = keyOf(s.subject);
+      const key = s.subject as `${string}:${string}`;
       return {
         key,
         actor: s.actor ?? { did: key },
@@ -149,12 +142,9 @@ export const actions: Actions = {
   resolve: async (event) => {
     const group = await groupOf(event);
     const form = await event.request.formData();
-    const key = String(form.get('subject'));
+    const subject = String(form.get('subject'));
     const note = String(form.get('note') ?? '').trim();
-    const subject = key.startsWith('did:')
-      ? { $type: 'fyi.opensocial.defs#accountSubject', did: key }
-      : { $type: 'fyi.opensocial.defs#recordSubject', uri: key };
-    return act(event, 'fyi.opensocial.resolveSubject', {
+    return act(event, 'fyi.opensocial.resolveModSubject', {
       group,
       subject,
       status: String(form.get('status')),
@@ -198,7 +188,7 @@ export const actions: Actions = {
     const rule = String(form.get('rule') ?? '');
     return act(event, 'fyi.opensocial.createReport', {
       group,
-      subject: { $type: 'fyi.opensocial.defs#accountSubject', did: String(form.get('did')) },
+      subject: String(form.get('did')),
       reasonType: String(form.get('reasonType')),
       ...(reason ? { reason } : {}),
       ...(rule ? { rule } : {})

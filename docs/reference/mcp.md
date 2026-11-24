@@ -6,15 +6,15 @@ JSON. It speaks MCP `2025-06-18`, `2025-03-26` and `2024-11-05`, and
 answers an `initialize` that asks for another version with the latest.
 [MCP](../design/mcp.md) says how a client connects and signs in.
 
-| Message | Answer |
-| --- | --- |
-| `initialize`, `ping`, `tools/list`, `tools/call` | as MCP has them |
-| a notification, with no `id` | 202, with no body |
-| any other method | JSON-RPC `-32601` |
-| a body that isn't JSON | 400, JSON-RPC `-32700` with a null `id` |
-| JSON that isn't one JSON-RPC 2.0 object (a batch, a string) | `-32600` |
-| an unknown tool, or arguments that aren't an object | `-32602` |
-| no token, or one the host doesn't know | 401, with `WWW-Authenticate: Bearer` naming the resource metadata |
+| Message                                                     | Answer                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| `initialize`, `ping`, `tools/list`, `tools/call`            | as MCP has them                                                   |
+| a notification, with no `id`                                | 202, with no body                                                 |
+| any other method                                            | JSON-RPC `-32601`                                                 |
+| a body that isn't JSON                                      | 400, JSON-RPC `-32700` with a null `id`                           |
+| JSON that isn't one JSON-RPC 2.0 object (a batch, a string) | `-32600`                                                          |
+| an unknown tool, or arguments that aren't an object         | `-32602`                                                          |
+| no token, or one the host doesn't know                      | 401, with `WWW-Authenticate: Bearer` naming the resource metadata |
 
 ## The tools are the commands
 
@@ -46,7 +46,7 @@ group. A tool does one of four things:
   member's current roles, and logs the write under the client.
 - It writes an invite in the invitee's inbox, or takes it back, the same
   way.
-- It sets a role's grant in the permissions record.
+- It adds to a role's grant in its record, or takes from it.
 
 [MCP](../design/mcp.md#tools-and-calls) says why.
 
@@ -72,76 +72,76 @@ profile already had keeps its icon.
 
 ## group
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `group_show` | `group show` | `fyi.opensocial.getGroup` | shows the group as the member may see it: its profile, rules, member count, roles and spaces |
-| `group_deactivate` | `group deactivate` | `fyi.opensocial.deactivateGroup` | switches the group off. With `undo`, `fyi.opensocial.activateGroup` switches it back on |
-| `group_handle` | `group handle` | `fyi.opensocial.updateGroupHandle` | gives the group a handle on a domain that names it, or gives its own address back |
+| Tool               | Command            | Lexicon                            | What it does                                                                                 |
+| ------------------ | ------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| `group_show`       | `group show`       | `fyi.opensocial.getGroup`          | shows the group as the member may see it: its profile, rules, member count, roles and spaces |
+| `group_deactivate` | `group deactivate` | `fyi.opensocial.deactivateGroup`   | switches the group off. With `undo`, `fyi.opensocial.activateGroup` switches it back on      |
+| `group_handle`     | `group handle`     | `fyi.opensocial.updateGroupHandle` | gives the group a handle on a domain that names it, or gives its own address back            |
 
 ## profile
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
+| Tool          | Command       | Lexicon                  | What it does                                                                                                                                                            |
+| ------------- | ------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `profile_set` | `profile set` | `fyi.opensocial.profile` | changes the fields given in the group's profile (at `self` in its meta space) as the group, and keeps the rest. A field given empty, an empty list or `null` is removed |
 
 ## rule
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `rule_set` | `rule set` | `fyi.opensocial.rule` | writes a rule in the meta space as the group. It writes the one `rule` names by its key, or without one a new rule keyed by the host's clock |
-| `rule_delete` | `rule delete` | `fyi.opensocial.rule` | deletes the rule `rule` names |
+| Tool          | Command       | Lexicon               | What it does                                                                                                                                 |
+| ------------- | ------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rule_set`    | `rule set`    | `fyi.opensocial.rule` | writes a rule in the meta space as the group. It writes the one `rule` names by its key, or without one a new rule keyed by the host's clock |
+| `rule_delete` | `rule delete` | `fyi.opensocial.rule` | deletes the rule `rule` names                                                                                                                |
 
 ## label
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `label_define` | `label define` | `fyi.opensocial.putLabelDefinition` | defines or changes the group's own label `label`: its `name` and `description`, and how apps should show it (`severity`, `blurs`, `default_setting`, `adult_only`) |
-| `label_delete` | `label delete` | `fyi.opensocial.deleteLabelDefinition` | stops defining the label `label` |
+| Tool           | Command        | Lexicon                                | What it does                                                                                                                                                       |
+| -------------- | -------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `label_define` | `label define` | `fyi.opensocial.putLabelDefinition`    | defines or changes the group's own label `label`: its `name` and `description`, and how apps should show it (`severity`, `blurs`, `default_setting`, `adult_only`) |
+| `label_delete` | `label delete` | `fyi.opensocial.deleteLabelDefinition` | stops defining the label `label`                                                                                                                                   |
 
 ## role
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `role_set` | `role set` | `fyi.opensocial.role` | writes the role `role` (its id) in the members space, as the group |
-| `role_delete` | `role delete` | `fyi.opensocial.role` | deletes a role nobody holds or is granted |
-| `role_grant` | `role grant` | `fyi.opensocial.permissions` | adds the `scopes` given, and the roles its holders may assign (`assignable`), to the grant of `role` in the permissions record. With `undo`, it takes them away, or drops the grant if none are given. The rest of the record stays as it was, and the write follows the same rules as any write to it |
+| `role_set` | `role set` | `fyi.opensocial.role` | writes the role `role` (its id) in the members space, as the group, with its `scopes` and the roles its holders may assign (`assignable`, `*` for every role) |
+| `role_delete` | `role delete` | `fyi.opensocial.role` | deletes a role nobody holds |
+| `role_grant` | `role grant` | `fyi.opensocial.role` | adds the `scopes` given, and the roles its holders may assign (`assignable`), to those in the record of `role`. With `undo`, it takes them away, or takes all of both if none are given. The rest of the record stays as it was, and the write follows the same rules as any write of it. A role the group doesn't have is refused |
 
 ## site
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `site_publish` | `site publish` | `fyi.opensocial.putSite` | publishes the group's whole website from `files`, each `{path, text}` or `{path, bytes}`. `fallback` and `not_found` name files among them, and `reads` names the host's methods its pages may ask as whoever signs in. `acts` names the procedures they may ask as that person, and `spaces` the group's spaces they may read whole, each `{space, key}`, where `key` names one space of the type and without it it's every one (`{"space": "fyi.opensocial.siteSpace", "key": "board"}`). `writes` names the records they may write in that person's own repo, each `{space, key, collection}`, with `key` the same way. The command reads the files from a folder |
-| `site_delete` | `site delete` | `fyi.opensocial.deleteSite` | takes the group's website down |
-| `site_domain` | `site domain` | `fyi.opensocial.putSiteDomain` | serves the group's website at its handle's own domain once that domain reaches this host. With `undo`, `fyi.opensocial.deleteSiteDomain` serves it at its address alone again |
+| Tool           | Command        | Lexicon                        | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------- | -------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `site_publish` | `site publish` | `fyi.opensocial.putSite`       | publishes the group's whole website from `files`, each `{path, text}` or `{path, bytes}`. `fallback` and `not_found` name files among them, and `reads` names the host's methods its pages may ask as whoever signs in. `acts` names the procedures they may ask as that person, and `spaces` the group's spaces they may read whole, each `{space, key}`, where `key` names one space of the type and without it it's every one (`{"space": "fyi.opensocial.siteSpace", "key": "board"}`). `writes` names the records they may write in that person's own repo, each `{space, key, collection}`, with `key` the same way. The command reads the files from a folder |
+| `site_delete`  | `site delete`  | `fyi.opensocial.deleteSite`    | takes the group's website down                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `site_domain`  | `site domain`  | `fyi.opensocial.putSiteDomain` | serves the group's website at its handle's own domain once that domain reaches this host. With `undo`, `fyi.opensocial.deleteSiteDomain` serves it at its address alone again                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## member
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `member_list` | `member list` | `fyi.opensocial.listMembers` | lists who's in the group and their roles, a page at a time, filtered by part of a handle or DID (`q`) |
-| `member_assign` | `member assign` | `fyi.opensocial.membership` | writes the membership of `member` (a DID) with `roles` in place of theirs, `member` among them. It lets in someone waiting to join, or changes a member's roles |
-| `member_eject` | `member eject` | `fyi.opensocial.membership` | deletes the membership, which puts them out |
+| Tool            | Command         | Lexicon                      | What it does                                                                                                                                                    |
+| --------------- | --------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `member_list`   | `member list`   | `fyi.opensocial.listMembers` | lists who's in the group and their roles, a page at a time, filtered by part of a handle or DID (`q`)                                                           |
+| `member_assign` | `member assign` | `fyi.opensocial.membership`  | writes the membership of `member` (a DID) with `roles` in place of theirs, `member` among them. It lets in someone waiting to join, or changes a member's roles |
+| `member_eject`  | `member eject`  | `fyi.opensocial.membership`  | deletes the membership, which puts them out                                                                                                                     |
 
 ## join
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
+| Tool        | Command     | Lexicon                           | What it does                                |
+| ----------- | ----------- | --------------------------------- | ------------------------------------------- |
 | `join_list` | `join list` | `fyi.opensocial.listJoinRequests` | lists the requests to join that are waiting |
-| `join_deny` | `join deny` | `fyi.opensocial.denyJoinRequest` | turns down `member`'s request |
+| `join_deny` | `join deny` | `fyi.opensocial.denyJoinRequest`  | turns down `member`'s request               |
 
 ## invite
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `invite_send` | `invite send` | `fyi.opensocial.invite` | invites `person` (a DID), with an optional `message` and `expires_at`, and answers the invite's `uri`. With `undo`, it takes back the invite waiting for them |
-| `invite_list` | `invite list` | `fyi.opensocial.listInvites` | lists the invites that are waiting |
+| Tool          | Command       | Lexicon                      | What it does                                                                                                                                                  |
+| ------------- | ------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invite_send` | `invite send` | `fyi.opensocial.invite`      | invites `person` (a DID), with an optional `message` and `expires_at`, and answers the invite's `uri`. With `undo`, it takes back the invite waiting for them |
+| `invite_list` | `invite list` | `fyi.opensocial.listInvites` | lists the invites that are waiting                                                                                                                            |
 
 ## space
 
-| Tool | Command | Lexicon | What it does |
-| --- | --- | --- | --- |
-| `space_create` | `space create` | `fyi.opensocial.createSpace` | adds a space of `type` to the group |
-| `space_records` | `space records` | `fyi.opensocial.listSpaceRecords` | lists the records in the space `space` |
+| Tool            | Command         | Lexicon                           | What it does                                                                                                                                                   |
+| --------------- | --------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `space_create`  | `space create`  | `com.atproto.space.createSpace`   | makes a space of `type` under `policy`, an `fyi.opensocial.policy` object, as the group with a group token for it. `skey` is its key, or a new one if left out |
+| `space_records` | `space records` | `fyi.opensocial.listSpaceRecords` | lists the records in the space `space`                                                                                                                         |
 
 ## mod
 
@@ -151,7 +151,7 @@ does.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `mod_list` | `mod list` | `fyi.opensocial.listSubjects` | shows the moderation queue |
-| `mod_history` | `mod history` | `fyi.opensocial.getSubjectHistory` | shows what was done about a subject |
-| `mod_resolve` | `mod resolve` | `fyi.opensocial.resolveSubject` | resolves or escalates a subject |
+| `mod_list` | `mod list` | `fyi.opensocial.listModSubjects` | shows the moderation queue |
+| `mod_history` | `mod history` | `fyi.opensocial.getModSubjectHistory` | shows what was done about a subject |
+| `mod_resolve` | `mod resolve` | `fyi.opensocial.resolveModSubject` | resolves or escalates a subject |
 | `mod_label` | `mod label` | `com.atproto.space.createRecord` | labels a subject `val` as the group, with a `com.atproto.label.record` record beside it. With `undo`, it deletes the label (`com.atproto.space.deleteRecord`) |

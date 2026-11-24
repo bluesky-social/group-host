@@ -13,7 +13,7 @@
 //!   of its spaces here, or a member's record in their public repo.
 
 use crate::Host;
-use crate::api::{Params, invalid, page, param};
+use crate::api::{Params, invalid, invalid_cursor, page, param};
 use crate::authority::Access;
 use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
@@ -33,11 +33,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
-
-/// An account, as a subject is sent and answered.
-const ACCOUNT: &str = "fyi.opensocial.defs#accountSubject";
-/// A record, as a subject is sent and answered.
-const RECORD: &str = "fyi.opensocial.defs#recordSubject";
 
 /// A subject in a group's queue: an account's DID, or a record's URI.
 #[derive(Debug, Clone, PartialEq)]
@@ -226,12 +221,8 @@ pub fn space_of(uri: &str) -> Option<(String, String)> {
     })
 }
 
-/// The longest reason type a report gives: one of the known ones, or
-/// another as long.
-const REASON_TYPE_MAX: usize = 256;
-
 /// The reason of a report that appeals what the group did to its subject.
-const APPEAL: &str = "com.atproto.moderation.defs#reasonAppeal";
+const APPEAL: &str = "appeal";
 
 /// The account a public record's URI is in, `at://<did>/<collection>/<rkey>`,
 /// a record in no space, each of its parts what it says.
@@ -256,29 +247,22 @@ fn record_in(group: &str, uri: &str) -> Result<(), XrpcError> {
     Ok(())
 }
 
-/// A subject as the queue keys it (an account's DID, or a record's URI in
-/// one of `group`'s spaces or in a public repo) and the version of a
-/// record it names, from the union a caller sends.
-fn subject_in(group: &str, asked: &Value) -> Result<(String, Option<String>), XrpcError> {
-    let field = |key: &str| asked[key].as_str().map(String::from);
-    match asked["$type"].as_str() {
-        Some(ACCOUNT) => Ok((field("did").expect("its lexicon requires it"), None)),
-        Some(RECORD) => {
-            let uri = field("uri").expect("its lexicon requires it");
-            record_in(group, &uri)?;
-            Ok((uri, field("cid")))
-        }
-        _ => Err(invalid_subject("a subject is an account or a record")),
+/// Refuses a subject that is neither an account's DID nor a record's URI
+/// in one of `group`'s spaces or in a public repo.
+fn subject_of(group: &str, subject: &str) -> Result<(), XrpcError> {
+    match syntax::is_did(subject) {
+        true => Ok(()),
+        false => record_in(group, subject),
     }
 }
 
-/// A subject as the queue keys it, answered as the union it was sent as.
-fn subject_ref(key: &str) -> Value {
-    if key.starts_with("at://") {
-        json!({"$type": RECORD, "uri": key})
-    } else {
-        json!({"$type": ACCOUNT, "did": key})
-    }
+/// A subject as the queue keys it, from the `subject` a caller sends, and
+/// the version of a record it names in `cid`: an account has none.
+fn subject_in(group: &str, asked: &Value) -> Result<(String, Option<String>), XrpcError> {
+    let subject = asked["subject"].as_str().expect("its lexicon requires it");
+    subject_of(group, subject)?;
+    let cid = asked["cid"].as_str().filter(|_| !syntax::is_did(subject));
+    Ok((subject.to_string(), cid.map(String::from)))
 }
 
 impl Host {
@@ -417,11 +401,11 @@ fn account_of(key: &str) -> &str {
     if parts.len() == 3 { parts[0] } else { parts[4] }
 }
 
-/// A subject as the queue answers it, with `actors`, the people it names
-/// as a view names them.
+/// A subject as the queue answers it (`defs#modSubjectView`), with
+/// `actors`, the people it names as a view names them.
 fn subject_view(s: &Subject, actors: &HashMap<String, Value>) -> Value {
     json!({
-        "subject": subject_ref(&s.subject),
+        "subject": s.subject,
         "actor": actors[account_of(&s.subject)],
         "status": s.status,
         "reportCount": s.reports,
@@ -466,13 +450,13 @@ fn event_view(e: &Event, actors: &HashMap<String, Value>) -> Value {
 
 /// The group's queue, of a status (`open` unless asked), the latest
 /// changed first.
-pub async fn list_subjects(
+pub async fn list_mod_subjects(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
     let group = param(&p, "group")?;
-    host.moderator(&headers, "listSubjects", group, "mod.read")
+    host.moderator(&headers, "listModSubjects", group, "mod.read")
         .await?;
     let limit = page(&p, 50, 100)?;
     let cursor = p
@@ -480,11 +464,10 @@ pub async fn list_subjects(
         .map(|c| c.split_once(':').unwrap_or((c, "")));
     let before = match cursor {
         None => None,
-        Some((at, subject)) => Some((
-            at.parse::<i64>()
-                .map_err(|_| invalid("a cursor this host gave"))?,
-            subject,
-        )),
+        Some((at, subject)) => {
+            let at = at.parse::<i64>().map_err(|_| invalid_cursor())?;
+            Some((at, subject))
+        }
     };
     let status = p.get("status").map_or("open", String::as_str);
     let subjects = host
@@ -505,24 +488,20 @@ pub async fn list_subjects(
 
 /// What happened to a subject in the group's queue, oldest first, a page
 /// at a time.
-pub async fn get_subject_history(
+pub async fn get_mod_subject_history(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Answer {
     let group = param(&p, "group")?;
-    host.moderator(&headers, "getSubjectHistory", group, "mod.read")
+    host.moderator(&headers, "getModSubjectHistory", group, "mod.read")
         .await?;
     let subject = param(&p, "subject")?;
-    if !syntax::is_did(subject) {
-        record_in(group, subject)?;
-    }
+    subject_of(group, subject)?;
     let limit = page(&p, 50, 100)?;
     let after = match p.get("cursor") {
         None => 0,
-        Some(c) => c
-            .parse::<i64>()
-            .map_err(|_| invalid("a cursor this host gave"))?,
+        Some(c) => c.parse::<i64>().map_err(|_| invalid_cursor())?,
     };
     let cid = p.get("cid").map(String::as_str);
     let events = host
@@ -543,16 +522,16 @@ pub async fn get_subject_history(
 
 /// Resolves or escalates a subject, with a note if one is given; setting
 /// the status it has keeps the note.
-pub async fn resolve_subject(
+pub async fn resolve_mod_subject(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
     let group = body["group"].as_str().expect("its lexicon requires it");
     let me = host
-        .moderator(&headers, "resolveSubject", group, "mod.resolve")
+        .moderator(&headers, "resolveModSubject", group, "mod.resolve")
         .await?;
-    let (subject, cid) = subject_in(group, &body["subject"])?;
+    let (subject, cid) = subject_in(group, &body)?;
     let status = body["status"].as_str().expect("its lexicon requires it");
     let found = host.store.subject(group, &subject);
     if found.map_err(XrpcError::internal)?.is_none() {
@@ -600,20 +579,14 @@ pub async fn create_report(
     let reason_type = body["reasonType"]
         .as_str()
         .expect("its lexicon requires it");
-    if reason_type.len() > REASON_TYPE_MAX {
-        return Err(invalid(format!(
-            "reasonType is {REASON_TYPE_MAX} bytes at most"
-        )));
-    }
     // A rule is cited by its URI, a record's in the group's meta space.
     let rule = body["rule"].as_str();
     let meta = meta_space(group);
     if rule.is_some_and(|r| space_of(r).is_none_or(|(space, _)| space != meta)) {
         return Err(invalid("rule is a rule in the group's meta space"));
     }
-    let (subject, cid) = subject_in(group, &body["subject"])?;
-    let labeler = host.group_record(group, &meta, &format!("{NS}.labeler"), "self");
-    let labeler = labeler.map_err(XrpcError::internal)?.unwrap_or_default();
+    let (subject, cid) = subject_in(group, &body)?;
+    let labeler = host.labeler_of(group)?;
     if !accepts(&labeler, "reasonTypes", reason_type) {
         return Err(invalid(format!(
             "the group takes no reports of {reason_type}"

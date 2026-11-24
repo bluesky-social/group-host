@@ -37,7 +37,10 @@ struct Here {
 async fn here() -> Here {
     let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
-    let space = h.host.create_space(&group, KIND, "self", false).unwrap();
+    let space = h
+        .host
+        .create_space(&group, KIND, "self", &closed())
+        .unwrap();
     let alice = authority(&h, false, true).await;
     let bob = authority(&h, false, true).await;
     Here {
@@ -153,18 +156,18 @@ async fn makes_spaces_and_grants() {
     let x = here().await;
     let host = &x.h.host;
     let again = host
-        .create_space(&x.group, KIND, "self", false)
+        .create_space(&x.group, KIND, "self", &closed())
         .unwrap_err();
     assert_eq!(again.error, "SpaceAlreadyExists");
     let elsewhere = host
-        .create_space(&x.alice.did, KIND, "self", false)
+        .create_space(&x.alice.did, KIND, "self", &closed())
         .unwrap_err();
     assert_eq!(
         elsewhere.message,
         format!("{} is no group here", x.alice.did)
     );
     let bad = host
-        .create_space(&x.group, "content", "self", false)
+        .create_space(&x.group, "content", "self", &closed())
         .unwrap_err();
     assert_eq!(bad.error, "InvalidRequest");
     assert_eq!(
@@ -209,7 +212,7 @@ async fn makes_spaces_and_grants() {
             .may(&x.space, &space, Some(&x.alice.did), Access::Read)
             .unwrap()
     );
-    let open = host.create_space(&x.group, KIND, "open", true).unwrap();
+    let open = host.create_space(&x.group, KIND, "open", &open()).unwrap();
     let opened = host.store.space(&open).unwrap().unwrap();
     assert!(host.may(&open, &opened, None, Access::Read).unwrap());
     assert!(!host.may(&open, &opened, None, Access::Write).unwrap());
@@ -369,7 +372,7 @@ async fn refuses_a_sync_it_should_not_authorize() {
     }
 
     // A space open to all authorizes anyone, with no token.
-    let open = host.create_space(&x.group, KIND, "open", true).unwrap();
+    let open = host.create_space(&x.group, KIND, "open", &open()).unwrap();
     let (status, _) = authorize(&x.h, json!({"space": open, "credentialKey": kid})).await;
     assert_eq!(status, 200);
 
@@ -398,7 +401,7 @@ async fn a_space_deleted_says_so_until_it_is_made_again() {
     assert_eq!(error(&said), (400, "SpaceDeleted"));
     assert!(host.store.space_deleted(&x.space).unwrap());
 
-    host.create_space(&x.group, KIND, "self", true).unwrap();
+    host.create_space(&x.group, KIND, "self", &open()).unwrap();
     assert!(!host.store.space_deleted(&x.space).unwrap());
     let (status, _) = authorize(&x.h, asking(&x, None, None)).await;
     assert_eq!(status, 200);
@@ -998,7 +1001,8 @@ async fn tells_every_syncer_of_a_space_deleted_until_it_lands() {
     assert_eq!(owed, [("c".to_string(), 3), ("d".to_string(), 3)]);
 
     // The space made again: what is owed is so no more.
-    host.create_space(&x.group, KIND, "self", false).unwrap();
+    host.create_space(&x.group, KIND, "self", &common::spaces::closed())
+        .unwrap();
     due_now(&x.h);
     assert_eq!(host.retry_syncers_due().await.unwrap(), 2);
     assert_eq!(owed_now(&x.h), vec![]);
@@ -1008,7 +1012,10 @@ async fn tells_every_syncer_of_a_space_deleted_until_it_lands() {
 async fn a_group_writing_where_it_may_not_is_left_out() {
     let x = here().await;
     let other = x.h.host.create_account("hikers.groups.test").await.unwrap();
-    let theirs = x.h.host.create_space(&other, KIND, "self", false).unwrap();
+    let theirs =
+        x.h.host
+            .create_space(&other, KIND, "self", &closed())
+            .unwrap();
     // The write is made in the group's repo; the space does not count it.
     x.h.host
         .space_write(&x.group, &theirs, &[create(RULE, "a", rule("A"))])

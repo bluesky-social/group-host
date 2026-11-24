@@ -1,5 +1,5 @@
 //! A group's members space, written as the group: an app a member signed
-//! in, writing roles, the permissions record and memberships there.
+//! in, writing roles, each with what it may do, and memberships there.
 
 #![allow(dead_code)]
 
@@ -13,8 +13,7 @@ use serde_json::{Value as Json, json};
 
 /// What an app asks for to run a group's members: its roles and what
 /// each may do, and who holds them.
-pub const RUNS: &str =
-    "atproto include:fyi.opensocial.configure include:fyi.opensocial.manageMembers";
+pub const RUNS: &str = "atproto include:fyi.opensocial.authManageGroup";
 
 /// The collection `name` of ours.
 pub fn c(name: &str) -> String {
@@ -26,9 +25,9 @@ pub fn role(name: &str) -> Json {
     json!({"$type": c("role"), "displayName": name, "createdAt": "2026-11-03T00:00:00Z"})
 }
 
-/// A membership record of `did`, holding `roles`.
-pub fn membership(did: &str, roles: &[&str]) -> Json {
-    json!({"$type": c("membership"), "member": did, "roles": roles, "createdAt": "2026-11-03T00:00:00Z"})
+/// A membership record holding `roles`, kept at its member's DID.
+pub fn membership(roles: &[&str]) -> Json {
+    json!({"$type": c("membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"})
 }
 
 /// A record of `group`'s members space, as kept.
@@ -37,29 +36,19 @@ pub fn record(h: &Running, group: &str, name: &str, rkey: &str) -> Option<Json> 
     h.host.group_record(group, &space, &c(name), rkey).unwrap()
 }
 
-/// `group`'s permissions record with `role`'s grant as given, in place of
-/// any it had.
+/// `group`'s role `name` as kept, or a new one named so, with its grant
+/// as given in place of any it had.
 pub fn granting(
     h: &Running,
     group: &str,
-    role: &str,
+    name: &str,
     scopes: &[&str],
     assignable: &[&str],
 ) -> Json {
-    let mut p = record(h, group, "permissions", "self").unwrap();
-    let grants = p["grants"].as_array_mut().unwrap();
-    grants.retain(|g| g["role"] != role);
-    grants.push(json!({"role": role, "scopes": scopes, "assignable": assignable}));
-    p
-}
-
-/// Lets holders of `role`, in the permissions record `p`, give `another`.
-pub fn gives(p: &mut Json, role: &str, another: &str) {
-    for g in p["grants"].as_array_mut().unwrap() {
-        if g["role"] == role {
-            g["assignable"].as_array_mut().unwrap().push(json!(another));
-        }
-    }
+    let mut r = record(h, group, "role", name).unwrap_or_else(|| role(name));
+    r["scopes"] = json!(scopes);
+    r["assignable"] = json!(assignable);
+    r
 }
 
 /// Writes `record` at `rkey` in `group`'s members space, as the host

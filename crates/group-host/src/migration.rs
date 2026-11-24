@@ -23,21 +23,27 @@
 //! 4. `migrateActivate`, at the destination: once the directory names it,
 //!    the group switched on.
 //!
-//! A move is between two of these hosts, so a space's state moves as
-//! this host keeps it, not as the space alpha's meta archive.
+//! A space's state moves as a space meta archive (`atproto-space-meta`):
+//! its policy, `fyi.opensocial.policy`; each account's grant beside it, as
+//! `com.atproto.memberspace.member` policy state; and its writers.
 
 use crate::Host;
 use crate::api::{ANSWER_AT_MOST, Params, REPO_AT_MOST, invalid, param, too_much};
+use crate::group::did_rkey;
 use crate::group_api::signed_in;
+use crate::import_space::MEMBER;
 use crate::index_api::capped;
 use crate::rbac::NS;
 use crate::repo::{Asked, Write};
-use crate::store::{Account, Store};
+use crate::store::{Account, Space, Store};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use anyhow::Result;
 use atproto::service_auth::{self, Claims};
-use atproto::space::{LtHash, SpaceRef, element, read_star, star};
+use atproto::space::{
+    LtHash, SPACE_META, SPACE_META_VERSION, SpaceRef, element, read_space_meta, read_star, star,
+    write_star,
+};
 use atproto::{Cid, Curve, Keypair, car, did, drisl, jose, mst::Tree};
 use axum::Json;
 use axum::extract::{Query, State};
@@ -111,7 +117,7 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Who may read or write `space` beyond what its access record says.
+    /// Who may read or write `space` beside what its policy says.
     pub fn grants(&self, space: &str) -> Result<Vec<(String, bool, bool)>> {
         let conn = self.conn();
         let mut q =
@@ -236,24 +242,8 @@ pub async fn migrate_export(
             let hosted = hosted.filter(|s| s.authority == group);
             let hosted = hosted.ok_or_else(|| invalid("not one of the group's spaces"))?;
             if part == "meta" {
-                let writers = host
-                    .store
-                    .writers(space, None, u32::MAX)
-                    .map_err(XrpcError::internal)?;
-                let writers: Vec<Value> = writers
-                    .iter()
-                    .filter(|w| w.did != group)
-                    .map(|w| json!({"did": w.did, "repoRev": w.repo_rev, "data": jose::b64(&w.data)}))
-                    .collect();
-                let grants = host.store.grants(space).map_err(XrpcError::internal)?;
-                let grants: Vec<Value> = grants
-                    .iter()
-                    .map(|(d, r, w)| json!({"did": d, "read": r, "write": w}))
-                    .collect();
-                return Ok(Json(
-                    json!({"publicRead": hosted.public_read, "writers": writers, "grants": grants}),
-                )
-                .into_response());
+                let archive = space_meta(&host, space, &hosted)?;
+                return Ok(star_answer(archive));
             }
             if part != "repo" {
                 return Err(invalid(format!(
@@ -268,7 +258,7 @@ pub async fn migrate_export(
                 .store
                 .space_records(group, space)
                 .map_err(XrpcError::internal)?;
-            // A space of the group's always holds its access record.
+            // A space of the group's always holds its published policy.
             let head = head.unwrap_or(crate::store::SpaceHead {
                 rev: String::new(),
                 state: LtHash::default().state(),
@@ -283,13 +273,61 @@ pub async fn migrate_export(
                 rev,
                 data,
             };
-            Ok((
-                [(header::CONTENT_TYPE, "application/vnd.dasl.star")],
-                star(&commit, &records),
-            )
-                .into_response())
+            Ok(star_answer(star(&commit, &records)))
         }
     }
+}
+
+/// A STAR archive, as an answer.
+fn star_answer(archive: Vec<u8>) -> Response {
+    (
+        [(header::CONTENT_TYPE, "application/vnd.dasl.star")],
+        archive,
+    )
+        .into_response()
+}
+
+/// The space at `uri`, `hosted` here, as a space meta archive
+/// (`atproto-space-meta`): its policy; each account's grant beside it, as
+/// a memberspace's member; and its writers but its authority, each at the
+/// space's revision it was last heard of at.
+fn space_meta(host: &Host, uri: &str, hosted: &Space) -> Result<Vec<u8>, XrpcError> {
+    use atproto::Value as D;
+    let map = |pairs: Vec<(&str, D)>| -> Vec<u8> {
+        let map = pairs.into_iter().map(|(k, v)| (k.to_string(), v));
+        drisl::encode(&D::Map(map.collect()))
+    };
+    let meta = BTreeMap::from([
+        ("$type".to_string(), D::String(SPACE_META.into())),
+        ("ver".to_string(), D::Integer(SPACE_META_VERSION)),
+        ("space".to_string(), D::String(uri.into())),
+    ]);
+    let policy = D::from_json(&hosted.policy).expect("a policy the host kept");
+    let mut pairs = vec![("policy".to_string(), drisl::encode(&policy))];
+    let mut state = BTreeMap::new();
+    for (did, read, write) in host.store.grants(uri).map_err(XrpcError::internal)? {
+        let member = map(vec![
+            ("$type", D::String(MEMBER.into())),
+            ("read", D::Bool(read)),
+            ("write", D::Bool(write)),
+        ]);
+        state.insert(format!("{MEMBER}/{}", did_rkey(&did)), member);
+    }
+    let writers = host.store.writers(uri, None, u32::MAX);
+    let mut written = BTreeMap::new();
+    for w in writers.map_err(XrpcError::internal)? {
+        let writer = map(vec![
+            ("repoRev", D::String(w.repo_rev)),
+            ("data", D::Bytes(w.data)),
+            ("spaceRev", D::String(w.space_rev)),
+        ]);
+        written.insert(format!("writer/{}", w.did), writer);
+    }
+    written.remove(&format!("writer/{}", hosted.authority));
+    pairs.extend(state);
+    pairs.extend(written);
+    let pairs = pairs.iter().map(|(k, v)| (k.as_bytes(), v.as_slice()));
+    Ok(write_star(&meta, pairs))
 }
 
 /// The record at `path`, `collection/rkey`, of `value`'s DRISL, to write.
@@ -601,8 +639,10 @@ async fn receive(
         let res = host
             .pull(pds, group, token, &[("part", "meta"), ("space", uri)])
             .await?;
-        let meta: Value = json_at_most(res).await?;
-        host.create_space(group, &space.kind, &space.skey, meta["publicRead"] == true)?;
+        let read = capped(res, REPO_AT_MOST).await;
+        let bytes = read.ok_or(source(too_much(REPO_AT_MOST)))?;
+        let meta = read_space_meta(&bytes).map_err(source)?;
+        host.keep_space_meta(group, meta)?;
         let res = host
             .pull(pds, group, token, &[("part", "repo"), ("space", uri)])
             .await?;
@@ -613,19 +653,6 @@ async fn receive(
             "the group's repo in {uri} is not what its commit says"
         )))?;
         host.space_write_asked(group, uri, &writes, &off).await?;
-        for w in meta["writers"].as_array().into_iter().flatten() {
-            let data = w["data"].as_str().and_then(jose::unb64).unwrap_or_default();
-            let (who, rev) = (
-                w["did"].as_str().unwrap_or_default(),
-                w["repoRev"].as_str().unwrap_or_default(),
-            );
-            host.record_writer(uri, who, rev, &data)
-                .map_err(XrpcError::internal)?;
-        }
-        for g in meta["grants"].as_array().into_iter().flatten() {
-            let who = g["did"].as_str().unwrap_or_default();
-            host.grant(uri, who, g["read"] == true, g["write"] == true)?;
-        }
     }
 
     // Only one who may configure the group, by its own records, takes it.
@@ -752,11 +779,8 @@ pub async fn migrate_activate(
     on.map_err(XrpcError::internal)?;
     // Its repos in spaces were written while it was off, which no space
     // hears of: each is told now, as an account brought here is.
-    let told = host.tell_spaces(&group).await;
-    told.map_err(XrpcError::internal)?;
+    host.tell_spaces(&group).await?;
+    host.open_spaces(&group).await?;
     let spaces = host.store.spaces_of(&group).map_err(XrpcError::internal)?;
-    for space in &spaces {
-        host.reindex(space);
-    }
     Ok(Json(json!({ "spaces": spaces.len() })))
 }

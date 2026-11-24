@@ -1,6 +1,6 @@
 //! The host's index of its groups' spaces: what each writer has written
 //! in each, read from wherever their repo is, so the host can answer for
-//! the space (`listSpaceRecords`) to whoever its access record lets read.
+//! the space (`listSpaceRecords`) to whoever its policy lets read.
 //!
 //! The host is each space's authority, so it knows its writer set: each
 //! writer's revision and digest as their host last said. When a writer's

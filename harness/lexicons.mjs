@@ -51,9 +51,14 @@ const base =
 //   members, and listMembers gives them a page at a time.
 // - getAuthorization's `assistant`, named `mcp` as the host names its MCP
 //   server, while the console here was the only client reading it.
+// - The labeler's `createdAt`, which the proposal's has not, taken out
+//   while no labeler written with one is kept anywhere.
+// - A membership's `member`, which its key, the member's DID, already
+//   says, as the opensocial proposal has it.
 const retracted = new Set([
   'fyi.opensocial.getGroup#main.output.members',
   'fyi.opensocial.getAuthorization#main.output.assistant',
+  'fyi.opensocial.membership#main.record.member',
   ...['displayName', 'description', 'avatar', 'pronouns', 'links', 'bot'].map(
     (f) => `fyi.opensocial.defs#actorView.${f}`
   ),
@@ -69,66 +74,73 @@ const retracted = new Set([
   'fyi.opensocial.getGroup#main.output.joinRequests[]',
   'fyi.opensocial.getJoinRequest#main.output.request',
   'fyi.opensocial.listJoinRequests#main.output.requests[]',
-  'fyi.opensocial.defs#subjectView',
-  'fyi.opensocial.defs#subjectView.subject',
-  'fyi.opensocial.defs#subjectView.status',
-  'fyi.opensocial.defs#subjectView.reportCount',
-  'fyi.opensocial.defs#subjectView.lastReportedAt',
-  'fyi.opensocial.getSubjectHistory#main.output.subject',
-  'fyi.opensocial.getSubjectHistory#main.output.events[]',
   'fyi.opensocial.labeler#main.record.policies',
   'fyi.opensocial.labeler#main.record.subjectCollections[]',
-  'fyi.opensocial.listSubjects#main.parameters.limit',
-  'fyi.opensocial.resolveSubject#main.input',
-  'fyi.opensocial.resolveSubject#main.input.subject',
-  'fyi.opensocial.resolveSubject#main.input.action',
-  'fyi.opensocial.resolveSubject#main.output',
-  ...['readableBy', 'credentialScopes', 'createdAt'].map(
-    (f) => `fyi.opensocial.access#main.record.${f}`
+  ...['readableBy', 'credentialScopes'].map((f) => `fyi.opensocial.defs#spaceView.${f}`),
+  // A space's name, public flag and grants, and its index entry's name,
+  // gone as its policy (fyi.opensocial.policy) took their place.
+  ...['name', 'public', 'grants', 'people', 'writableBy'].map(
+    (f) => `fyi.opensocial.defs#spaceView.${f}`
   ),
-  ...['readableBy', 'credentialScopes', 'writableBy', 'spaceType'].map(
-    (f) => `fyi.opensocial.createSpace#main.input.${f}`
-  ),
-  'fyi.opensocial.createSpace#main.output.uri',
-  ...['readableBy', 'credentialScopes', 'writableBy'].map(
-    (f) => `fyi.opensocial.updateSpace#main.input.${f}`
-  ),
-  ...['readableBy', 'credentialScopes'].map((f) => `fyi.opensocial.defs#spaceView.${f}`)
+  'fyi.opensocial.space#main.record.name',
+  'fyi.opensocial.labeler#main.record.createdAt'
 ]);
 
 // Where the opensocial proposal's shape, which the host takes, differs
-// from the style above: each finding, exactly as said. A space grant's
-// scopes, and a group grant's, are bare strings, as OAuth scopes are, the
-// group grant the proposal's shared `defs#groupGrant`; createSpace names a
-// space's `type` so; and the access record and createSpace require what
-// the proposal's do. A membership's roles are bare role ids, at most 100;
-// a moderation subject's status is a closed set; and a report's and an
-// event's `id` is the proposal's name for it. A rule's title is as long
-// as the proposal's.
+// from the style above: each finding, exactly as said. A space policy's
+// grant's scopes, and a role's scopes and assignable roles, are bare
+// strings, as OAuth scopes and record keys are. A membership's roles are
+// bare role keys, at most 100; a moderation subject's status is a closed
+// set; and a report's and an event's `id` is the proposal's name for it.
+// A rule's title is as long as the proposal's. A moderation subject is a
+// URI, an account's DID or a record's, beside its version, not a union;
+// and a report's reason, a labeler's reasons and its subject types, are
+// plain words, not atproto's moderation defs.
 const proposal = new Set([
   ...['maxLength went from 1000 to 640', 'maxGraphemes went from 100 to 64'].map(
     (m) => `fyi.opensocial.rule#main.record.title: ${m}: what was valid must stay so`
   ),
-  'fyi.opensocial.defs#spaceGrant.scopes: an array holds objects, which can grow, not bare values',
-  'fyi.opensocial.defs#groupGrant.scopes: an array holds objects, which can grow, not bare values',
-  'fyi.opensocial.permissions#main.record.grants[]: was {"type":"ref","ref":"#grant"}, now {"type":"ref","ref":"fyi.opensocial.defs#groupGrant"}: a field is never retyped',
-  'fyi.opensocial.createSpace: field-name-syntax: name is a commonly reserved keyword: type',
-  'fyi.opensocial.access#main.record: grants is required now: only new optional fields',
-  ...['type', 'access'].map(
-    (f) => `fyi.opensocial.createSpace#main.input: ${f} is required now: only new optional fields`
-  ),
-  ...['space', 'access'].map(
-    (f) => `fyi.opensocial.createSpace#main.output: ${f} is required now: only new optional fields`
+  'fyi.opensocial.policy#grant.scopes: an array holds objects, which can grow, not bare values',
+  ...['scopes', 'assignable'].map(
+    (f) =>
+      `fyi.opensocial.role#main.record.${f}: an array holds objects, which can grow, not bare values`
   ),
   'fyi.opensocial.membership#main.record.roles: maxLength went from none to 100: what was valid must stay so',
-  'fyi.opensocial.membership#main.record.roles[]: was {"type":"ref","ref":"fyi.opensocial.defs#roleRef"}, now {"type":"ref","ref":"fyi.opensocial.defs#roleId"}: a field is never retyped',
+  'fyi.opensocial.membership#main.record.roles[]: was {"type":"ref","ref":"fyi.opensocial.defs#roleId"}, now {"type":"string","format":"record-key"}: a field is never retyped',
   ...['createReport', 'defs'].map(
     (n) => `fyi.opensocial.${n}: field-name-syntax: name is a commonly reserved keyword: id`
   ),
   ...[
-    'defs#subjectStatus',
-    'listSubjects#main.parameters.status',
-    'resolveSubject#main.input.status'
+    [
+      'createReport#main.input.subject',
+      '{"type":"union","refs":["fyi.opensocial.defs#accountSubject","fyi.opensocial.defs#recordSubject"]}',
+      '{"type":"string","format":"uri"}'
+    ],
+    ...[
+      'createReport#main.input.reasonType',
+      'defs#reportEvent.reasonType',
+      'labeler#main.record.reasonTypes[]'
+    ].map((p) => [
+      p,
+      '{"type":"ref","ref":"com.atproto.moderation.defs#reasonType"}',
+      '{"type":"string"}'
+    ]),
+    [
+      'labeler#main.record.subjectTypes[]',
+      '{"type":"ref","ref":"com.atproto.moderation.defs#subjectType"}',
+      '{"type":"string"}'
+    ],
+    [
+      'defs#statusEvent.status',
+      '{"type":"ref","ref":"fyi.opensocial.defs#subjectStatus"}',
+      '{"type":"string"}'
+    ]
+  ].map(([p, was, now]) => `fyi.opensocial.${p}: was ${was}, now ${now}: a field is never retyped`),
+  ...[
+    'defs#modSubjectView.status',
+    'defs#statusEvent.status',
+    'listModSubjects#main.parameters.status',
+    'resolveModSubject#main.input.status'
   ].map((p) => `fyi.opensocial.${p}: knownValues, not enum: an enum can never grow`)
 ]);
 
@@ -234,7 +246,7 @@ for (const file of files(dir)) {
 }
 
 // A space lexicon, as the alpha's lexiconSpaceSchema takes it: a key, a
-// name of 1 to 64 characters for consent screens, and its collections,
+// title of 1 to 64 characters for consent screens, and its collections,
 // each a record lexicon here. It is the file's only def, as goat, which
 // skips the file, lints none of it.
 const nsids = new Set(
@@ -247,8 +259,8 @@ for (const file of spaces) {
   if (Object.keys(doc.defs).length > 1) say(doc.id, 'a space lexicon has its main def alone');
   if (!/^(any|nsid|tid|literal:.+)$/.test(def.key ?? ''))
     say(at, 'a space needs a key: any, nsid, tid or literal:<value>');
-  if (typeof def.name !== 'string' || def.name.length < 1 || def.name.length > 64)
-    say(at, 'a space needs a name of 1 to 64 characters');
+  if (typeof def.title !== 'string' || def.title.length < 1 || def.title.length > 64)
+    say(at, 'a space needs a title of 1 to 64 characters');
   if (!Array.isArray(def.collections)) say(at, 'a space lists its collections');
   for (const c of def.collections ?? [])
     if (!nsids.has(c)) say(`${at}.collections`, `${c} is not a record lexicon here`);
@@ -309,14 +321,35 @@ const loosened = (before, after, path) => {
 // said of each is why.
 // - com.atproto.moderation.createReport: reports come to the group's own
 //   fyi.opensocial.createReport, as the opensocial proposal has them.
-// - com.atproto.managedspace.checkUserAccess: the space alpha of November
-//   13, 2026 replaced it with com.atproto.managedspace.checkAccess.
+// - com.atproto.managedspace.checkAccess: an inbox is a memberspace its
+//   owner's app makes, which asks no one.
 // - com.atproto.label.label: atproto names the label record
 //   com.atproto.label.record, as the opensocial proposal does.
+// - com.atproto.moderation.defs: a report's reason and a labeler's are
+//   plain words, as the opensocial proposal has them, and nothing else
+//   here refers to it.
+// - fyi.opensocial.permissions: each role record carries its own
+//   group-wide scopes and assignable roles, as the opensocial proposal's
+//   do, so the members space keeps no record of them all.
+// - fyi.opensocial.access: each space's policy (fyi.opensocial.policy),
+//   kept by the host and published as com.atproto.space.policy, took its
+//   place, as the opensocial proposal has it.
+// - fyi.opensocial.configure, manageSpaces, manageMembers and moderate:
+//   tiered as authManageProfile, within authModerate, within
+//   authManageGroup, and participate named authParticipate, as the
+//   opensocial proposal's permission sets are.
 const RETIRED = new Set([
   'com.atproto.moderation.createReport',
-  'com.atproto.managedspace.checkUserAccess',
-  'com.atproto.label.label'
+  'com.atproto.managedspace.checkAccess',
+  'com.atproto.label.label',
+  'com.atproto.moderation.defs',
+  'fyi.opensocial.permissions',
+  'fyi.opensocial.access',
+  'fyi.opensocial.configure',
+  'fyi.opensocial.manageSpaces',
+  'fyi.opensocial.manageMembers',
+  'fyi.opensocial.moderate',
+  'fyi.opensocial.participate'
 ]);
 
 // None of ours is published yet, so nothing out there was written to it.

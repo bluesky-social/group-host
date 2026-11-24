@@ -17,11 +17,11 @@
   } = $props();
   let sent = $state(false);
   const REASONS = [
-    ['com.atproto.moderation.defs#reasonRude', 'Rude, or unkind'],
-    ['com.atproto.moderation.defs#reasonSpam', 'Spam'],
-    ['com.atproto.moderation.defs#reasonMisleading', 'Misleading'],
-    ['com.atproto.moderation.defs#reasonViolation', 'Breaks one of the rules'],
-    ['com.atproto.moderation.defs#reasonOther', 'Something else']
+    ['rude', 'Rude, or unkind'],
+    ['spam', 'Spam'],
+    ['misleading', 'Misleading'],
+    ['violation', 'Breaks one of the rules'],
+    ['other', 'Something else']
   ];
   const form = sending(async (data) => {
     const reason = String(data.get('reason') ?? '').trim();

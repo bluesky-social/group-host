@@ -50,13 +50,13 @@
             "type": "array",
             "maxLength": 20,
             "items": { "type": "ref", "ref": "#space" },
-            "description": "The types of the group's spaces the site's pages may read whole, as whoever is looking and signed in, through the site kit's records ask: each asked of the visitor when they sign in. What each visitor may read in a space is still its access record's to say."
+            "description": "The types of the group's spaces the site's pages may read whole, as whoever is looking and signed in, through the site kit's records ask: each asked of the visitor when they sign in. What each visitor may read in a space is still its policy's to say."
           },
           "writes": {
             "type": "array",
             "maxLength": 20,
             "items": { "type": "ref", "ref": "#write" },
-            "description": "The records the site's pages may write, as whoever is looking and signed in, in their own repo in the group's spaces, through the page the host serves around them: each asked of the visitor's PDS when they sign in. What a space lets each visitor write is still its access record's to say."
+            "description": "The records the site's pages may write, as whoever is looking and signed in, in their own repo in the group's spaces, through the page the host serves around them: each asked of the visitor's PDS when they sign in. What a space lets each visitor write is still its policy's to say."
           }
         }
       }

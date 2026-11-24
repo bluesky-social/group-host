@@ -40,6 +40,8 @@
     - text: Admin
     - checkbox "Member" [checked]
     - text: Member
+    - checkbox "Any role, even ones made later"
+    - text: Any role, even ones made later
   - checkbox "Every new member gets it"
   - text: Every new member gets it
   - button "Cancel"

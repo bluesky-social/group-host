@@ -141,10 +141,10 @@ and you label it from a terminal, as the last part shows.
 
 ## How do I take an account down?
 
-A takedown asks apps to hide what an account posted. The host writes
-the label `!takedown` but hides nothing itself. Apps that follow the
-group's labels do the hiding. The account stays in the group until you
-remove it, as the next part shows.
+A takedown hides what an account posted. The host writes the label
+`!takedown` and stops showing everything the account posted in the
+group's spaces, and apps that follow the group's labels hide it too. The
+account stays in the group until you remove it, as the next part shows.
 
 A takedown is a label like any other, so it takes the same `label`
 permission.

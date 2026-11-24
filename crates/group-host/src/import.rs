@@ -573,7 +573,7 @@ impl Host {
         })?;
         let on = self.activate_arrived(did, &account.handle);
         on.map_err(XrpcError::internal)?;
-        self.tell_spaces(did).await.map_err(XrpcError::internal)?;
+        self.tell_spaces(did).await?;
         let group = NewGroup {
             handle: account.handle.clone(),
             founder: me.to_string(),
@@ -582,6 +582,7 @@ impl Host {
             ..NewGroup::default()
         };
         let made = self.make_group(did, &group).await?;
+        self.open_spaces(did).await?;
         self.store.end_import(did).map_err(XrpcError::internal)?;
         let logged = self.record(did, me, None, "moved the account here as a group");
         logged.map_err(XrpcError::internal)?;

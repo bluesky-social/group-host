@@ -142,30 +142,24 @@ export function judged(ctx, vals = []) {
   return { setting, names, any: setting !== 'show' || names.length > 0 };
 }
 
-/** A record, at the version read, as a report or an appeal names it. */
-const subjectOf = (record) => ({
-  $type: 'fyi.opensocial.defs#recordSubject',
-  uri: record.uri,
-  cid: record.cid
-});
-
 /**
- * Reports `record` to the place's moderators, into the group host's queue,
- * as the visitor: `reasonType` one of atproto's, with their own words and
- * the rule it breaks, if they give them.
+ * Reports `record` to the place's moderators, at the version read, into
+ * the group host's queue, as the visitor: `reasonType` one the host knows
+ * (`spam`, `rude`, …), with their own words and the rule it breaks, if
+ * they give them.
  */
 export const report = (ctx, record, reasonType, { reason, rule } = {}) =>
   os().act('fyi.opensocial.createReport', {
     group: ctx.group.did,
-    subject: subjectOf(record),
+    subject: record.uri,
+    cid: record.cid,
     reasonType,
     ...(reason ? { reason } : {}),
     ...(rule ? { rule } : {})
   });
 
 /** Appeals what the moderators did to the visitor's own `record`, in their words. */
-export const appeal = (ctx, record, reason) =>
-  report(ctx, record, 'com.atproto.moderation.defs#reasonAppeal', { reason });
+export const appeal = (ctx, record, reason) => report(ctx, record, 'appeal', { reason });
 
 /**
  * Joins the place, or asks to, as its join policy says, with `message`

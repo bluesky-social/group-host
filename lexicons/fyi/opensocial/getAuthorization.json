@@ -45,7 +45,7 @@
                 "type": "ref",
                 "ref": "#label"
               },
-              "description": "What each permission set the app asked for is called, and says it is for, in its own words."
+              "description": "What each permission set the app asked for, and each a group would give in place of one, is called, and says it is for, in its own words."
             },
             "loginHint": {
               "type": "string",

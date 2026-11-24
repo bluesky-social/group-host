@@ -10,11 +10,14 @@
 //!   (`com.atproto.space.getRepo`), checked against its commit's set hash.
 //! - `blob`: one of its files in a space, before the repos that hold it.
 //!
-//! A space's policy becomes this host's say over it: a memberspace's
-//! members their grants, and its public reading the space's. Anything
-//! this host would not do as the policy says (anyone writing, only some
-//! apps, a managing app) refuses the space rather than quietly widening
-//! or narrowing who uses it.
+//! A space's policy becomes this host's over it, `fyi.opensocial.policy`,
+//! left out of the group's index: a memberspace's public reading its
+//! `publicRead`, and its members, each kept as an account's grant beside
+//! the policy (reading, writing). Anything this host would not do as the
+//! policy says (anyone writing, only some apps, a managing app) refuses
+//! the space rather than quietly widening or narrowing who uses it. A
+//! space already under `fyi.opensocial.policy`, as a group moving between
+//! hosts brings its spaces, keeps its policy as it is.
 //!
 //! Its repos tell their spaces' authorities nothing while the account is
 //! switched off: an authority elsewhere would check the account's word
@@ -25,8 +28,9 @@ use crate::Host;
 use crate::api::{Params, invalid, param};
 use crate::group::{members_space, meta_space};
 use crate::group_api::signed_in;
+use crate::lexicons::lexicons;
 use crate::migration::create;
-use crate::rbac::NS;
+use crate::rbac::{NS, POLICY};
 use crate::repo::{Asked, Write, record_cid};
 use crate::store::{SpaceHead, Store};
 use crate::xrpc::{XrpcError, read_body};
@@ -48,6 +52,9 @@ pub const ARCHIVE_AT_MOST: u64 = 100 * 1024 * 1024;
 
 const PERSONAL: &str = "com.atproto.personalspace.policy";
 const MEMBERS: &str = "com.atproto.memberspace.policy";
+/// An account's grant in a space beside its policy, as a space meta
+/// archive's policy state keeps it.
+pub(crate) const MEMBER: &str = "com.atproto.memberspace.member";
 const MEMBER_PREFIX: &str = "com.atproto.memberspace.member/";
 const SPACE_REPOS: &str = "SELECT space, rev, state FROM space_repo WHERE did = ?1 ORDER BY space";
 
@@ -83,17 +90,18 @@ pub fn record_key_to_did(rkey: &str) -> String {
     }
 }
 
-/// Who may do what in the space `meta` holds, as this host says it: whether
-/// anyone may read it, and each member's grant (reading, writing).
-fn access(meta: &SpaceMeta) -> Result<(bool, Vec<Grant>), XrpcError> {
+/// What this host keeps of the space `meta` holds: its policy, as ours,
+/// and each account's grant beside it (reading, writing).
+pub(crate) fn kept(meta: &SpaceMeta) -> Result<(serde_json::Value, Vec<Grant>), XrpcError> {
     let flag = |key: &str| meta.policy.get(key) == Some(&Value::Bool(true));
     let kind = meta.policy.get("$type");
-    let members = match kind {
-        Some(Value::String(t)) if t == MEMBERS => true,
-        Some(Value::String(t)) if t == PERSONAL => false,
+    let (ours, members) = match kind {
+        Some(Value::String(t)) if t == POLICY => (true, true),
+        Some(Value::String(t)) if t == MEMBERS => (false, true),
+        Some(Value::String(t)) if t == PERSONAL => (false, false),
         _ => {
             return Err(unsupported(
-                "a policy other than personalspace or memberspace",
+                "a policy other than personalspace, memberspace or this host's own",
             ));
         }
     };
@@ -116,21 +124,29 @@ fn access(meta: &SpaceMeta) -> Result<(bool, Vec<Grant>), XrpcError> {
         };
         Ok((did, *read, *write))
     });
-    Ok((
-        members && flag("publicRead"),
-        grants.collect::<Result<_, _>>()?,
-    ))
+    let grants = grants.collect::<Result<_, _>>()?;
+    let policy = Value::Map(meta.policy.clone()).to_json();
+    if ours {
+        let checked = lexicons().validate(POLICY, &policy);
+        checked.map_err(|e| refused("InvalidArchive", e.to_string()))?;
+        return Ok((policy, grants));
+    }
+    let mut policy = json!({"$type": POLICY, "unlisted": true, "grants": []});
+    if members && flag("publicRead") {
+        policy["publicRead"] = json!(true);
+    }
+    Ok((policy, grants))
 }
 
 impl Store {
     /// Keeps the space at `uri`, of `authority`'s, as an archive brought it,
-    /// replacing what was kept for it: whether anyone may read it, `grants`,
+    /// replacing what was kept for it: its policy, `grants` beside it,
     /// and `writers`, each with the space's revision it is kept at.
     pub fn import_space(
         &self,
         uri: &str,
         authority: &str,
-        public_read: bool,
+        policy: &serde_json::Value,
         grants: &[Grant],
         writers: &[Writer],
         now: i64,
@@ -138,9 +154,17 @@ impl Store {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         tx.execute(
-            "INSERT INTO space (uri, authority, public_read, created_at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT (uri) DO UPDATE SET public_read = excluded.public_read",
-            params![uri, authority, public_read, now],
+            "INSERT INTO space (uri, authority, public_read, created_at, policy)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (uri) DO UPDATE SET public_read = excluded.public_read,
+             policy = excluded.policy",
+            params![
+                uri,
+                authority,
+                policy["publicRead"] == true,
+                now,
+                policy.to_string()
+            ],
         )?;
         tx.execute("DELETE FROM space_grant WHERE space = ?1", [uri])?;
         tx.execute("DELETE FROM space_writer WHERE space = ?1", [uri])?;
@@ -183,10 +207,6 @@ impl Host {
     pub(crate) fn import_space_meta(&self, did: &str, bytes: &[u8]) -> Result<String, XrpcError> {
         let meta = read_space_meta(bytes);
         let meta = meta.map_err(|e| refused("InvalidArchive", e.to_string()))?;
-        let space = SpaceRef::parse(&meta.space).expect("a space the archive's reader checked");
-        if space.authority != did {
-            return Err(refused("NotSpaceOwner", "that space isn't the account's"));
-        }
         // Its group makes these two as it is made.
         if [meta_space(did), members_space(did)].contains(&meta.space) {
             return Err(refused(
@@ -194,7 +214,17 @@ impl Host {
                 format!("{} is the group's own, made with it", meta.space),
             ));
         }
-        let (public_read, grants) = access(&meta)?;
+        self.keep_space_meta(did, meta)
+    }
+
+    /// A space `did` governs, as `meta` holds it: kept here as this host
+    /// would keep it, replacing what was kept of it. Its URI.
+    pub(crate) fn keep_space_meta(&self, did: &str, meta: SpaceMeta) -> Result<String, XrpcError> {
+        let space = SpaceRef::parse(&meta.space).expect("a space the archive's reader checked");
+        if space.authority != did {
+            return Err(refused("NotSpaceOwner", "that space isn't the account's"));
+        }
+        let (policy, grants) = kept(&meta)?;
         // Its own repo there comes as a repo of its own, and is told to
         // the space as the account is switched on.
         let writers: Vec<_> = meta
@@ -206,7 +236,7 @@ impl Host {
         let now = crate::time::now_millis();
         let kept = self
             .store
-            .import_space(&meta.space, did, public_read, &grants, &writers, now);
+            .import_space(&meta.space, did, &policy, &grants, &writers, now);
         kept.map_err(XrpcError::internal)?;
         Ok(meta.space)
     }
@@ -270,9 +300,10 @@ impl Host {
     }
 
     /// Tells each space `did` has a repo in of it, as `did` is switched on
-    /// here, and reads the spaces it governs again.
-    pub(crate) async fn tell_spaces(&self, did: &str) -> Result<()> {
-        for (space, head) in self.store.space_repos(did)? {
+    /// here.
+    pub(crate) async fn tell_spaces(&self, did: &str) -> Result<(), XrpcError> {
+        let repos = self.store.space_repos(did).map_err(XrpcError::internal)?;
+        for (space, head) in repos {
             let parsed = SpaceRef::parse(&space).expect("a space the host keeps");
             let data = LtHash::from_state(&head.state).expect("a state the host wrote");
             let commit = Commit {
@@ -287,7 +318,17 @@ impl Host {
                 tracing::warn!(space, repo = did, error, "telling the authority failed");
             }
         }
-        for space in self.store.spaces_of(did)? {
+        Ok(())
+    }
+
+    /// Publishes the policy of each space `did` governs, listing it in its
+    /// index as the policy says, and reads it again: once its members
+    /// space, which holds the index, is there.
+    pub(crate) async fn open_spaces(&self, did: &str) -> Result<(), XrpcError> {
+        let governed = self.store.spaces_of(did).map_err(XrpcError::internal)?;
+        for space in governed {
+            let policy = self.hosted_space(&space)?.policy;
+            self.publish_policy(did, &space, &policy).await?;
             self.reindex(&space);
         }
         Ok(())

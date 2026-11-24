@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Report an account or record in a group, or a member's record in their public repo, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space: a record's own, or the members space for an account or a public record. A report whose reasonType is com.atproto.moderation.defs#reasonAppeal is an appeal, which only its subject may file: the account itself, or the record's author; one the queue already has is taken though its author is no longer in the group.",
+      "description": "Report an account or record in a group, or a member's record in their public repo, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space: a record's own, or the members space for an account or a public record. A report whose reasonType is appeal is an appeal, which only its subject may file: the account itself, or the record's author; one the queue already has is taken though its author is no longer in the group.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -21,15 +21,28 @@
               "description": "The group DID."
             },
             "subject": {
-              "type": "union",
-              "refs": [
-                "fyi.opensocial.defs#accountSubject",
-                "fyi.opensocial.defs#recordSubject"
-              ]
+              "type": "string",
+              "format": "uri",
+              "description": "An account DID or record URI."
+            },
+            "cid": {
+              "type": "string",
+              "format": "cid",
+              "description": "If set, a specific version of the record."
             },
             "reasonType": {
-              "type": "ref",
-              "ref": "com.atproto.moderation.defs#reasonType"
+              "type": "string",
+              "maxLength": 256,
+              "knownValues": [
+                "spam",
+                "violation",
+                "misleading",
+                "nsfw",
+                "rude",
+                "other",
+                "appeal"
+              ],
+              "description": "For violation, cite the broken rule in rule. appeal asks the group to undo what it did to the subject."
             },
             "reason": {
               "type": "string",
@@ -39,7 +52,7 @@
             "rule": {
               "type": "string",
               "format": "at-uri",
-              "description": "A rule in the group's meta space."
+              "description": "The group rule the subject breaks."
             }
           }
         }

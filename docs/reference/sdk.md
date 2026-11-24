@@ -22,14 +22,14 @@ The client it answers has `did` and `handle`, the group's as the host gives them
 | `members({ q, limit })` | `listMembers` | an async iterator over every member, page by page | `GroupNotFound` |
 | `join({ message, invite })` | `requestJoin` | `status` (`pending` or `admitted`), with `request` when pending and `membership` when admitted | `GroupNotFound`, `InvalidInvite`, `JoinClosed`, `AlreadyMember` |
 | `leave()` | `leaveGroup` | nothing | `NotAMember`, `LastConfigurer` |
-| `report({ subject, reasonType, reason, rule })` | `createReport` | `id`, `createdAt` | `GroupNotFound`, `InvalidSubject` |
+| `report({ subject, cid, reasonType, reason, rule })` | `createReport` | `id`, `createdAt` | `GroupNotFound`, `InvalidSubject` |
 | `space(schema, options)` | nothing until used | a `GroupSpace` | |
 
 `members` takes `q`, part of a handle or DID in any case, and `limit`, the page size (50 by default, at most 100). It asks for pages until the host answers no cursor, or the cursor it was just given.
 
 `join` asks to join. An invite the group sent the member admits them at once, whether `invite` names it or not. If `invite` names something that isn't such an invite, the host refuses with `InvalidInvite`. `message` is up to 2,000 graphemes.
 
-`report` reports an account or a record to the group's moderators. `subject` is an account subject or a record subject, and `reasonType` is one of `com.atproto.moderation.defs#reasonType`. `rule` is the URI of a rule in the group's meta space.
+`report` reports an account or a record to the group's moderators. `subject` is an account's DID or a record's URI, and `cid`, if given, the version of the record. `reasonType` is `spam`, `violation`, `misleading`, `nsfw`, `rude`, `other`, or `appeal` for the subject's own appeal. `rule` is the URI of a rule in the group's meta space.
 
 A refusal is lex's `XrpcResponseError`, and its `error` is the name from the method's lexicon.
 

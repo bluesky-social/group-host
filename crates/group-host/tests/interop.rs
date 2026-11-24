@@ -11,6 +11,7 @@ use atproto::space::{
 use atproto::space_auth::{Expect, Kind, sign_request, space_host_aud, verify};
 use atproto::{Curve, Keypair};
 use common::net::net;
+use common::spaces::closed;
 use common::{start, start_reachable_by_name};
 use group_host::repo::Write;
 use serde_json::{Value, json};
@@ -279,7 +280,7 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
     let group = h.host.create_account("runners.groups.test").await.unwrap();
     let space = h
         .host
-        .create_space(&group, "fyi.opensocial.content", "self", false)
+        .create_space(&group, "fyi.opensocial.content", "self", &closed())
         .unwrap();
     let alice = &net.accounts[0];
     h.host.grant(&space, &alice.did, true, true).unwrap();
@@ -427,7 +428,9 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
     let service = h.host.config.service_did.clone();
     assert!(service.starts_with("did:web:localhost"), "{service}");
 
-    // Alice's inbox, at her PDS, a space this host manages for her.
+    // Alice's inbox, at her PDS, as her app makes it: a memberspace that
+    // tracks anyone's writes and names no members, so groups write in it
+    // and only she reads it.
     let alice = &net.accounts[0];
     let session = call(
         &net.pds,
@@ -444,14 +447,14 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         &json!({
             "spaceType": "fyi.opensocial.invites",
             "skey": "self",
-            "policy": {"$type": "com.atproto.managedspace.policy", "managingApp": format!("{service}#opensocial")},
+            "policy": {"$type": "com.atproto.memberspace.policy", "publicWrite": true},
         }),
     )
     .await;
     let inbox = created["space"].as_str().unwrap().to_string();
 
-    // A group here invites her: its write is told to her PDS, which asks
-    // this host whether the group may write there.
+    // A group here invites her: its write is told to her PDS, which takes
+    // it, as the inbox takes anyone's.
     let founder = common::spaces::authority(&h, false, true).await;
     let group = common::groups::start_group(
         &h,

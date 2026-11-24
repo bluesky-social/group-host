@@ -6,11 +6,12 @@
 //! In the group's own meta and members spaces, a token writes only what
 //! the host would keep it: in the meta space, the profile, its pictures
 //! and the rules, as `group_config` has them, and the labeler, kept at
-//! `self` and never deleted; in the members space, roles, the
-//! permissions record and memberships, as `member_writes.rs` keeps them,
-//! so that nobody gives themselves more than they hold. The group's
-//! declaration, in its public repo, follows who may read its meta space.
-//! Who may read a space changes only through the host's methods.
+//! `self` and never deleted; in the members space, roles and memberships,
+//! as `member_writes.rs` keeps them, so that nobody gives themselves more
+//! than they hold. The group's declaration, in its public repo, follows
+//! who may read its meta space. A space's policy, published as
+//! `com.atproto.space.policy`, and the group's index of its spaces change
+//! only through the space methods (`group_spaces.rs`), never as records.
 //!
 //! In someone's inbox, a token writes the group's invite to them, as
 //! `group_invites` has it.
@@ -19,11 +20,12 @@ use crate::Host;
 use crate::api::invalid;
 use crate::group::{members_space, meta_space};
 use crate::group_invites::is_inbox;
+use crate::group_spaces::PUBLISHED;
 use crate::lexicons::{check_record, validation};
 use crate::member_writes::members_writes;
 use crate::oauth_resource::{Acting, Refusal};
-use crate::oauth_scope::{labels_in, may_write, writes_in};
-use crate::rbac::{self, Access, LABEL, NS, actions_for, grants, repo_collections_for};
+use crate::oauth_scope::{may_write, meta_writes};
+use crate::rbac::{self, LABEL, NS, actions_for, repo_collections_for};
 use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -86,14 +88,14 @@ impl Host {
     }
 
     /// Refuses a write to the group's own meta or members space that the
-    /// host would not make itself, and to any space's access record.
+    /// host would not make itself, and to any space's published policy.
     fn guard(&self, group: &str, space: &str, writes: &[Write]) -> Result<(), XrpcError> {
         let c = |name: &str| format!("{NS}.{name}");
         let label = LABEL.to_string();
         let allowed = if space == meta_space(group) {
             Some([c("profile"), c("rule"), c("labeler"), label].to_vec())
         } else if space == members_space(group) {
-            Some([c("role"), c("permissions"), c("membership"), label].to_vec())
+            Some([c("role"), c("membership"), label].to_vec())
         } else {
             None
         };
@@ -102,7 +104,8 @@ impl Host {
             let ours = allowed
                 .as_ref()
                 .is_none_or(|a| a.iter().any(|x| x == collection));
-            if !ours || collection == c("access") {
+            let kept = [PUBLISHED.to_string(), c("space")].contains(&collection.to_string());
+            if !ours || kept {
                 return Err(forbidden(format!(
                     "{collection} changes through the host's methods, not as a record"
                 )));
@@ -233,21 +236,16 @@ fn commit_view(c: &crate::repo::Committed) -> Value {
 
 impl Host {
     /// The roles the member who approved a grant holds now, and the
-    /// group's grants. What a token may do is asked of them at each use,
-    /// so a member whose roles shrink gives the app less at once.
-    fn standing(&self, acting: &Acting) -> Result<(Vec<String>, Vec<rbac::Grant>), XrpcError> {
+    /// group's roles' grants. What a token may do is asked of them at each
+    /// use, so a member whose roles shrink gives the app less at once.
+    pub(crate) fn standing(
+        &self,
+        acting: &Acting,
+    ) -> Result<(Vec<String>, Vec<rbac::Grant>), XrpcError> {
         let (group, member) = (&acting.grant.group, &acting.grant.member);
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
-        let permissions = self.group_record(
-            group,
-            &members_space(group),
-            &format!("{NS}.permissions"),
-            "self",
-        );
-        let permissions = permissions
-            .map_err(XrpcError::internal)?
-            .unwrap_or_default();
-        Ok((roles, grants(&permissions)))
+        let granted = self.role_grants(group).map_err(XrpcError::internal)?;
+        Ok((roles, granted))
     }
 
     /// Whether the token may make each of `writes` in the group's repo,
@@ -420,10 +418,10 @@ pub async fn apply_writes(
 /// A blob for the group's records, of a type the token's scope takes.
 pub async fn upload_blob(State(host): State<Arc<Host>>, headers: HeaderMap, body: Body) -> Answer {
     let acting = host.acting(&headers, "POST", "/xrpc/com.atproto.repo.uploadBlob")?;
-    let (group, member) = (&acting.grant.group, &acting.grant.member);
+    let group = &acting.grant.group;
     host.active(group)?;
     let (roles, grants) = host.standing(&acting)?;
-    if !host.writes_anything(group, &roles, &grants, member)? {
+    if !host.writes_anything(group, &roles, &grants)? {
         let no_more = "the member who signed this app in may no longer write anything as the group";
         return Err(forbidden(no_more).into());
     }
@@ -462,16 +460,15 @@ impl Host {
     ) -> Result<(), XrpcError> {
         let group = &acting.grant.group;
         let (roles, grants) = self.standing(acting)?;
-        let own = uri == meta_space(group) || uri == members_space(group);
         let held = actions_for(&grants, &roles);
-        let configures = held.contains("group.configure");
-        let access = self.group_record(group, uri, &format!("{NS}.access"), "self");
-        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        let everything = repo_collections_for(&grants, &roles).contains("*");
-        let access = Access::of(&access, uri);
-        let writable = writes_in(&access, &roles, &acting.grant.member, everything);
-        let labelling = held.contains("label");
-        let labels = labels_in(&access, &roles, &acting.grant.member, labelling);
+        let policy = self.policy(uri).map_err(XrpcError::internal)?;
+        let mut writable = policy.map(|p| p.writes(&roles)).unwrap_or_default();
+        // The meta space's own records, as its policy and the group's roles
+        // grant them.
+        if uri == meta_space(group) {
+            writable.extend(meta_writes(&held));
+        }
+        let labels = held.contains("label");
         for w in writes {
             let (collection, _) = w.path();
             if !acting.permissions.space(space, Some(collection), action(w)) {
@@ -481,13 +478,12 @@ impl Host {
                     action(w)
                 )));
             }
-            let still = match own {
-                _ if collection == LABEL => labels,
+            let still = match collection {
+                LABEL => labels,
                 _ if uri == members_space(group) => {
                     may_write(&members_writes(&grants, &roles), collection, action(w))
                 }
-                true => configures,
-                false => may_write(&writable, collection, action(w)),
+                _ => may_write(&writable, collection, action(w)),
             };
             if !still {
                 return Err(no_longer(collection));

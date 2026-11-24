@@ -1,13 +1,15 @@
 //! The space index, served: what is in one of a group's spaces, and the
-//! pictures and files there, for whoever its access record lets read the
+//! pictures and files there, for whoever its policy lets read the
 //! space, signed in, asked on every call. The index holds copies; it
-//! never decides who sees them.
+//! never decides who sees them. What the group takes down with a
+//! `!takedown` label (`takedown.rs`) it serves to nobody.
 
 use crate::Host;
 use crate::api::{Params, invalid, page, param};
 use crate::authority::Access::Write;
 use crate::group_api::{group_of, signed_in};
-use crate::rbac::{Access, NS};
+use crate::rbac::NS;
+use crate::store::Indexed;
 use crate::time::iso;
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -31,7 +33,7 @@ fn not_found(message: &str) -> XrpcError {
 }
 
 /// The space a read names, once it is one of the group's and the caller
-/// may read it by its access record.
+/// may read it by its policy.
 async fn readable(
     host: &Host,
     p: &Params,
@@ -45,15 +47,13 @@ async fn readable(
     // Someone not signed in reads no space, a public one included.
     let me = signed_in(host, headers, &format!("{NS}.{lxm}")).await?;
     let named = SpaceRef::parse(space).ok().filter(|s| s.authority == group);
-    let access = match named {
-        Some(_) => host
-            .group_record(group, space, &format!("{NS}.access"), "self")
-            .map_err(XrpcError::internal)?,
+    let policy = match named {
+        Some(_) => host.policy(space).map_err(XrpcError::internal)?,
         None => None,
     };
-    let access = access.ok_or_else(|| not_found("not one of this group's spaces"))?;
+    let policy = policy.ok_or_else(|| not_found("not one of this group's spaces"))?;
     let roles = host.roles(group, &me).map_err(XrpcError::internal)?;
-    if !Access::of(&access, space).can_read(&roles, &me) {
+    if !policy.can_read(&roles) {
         return Err(XrpcError::new(
             StatusCode::UNAUTHORIZED,
             "NotAuthorized",
@@ -77,24 +77,30 @@ fn text_of(value: &Value) -> String {
 
 /// Records in one of a group's spaces, from the index: one collection or
 /// every one, newest first, a page at a time; only those whose `field`
-/// equals `equals`, if it says; or the one at `uri`.
+/// equals `equals`, if it says; or the one at `uri`. None the group has
+/// taken down (`takedown.rs`).
 pub async fn list_space_records(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, XrpcError> {
-    let (_, space) = readable(&host, &p, &headers, "listSpaceRecords").await?;
+    let (group, space) = readable(&host, &p, &headers, "listSpaceRecords").await?;
     // A space with writes the index has not read yet is read first.
     // Read at most a few seconds: past that, the index as it is.
     let synced = tokio::time::timeout(SYNC_AT_MOST, host.sync_space(&space)).await;
     tracing::debug!(space, ?synced, "read before listing");
     let limit = page(&p, 50, 100)?;
-    let view = |r: &crate::store::Indexed| {
+    let down = host
+        .taken_down(&group, &space)
+        .map_err(XrpcError::internal)?;
+    let uri_of = |r: &Indexed| format!("{space}/{}/{}/{}", r.did, r.collection, r.rkey);
+    let hidden = |r: &Indexed| down.hides(&uri_of(r), &r.did, &r.cid.to_string());
+    let view = |r: &Indexed| {
         let value = drisl::decode(&r.value)
             .expect("a record the host indexed")
             .to_json();
         json!({
-            "uri": format!("{space}/{}/{}/{}", r.did, r.collection, r.rkey),
+            "uri": uri_of(r),
             "cid": r.cid.to_string(),
             "repo": r.did,
             "value": value,
@@ -111,7 +117,7 @@ pub async fn list_space_records(
             .store
             .indexed_one(&space, did, &format!("{collection}/{rkey}"))
             .map_err(XrpcError::internal)?;
-        let records: Vec<Value> = one.iter().map(view).collect();
+        let records: Vec<Value> = one.iter().filter(|r| !hidden(r)).map(view).collect();
         return Ok(Json(json!({ "records": records })));
     }
     let collection = p.get("collection").map(String::as_str);
@@ -136,6 +142,9 @@ pub async fn list_space_records(
         let ended = batch.len() < limit as usize;
         for r in &batch {
             before = Some(r.seq);
+            if hidden(r) {
+                continue;
+            }
             let shown = view(r);
             let matches = wanted.is_none_or(|(field, equals)| {
                 at_path(&shown["value"], field).is_some_and(|v| text_of(v) == equals)
@@ -166,6 +175,14 @@ pub async fn get_space_blob(
     let (group, space) = readable(&host, &p, &headers, "getSpaceBlob").await?;
     let repo = param(&p, "repo")?;
     let cid = Cid::parse(param(&p, "cid")?).map_err(|e| invalid(format!("cid: {e}")))?;
+    // One the group has taken down is not served, as though not there.
+    let down = host
+        .taken_down(&group, &space)
+        .map_err(XrpcError::internal)?;
+    let gone = host.file_taken_down(&down, &space, repo, &cid);
+    if gone.map_err(XrpcError::internal)? {
+        return Err(not_found("no such file in this space"));
+    }
     let fetched = host.space_blob(&group, &space, repo, &cid).await;
     let (mime, bytes) = fetched.ok_or_else(|| not_found("no such file in this space"))?;
     let headers = [

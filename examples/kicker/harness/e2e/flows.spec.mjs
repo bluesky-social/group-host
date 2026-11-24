@@ -229,8 +229,8 @@ const noteUri = async (text) => {
 };
 /// What the group host's queue holds of `uri`, of the subjects `status`.
 const queued = async (uri, status = 'open') => {
-  const { subjects } = await asAlice('fyi.opensocial.listSubjects', { status });
-  return subjects.find((s) => s.subject.uri === uri);
+  const { subjects } = await asAlice('fyi.opensocial.listModSubjects', { status });
+  return subjects.find((s) => s.subject === uri);
 };
 
 test("a member reports a note, into the group host's queue", async ({ page }) => {

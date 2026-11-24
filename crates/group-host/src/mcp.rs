@@ -698,19 +698,10 @@ fn query_of(args: &Value) -> Vec<(String, String)> {
 }
 
 impl Host {
-    /// Writes a record of `who`'s group as the group, as `Plan::Write`
-    /// says: `record` at `rkey`, or at a new key, or with none deletes the
-    /// one at `rkey`, in its space at `uri`. What a group session `who`'s
-    /// member approved for that space would write, its scope what their
-    /// roles there grant now, kept to the same rules.
-    async fn record_as(
-        &self,
-        who: &McpGrant,
-        uri: &str,
-        collection: String,
-        rkey: Option<String>,
-        record: Option<Value>,
-    ) -> Result<Value, XrpcError> {
+    /// A session as `who`'s group for the space at `uri`, as a group token
+    /// `who`'s member asked for it would be: its scope what their roles
+    /// there grant now.
+    fn session_for(&self, who: &McpGrant, uri: &str) -> Result<(Acting, SpaceRef), XrpcError> {
         let group = &who.group;
         let space = SpaceRef::parse(uri).map_err(|e| invalid(e.to_string()))?;
         let (_, _, scope) = self.group_scope(group, &who.member, uri, &space)?;
@@ -733,6 +724,24 @@ impl Host {
             permissions: Permissions::new(&scope, group),
             grant,
         };
+        Ok((acting, space))
+    }
+
+    /// Writes a record of `who`'s group as the group, as `Plan::Write`
+    /// says: `record` at `rkey`, or at a new key, or with none deletes the
+    /// one at `rkey`, in its space at `uri`. What a group session `who`'s
+    /// member approved for that space would write, its scope what their
+    /// roles there grant now, kept to the same rules.
+    async fn record_as(
+        &self,
+        who: &McpGrant,
+        uri: &str,
+        collection: String,
+        rkey: Option<String>,
+        record: Option<Value>,
+    ) -> Result<Value, XrpcError> {
+        let group = &who.group;
+        let (acting, space) = self.session_for(who, uri)?;
         let rkey = rkey.unwrap_or_else(|| self.clock.next());
         let write = match &record {
             None => Write::Delete { collection, rkey },
@@ -860,14 +869,35 @@ impl Host {
                 undo,
             } => {
                 let members = crate::group::members_space(&who.group);
-                let collection = format!("{NS}.permissions");
-                let kept = self.group_record(&who.group, &members, &collection, "self");
+                let collection = format!("{NS}.role");
+                let kept = self.group_record(&who.group, &members, &collection, &role);
                 let kept = kept.map_err(XrpcError::internal).map_err(said)?;
                 let kept = kept.unwrap_or_default();
-                let write = group_host_mcp::regrant(&kept, &role, &scopes, &assignable, undo);
+                let write = group_host_mcp::regrant(&kept, &role, &scopes, &assignable, undo)?;
                 Box::pin(self.carry_out(who, write)).await
             }
+            Plan::Space { kind, skey, policy } => {
+                let skey = skey.unwrap_or_else(|| self.clock.next());
+                let made = self.space_as(who, &kind, &skey, policy).await;
+                made.map_err(said)
+            }
         }
+    }
+
+    /// Makes a space of `kind` at `skey` under `policy` as `who`'s group,
+    /// as a group session `who`'s member asked for it would.
+    async fn space_as(
+        &self,
+        who: &McpGrant,
+        kind: &str,
+        skey: &str,
+        policy: Value,
+    ) -> Result<Value, XrpcError> {
+        let uri = format!("at://{}/space/{kind}/{skey}", who.group);
+        let (acting, _) = self.session_for(who, &uri)?;
+        let body = json!({"spaceType": kind, "skey": skey, "policy": policy});
+        let made = self.create_space_as(&acting, &body).await?;
+        Ok(json!({ "space": made }))
     }
 
     /// Asks the method `nsid` with `input` as `who`'s member, as the

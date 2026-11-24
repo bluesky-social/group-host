@@ -41,13 +41,10 @@
               "ref": "fyi.opensocial.defs#joinPolicy",
               "description": "Defaults to approval."
             },
-            "metaReadableBy": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.defs#audience"
-              },
-              "description": "Defaults to ['public']."
+            "metaPublicRead": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether anyone may read its meta space (its policy's publicRead). Members read it either way."
             }
           }
         }

@@ -1,13 +1,13 @@
 #!/bin/sh
 # Builds the space alpha's dev-env at /opt/atproto, for the reference PDS
 # the `test` and `e2e` checks run on (GROUP_HOST_DEV_ENV, harness/pds.mjs):
-# permissioned-data-alpha as of November 13, 2026, the build
-# @atproto/space 0.0.0-spaces-alpha-20261113224550 was published from.
+# permissioned-data-alpha as of November 17, 2026, the build
+# @atproto/space 0.0.0-spaces-alpha-20261117141222 was published from.
 # A build kept from an earlier run is used again while ATPROTO_COMMIT and
 # BUILD are what it was made at; BUILD is bumped when these steps change.
 # Then SQLite's native module for its PDS, which the install skips.
 set -eu
-ATPROTO_COMMIT=83d473dec69bbf19fe95fcbbb20a39842779db82
+ATPROTO_COMMIT=9bd80070f54da18c37bdc607426be7bfaf887c53
 BUILD=2
 dir=/opt/atproto
 export PATH="/opt/node/bin:$dir/.bin:$PATH" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 COREPACK_HOME="$dir/.corepack"

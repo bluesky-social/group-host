@@ -15,6 +15,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get as route_get;
 use common::groups::*;
+use common::oauth::make_space;
 use common::spaces::*;
 use common::{Running, serve, start, start_reachable};
 use group_host::group::members_space;
@@ -47,10 +48,8 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let lxm = format!("{NS}.createSpace");
-    let body = json!({"group": did, "type": "fyi.opensocial.board", "skey": "notes", "access": {"grants": [{"role": "member", "scopes": ["space:*?action=read"]}]}});
-    let (status, made) = post(h, &lxm, &body, &[auth(h, founder, &lxm)]).await;
-    assert_eq!(status, 200, "{made}");
+    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "member", "read": true, "write": true}]});
+    let made = make_space(h, founder, &did, "fyi.opensocial.board", "notes", policy).await;
     h.host
         .space_write(
             &did,
@@ -58,12 +57,12 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
             &[Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: member.into(),
-                value: json!({"$type": format!("{NS}.membership"), "member": member, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await
         .unwrap();
-    (did, made["space"].as_str().unwrap().to_string())
+    (did, made)
 }
 
 async fn list(h: &Running, who: Option<&Authority>, query: &str) -> (u16, Json) {
@@ -228,11 +227,8 @@ async fn a_public_space_is_for_anyone_signed_in() {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let lxm = format!("{NS}.createSpace");
-    let body = json!({"group": did, "type": "fyi.opensocial.board", "skey": "open", "access": {"public": true, "grants": []}});
-    let (status, made) = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
-    assert_eq!(status, 200, "{made}");
-    let space = made["space"].as_str().unwrap();
+    let policy = json!({"$type": "fyi.opensocial.policy", "publicRead": true, "grants": []});
+    let space = &make_space(&h, &alice, &did, "fyi.opensocial.board", "open", policy).await;
     let picture = h.host.upload_blob(&did, b"a map", "image/png").unwrap();
     h.host
         .space_write(
@@ -277,7 +273,7 @@ async fn pages_filters_and_finds_one() {
     h.host.space_write(&did, &space, &writes).await.unwrap();
     let query = format!("group={did}&space={space}");
     // The group's own repo, from the store, read as the list is asked:
-    // its access record there among them.
+    // its published policy there among them.
     let (_, all) = list(&h, Some(&alice), &query).await;
     assert_eq!(all["records"].as_array().unwrap().len(), 7);
 

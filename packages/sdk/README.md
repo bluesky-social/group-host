@@ -35,17 +35,17 @@ handle (a handle resolved by the member's PDS) and asks the host for it.
 `agent` is the member's (an OAuth session); `service` is the host's
 `did:web:…#opensocial`, which the member's PDS proxies to.
 
-| Member                                          | What                                             |
-| ----------------------------------------------- | ------------------------------------------------ |
-| `did`, `handle`                                 | the group's                                      |
-| `agent`                                         | the member's agent                               |
-| `client`                                        | a lex `Client` asking the host                   |
-| `getGroup()`                                    | `getGroup`'s answer, typed                       |
-| `members({ q, limit })`                         | an async iterator over `listMembers`, every page |
-| `join({ message, invite })`                     | `requestJoin`                                    |
-| `leave()`                                       | `leaveGroup`                                     |
-| `report({ subject, reasonType, reason, rule })` | `createReport`                                   |
-| `space(schema, { skey, store, ... })`           | a `GroupSpace` of the group's                    |
+| Member                                               | What                                             |
+| ---------------------------------------------------- | ------------------------------------------------ |
+| `did`, `handle`                                      | the group's                                      |
+| `agent`                                              | the member's agent                               |
+| `client`                                             | a lex `Client` asking the host                   |
+| `getGroup()`                                         | `getGroup`'s answer, typed                       |
+| `members({ q, limit })`                              | an async iterator over `listMembers`, every page |
+| `join({ message, invite })`                          | `requestJoin`                                    |
+| `leave()`                                            | `leaveGroup`                                     |
+| `report({ subject, cid, reasonType, reason, rule })` | `createReport`                                   |
+| `space(schema, { skey, store, ... })`                | a `GroupSpace` of the group's                    |
 
 `listActorGroups(client, params)` and `listActorInvites(client, params)`
 answer one page of `getActorGroups` and `getActorInvites`, with a lex

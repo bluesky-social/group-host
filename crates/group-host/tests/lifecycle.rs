@@ -41,7 +41,7 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
             &[Write::Create {
                 collection: format!("{NS}.membership"),
                 rkey: carol.did.clone(),
-                value: json!({"$type": format!("{NS}.membership"), "member": carol.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
+                value: json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}),
             }],
         )
         .await
@@ -267,7 +267,7 @@ async fn a_group_deleted_is_gone() {
     // A space it ended before is forgotten with it.
     let ended = h
         .host
-        .create_space(&did, &format!("{NS}.calendar"), "old", false);
+        .create_space(&did, &format!("{NS}.calendar"), "old", &closed());
     let ended = ended.unwrap();
     h.host.end_space(&did, &ended).unwrap();
 

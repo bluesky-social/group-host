@@ -114,7 +114,7 @@ async function membership(
   roles: string[],
   action: 'create' | 'update'
 ) {
-  const record = { $type: MEMBERSHIP, member: who, roles, createdAt: new Date().toISOString() };
+  const record = { $type: MEMBERSHIP, roles, createdAt: new Date().toISOString() };
   const nsid =
     action === 'create' ? 'com.atproto.space.createRecord' : 'com.atproto.space.putRecord';
   return asGroup(event, group, membersOf(group), nsid, {

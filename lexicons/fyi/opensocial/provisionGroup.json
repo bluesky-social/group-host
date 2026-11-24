@@ -38,12 +38,10 @@
                 "fyi.opensocial.profile#invite"
               ]
             },
-            "metaReadableBy": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "fyi.opensocial.defs#audience"
-              }
+            "metaPublicRead": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether anyone may read its meta space (its policy's publicRead). Members read it either way."
             },
             "stewards": {
               "type": "array",

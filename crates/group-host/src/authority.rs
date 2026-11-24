@@ -20,7 +20,7 @@
 use crate::Host;
 use crate::index_api::capped;
 use crate::oauth_clients::pinned_client;
-use crate::rbac::{self, NS};
+use crate::rbac::Policy;
 use crate::repo::invalid;
 use crate::space::NOTIFY_REPO_UPDATE;
 use crate::space_api::NOTIFY_REVOKED;
@@ -325,14 +325,14 @@ impl Host {
         }
     }
 
-    /// Makes a space of `authority`'s, a group here, of `kind` at `skey`;
-    /// open to any reader with `public_read`. Its URI.
+    /// Makes a space of `authority`'s, a group here, of `kind` at `skey`,
+    /// under `policy`. Its URI.
     pub fn create_space(
         &self,
         authority: &str,
         kind: &str,
         skey: &str,
-        public_read: bool,
+        policy: &Json,
     ) -> Result<String, XrpcError> {
         let uri = format!("at://{authority}/space/{kind}/{skey}");
         SpaceRef::parse(&uri).map_err(|e| invalid(e.to_string()))?;
@@ -342,7 +342,7 @@ impl Host {
         }
         let made = self
             .store
-            .create_space(&uri, authority, public_read, now())
+            .create_space(&uri, authority, policy, now())
             .map_err(XrpcError::internal)?;
         if !made {
             return Err(XrpcError::new(
@@ -352,6 +352,15 @@ impl Host {
             ));
         }
         Ok(uri)
+    }
+
+    /// The policy of the space at `uri`, if it is one here.
+    pub fn policy(&self, uri: &str) -> Result<Option<Policy>> {
+        let Some(space) = self.store.space(uri)? else {
+            return Ok(None);
+        };
+        let at = SpaceRef::parse(uri)?;
+        Ok(Some(Policy::of(&space.policy, &at)))
     }
 
     /// The space at `uri`, if its authority is a group here.
@@ -399,23 +408,15 @@ impl Host {
         if user == space.authority {
             return Ok(true);
         }
-        // A group's space with an access record: the record decides,
-        // against the user's roles in the group.
-        let access = self.group_record(&space.authority, uri, &format!("{NS}.access"), "self")?;
-        if let Some(access) = access.map(|a| rbac::Access::of(&a, uri)) {
-            let roles = self.roles(&space.authority, user)?;
-            let by_record = match access_kind {
-                Access::Read => access.can_read(&roles, user),
-                Access::Write => access.can_write_own(&roles, user),
-            };
-            if by_record {
-                return Ok(true);
-            }
-        }
+        // Its policy decides, against the user's roles in the group; then
+        // what the host keeps of each account beyond it, from a space
+        // brought here with its members.
+        let policy = Policy::of(&space.policy, &SpaceRef::parse(uri)?);
+        let roles = self.roles(&space.authority, user)?;
         let granted = self.store.granted(uri, user)?;
         Ok(match access_kind {
-            Access::Read => space.public_read || granted.is_some_and(|(read, _)| read),
-            Access::Write => granted.is_some_and(|(_, write)| write),
+            Access::Read => policy.can_read(&roles) || granted.is_some_and(|(read, _)| read),
+            Access::Write => policy.writes_own(&roles) || granted.is_some_and(|(_, write)| write),
         })
     }
 
@@ -468,6 +469,30 @@ impl Host {
         if let Some(prev) = removed {
             let update = repo_removed(repo, &space_rev, prev.as_deref());
             self.forward(space, update, space_rev);
+        }
+        Ok(())
+    }
+
+    /// Takes out of the writer set of `space` (at `uri`) each repo that
+    /// may write there no more, as its policy and the roles it reads have
+    /// it now; with `only`, that repo alone.
+    pub fn prune_writers(&self, uri: &str, space: &Space, only: Option<&str>) -> Result<()> {
+        for writer in self.store.writers(uri, None, u32::MAX)? {
+            let other = only.is_some_and(|o| o != writer.did);
+            if other || self.may(uri, space, Some(&writer.did), Access::Write)? {
+                continue;
+            }
+            self.remove_writer(uri, &writer.did)?;
+        }
+        Ok(())
+    }
+
+    /// Takes `member` out of the writer set of each of `group`'s spaces
+    /// they may write in no more.
+    pub fn prune_writer_of(&self, group: &str, member: &str) -> Result<()> {
+        for uri in self.store.spaces_of(group)? {
+            let space = self.store.space(&uri)?.context("a space of the group's")?;
+            self.prune_writers(&uri, &space, Some(member))?;
         }
         Ok(())
     }

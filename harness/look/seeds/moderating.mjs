@@ -50,17 +50,15 @@ export default async ({ world, opensocial, ask, page, who, exists }) => {
     );
   }
   // A board its members read, and a post on it to report.
-  const access = { grants: [{ role: 'member', scopes: ['space:*?action=read'] }] };
+  const policy = { grants: [{ role: 'member', read: true }] };
   opensocial(
     'dan',
     'space',
     'create',
     g,
     'com.example.board',
-    '--access',
-    JSON.stringify(access),
-    '--name',
-    'Swaps',
+    '--policy',
+    JSON.stringify(policy),
     '--skey',
     'swaps'
   );
@@ -71,25 +69,15 @@ export default async ({ world, opensocial, ask, page, who, exists }) => {
     const res = await fetch(`${world.host}/xrpc/${lxm}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        group: did,
-        subject,
-        reasonType: `com.atproto.moderation.defs#${reasonType}`,
-        reason
-      })
+      body: JSON.stringify({ group: did, subject, reasonType, reason })
     });
     if (!res.ok) throw new Error(`${name} reporting: ${await res.text()}`);
   };
-  await report(
-    'maximilianaquinces',
-    { $type: 'fyi.opensocial.defs#recordSubject', uri: post },
-    'reasonRude',
-    'Calls people names under every swap.'
-  );
+  await report('maximilianaquinces', post, 'rude', 'Calls people names under every swap.');
   await report(
     'frank',
-    { $type: 'fyi.opensocial.defs#accountSubject', did: who.maximilianaquinces.did },
-    'reasonSpam',
+    who.maximilianaquinces.did,
+    'spam',
     'Posts the same seed shop link in every thread.'
   );
 };

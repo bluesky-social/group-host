@@ -20,19 +20,17 @@ and the authority for each group's own spaces.
 
 Starting a group makes two spaces. Meta,
 `at://<group>/space/fyi.opensocial.meta/self`, holds the group's profile,
-its labeler and an access record. Members,
+its rules and its labeler. Members,
 `at://<group>/space/fyi.opensocial.members/self`, holds the roles, the
-permissions and the memberships. It also holds a `fyi.opensocial.space`
-record for each of the group's spaces, which is the list apps read to
-find them. A group listed on the network points at its meta space from a
-`fyi.opensocial.declaration` record in its public repo.
+permissions and the memberships. It also holds the index: a
+`fyi.opensocial.space` record, `{space, createdAt}`, for each of the
+group's listed spaces, which apps read to find them. A group listed on
+the network points at its meta space from a `fyi.opensocial.declaration`
+record in its public repo.
 
-A member holding `space.create` makes more with
-`fyi.opensocial.createSpace`. Each gets its access record and, unless
-the member asks not to, an index entry. A member holding `space.delete`
-ends one with `fyi.opensocial.deleteSpace`, listed or not. Nobody makes
-or deletes meta and members this way. Only the chosen people a space is
-for can change it ([groups](groups.md)).
+A group makes more spaces, and changes and ends them, through atproto's
+own space methods ([below](#making-changing-and-ending-a-space)). Meta
+and members come and go with the group.
 
 A space's type is any NSID, but a member's PDS grants an app a type only
 once it can read that type's published schema. For a group's site, the
@@ -58,10 +56,11 @@ repo, the space, the revision and that digest.
 
 The group also writes in spaces it isn't the authority for. An invite
 goes in the group's repo in the invitee's inbox,
-`at://<invitee>/space/fyi.opensocial.invites/self`. The inbox's authority
-asks this host who may use it, with
-`com.atproto.managedspace.checkAccess`. Its owner may read, and a group
-here may write ([membership](membership.md)).
+`at://<invitee>/space/fyi.opensocial.invites/self`. The invitee's app
+makes it a `com.atproto.memberspace.policy` space with `publicWrite` set
+and no members, so any group may write there and only its owner reads
+it. The host tells the invitee's PDS of each write
+([membership](membership.md#invites)).
 
 Details:
 
@@ -79,22 +78,83 @@ Details:
 
 ## Deciding who reads and writes
 
-Members and roles change, so a space's rule can't be a fixed list. Each
-space holds an access record, `fyi.opensocial.access/self`, in the
-group's own repo there. The host checks it against the user's roles on
-every request. Its `grants` give each role OAuth scopes in that space
-and no other, such as `space:<type>?action=read`. A user may read if the
-record is `public`, or if a role they hold is granted `read` there.
-`public` means anyone signed in, and never anyone at all. A member whose
-roles grant `read` may write in their own name, unless `writableBy`
-names who may. In a space of chosen people (`people`, by DID), those
-people read and write while they're members, and the roles granted
-`read` read too.
+Members and roles change, so a space's rule can't be a fixed list of
+people. Each space is kept under a policy, `fyi.opensocial.policy`, that
+speaks of roles. The host keeps it, and checks it against the user's
+roles on every request. It holds:
 
-The group itself may do anything in its spaces. Where the access record
-doesn't allow a user, a grant may, and grants come only from moving a
-group in ([moving](moving.md)). While a group is switched off, no one
-reads or writes in its spaces, the group included.
+- `grants`, at most one a role. Each says whether the role's members
+  read the space (`read`), whether they write there in their own name
+  (`write`), and which OAuth scopes they hold there acting as the group
+  (`scopes`), such as `space:<type>?collection=<nsid>`. A scope naming
+  another space grants nothing.
+- `publicRead`: anyone at all may read the space, signed in or not.
+- `unlisted`: the space is left out of the group's index.
+
+A user reads the space if it's `publicRead`, or if a role they hold is
+granted `read`. Only members whose roles are granted `write` are in the
+space's writer set, so only their records reach readers. Someone who
+loses `write`, by a change of roles or policy, by leaving or by being
+put out, leaves the writer set at once.
+
+The group itself may do anything in its spaces. Where the policy doesn't
+allow a user, a grant of their own may. Such grants come only with a
+space moved here ([moving](moving.md)). While a group is switched off,
+no one reads or writes in its spaces, the group included.
+
+The host publishes each policy in its space, as the group's
+`com.atproto.space.policy/self` record there (`{policy}`), so anyone who
+reads the space can read its rules. It keeps the index in step with
+`unlisted`. Both are the host's alone: a write of either as a record is
+refused, and they change only when the policy does.
+
+## Making, changing and ending a space
+
+A space is made, changed, ended and read by atproto's own methods,
+`com.atproto.space.createSpace`, `updateSpace`, `deleteSpace` and
+`getSpace`, called as the group. That's an app signed in as the group,
+or a group token from `fyi.opensocial.getGroupAuth`
+([signing in](signing-in.md)). An app password can't call them, since
+its session never reaches spaces. Each call is checked twice:
+
+- The session's scope must hold `space:<type>?manage=create`,
+  `manage=update` or `manage=delete` for the space, or it fails
+  `ScopeMissing`.
+- The member's roles must allow it at that moment, or it fails
+  `NotAuthorized`. Making a space takes a role granting `space.create`.
+  Changing one takes a role granting `space.configure`, or a
+  `manage=update` scope that the space's own policy grants one of their
+  roles. Ending one takes `space.delete`, or a `manage=delete` scope in
+  its policy.
+
+`createSpace` takes a type, a key (or makes a new one) and a policy. Any
+policy but `fyi.opensocial.policy` fails `UnsupportedPolicy`. The host
+also refuses a grant of a role the group doesn't have, two grants of one
+role, a scope that's no space scope, and the meta and members types. A
+space is made whole or not at all: if its policy can't be published,
+the host ends it again. Unless `unlisted`, it gets an index entry.
+
+`updateSpace` replaces the policy whole, publishes it, and lists or
+unlists the space to match. It grants no more than its caller holds. It
+changes only the grants of roles they may assign, adds only scopes their
+roles hold, and grants `read` or `write` (or turns on `publicRead`) only
+if they have it there. Anything else fails `NotAuthorized`. A new
+group's admins hold every scope in its spaces (`space:*?collection=*`),
+so they may give any. On the members space, `member` keeps `read` and
+`write`, and `publicRead` stays off: every member holds `member`, and
+nobody else reads the roster. Any other policy there fails
+`MembersSpaceFixed`. Then each writer the new policy no longer lets
+write leaves the writer set. Changing `publicRead` on meta writes or
+removes the group's declaration.
+
+`deleteSpace` takes the space out of the index, then ends it
+([below](#ending-a-space-or-a-group)). Meta and members can't be deleted
+(`NotAuthorized`). `getSpace` answers a space and its policy to a member
+who reads it or may change it.
+
+A group token for a space carries the `manage=` operations its member
+may use there. One may be asked for a space not made yet, to make it
+with `manage=create`.
 
 ## Credentials
 
@@ -209,10 +269,13 @@ The `fyi.opensocial.*` methods answer from the index.
 `fyi.opensocial.listSpaceRecords` brings the index up to date, waiting
 at most 5 seconds, then answers newest first. It orders by when the
 index first saw each record, its `createdAt`, which reading a repo again
-doesn't move. It and `getSpaceBlob` check the access record on every
-call, so the index never decides who sees what. The caller is known by
-service auth or the console's session. A caller with neither reads
-nothing, even in a space readable by `public`, and is told `AuthMissing`.
+doesn't move. It and `getSpaceBlob` check the policy on every call, so
+the index never decides who sees what. The caller is known by service
+auth or the console's session. A caller with neither reads nothing
+through these methods, even in a `publicRead` space, and is told
+`AuthMissing`. Such a space is read without signing in through
+`com.atproto.space.*`, with a credential `authorizeSpaceSync` gives
+anyone for it.
 The host also serves a space's images at `/img/{did}/{cid}` to anyone
 signed in whom the space lets read.
 
@@ -234,8 +297,9 @@ repos. Parameters, limits and headers are in
 
 ## Ending a space or a group
 
-Deleting a space removes its entry in members and tells every service
-registered to it with `spaceDeleted` by `notifySpaceUpdate`, retried as
+Deleting a space removes its entry in the index, if it has one, and
+tells every service registered to it with `spaceDeleted` by
+`notifySpaceUpdate`, retried as
 above. The host forgets the space's index, writer set, registrations,
 grants and issued credentials, and the group's own repo in it. It keeps
 only the fact that the space was deleted, so `authorizeSpaceSync`

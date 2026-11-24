@@ -29,7 +29,7 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let membership = json!({"$type": format!("{NS}.membership"), "member": bob.did, "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
+    let membership = json!({"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
     keep(h, &did, "membership", &bob.did, membership).await;
     (did, [alice, bob, carol])
 }
@@ -375,8 +375,8 @@ async fn an_app_writes_the_site_as_the_group_only_if_its_member_configures_it() 
 
     // A member whose role writes the record, but who does not configure
     // the group, may not.
-    let p = granting(&h, &did, "member", &[&format!("repo:{SITE}")], &[]);
-    keep(&h, &did, "permissions", "self", p).await;
+    let member = granting(&h, &did, "member", &[&format!("repo:{SITE}")], &[]);
+    keep(&h, &did, "role", "member", member).await;
     let tokens = app.sign_in(&h, &bob, &did).await;
     let token = tokens["access_token"].as_str().unwrap();
     let said = app

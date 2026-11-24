@@ -61,6 +61,7 @@ pub mod space;
 pub mod space_api;
 pub mod stats;
 pub mod store;
+pub mod takedown;
 pub mod time;
 pub mod token_writes;
 pub mod xrpc;
@@ -250,18 +251,6 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(group_handle::update_group_handle),
         )
         .route(
-            "/xrpc/fyi.opensocial.createSpace",
-            post(group_spaces::create_space),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.updateSpace",
-            post(group_spaces::update_space),
-        )
-        .route(
-            "/xrpc/fyi.opensocial.deleteSpace",
-            post(group_spaces::delete_space),
-        )
-        .route(
             "/xrpc/fyi.opensocial.listSpaceRecords",
             get(index_api::list_space_records),
         )
@@ -304,10 +293,6 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
         .route(
             "/xrpc/fyi.opensocial.declineInvite",
             post(group_invites::decline_invite),
-        )
-        .route(
-            "/xrpc/com.atproto.managedspace.checkAccess",
-            get(group_invites::check_access),
         )
         .route(
             "/xrpc/fyi.opensocial.getAuthorization",
@@ -356,16 +341,16 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(moderation::delete_label_definition),
         )
         .route(
-            "/xrpc/fyi.opensocial.listSubjects",
-            get(moderation::list_subjects),
+            "/xrpc/fyi.opensocial.listModSubjects",
+            get(moderation::list_mod_subjects),
         )
         .route(
-            "/xrpc/fyi.opensocial.getSubjectHistory",
-            get(moderation::get_subject_history),
+            "/xrpc/fyi.opensocial.getModSubjectHistory",
+            get(moderation::get_mod_subject_history),
         )
         .route(
-            "/xrpc/fyi.opensocial.resolveSubject",
-            post(moderation::resolve_subject),
+            "/xrpc/fyi.opensocial.resolveModSubject",
+            post(moderation::resolve_mod_subject),
         )
         .route(
             "/xrpc/fyi.opensocial.createReport",
@@ -594,6 +579,22 @@ fn token_routes() -> Router<Arc<Host>> {
         .route(
             &x("com.atproto.space.applyWrites"),
             post(token_writes::space_apply_writes),
+        )
+        .route(
+            &x("com.atproto.space.createSpace"),
+            post(group_spaces::create_space),
+        )
+        .route(
+            &x("com.atproto.space.updateSpace"),
+            post(group_spaces::update_space),
+        )
+        .route(
+            &x("com.atproto.space.deleteSpace"),
+            post(group_spaces::delete_space),
+        )
+        .route(
+            &x("com.atproto.space.getSpace"),
+            get(group_spaces::get_space),
         )
         .route(
             &x("com.atproto.server.getSession"),

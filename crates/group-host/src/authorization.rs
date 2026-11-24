@@ -11,7 +11,7 @@ use crate::group_api::{group_of, signed_in};
 use crate::mcp;
 use crate::oauth_scope::{concrete, set_of};
 use crate::oauth_store::Request;
-use crate::rbac::{Access, NS};
+use crate::rbac::NS;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use axum::Json;
@@ -88,7 +88,7 @@ impl Host {
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
         let granted = match roles.is_empty() {
             true => Vec::new(),
-            false => self.narrow(group, &roles, member, requested)?,
+            false => self.narrow(group, &roles, requested)?,
         };
         let withheld: Vec<String> = requested
             .iter()
@@ -102,10 +102,8 @@ impl Host {
             "granted": objects("scope", &granted),
             "withheld": objects("scope", &withheld),
         });
-        let (meta, access) = (meta_space(group), format!("{NS}.access"));
-        let access = self.group_record(group, &meta, &access, "self");
-        let access = access.map_err(XrpcError::internal)?.unwrap_or_default();
-        if Access::of(&access, &meta).can_read(&roles, member) {
+        let meta = meta_space(group);
+        if self.reads_space(&meta, &roles)? {
             let profile = self.group_record(group, &meta, &format!("{NS}.profile"), "self");
             let profile = profile.map_err(XrpcError::internal)?.unwrap_or_default();
             if let Some(name) = profile.get("displayName") {
@@ -129,12 +127,17 @@ impl Host {
     }
 }
 
-/// What each of this host's permission sets asked for is called, and
-/// says it is for.
-fn labels(requested: &[String]) -> Value {
-    let ours = requested.iter().filter_map(|s| Some((s, set_of(s)?)));
-    ours.map(|(s, set)| json!({"scope": s, "title": set["title"], "text": set["detail"]}))
-        .collect()
+/// What each of this host's permission sets among `scopes` is called,
+/// and says it is for, once each.
+fn labels(scopes: &[&str]) -> Value {
+    let mut out: Vec<Value> = Vec::new();
+    for (i, s) in scopes.iter().enumerate() {
+        let set = set_of(s).filter(|_| !scopes[..i].contains(s));
+        out.extend(
+            set.map(|set| json!({"scope": s, "title": set["title"], "text": set["detail"]})),
+        );
+    }
+    out.into()
 }
 
 /// An app's pending request to sign in as a group, as the caller would
@@ -172,10 +175,20 @@ pub async fn get_authorization(
     for group in &groups {
         offered.push(host.offered(group, &me, &requested)?.0);
     }
+    // Each set asked for, and any within it a group would give in its
+    // place.
+    let granted = offered
+        .iter()
+        .flat_map(|g| g["granted"].as_array().into_iter().flatten());
+    let named: Vec<&str> = requested
+        .iter()
+        .map(String::as_str)
+        .chain(granted.filter_map(|g| g["scope"].as_str()))
+        .collect();
     let mut out = json!({
         "client": client,
         "requested": objects("scope", &requested),
-        "labels": labels(&requested),
+        "labels": labels(&named),
         "groups": offered,
     });
     if let Some(hint) = request.parameters.get("login_hint") {
@@ -212,7 +225,7 @@ pub async fn approve_authorization(
     if roles.is_empty() {
         return Err(forbidden("you hold no role in this group"));
     }
-    let granted = host.narrow(group, &roles, &me, &requested(&request))?;
+    let granted = host.narrow(group, &roles, &requested(&request))?;
     let scope = concrete(&granted, group);
     let approved = host.approve_request(&request, group, &me, &scope);
     let redirect = approved.map_err(XrpcError::internal)?.ok_or_else(expired)?;

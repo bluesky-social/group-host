@@ -14,7 +14,7 @@ use crate::Host;
 use crate::group::{did_rkey, members_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_config::put_in;
-use crate::rbac::{Grant, NS, actions_for, actions_of, grants, roles_of};
+use crate::rbac::{Grant, NS, actions_for, actions_of, roles_of};
 use crate::repo::Write;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
@@ -35,7 +35,7 @@ fn forbidden(message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", message)
 }
 
-/// A group's members space, its grants, and its records there.
+/// A group's members space, its roles' grants, and its records there.
 pub(crate) struct Members<'a> {
     pub host: &'a Host,
     pub group: String,
@@ -46,14 +46,12 @@ pub(crate) struct Members<'a> {
 impl<'a> Members<'a> {
     pub(crate) fn of(host: &'a Host, group: &str) -> Result<Members<'a>, XrpcError> {
         let space = members_space(group);
-        let permissions = host
-            .group_record(group, &space, &format!("{NS}.permissions"), "self")
-            .map_err(XrpcError::internal)?;
+        let grants = host.role_grants(group).map_err(XrpcError::internal)?;
         Ok(Members {
             host,
             group: group.into(),
             space,
-            grants: grants(&permissions.unwrap_or_default()),
+            grants,
         })
     }
 
@@ -111,7 +109,6 @@ impl<'a> Members<'a> {
         }
         let membership = json!({
             "$type": format!("{NS}.membership"),
-            "member": did,
             "roles": held,
             "createdAt": iso(now_millis()),
         });
@@ -136,8 +133,8 @@ impl<'a> Members<'a> {
             .filter(|g| actions_of(&g.scopes).contains("group.configure"))
             .map(|g| g.role.clone())
             .collect();
-        let others = self.records("membership")?.into_iter().any(|(_, m)| {
-            m["member"] != who && roles_of(&m).iter().any(|r| configuring.contains(r))
+        let others = self.records("membership")?.into_iter().any(|(k, m)| {
+            k != did_rkey(who) && roles_of(&m).iter().any(|r| configuring.contains(r))
         });
         if others {
             return Ok(());
