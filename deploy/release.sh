@@ -45,8 +45,10 @@ git fetch -q "$REPO" main
 main=$(git rev-parse FETCH_HEAD)
 current=$(git show "$main:Cargo.toml" | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
 
-# The release that landed last, tagged once.
-landed=$(git log --format='%H%x09%s' "$main" | awk -F '\t' -v t="Release $current" '$2 == t { print $1; exit }')
+# The release that landed last, tagged once. awk reads all it is given,
+# the first match kept: quitting early would end the writer with SIGPIPE,
+# which pipefail takes for a failure.
+landed=$(git log --format='%H%x09%s' "$main" | awk -F '\t' -v t="Release $current" '$2 == t && !n++ { print $1 }')
 if [ -z "$landed" ]; then
   echo "main's $current came from no release pull: nothing to tag"
 else
@@ -122,7 +124,7 @@ if [ -n "$dry" ]; then
 fi
 
 pull=$(knotless pull list "$REPO" -q "is:pull state:open author:$OWNER Release" |
-  awk -F '\t' '$4 ~ /^Release [0-9]+\.[0-9]+\.[0-9]+$/ { print $3; exit }')
+  awk -F '\t' '$4 ~ /^Release [0-9]+\.[0-9]+\.[0-9]+$/ && !n++ { print $3 }')
 if [ -n "$pull" ] && git fetch -q "$REPO" "refs/heads/$BRANCH" &&
   [ "$(git rev-parse "FETCH_HEAD^:.changeset")" = "$(git rev-parse "$main:.changeset")" ] &&
   git merge-tree --write-tree "$main" FETCH_HEAD > /dev/null; then
