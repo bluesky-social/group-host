@@ -1,5 +1,10 @@
 # group-host
 
+> **Alpha.** group-host is early and changes often. Its `fyi.opensocial.*`
+> lexicons are not yet published and will change, as will the space
+> alpha it builds on, so apps and records written against today's will
+> break. Don't run it for a group you can't afford to lose.
+
 group-host is a group host for atproto. A group on it is an account of
 its own, with no password and no one person behind it. The host is the
 group's PDS, the authority for its private spaces and its OAuth server,
