@@ -8,16 +8,16 @@ The methods' parameters and errors are in [the API reference](../reference/api.m
 ## Where membership is recorded
 
 The group writes its roster in its members space,
-`at://<group>/space/fyi.opensocial.members/self`. A space is a private
+`at://<group>/space/org.atgrp.members/self`. A space is a private
 record store whose authority (here the group) decides who may read and
 write it ([spaces](spaces.md)). Any member's tools can read the roster
 there, and no one outside the group can. The group writes two kinds of
 record:
 
-- `fyi.opensocial.membership`, one per member, keyed by their DID. It
+- `org.atgrp.membership`, one per member, keyed by their DID. It
   holds the `roles` they have, each by its id (`["member", "admin"]`),
   at most 100. The key alone says whose it is.
-- `fyi.opensocial.role`, one per role, keyed by its id. It holds the
+- `org.atgrp.role`, one per role, keyed by its id. It holds the
   role's name, description, and whether it's a `default` or `bot` role.
   It also holds the role's grant across the group: the `scopes` it
   carries and the roles it may assign (`assignable`), each a list of at
@@ -41,7 +41,7 @@ Apps change these records the way they change any of the group's, by
 writing them as the group with `com.atproto.space.*` (see the next
 sections). The host has no method of its own for roles or memberships.
 
-A member may also write an `fyi.opensocial.acceptance` record in their
+A member may also write an `org.atgrp.acceptance` record in their
 own repo there. It's their side of membership, for apps that show only
 people who have taken up their place. It doesn't change anything they
 may do. `getGroup` reports it to them as `viewer.accepted`.
@@ -51,7 +51,7 @@ may do. `getGroup` reports it to them as `viewer.accepted`.
 The host's methods ask about eleven actions, such as `invite`, `admit`,
 `eject`, `role.assign` and `group.configure`. Each is answered by exactly
 one scope, in atproto's permission syntax (`space:*?manage=create`,
-`include:fyi.opensocial.authManageGroup` for `group.configure`). A
+`include:org.atgrp.authManageGroup` for `group.configure`). A
 member may do what any of their roles grants. Roles add up, with no
 deny, precedence or hierarchy, so every "may they?" is a lookup. A role
 may also carry `repo:<collection>` scopes, the collections of the
@@ -73,25 +73,25 @@ may admit someone with.
 
 The actions over members are writes of memberships in the members space,
 and their scopes say so. `admit` is
-`space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=create`,
+`space:org.atgrp.members?skey=self&collection=org.atgrp.membership&action=create`,
 `role.assign` the same with `action=update`, and `eject` with
 `action=delete`. A scope naming every write of memberships, or of every
 collection in every space, carries all three.
 
 The group's permission sets carry actions too, as their permissions do.
-`fyi.opensocial.authModerate` carries `admit`, `eject`, `role.assign`,
+`org.atgrp.authModerate` carries `admit`, `eject`, `role.assign`,
 `invite`, `mod.read` and `mod.resolve`. It labels too, but only in the
 meta and members spaces, which its permissions name, so it doesn't carry
 `label`, which is labels in every space. Labelling in the group's other
 spaces takes `space:*?collection=com.atproto.label.record`, or a scope a
 space's policy grants there ([moderation](moderation.md#labels)).
-`fyi.opensocial.authManageGroup` carries all of those and
-`group.configure`. `fyi.opensocial.authManageProfile` carries none. Who
+`org.atgrp.authManageGroup` carries all of those and
+`group.configure`. `org.atgrp.authManageProfile` carries none. Who
 writes the profile and rules is for the meta space's policy to say
 ([spaces](spaces.md)).
 
 A new group has two roles. `admin` carries
-`include:fyi.opensocial.authManageGroup`,
+`include:org.atgrp.authManageGroup`,
 `space:*?collection=com.atproto.label.record` (labels in every space),
 `space:*?manage=update` and `space:*?manage=create&manage=delete`
 (changing, making and ending spaces), `repo:*` and `space:*?collection=*`
@@ -123,7 +123,7 @@ against the records as the earlier writes left them. It's checked
 against the member's roles as they were before any of the writes. The
 writes all happen together or not at all.
 
-A role (`fyi.opensocial.role`) is keyed by its id, 64 characters at
+A role (`org.atgrp.role`) is keyed by its id, 64 characters at
 most. It can only go once no member holds it (`RoleInUse`), its grant
 with it. Its name is 64 characters at most, and its description 2,000.
 
@@ -161,7 +161,7 @@ actions it shows as coming with those. It changes only roles the
 editing member may assign, and lists among the roles a role may give
 only those they may assign, beside those it lists already.
 
-A membership (`fyi.opensocial.membership`) is kept at its member's DID,
+A membership (`org.atgrp.membership`) is kept at its member's DID,
 holds `member` (`MemberRole`), and names only roles the group defines.
 
 - Creating one admits someone waiting to join, and their request goes
@@ -178,7 +178,7 @@ holds `member` (`MemberRole`), and names only roles the group defines.
 
 A token from `getGroupAuth` for the members space writes what the
 member's grants let them write there. The console's member and settings
-pages write with one, and so do the `opensocial` commands. An
+pages write with one, and so do the `atgrp` commands. An
 [MCP client](mcp.md) makes the same writes with its tools, as the member
 who connected it: `role_set`, `role_delete`, `role_grant`,
 `member_assign` and `member_eject`.
@@ -222,8 +222,8 @@ Details:
 
 An invite must reach someone outside the group, so the group writes it
 where they already look. That's their inbox,
-`at://<invitee>/space/fyi.opensocial.invites/self`, a space of their own
-at their PDS. The invite is an `fyi.opensocial.invite` record in the
+`at://<invitee>/space/org.atgrp.invites/self`, a space of their own
+at their PDS. The invite is an `org.atgrp.invite` record in the
 group's repo there, with a `createdAt` and an optional `message` and
 `expiresAt`. The invitee's own app makes the inbox, with atproto's
 baseline `com.atproto.memberspace.policy`, `publicWrite` set and no
@@ -233,7 +233,7 @@ among the inbox's writers.
 
 An app makes it with `com.atproto.space.createSpace` at the person's PDS,
 asking them for
-`space:fyi.opensocial.invites?action=read_self&manage=create`: to make
+`space:org.atgrp.invites?action=read_self&manage=create`: to make
 their own inbox, and to see the policy of one already there, which it
 leaves as it is. The
 console doesn't make one: someone whose app never made their inbox
@@ -244,7 +244,7 @@ An app invites someone by writing that record as the group, through
 `com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
 one write) with a session for the group. It takes the invite back by
 deleting it (`deleteRecord`). A session gets there through the
-`authModerate` or `authManageGroup` permission set, a `space:fyi.opensocial.invites` scope,
+`authModerate` or `authManageGroup` permission set, a `space:org.atgrp.invites` scope,
 or a group token for the inbox from `getGroupAuth`, which the console
 uses ([signing in](signing-in.md)). In every case, the member who signed
 the app in must hold `invite` at the time of each write. The host checks

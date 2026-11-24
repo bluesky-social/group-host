@@ -192,7 +192,7 @@ the site, and a link out of `docs/` goes to the file in the repository
 (`plugins.mjs`).
 
 On a reference page, a table of routes or methods is drawn as a list,
-each with its HTTP method. Each `fyi.opensocial` method, or MCP tool,
+each with its HTTP method. Each `org.atgrp` method, or MCP tool,
 gets its lexicon from `lexicons/` under it, so what it takes and answers
 can't drift from the page (`reference.mjs`). A method named in code on
 any page links to its entry there. It matches by its whole NSID, or by
@@ -257,7 +257,7 @@ using the command or the console sees adds a change file under
 names the bump (`default: patch`, `minor` or `major`), and below it a
 heading and a line say what changed for them. The `check` check asks
 for one on any pull that changes `crates/*/src`, `web/src`,
-`web/messages` or `lexicons/fyi` (`harness/changes.sh`). A change no one
+`web/messages` or `lexicons/org` (`harness/changes.sh`). A change no one
 sees says `Changeset: none` on a
 line of one of its commits' messages instead. The pull's body would be
 the place, but a run can't read it, since the repository is private.

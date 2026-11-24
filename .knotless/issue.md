@@ -21,5 +21,5 @@
 
 ## Where
 
-<!-- a local host or a deployed one; the console, the opensocial command, or
+<!-- a local host or a deployed one; the console, the atgrp command, or
      MCP; the commit you built from. -->

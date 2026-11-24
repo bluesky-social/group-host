@@ -15,7 +15,7 @@ its member's roles. Roles are in [membership](membership.md), spaces in
 | ------------------------ | ----------- | -------------------------------------- | ----------------------- |
 | A person, in the console | themselves  | OAuth at their own PDS                 | a session cookie        |
 | An app                   | a group     | OAuth at this host, or an app password | a group grant           |
-| The console              | a group     | `fyi.opensocial.internal.getGroupAuth` | a 15-minute group token |
+| The console              | a group     | `org.atgrp.internal.getGroupAuth` | a 15-minute group token |
 | An MCP client            | a member    | OAuth at `/mcp`                        | an MCP grant            |
 
 Members keep their accounts on their own PDSes, so the host only needs
@@ -68,7 +68,7 @@ the sign-up PDS's own name, `you.bsky.social` or
 As you type, the field suggests the accounts whose handle matches, with
 each one's picture, name and handle where they're known. Picking one
 signs in as it at once. From two letters on, the browser asks the host
-(`fyi.opensocial.internal.searchActors`), and the host asks wherever
+(`org.atgrp.internal.searchActors`), and the host asks wherever
 `ACTOR_SEARCH` says. On the network everyone's on, that's
 typeahead.waow.tech, a service that knows the accounts of the whole
 network. So what you type reaches it from the host and never from a
@@ -122,11 +122,11 @@ explains it.
 
 ## Calling the host's own methods
 
-A caller asks the `fyi.opensocial.*` methods as a person. The caller
+A caller asks the `org.atgrp.*` methods as a person. The caller
 sends service auth, a short-lived JWT their own PDS signs with `aud` the
 host's `SERVICE_DID` and `lxm` the method called. With no
 `Authorization` header at all, the console's cookie names the caller
-instead. The host's DID document names a `#opensocial` service, so a PDS
+instead. The host's DID document names a `#atgrp` service, so a PDS
 can proxy these calls.
 
 Writing a group's records is different. Those calls go to the group's
@@ -214,9 +214,9 @@ are at that moment.
 
   | Set                                        | Title                | Covers                                                                                                                       |
   | ------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-  | `include:fyi.opensocial.authManageProfile` | Group profile        | the profile and rules in the meta space                                                                                      |
-  | `include:fyi.opensocial.authModerate`      | Group moderation     | memberships and labels in the members space, labels in the meta space, invites in people's inboxes, join requests, the queue |
-  | `include:fyi.opensocial.authManageGroup`   | Group administration | all of that, the labeler, roles, and changing the meta and members spaces (`manage=update`)                                  |
+  | `include:org.atgrp.authManageProfile` | Group profile        | the profile and rules in the meta space                                                                                      |
+  | `include:org.atgrp.authModerate`      | Group moderation     | memberships and labels in the members space, labels in the meta space, invites in people's inboxes, join requests, the queue |
+  | `include:org.atgrp.authManageGroup`   | Group administration | all of that, the labeler, roles, and changing the meta and members spaces (`manage=update`)                                  |
 
   A set is an upper bound: of one asked for, the token keeps the parts
   the roles grant. Of each space permission, it keeps the collections
@@ -233,18 +233,18 @@ are at that moment.
   the profile and rules by the meta space's policy gives
   `authManageProfile`. Otherwise the parts are kept as scopes.
 
-  `include:fyi.opensocial.authParticipate` is for a person's own
+  `include:org.atgrp.authParticipate` is for a person's own
   session, at their PDS, and it's never kept for a group's.
 
 - `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
 - `rpc:M` is kept only if the roles hold `repo:*` and `M` is neither
-  `*` nor a `fyi.opensocial.*` method.
+  `*` nor a `org.atgrp.*` method.
 - `space:T?…` is kept if some space of type `T` lets the roles write
   what's asked there. For a scope that only reads, reading it there is
   enough. In the members space, the roles write its roles if they hold
   `group.configure`. They write memberships as they hold `admit`
   (create), `role.assign` (update) and `eject` (delete).
-- `space:fyi.opensocial.invites?…` (people's inboxes) is kept if the
+- `space:org.atgrp.invites?…` (people's inboxes) is kept if the
   roles hold `invite` and it asks for invites alone, in anyone's inbox or
   one person's.
 - `space:*?…` becomes one scope per space the roles may read, naming the
@@ -275,7 +275,7 @@ the group's DID.
 A token calls none of the host's own methods, since those take a
 member's service auth. Of the sets, a token makes their writes in the
 meta and members spaces and in people's inboxes. Their `rpc:` and
-`manage=` scopes say what an app was given, as the opensocial proposal
+`manage=` scopes say what an app was given, as the Atmosphere Groups proposal
 lists them. A grant keeps this scope through every refresh. Refreshing
 doesn't ask the roles again, because each write does.
 
@@ -368,7 +368,7 @@ storing one.
 ## Group tokens for the console
 
 The console acts as a group too. It doesn't run OAuth against the host
-it's part of. Instead it asks `fyi.opensocial.internal.getGroupAuth` for a group
+it's part of. Instead it asks `org.atgrp.internal.getGroupAuth` for a group
 and one of its spaces, as the member, with a DPoP proof. For each
 collection the member's roles may write in that space as the group, by
 the scopes its policy grants them, the token's scope holds a space scope
@@ -404,8 +404,8 @@ checks it as it checks any write ([MCP](../reference/mcp.md)).
 Every grant records its member, its client, its source (`oauth`,
 `getGroupAuth`, `appPassword` or `provisionGroup`), its scope, when it
 was made, and when it was last used. Members who hold `group.configure`
-list every grant in force with `fyi.opensocial.internal.listGroupTokens` and end
-any one with `fyi.opensocial.internal.revokeGroupToken`. An app ends its own at
+list every grant in force with `org.atgrp.internal.listGroupTokens` and end
+any one with `org.atgrp.internal.revokeGroupToken`. An app ends its own at
 `/oauth/revoke`. MCP grants are listed separately, with
 `listConnectedApps`.
 
@@ -424,7 +424,7 @@ Some apps sign in with a handle and a password through
 passwords let them sign in as a group.
 
 A member whose roles hold `repo:*` makes one in the console with
-`fyi.opensocial.internal.createAppPassword`, and it stays theirs. The password
+`org.atgrp.internal.createAppPassword`, and it stays theirs. The password
 appears in that answer only, and the host keeps its SHA-256. A group
 holds at most 25. Makers list their own with `listAppPasswords`, and
 configurers list every one. `revokeAppPassword` deletes one along with
@@ -447,7 +447,7 @@ none of them works again even if the maker gets `repo:*` back.
 ## Provisioning
 
 An app that starts groups wants to sign in to the new group in the same
-step. `fyi.opensocial.internal.provisionGroup` does both. The person calls it as
+step. `org.atgrp.internal.provisionGroup` does both. The person calls it as
 themselves and becomes the founder. The app proves itself in the same
 call with its `clientId`, a client assertion if it's confidential, a
 DPoP proof, and the scope it wants. That scope must hold `atproto` and

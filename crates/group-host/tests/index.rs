@@ -24,8 +24,8 @@ use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-const NS: &str = "fyi.opensocial";
-const NOTE: &str = "fyi.opensocial.note";
+const NS: &str = "org.atgrp";
+const NOTE: &str = "org.atgrp.note";
 
 fn note(text: &str) -> Json {
     json!({"$type": NOTE, "text": text, "createdAt": "2026-11-03T00:00:00Z"})
@@ -48,8 +48,8 @@ async fn group_with(h: &Running, founder: &Authority, member: &str) -> (String, 
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "member", "read": true, "write": true}]});
-    let made = make_space(h, founder, &did, "fyi.opensocial.board", "notes", policy).await;
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [{"role": "member", "read": true, "write": true}]});
+    let made = make_space(h, founder, &did, "org.atgrp.board", "notes", policy).await;
     h.host
         .space_write(
             &did,
@@ -227,8 +227,8 @@ async fn a_public_space_is_for_anyone_signed_in() {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let policy = json!({"$type": "fyi.opensocial.policy", "publicRead": true, "grants": []});
-    let space = &make_space(&h, &alice, &did, "fyi.opensocial.board", "open", policy).await;
+    let policy = json!({"$type": "org.atgrp.policy", "publicRead": true, "grants": []});
+    let space = &make_space(&h, &alice, &did, "org.atgrp.board", "open", policy).await;
     let picture = h.host.upload_blob(&did, b"a map", "image/png").unwrap();
     h.host
         .space_write(
@@ -265,9 +265,9 @@ async fn pages_filters_and_finds_one() {
     let writes: Vec<Write> = (0..5)
         .map(|i| create(&format!("n{i}"), json!({"$type": NOTE, "text": format!("Note {i}"), "subject": {"uri": format!("at://s/{}", i % 2)}})))
         .chain([Write::Create {
-            collection: "fyi.opensocial.other".into(),
+            collection: "org.atgrp.other".into(),
             rkey: "x".into(),
-            value: json!({"$type": "fyi.opensocial.other", "text": "Other"}),
+            value: json!({"$type": "org.atgrp.other", "text": "Other"}),
         }])
         .collect();
     h.host.space_write(&did, &space, &writes).await.unwrap();

@@ -58,7 +58,7 @@ async fn group(h: &Running) -> (String, String, Authority) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
         {"role": "admin", "read": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
     ]});
@@ -81,12 +81,12 @@ async fn keeps_for_each_role_what_its_grants_hold() {
     let (did, _, _) = group(&h).await;
     let all = asked(&[
         "atproto",
-        "include:fyi.opensocial.authManageGroup",
+        "include:org.atgrp.authManageGroup",
         "include:com.example.other",
         "repo:app.bsky.feed.post?action=create",
         "repo:app.bsky.feed.like",
         "rpc:app.bsky.feed.getTimeline?aud=*",
-        "rpc:fyi.opensocial.listModSubjects?aud=*",
+        "rpc:org.atgrp.listModSubjects?aud=*",
         "rpc:*?aud=*",
         "blob:*/*",
         "transition:generic",
@@ -96,7 +96,7 @@ async fn keeps_for_each_role_what_its_grants_hold() {
         admin,
         asked(&[
             "atproto",
-            "include:fyi.opensocial.authManageGroup",
+            "include:org.atgrp.authManageGroup",
             "repo:app.bsky.feed.post?action=create",
             "repo:app.bsky.feed.like",
             "rpc:app.bsky.feed.getTimeline?aud=*",
@@ -223,8 +223,8 @@ async fn makes_a_scope_for_every_type_one_for_each_space_the_roles_read() {
         all,
         [
             format!("space:{CALENDAR}?authority={did}&skey=rides&action=read"),
-            format!("space:fyi.opensocial.members?authority={did}&skey=self&action=read"),
-            format!("space:fyi.opensocial.meta?authority={did}&skey=self&action=read"),
+            format!("space:org.atgrp.members?authority={did}&skey=self&action=read"),
+            format!("space:org.atgrp.meta?authority={did}&skey=self&action=read"),
         ]
     );
     let narrow = |r: &[&str], scope: &str| {
@@ -322,7 +322,7 @@ async fn keeps_a_manage_scope_for_roles_that_may_do_it_to_spaces() {
     }
     // A space's policy lets members change it, and so spaces of its
     // type, that one by its key; none other, and never ending it.
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=update")]},
     ]});
     h.host.store.set_policy(&uri, &policy).unwrap();
@@ -355,7 +355,7 @@ async fn gives_nothing_to_write_for_a_role_without_its_record() {
         .narrow(
             &did,
             &roles(&["admin"]),
-            &asked(&["atproto", "include:fyi.opensocial.authModerate", "repo:x"]),
+            &asked(&["atproto", "include:org.atgrp.authModerate", "repo:x"]),
         )
         .unwrap();
     assert_eq!(narrowed, asked(&["atproto"]));
@@ -367,7 +367,7 @@ fn makes_a_grant_concrete() {
     let scope = concrete(
         &asked(&[
             "atproto",
-            "include:fyi.opensocial.authManageProfile",
+            "include:org.atgrp.authManageProfile",
             "space:com.example.calendar?authority=self&skey=rides",
             "space:com.example.calendar",
             "space:com.example.calendar?action=read",
@@ -380,7 +380,7 @@ fn makes_a_grant_concrete() {
         scopes,
         [
             "atproto",
-            "space:fyi.opensocial.meta?authority=did:plc:riders&skey=self&collection=fyi.opensocial.profile&collection=fyi.opensocial.rule&action=read&action=create&action=update&action=delete",
+            "space:org.atgrp.meta?authority=did:plc:riders&skey=self&collection=org.atgrp.profile&collection=org.atgrp.rule&action=read&action=create&action=update&action=delete",
             "space:com.example.calendar?authority=did:plc:riders&skey=rides&collection=*",
             "space:com.example.calendar?collection=*",
             "space:com.example.calendar?action=read",
@@ -392,7 +392,7 @@ fn makes_a_grant_concrete() {
 /// its profile and rules as the group.
 fn profile_writer(h: &Running, did: &str, role: &str) {
     let write = format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule");
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true},
         {"role": "admin", "read": true, "scopes": [write]},
         {"role": role, "read": true, "scopes": [write]},
@@ -425,9 +425,9 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
     profile_writer(&h, &did, "editor");
     let narrow =
         |r: &[&str], scopes: &[&str]| h.host.narrow(&did, &roles(r), &asked(scopes)).unwrap();
-    let group = "include:fyi.opensocial.authManageGroup";
-    let moderation = "include:fyi.opensocial.authModerate";
-    let profile = "include:fyi.opensocial.authManageProfile";
+    let group = "include:org.atgrp.authManageGroup";
+    let moderation = "include:org.atgrp.authModerate";
+    let profile = "include:org.atgrp.authManageProfile";
     // Whole, for roles that grant all of it.
     for set in [group, moderation, profile] {
         assert_eq!(narrow(&["admin"], &[set]), [set], "{set}");
@@ -484,8 +484,8 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
     // no set of ours.
     for role in ["admin", "moderator", "member"] {
         let others = [
-            "include:fyi.opensocial.authParticipate",
-            "include:fyi.opensocial.profile",
+            "include:org.atgrp.authParticipate",
+            "include:org.atgrp.profile",
         ];
         assert_eq!(narrow(&[role], &others), Vec::<String>::new(), "{role}");
     }
@@ -535,7 +535,7 @@ async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
     let kept = narrow(&["labeller"], &[&named]);
     assert_eq!(kept, std::slice::from_ref(&named));
     // As does a grant of them in its policy, there only.
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true},
         {"role": "moderator", "read": true, "scopes": [every]},
     ]});
@@ -562,7 +562,7 @@ async fn a_profile_writer_keeps_the_profile_with_what_it_approved() {
         .space_write(&did, &members_space(&did), &[write])
         .await
         .unwrap();
-    let app = App::loopback("atproto include:fyi.opensocial.authManageGroup");
+    let app = App::loopback("atproto include:org.atgrp.authManageGroup");
     let tokens = app.sign_in(&h, &bob, &did).await;
     assert!(
         tokens["scope"]
@@ -589,7 +589,7 @@ async fn a_profile_writer_keeps_the_profile_with_what_it_approved() {
         .await;
     assert_eq!(said.status, 403, "{}", said.body);
     // Alice, an admin, keeps all of it.
-    let alices = App::loopback("atproto include:fyi.opensocial.authManageGroup");
+    let alices = App::loopback("atproto include:org.atgrp.authManageGroup");
     let tokens = alices.sign_in(&h, &alice, &did).await;
     let scope = tokens["scope"].as_str().unwrap();
     assert!(scope.contains(&format!("collection={NS}.role")), "{scope}");
@@ -619,7 +619,7 @@ async fn keeps_an_inbox_scope_for_roles_that_may_invite() {
 #[test]
 fn makes_a_permission_set_concrete() {
     let did = "did:plc:riders";
-    let scope = concrete(&asked(&["include:fyi.opensocial.authManageGroup"]), did);
+    let scope = concrete(&asked(&["include:org.atgrp.authManageGroup"]), did);
     let scopes: Vec<&str> = scope.split(' ').collect();
     let all = "action=read&action=create&action=update&action=delete";
     let at = format!("authority={did}&skey=self");

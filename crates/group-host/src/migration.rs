@@ -11,7 +11,7 @@
 //! keeps who writes, so it reads them on without waiting for them to write
 //! again, and their PDSes find the new authority by the group's DID.
 //!
-//! The steps, each a method, which the `opensocial` command walks through:
+//! The steps, each a method, which the `atgrp` command walks through:
 //!
 //! 1. `migratePrepare`, at the source: a service token the group signs, for
 //!    the destination; the group's handle and spaces; and a token, good for
@@ -24,7 +24,7 @@
 //!    the group switched on.
 //!
 //! A space's state moves as a space meta archive (`atproto-space-meta`):
-//! its policy, `fyi.opensocial.policy`; each account's grant beside it, as
+//! its policy, `org.atgrp.policy`; each account's grant beside it, as
 //! `com.atproto.memberspace.member` policy state; and its writers.
 
 use crate::Host;
@@ -59,7 +59,7 @@ type Answer = Result<Json<Value>, XrpcError>;
 /// How long the destination may pull the group with its export token.
 const EXPORT_FOR: i64 = 60 * 60_000;
 /// The method the group's service token is for.
-pub const RECEIVE: &str = "fyi.opensocial.internal.migrateReceive";
+pub const RECEIVE: &str = "org.atgrp.internal.migrateReceive";
 
 fn refused(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)
@@ -408,7 +408,7 @@ impl Host {
         token: &str,
         extra: &[(&str, &str)],
     ) -> Result<reqwest::Response, XrpcError> {
-        let url = format!("{pds}/xrpc/fyi.opensocial.internal.migrateExport");
+        let url = format!("{pds}/xrpc/org.atgrp.internal.migrateExport");
         let mut query = vec![("group", group), ("token", token)];
         query.extend_from_slice(extra);
         self.ask_source(&url, &query).await

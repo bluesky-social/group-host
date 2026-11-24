@@ -54,7 +54,7 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
         {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
     ]});
@@ -456,7 +456,7 @@ async fn writes_only_what_its_member_still_may() {
     let (did, calendar, [_, bob, _]) = group(&h).await;
     membership(&h, &did, &bob.did, &["member", "admin"]).await;
     let scope = format!(
-        "atproto repo:{POST} include:fyi.opensocial.authManageGroup space:{CALENDAR}?collection=*"
+        "atproto repo:{POST} include:org.atgrp.authManageGroup space:{CALENDAR}?collection=*"
     );
     let app = App::loopback(&scope);
     let access = token(&h, &app, &bob, &did).await;
@@ -644,7 +644,7 @@ async fn writes_in_a_space_as_its_policy_grants_now() {
 async fn configures_the_group_as_its_methods_would() {
     let h = start(&[], false).await;
     let (did, _, [alice, ..]) = group(&h).await;
-    let app = App::loopback("atproto include:fyi.opensocial.authManageGroup");
+    let app = App::loopback("atproto include:org.atgrp.authManageGroup");
     let access = token(&h, &app, &alice, &did).await;
     let (meta, members) = (meta_space(&did), members_space(&did));
     let c = |n: &str| format!("{NS}.{n}");

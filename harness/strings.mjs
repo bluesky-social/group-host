@@ -28,24 +28,13 @@ const { parse } = createRequire(join(web, 'package.json'))('svelte/compiler');
 const READ = new Set(['title', 'label', 'placeholder', 'aria-label', 'alt', 'confirm', 'submit']);
 
 /** Words that are the same in every language: names, a DNS record's type, a host's first label. */
-const NAMES = new Set([
-  'opensocial',
-  'A',
-  'AAAA',
-  'TXT',
-  'CNAME',
-  'DID',
-  'PDS',
-  'MCP',
-  'OAuth',
-  'www'
-]);
+const NAMES = new Set(['A', 'AAAA', 'TXT', 'CNAME', 'DID', 'PDS', 'MCP', 'OAuth', 'www']);
 
 const LETTER = /\p{L}/u;
 
 /**
  * Whether `word` is a language's: not a name, and not code, a domain or
- * an NSID (`_atproto.`, `fyi.opensocial.members/self`), which hold a
+ * an NSID (`_atproto.`, `org.atgrp.members/self`), which hold a
  * dot, an underscore, a slash, a colon or an @ before their end.
  */
 function spoken(word) {

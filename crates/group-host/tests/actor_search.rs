@@ -12,7 +12,7 @@ use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 
 async fn search(h: &Running, query: &str) -> Vec<Json> {
-    let (status, said) = h.get("fyi.opensocial.internal.searchActors", query).await;
+    let (status, said) = h.get("org.atgrp.internal.searchActors", query).await;
     assert_eq!(status, 200, "{said}");
     said["actors"].as_array().unwrap().clone()
 }

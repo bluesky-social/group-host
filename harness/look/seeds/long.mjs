@@ -5,28 +5,17 @@
 
 export const GROUP = 'the-evening-society-of-ridge-walkers-and-lantern-keepers.groups.test';
 
-export default async ({ opensocial, ask, who, exists }) => {
+export default async ({ atgrp, ask, who, exists }) => {
   const g = GROUP;
-  if (!(await exists(g))) opensocial('dan', 'group', 'create', g, '--join-policy', 'approval');
+  if (!(await exists(g))) atgrp('dan', 'group', 'create', g, '--join-policy', 'approval');
   const name = 'The Evening Society of Ridge Walkers and Lantern Keepers, North';
   const about =
     'We walk the long ridge every Thursday evening from the first warm week of April until the clocks go back, lanterns lit, at a pace anyone can keep. Bring water, a warm layer, and a lantern if you have one; we lend them to whoever does not. Dogs are welcome on a lead.';
   const site =
     'https://a-very-long-domain-name-for-a-walking-group.example/routes/the-north-ridge/in-the-evening';
-  opensocial(
-    'dan',
-    'profile',
-    'set',
-    g,
-    '--display-name',
-    name,
-    '--description',
-    about,
-    '--url',
-    site
-  );
+  atgrp('dan', 'profile', 'set', g, '--display-name', name, '--description', about, '--url', site);
   const rule = 'Wait for the last walker at every gate, stile and fork';
-  opensocial(
+  atgrp(
     'dan',
     'rule',
     'set',
@@ -37,7 +26,7 @@ export default async ({ opensocial, ask, who, exists }) => {
     'Nobody walks on until everyone is through; the walker at the back carries the second lantern and says when all are there.'
   );
   await ask('maximilianaquinces', g);
-  opensocial('dan', 'member', 'assign', g, who.maximilianaquinces.handle, 'member');
+  atgrp('dan', 'member', 'assign', g, who.maximilianaquinces.handle, 'member');
   const note =
     'I have walked the ridge alone for years, mostly at dusk, and have a spare lantern or two. I would like to walk with others, and can lead the slower group if that helps anyone.';
   await ask('frank', g, note);

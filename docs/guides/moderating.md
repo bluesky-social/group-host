@@ -237,21 +237,21 @@ From **Resolved**, the row's **Review** can still escalate a subject.
 
 ## From a terminal
 
-Each act here has a command in [the `opensocial` command](../reference/cli.md):
+Each act here has a command in [the `atgrp` command](../reference/cli.md):
 
-- Read the queue: `opensocial mod list gardens.groups.test --status open`,
+- Read the queue: `atgrp mod list gardens.groups.test --status open`,
   or `escalated` or `resolved`.
 - Read one subject's history, with who did each thing:
-  `opensocial mod history gardens.groups.test <did or at:// uri>`.
-- Escalate or resolve: `opensocial mod resolve gardens.groups.test <subject> --status escalated --note "…"`,
+  `atgrp mod history gardens.groups.test <did or at:// uri>`.
+- Escalate or resolve: `atgrp mod resolve gardens.groups.test <subject> --status escalated --note "…"`,
   or `--status resolved`.
-- Label an account: `opensocial mod label gardens.groups.test <did> spam`.
+- Label an account: `atgrp mod label gardens.groups.test <did> spam`.
   A takedown is the same with `!takedown`.
-- Label a post: `opensocial mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.
+- Label a post: `atgrp mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.
 - Take a label back: the same command with `--undo`.
-- Define one of the group's labels: `opensocial label define gardens.groups.test off-topic --name Off-topic --description "Not about gardens."`,
-  or stop defining it with `opensocial label delete gardens.groups.test off-topic`.
-- Remove a member: `opensocial member eject gardens.groups.test maximilianaquinces.test`.
+- Define one of the group's labels: `atgrp label define gardens.groups.test off-topic --name Off-topic --description "Not about gardens."`,
+  or stop defining it with `atgrp label delete gardens.groups.test off-topic`.
+- Remove a member: `atgrp member eject gardens.groups.test maximilianaquinces.test`.
 
 No command makes a report. An AI app connected to the group has the same
 acts as tools, listed in [the MCP reference](../reference/mcp.md).

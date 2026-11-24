@@ -4,24 +4,15 @@
 // it, more than a page of members; harbor asking to join with a note; and an invite waiting
 // for maximilianaquinces.
 
-export default async ({ world, opensocial, ask, page, picture, who, exists }) => {
+export default async ({ world, atgrp, ask, page, picture, who, exists }) => {
   const g = 'lanterns.groups.test';
-  if (!(await exists(g))) opensocial('alice', 'group', 'seed', g);
+  if (!(await exists(g))) atgrp('alice', 'group', 'seed', g);
   const about =
     'Evening walks on the ridge trails, lanterns lit, every Thursday from April to October.';
-  opensocial(
-    'alice',
-    'profile',
-    'set',
-    g,
-    '--display-name',
-    'Lantern Hikers',
-    '--description',
-    about
-  );
+  atgrp('alice', 'profile', 'set', g, '--display-name', 'Lantern Hikers', '--description', about);
   for (const name of ['bob', 'carol', 'dan', 'erin', 'frank']) {
     await ask(name, g);
-    opensocial(
+    atgrp(
       'alice',
       'member',
       'assign',
@@ -31,7 +22,7 @@ export default async ({ world, opensocial, ask, page, picture, who, exists }) =>
     );
   }
   await ask('harbor', g, 'I walk the north ridge most weeks and would love company.');
-  opensocial(
+  atgrp(
     'alice',
     'invite',
     'send',

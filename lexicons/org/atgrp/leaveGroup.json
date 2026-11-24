@@ -1,0 +1,43 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.leaveGroup",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Leave the group.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "errors": [
+        {
+          "name": "NotAMember",
+          "description": "The account is not a member of the group."
+        },
+        {
+          "name": "LastConfigurer",
+          "description": "It would leave the group with nobody able to configure it."
+        }
+      ]
+    }
+  }
+}

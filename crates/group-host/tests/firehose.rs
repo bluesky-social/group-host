@@ -18,9 +18,9 @@ const RIDERS: &str = "riders.groups.test";
 
 fn create(rkey: &str) -> Write {
     Write::Create {
-        collection: "fyi.opensocial.rule".into(),
+        collection: "org.atgrp.rule".into(),
         rkey: rkey.into(),
-        value: json!({"$type": "fyi.opensocial.rule", "title": "Ride safe", "createdAt": "2026-11-03T00:00:00Z"}),
+        value: json!({"$type": "org.atgrp.rule", "title": "Ride safe", "createdAt": "2026-11-03T00:00:00Z"}),
     }
 }
 
@@ -94,7 +94,7 @@ async fn sends_every_event_after_a_cursor() {
             panic!()
         };
         assert_eq!(text(field(&ops[0], "action")), "create");
-        assert_eq!(text(field(&ops[0], "path")), "fyi.opensocial.rule/a");
+        assert_eq!(text(field(&ops[0], "path")), "org.atgrp.rule/a");
         let Value::Bytes(blocks) = field(write, "blocks") else {
             panic!()
         };
@@ -143,9 +143,9 @@ async fn sends_every_event_after_a_cursor() {
             &did,
             &[
                 Write::Update {
-                    collection: "fyi.opensocial.rule".into(),
+                    collection: "org.atgrp.rule".into(),
                     rkey: "a".into(),
-                    value: json!({"$type": "fyi.opensocial.rule", "title": "Ride safer", "createdAt": "2026-11-03T00:00:00Z"}),
+                    value: json!({"$type": "org.atgrp.rule", "title": "Ride safer", "createdAt": "2026-11-03T00:00:00Z"}),
                 },
             ],
         )
@@ -160,7 +160,7 @@ async fn sends_every_event_after_a_cursor() {
         .write(
             &did,
             &[Write::Delete {
-                collection: "fyi.opensocial.rule".into(),
+                collection: "org.atgrp.rule".into(),
                 rkey: "a".into(),
             }],
         )

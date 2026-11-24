@@ -549,7 +549,7 @@ async fn moves_an_account_signed_in_at_its_server_and_gives_its_tokens_back() {
     assert_eq!(
         asked["scope"],
         format!(
-            "atproto rpc:com.atproto.server.createAccount?aud={aud}%23opensocial identity:* space:*?authority=*&action=read_self"
+            "atproto rpc:com.atproto.server.createAccount?aud={aud}%23atgrp identity:* space:*?authority=*&action=read_self"
         )
     );
     let (status, moving) = w.call("getAccountMove", None).await;

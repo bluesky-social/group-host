@@ -99,8 +99,8 @@ fn makes_each_schema_from_the_lexicons() {
     assert_eq!(
         assign.action,
         Action::Put {
-            collection: "fyi.opensocial.membership".into(),
-            space: "fyi.opensocial.members".into(),
+            collection: "org.atgrp.membership".into(),
+            space: "org.atgrp.members".into(),
             key: Key::Named("member".into()),
             stamp: true,
         }
@@ -234,7 +234,7 @@ fn plans_a_label_beside_its_subject() {
 
     // Where it goes: an account's in the members space, a record's in its
     // own, the group's.
-    let members = "at://did:plc:g/space/fyi.opensocial.members/self";
+    let members = "at://did:plc:g/space/org.atgrp.members/self";
     assert_eq!(
         label_space("did:plc:g", "did:plc:a").as_deref(),
         Some(members)
@@ -264,7 +264,7 @@ fn plans_a_method_asked_with_its_arguments() {
     assert_eq!(
         planned("group_show", json!({})),
         Ok(Plan::Call {
-            nsid: "fyi.opensocial.internal.getGroup".into(),
+            nsid: "org.atgrp.internal.getGroup".into(),
             procedure: false,
             input: json!({}),
         })
@@ -272,7 +272,7 @@ fn plans_a_method_asked_with_its_arguments() {
     // Its opposite, with undo, which takes nothing but the group.
     let off = |undo: bool| planned("group_deactivate", json!({"undo": undo}));
     let call = |nsid: &str| Plan::Call {
-        nsid: format!("fyi.opensocial.internal.{nsid}"),
+        nsid: format!("org.atgrp.internal.{nsid}"),
         procedure: true,
         input: json!({}),
     };
@@ -291,7 +291,7 @@ fn plans_a_method_asked_with_its_arguments() {
     let Ok(Plan::Call { nsid, input, .. }) = planned("label_define", args) else {
         panic!()
     };
-    assert_eq!(nsid, "fyi.opensocial.internal.putLabelDefinition");
+    assert_eq!(nsid, "org.atgrp.internal.putLabelDefinition");
     assert_eq!(
         input,
         json!({"label": "troll", "name": "Troll", "description": "Picks fights.", "defaultSetting": "hide", "adultOnly": true})
@@ -299,7 +299,7 @@ fn plans_a_method_asked_with_its_arguments() {
     let Ok(Plan::Call { nsid, .. }) = planned("label_delete", json!({"label": "troll"})) else {
         panic!()
     };
-    assert_eq!(nsid, "fyi.opensocial.internal.deleteLabelDefinition");
+    assert_eq!(nsid, "org.atgrp.internal.deleteLabelDefinition");
     // A subject and its version, sent as they are given.
     let call = |args: Value| match planned("mod_resolve", args).unwrap() {
         Plan::Call { nsid, input, .. } => (nsid, input),
@@ -309,15 +309,15 @@ fn plans_a_method_asked_with_its_arguments() {
     let asked = json!({"subject": post, "cid": "bafy", "status": "resolved"});
     assert_eq!(
         call(asked.clone()),
-        ("fyi.opensocial.resolveModSubject".into(), asked)
+        ("org.atgrp.resolveModSubject".into(), asked)
     );
 }
 
 #[test]
 fn plans_a_record_written_as_the_group() {
     let write = |space: &str, kind: &str, rkey: Option<&str>, record: Option<Value>| Plan::Write {
-        space: format!("fyi.opensocial.{space}"),
-        collection: format!("fyi.opensocial.{kind}"),
+        space: format!("org.atgrp.{space}"),
+        collection: format!("org.atgrp.{kind}"),
         rkey: rkey.map(String::from),
         record,
     };
@@ -328,8 +328,8 @@ fn plans_a_record_written_as_the_group() {
             json!({"display_name": "Riders", "description": ""})
         ),
         Ok(Plan::Edit {
-            space: "fyi.opensocial.meta".into(),
-            collection: "fyi.opensocial.profile".into(),
+            space: "org.atgrp.meta".into(),
+            collection: "org.atgrp.profile".into(),
             rkey: "self".into(),
             fields: json!({"displayName": "Riders", "description": ""})
                 .as_object()
@@ -337,7 +337,7 @@ fn plans_a_record_written_as_the_group() {
                 .clone(),
         })
     );
-    let rule = json!({"$type": "fyi.opensocial.rule", "title": "Be kind", "text": ""});
+    let rule = json!({"$type": "org.atgrp.rule", "title": "Be kind", "text": ""});
     assert_eq!(
         planned("rule_set", json!({"title": "Be kind", "text": ""})),
         Ok(write("meta", "rule", None, Some(rule.clone())))
@@ -366,7 +366,7 @@ fn plans_a_record_written_as_the_group() {
             "members",
             "role",
             Some("leader"),
-            Some(json!({"$type": "fyi.opensocial.role", "displayName": "Ride leader"}))
+            Some(json!({"$type": "org.atgrp.role", "displayName": "Ride leader"}))
         ))
     );
     // A membership at its member's DID, saying when it was made.
@@ -379,9 +379,7 @@ fn plans_a_record_written_as_the_group() {
             "members",
             "membership",
             Some("did:plc:b"),
-            Some(
-                json!({"$type": "fyi.opensocial.membership", "roles": ["member"], "createdAt": NOW})
-            )
+            Some(json!({"$type": "org.atgrp.membership", "roles": ["member"], "createdAt": NOW}))
         ))
     );
     assert_eq!(
@@ -404,7 +402,7 @@ fn plans_an_invite_and_a_grant() {
         Ok(Plan::Invite {
             person: "did:plc:b".into(),
             record: Some(
-                json!({"$type": "fyi.opensocial.invite", "message": "Ride with us", "expiresAt": "2099-01-01T00:00:00Z", "createdAt": NOW})
+                json!({"$type": "org.atgrp.invite", "message": "Ride with us", "expiresAt": "2099-01-01T00:00:00Z", "createdAt": NOW})
             ),
         })
     );
@@ -454,7 +452,7 @@ fn plans_a_space_under_its_policy() {
         Ok(Plan::Space {
             kind: "com.example.calendar".into(),
             skey: Some("rides".into()),
-            policy: json!({"$type": "fyi.opensocial.policy", "grants": grants}),
+            policy: json!({"$type": "org.atgrp.policy", "grants": grants}),
         })
     );
     assert_eq!(
@@ -474,18 +472,14 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
         } => {
             assert_eq!(
                 (space.as_str(), collection.as_str(), rkey.as_deref()),
-                (
-                    "fyi.opensocial.members",
-                    "fyi.opensocial.role",
-                    Some("leader")
-                )
+                ("org.atgrp.members", "org.atgrp.role", Some("leader"))
             );
             record.unwrap()
         }
         other => panic!("{other:?}"),
     };
     let names = |n: &[&str]| n.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    let kept = json!({"$type": "fyi.opensocial.role", "displayName": "Leader", "scopes": ["b", "c", "b"], "assignable": ["member"], "createdAt": NOW});
+    let kept = json!({"$type": "org.atgrp.role", "displayName": "Leader", "scopes": ["b", "c", "b"], "assignable": ["member"], "createdAt": NOW});
     // What is named is added to what the role had, once; the rest of the
     // record as it was.
     let record = written(regrant(
@@ -497,7 +491,7 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
     ));
     assert_eq!(
         record,
-        json!({"$type": "fyi.opensocial.role", "displayName": "Leader", "scopes": ["b", "c", "d"], "assignable": ["member", "*"], "createdAt": NOW})
+        json!({"$type": "org.atgrp.role", "displayName": "Leader", "scopes": ["b", "c", "d"], "assignable": ["member", "*"], "createdAt": NOW})
     );
     // With undo, what is named is taken away, a list left empty with it;
     // with nothing named, both lists go.
@@ -513,7 +507,7 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
     let record = written(regrant(&kept, "leader", &[], &[], true));
     assert_eq!(
         record,
-        json!({"$type": "fyi.opensocial.role", "displayName": "Leader", "createdAt": NOW})
+        json!({"$type": "org.atgrp.role", "displayName": "Leader", "createdAt": NOW})
     );
     // A role the group does not have is not granted anything.
     assert_eq!(
@@ -526,24 +520,24 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
 fn edits_a_record_keeping_what_is_not_given() {
     let avatar =
         json!({"$type": "blob", "ref": {"$link": "bafy"}, "mimeType": "image/png", "size": 3});
-    let kept = json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "description": "Bikes", "avatar": avatar, "url": "https://a.test", "joinPolicy": "open"});
+    let kept = json!({"$type": "org.atgrp.profile", "displayName": "Riders", "description": "Bikes", "avatar": avatar, "url": "https://a.test", "joinPolicy": "open"});
     let fields =
         json!({"displayName": "Riders United", "description": "", "url": null, "banner": avatar});
     let plan = edited(
         &kept,
-        "fyi.opensocial.meta".into(),
-        "fyi.opensocial.profile".into(),
+        "org.atgrp.meta".into(),
+        "org.atgrp.profile".into(),
         "self".into(),
         fields.as_object().unwrap().clone(),
     );
     assert_eq!(
         plan,
         Plan::Write {
-            space: "fyi.opensocial.meta".into(),
-            collection: "fyi.opensocial.profile".into(),
+            space: "org.atgrp.meta".into(),
+            collection: "org.atgrp.profile".into(),
             rkey: Some("self".into()),
             record: Some(
-                json!({"$type": "fyi.opensocial.profile", "displayName": "Riders United", "avatar": avatar, "banner": avatar, "joinPolicy": "open"})
+                json!({"$type": "org.atgrp.profile", "displayName": "Riders United", "avatar": avatar, "banner": avatar, "joinPolicy": "open"})
             ),
         }
     );
@@ -551,8 +545,8 @@ fn edits_a_record_keeping_what_is_not_given() {
     let fields = json!({"displayName": "Riders"});
     let plan = edited(
         &Value::Null,
-        "fyi.opensocial.meta".into(),
-        "fyi.opensocial.profile".into(),
+        "org.atgrp.meta".into(),
+        "org.atgrp.profile".into(),
         "self".into(),
         fields.as_object().unwrap().clone(),
     );
@@ -561,7 +555,7 @@ fn edits_a_record_keeping_what_is_not_given() {
     };
     assert_eq!(
         record,
-        Some(json!({"$type": "fyi.opensocial.profile", "displayName": "Riders"}))
+        Some(json!({"$type": "org.atgrp.profile", "displayName": "Riders"}))
     );
 }
 #[tokio::test]

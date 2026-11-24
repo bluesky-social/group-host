@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# The host and its console in one image, with the opensocial command: the
+# The host and its console in one image, with the atgrp command: the
 # compose file in deploy/ runs it once as each of the host and the console
 # (docs/deploying.md).
 #
@@ -23,8 +23,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --profile deploy --locked \
         -p group-host --bin group-host \
-        -p opensocial --bin opensocial \
-    && cp target/deploy/group-host target/deploy/opensocial /
+        -p atgrp --bin atgrp \
+    && cp target/deploy/group-host target/deploy/atgrp /
 
 # The console, its types made from the lexicons beside it.
 FROM node:24.22.1-bookworm-slim AS console
@@ -41,7 +41,7 @@ FROM node:24.22.1-bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=host /group-host /opensocial /usr/local/bin/
+COPY --from=host /group-host /atgrp /usr/local/bin/
 COPY --from=console /web/build /app/build
 COPY --from=console /web/package.json /app/package.json
 # The host's state, a volume the compose file mounts, owned by the node

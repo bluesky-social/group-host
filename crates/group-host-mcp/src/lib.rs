@@ -1,6 +1,6 @@
-//! An MCP server for a group on an opensocial host, and the tools it
-//! offers: each the twin of a command of `opensocial`, named
-//! `<group>_<action>` as the command is `opensocial <group> <action>`, and
+//! An MCP server for a group on an Atmosphere Groups host, and the tools it
+//! offers: each the twin of a command of `atgrp`, named
+//! `<group>_<action>` as the command is `atgrp <group> <action>`, and
 //! taking what the command takes. Each is asked as the member who
 //! connected the MCP client, so it may do only what that member's roles
 //! allow: read the group, change its profile and rules, and run its
@@ -23,23 +23,23 @@ pub const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-0
 /// What the server tells an MCP client of itself as it connects.
 const INSTRUCTIONS: &str = "The tools act as the person who connected you, in the one group \
 they chose, with what their roles there allow: read the group, change its profile and rules, \
-and run its members, roles, invites, spaces and moderation. Each is a command of `opensocial`, \
+and run its members, roles, invites, spaces and moderation. Each is a command of `atgrp`, \
 `<group> <action>`, named `<group>_<action>`. Anything their roles do not allow is refused.";
 
 /// A lexicon of ours: in the proposal, by its name; or the host's own,
-/// `internal` and its name, as `fyi.opensocial.internal.<name>`.
+/// `internal` and its name, as `org.atgrp.internal.<name>`.
 macro_rules! lexicon {
     ($name:literal) => {
         (
-            concat!("fyi.opensocial.", $name),
-            include_str!(concat!("../../../lexicons/fyi/opensocial/", $name, ".json")),
+            concat!("org.atgrp.", $name),
+            include_str!(concat!("../../../lexicons/org/atgrp/", $name, ".json")),
         )
     };
     (internal $name:literal) => {
         (
-            concat!("fyi.opensocial.internal.", $name),
+            concat!("org.atgrp.internal.", $name),
             include_str!(concat!(
-                "../../../lexicons/fyi/opensocial/internal/",
+                "../../../lexicons/org/atgrp/internal/",
                 $name,
                 ".json"
             )),
@@ -84,10 +84,10 @@ const LEXICONS: &[(&str, &str)] = &[
     ),
 ];
 
-const NS: &str = "fyi.opensocial";
+const NS: &str = "org.atgrp";
 /// The group's spaces a tool writes its records in, by their types.
-const META: &str = "fyi.opensocial.meta";
-const MEMBERS: &str = "fyi.opensocial.members";
+const META: &str = "org.atgrp.meta";
+const MEMBERS: &str = "org.atgrp.members";
 
 /// Where a record a tool writes is kept in its space.
 #[derive(Debug, Clone, PartialEq)]
@@ -284,7 +284,7 @@ enum At {
 
 /// What a tool is made of, as `TOOLS` says it.
 enum Made {
-    /// A method of ours, by its NSID past `fyi.opensocial.` (the host's
+    /// A method of ours, by its NSID past `org.atgrp.` (the host's
     /// own `internal.<name>`); and its opposite's.
     Method(&'static str, Option<&'static str>),
     /// A record of ours put, or deleted, in the group's space of a type.
@@ -422,7 +422,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "invite_send",
         &["person"],
         "Invites someone not yet a member, as the group: an invite written in their own inbox \
-         (fyi.opensocial.invites); one already waiting for them is the one answered. With undo, \
+         (org.atgrp.invites); one already waiting for them is the one answered. With undo, \
          takes back the invite waiting for them.",
         Made::Invite,
     ),

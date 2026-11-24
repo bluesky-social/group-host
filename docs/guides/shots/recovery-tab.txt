@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@erin.test"
 - main:
   - link "← Choir":
@@ -18,4 +18,4 @@
     - listitem:
       - code: did:key:<key>
       - text: This host
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

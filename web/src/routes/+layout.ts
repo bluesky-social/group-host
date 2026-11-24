@@ -1,5 +1,5 @@
-import type * as getActorInvites from '#lib/lexicons/fyi/opensocial/internal/getActorInvites.ts';
-import type * as getViewer from '#lib/lexicons/fyi/opensocial/internal/getViewer.ts';
+import type * as getActorInvites from '#lib/lexicons/org/atgrp/internal/getActorInvites.ts';
+import type * as getViewer from '#lib/lexicons/org/atgrp/internal/getViewer.ts';
 import type { LayoutLoad } from './$types';
 import { xrpc } from '#lib/data.ts';
 
@@ -12,16 +12,14 @@ import { xrpc } from '#lib/data.ts';
  * accounts this browser is signed in to, to switch to.
  */
 export const load: LayoutLoad = async (event) => {
-  const answer = await xrpc<typeof getViewer.main>(
-    event,
-    'fyi.opensocial.internal.getViewer',
-    {}
-  ).catch(() => null);
+  const answer = await xrpc<typeof getViewer.main>(event, 'org.atgrp.internal.getViewer', {}).catch(
+    () => null
+  );
   const viewer = answer?.actor ?? null;
   const invited = viewer
     ? await xrpc<typeof getActorInvites.main>(
         event,
-        'fyi.opensocial.internal.getActorInvites',
+        'org.atgrp.internal.getActorInvites',
         {}
       ).catch(() => null)
     : null;

@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@bob.test"
 - main:
   - heading "Book club" [level=1]
@@ -11,4 +11,4 @@
   - text: Note (optional)
   - textbox "Note (optional)"
   - button "Send request"
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

@@ -1,4 +1,4 @@
-//! The `fyi.opensocial.*` methods that make and read groups: starting
+//! The `org.atgrp.*` methods that make and read groups: starting
 //! one, a group as its viewer may see it, and every group here.
 //!
 //! A caller is who their service auth says, for this host (`SERVICE_DID`)

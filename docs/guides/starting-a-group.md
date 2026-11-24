@@ -155,14 +155,14 @@ press **Send request**, and the request shows in
 
 ## From a terminal
 
-The `opensocial` command does the same, signed in as the handle in
-`OPENSOCIAL_AS`. [Its reference](../reference/cli.md) lists every command.
+The `atgrp` command does the same, signed in as the handle in
+`ATGRP_AS`. [Its reference](../reference/cli.md) lists every command.
 
 - Start the group:
-  `opensocial group create bookclub.groups.test --display-name "Book club" --join-policy approval`
-- See it: `opensocial group show bookclub.groups.test`
+  `atgrp group create bookclub.groups.test --display-name "Book club" --join-policy approval`
+- See it: `atgrp group show bookclub.groups.test`
 - Write what it is for:
-  `opensocial profile set bookclub.groups.test --description "We read one book a month and meet to talk it over."`
+  `atgrp profile set bookclub.groups.test --description "We read one book a month and meet to talk it over."`
 
 Pictures and **Who sees it** are set in the console only.
 

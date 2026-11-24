@@ -1,0 +1,53 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.approveAuthorization",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Approve an app's pending request to sign in as a group. The app gets what the caller's roles in the group allow and nothing more, and every token it obtains is recorded as the caller's. Returns the URL to send the browser back to the app with.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "requestUri",
+            "group"
+          ],
+          "properties": {
+            "requestUri": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "group": {
+              "type": "string",
+              "format": "did"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "redirectUrl"
+          ],
+          "properties": {
+            "redirectUrl": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "ExpiredRequest"
+        },
+        {
+          "name": "Forbidden"
+        }
+      ]
+    }
+  }
+}

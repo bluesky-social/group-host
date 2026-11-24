@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import type * as checkGroupHandle from '#lib/lexicons/fyi/opensocial/internal/checkGroupHandle.ts';
+import type * as checkGroupHandle from '#lib/lexicons/org/atgrp/internal/checkGroupHandle.ts';
 import type { PageServerLoad } from './$types';
 import { xrpc } from '#lib/data.ts';
 import { listed, profileActions } from '#lib/server/settings.ts';
@@ -16,7 +16,7 @@ export const load: PageServerLoad = async (event) => {
   const { did, handle, address } = view.group;
   const own = address !== undefined && handle !== address;
   const checked = own
-    ? await xrpc<typeof checkGroupHandle.main>(event, 'fyi.opensocial.internal.checkGroupHandle', {
+    ? await xrpc<typeof checkGroupHandle.main>(event, 'org.atgrp.internal.checkGroupHandle', {
         group: did,
         handle
       })

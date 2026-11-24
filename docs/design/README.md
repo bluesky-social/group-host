@@ -6,11 +6,11 @@ same, and more. There's no one person behind it, so its members' roles
 decide what it may do. Much of what it keeps is private, so someone has
 to decide who reads it. This host does both for every group it holds.
 
-It implements the opensocial proposal
+It implements the Atmosphere Groups proposal
 (https://tangled.org/opensocial.group/proposal). Members keep their own
 accounts on their own PDSes, anywhere on the network. What the host adds
 beyond the proposal, for its console, its command and its operators, is
-under `fyi.opensocial.internal.*`, and may change.
+under `org.atgrp.internal.*`, and may change.
 
 ## What the host is to a group
 
@@ -24,7 +24,7 @@ under `fyi.opensocial.internal.*`, and may change.
   gets what that member's roles allow. The host checks it again at every
   write ([signing in](signing-in.md)).
 - An MCP server. A member connects an AI app here to act for them in
-  one group, and its tools are the twins of the `opensocial` commands
+  one group, and its tools are the twins of the `atgrp` commands
   ([MCP](mcp.md)).
 
 ## Where things live
@@ -46,11 +46,11 @@ under `fyi.opensocial.internal.*`, and may change.
 | --- | --- |
 | `atproto`, from [its own repository](https://knotless.dev/chadtmiller.com/atproto) | DRISL and CIDs, keys, the MST, CAR files, PLC operations, service auth, JOSE, lexicon data validation, and the space alpha's set hash, commits, MACs, STAR archives and tokens. It's checked against atproto's interop test vectors and its reference implementation, and published to that repository's Cargo registry. |
 | `crates/group-host` | the server, over SQLite. It holds accounts and repos, spaces, membership and roles, OAuth, moderation, moving, and the console's queries. |
-| `crates/group-host-mcp` | the MCP tools, each the twin of an `opensocial` command, and what each call comes to. The host carries a call out as the member who connected an MCP client, and the command carries it out as the person running it. |
-| `crates/opensocial` | a client for group hosts, and the `opensocial` command ([commands](../reference/cli.md)) |
+| `crates/group-host-mcp` | the MCP tools, each the twin of an `atgrp` command, and what each call comes to. The host carries a call out as the member who connected an MCP client, and the command carries it out as the person running it. |
+| `crates/atgrp` | a client for group hosts, and the `atgrp` command ([commands](../reference/cli.md)) |
 | `web/` | the console, a SvelteKit app where people start and run groups and approve apps. |
 | `Dockerfile`, `deploy/` | one image of the host, the console and the command, and the compose file that runs it ([deploying](../deploying.md)) |
-| `lexicons/` | the schemas of the records and methods. The host checks every `fyi.opensocial.*` method's parameters and input against its schema before the handler runs. It also checks a record of our own collections that an app writes as a group before it keeps it. |
+| `lexicons/` | the schemas of the records and methods. The host checks every `org.atgrp.*` method's parameters and input against its schema before the handler runs. It also checks a record of our own collections that an app writes as a group before it keeps it. |
 
 ## The pages
 

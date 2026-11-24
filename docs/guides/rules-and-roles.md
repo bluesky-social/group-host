@@ -215,19 +215,19 @@ hold `group.configure` can change the rules and roles at all.
 
 ## From a terminal
 
-The [`opensocial` command](../reference/cli.md) does each of these:
+The [`atgrp` command](../reference/cli.md) does each of these:
 
-- Add a rule: `opensocial rule set <group> --title <title> --text
+- Add a rule: `atgrp rule set <group> --title <title> --text
   <words>`. With `--rule <key>` it replaces that rule, and `--order <n>`
   sets its place.
-- Delete a rule: `opensocial rule delete <group> <rule>`.
-- Create a role: `opensocial role set <group> <role> --display-name
+- Delete a rule: `atgrp rule delete <group> <rule>`.
+- Create a role: `atgrp role set <group> <role> --display-name
   <name> --scopes <permission,…> --assignable <role,…>`, with
-  `--default` if every new member gets it. `opensocial role grant
+  `--default` if every new member gets it. `atgrp role grant
   <group> <role> --scopes <permission,…>` adds to what a role has.
-- Give or take roles: `opensocial member assign <group> <member>
+- Give or take roles: `atgrp member assign <group> <member>
   <role,role…>`, naming all the roles they keep, `member` among them.
-- Delete a role: `opensocial role delete <group> <role>`.
+- Delete a role: `atgrp role delete <group> <role>`.
 
 An AI app connected to the group has the same acts as
 [tools](../reference/mcp.md): `rule_set`, `rule_delete`, `role_set`,

@@ -13,7 +13,7 @@ use serde_json::{Value as Json, json};
 
 /// What an app asks for to run a group's members: its roles and what
 /// each may do, and who holds them.
-pub const RUNS: &str = "atproto include:fyi.opensocial.authManageGroup";
+pub const RUNS: &str = "atproto include:org.atgrp.authManageGroup";
 
 /// The collection `name` of ours.
 pub fn c(name: &str) -> String {

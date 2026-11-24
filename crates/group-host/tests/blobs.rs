@@ -14,9 +14,9 @@ const RIDERS: &str = "riders.groups.test";
 
 fn profile(rkey: &str, avatar: &Json) -> Write {
     Write::Create {
-        collection: "fyi.opensocial.profile".into(),
+        collection: "org.atgrp.profile".into(),
         rkey: rkey.into(),
-        value: json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "avatar": avatar}),
+        value: json!({"$type": "org.atgrp.profile", "displayName": "Riders", "avatar": avatar}),
     }
 }
 
@@ -96,7 +96,7 @@ async fn keeps_a_blob_while_any_record_references_it() {
         .write(
             &did,
             &[Write::Delete {
-                collection: "fyi.opensocial.profile".into(),
+                collection: "org.atgrp.profile".into(),
                 rkey: "a".into(),
             }],
         )
@@ -106,7 +106,7 @@ async fn keeps_a_blob_while_any_record_references_it() {
         .write(
             &did,
             &[Write::Delete {
-                collection: "fyi.opensocial.profile".into(),
+                collection: "org.atgrp.profile".into(),
                 rkey: "b".into(),
             }],
         )
@@ -247,7 +247,7 @@ fn finds_every_blob_a_record_references() {
     let record = json!({
         "avatar": blob(&a),
         "gallery": [blob(&b), blob(&a), {"$type": "blob", "ref": {"$link": "not a cid"}}],
-        "other": {"$type": "fyi.opensocial.rule", "ref": {"$link": b.to_string()}},
+        "other": {"$type": "org.atgrp.rule", "ref": {"$link": b.to_string()}},
         "n": 1,
     });
     let mut want = vec![a, b];

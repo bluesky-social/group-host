@@ -600,7 +600,7 @@ async fn labels_as_the_group_beside_what_it_labels() {
     let calendars = format!("at://{group}/space/com.example.calendar/");
     assert!(space.starts_with(&calendars), "{got}");
     let kept = h.host.store.space(space).unwrap().unwrap();
-    assert_eq!(kept.policy["$type"], "fyi.opensocial.policy");
+    assert_eq!(kept.policy["$type"], "org.atgrp.policy");
     let post = format!("{space}/{}/com.example.event/ride", bob.did);
     let got = tool(&h, access, "mod_label", json!({"subject": post, "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm", "val": "!hide"})).await;
     assert!(got.get("isError").is_none(), "{got}");

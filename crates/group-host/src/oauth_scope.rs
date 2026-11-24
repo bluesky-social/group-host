@@ -4,7 +4,7 @@
 //! is read later.
 //!
 //! No lexicon is resolved: the only permission sets a token keeps are
-//! this host's own for a group's session (`fyi.opensocial.authManageProfile`
+//! this host's own for a group's session (`org.atgrp.authManageProfile`
 //! within `authModerate` within `authManageGroup`), read from their
 //! lexicons here, each an upper bound: the parts of it the roles grant
 //! are kept. A space scope naming no collection keeps every one, which
@@ -28,17 +28,17 @@ pub const TIERS: [&str; 3] = ["authManageProfile", "authModerate", "authManageGr
 /// The action each of the host's methods a permission set lists asks of
 /// the member who signed the app in.
 const ASKS: [(&str, &str); 7] = [
-    ("fyi.opensocial.listJoinRequests", "admit"),
-    ("fyi.opensocial.denyJoinRequest", "admit"),
-    ("fyi.opensocial.internal.listInvites", "invite"),
-    ("fyi.opensocial.listModSubjects", "mod.read"),
-    ("fyi.opensocial.getModSubjectHistory", "mod.read"),
-    ("fyi.opensocial.internal.getModSubjectBlob", "mod.read"),
-    ("fyi.opensocial.resolveModSubject", "mod.resolve"),
+    ("org.atgrp.listJoinRequests", "admit"),
+    ("org.atgrp.denyJoinRequest", "admit"),
+    ("org.atgrp.internal.listInvites", "invite"),
+    ("org.atgrp.listModSubjects", "mod.read"),
+    ("org.atgrp.getModSubjectHistory", "mod.read"),
+    ("org.atgrp.internal.getModSubjectBlob", "mod.read"),
+    ("org.atgrp.resolveModSubject", "mod.resolve"),
 ];
 
 /// The permission set of this host's that `scope` includes, from its
-/// lexicon, if it is one: `include:fyi.opensocial.authModerate`.
+/// lexicon, if it is one: `include:org.atgrp.authModerate`.
 pub fn set_of(scope: &str) -> Option<&'static Value> {
     let name = scope.strip_prefix(&format!("include:{NS}."))?;
     let set = lexicons().def(&format!("{NS}.{name}"));
@@ -144,7 +144,7 @@ pub(crate) fn may_write(
 }
 
 /// Whether a kind of record and a kind of space are one app's: the same
-/// first two segments, as `fyi.opensocial`.
+/// first two segments, as `org.atgrp`.
 fn same_app(a: &str, b: &str) -> bool {
     let app = |n: &str| n.split('.').take(2).collect::<Vec<_>>().join(".");
     app(a) == app(b)
@@ -249,7 +249,7 @@ impl Host {
     /// - `space:T?…`, where some space of the group's of type `T` lets the
     ///   roles write each collection asked for, as asked, as the group; or
     ///   read it, if reading is all it asks;
-    /// - `space:fyi.opensocial.invites?…`, people's inboxes, for roles that
+    /// - `space:org.atgrp.invites?…`, people's inboxes, for roles that
     ///   may invite, as far as it asks for invites;
     /// - `space:*?…`, made into one scope for each of the group's spaces
     ///   the roles read, writing there what they may of what it asks;

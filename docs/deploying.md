@@ -8,7 +8,7 @@ The steps below set each of these up on one machine with Docker and a reverse pr
 
 A group is an atproto account of its own, with no password and no one person behind it. This host is each group's PDS, the authority for its private spaces, and its OAuth server. Members keep their own accounts on their own PDSes.
 
-One image, `group-host:current`, carries three programs. The host, `group-host`, is a Rust server over SQLite. The console is a SvelteKit app where people start and run groups, built into `/app/build`. The command is `opensocial`. The host and the console run as two containers from that image, behind one domain.
+One image, `group-host:current`, carries three programs. The host, `group-host`, is a Rust server over SQLite. The console is a SvelteKit app where people start and run groups, built into `/app/build`. The command is `atgrp`. The host and the console run as two containers from that image, behind one domain.
 
 ## Building the image
 
@@ -152,12 +152,12 @@ docker compose logs -f host
 journalctl CONTAINER_NAME=group-host-host-1 --since today
 ```
 
-The host also keeps its lines in `logs.sqlite`, in its data directory. It keeps the last 500,000 at info and below (`LOGS_KEEP`), and none longer than 30 days. Beside them, in `stats.sqlite`, it counts its requests by day and route, and the MCP tools called. Name the accounts that run it in `GROUP_HOST_ADMINS`. They can then read both from anywhere with `opensocial admin logs` and `opensocial admin stats`, signed in as themselves. Each answer carries `x-trace-id`, and `admin logs --trace` takes it to show every line of that request:
+The host also keeps its lines in `logs.sqlite`, in its data directory. It keeps the last 500,000 at info and below (`LOGS_KEEP`), and none longer than 30 days. Beside them, in `stats.sqlite`, it counts its requests by day and route, and the MCP tools called. Name the accounts that run it in `GROUP_HOST_ADMINS`. They can then read both from anywhere with `atgrp admin logs` and `atgrp admin stats`, signed in as themselves. Each answer carries `x-trace-id`, and `admin logs --trace` takes it to show every line of that request:
 
 ```sh
-opensocial admin logs --level warn
-opensocial admin logs --trace 0af7651916cd43dd8448eb211c80319c
-opensocial admin stats --days 30
+atgrp admin logs --level warn
+atgrp admin logs --trace 0af7651916cd43dd8448eb211c80319c
+atgrp admin stats --days 30
 ```
 
 Compose checks the host at `/xrpc/_health` and the console at `/_app/version.json`, a file the build writes, which the console answers without the host. Each is checked every second for up to 60 seconds while starting, then every 30 seconds.
@@ -199,11 +199,11 @@ Copy the snapshot and the blobs off the machine on a schedule. Keep `host-secret
 
 ## Running the command
 
-The image carries `opensocial`, so the command runs in the host's container, or in one of its own:
+The image carries `atgrp`, so the command runs in the host's container, or in one of its own:
 
 ```sh
-docker compose exec host opensocial --help
-docker run --rm group-host:current opensocial --help
+docker compose exec host atgrp --help
+docker run --rm group-host:current atgrp --help
 ```
 
 When the host's address changes, `group-host move-host` points every group's DID document at the new one. It runs once, over the data directory, with the host stopped and `.env` already naming the new domain. Run it first with `--dry-run` to see what it would change:

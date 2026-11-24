@@ -50,7 +50,7 @@ test('coming to the host signed out', async () => {
     page.getByText('Sign in with your Atmosphere account to see your groups, or to start one.')
   ).toBeVisible();
   await expect(page.locator('.group-row')).toHaveCount(0);
-  await expect(page.getByRole('contentinfo')).toHaveText(`${host} runs opensocial`);
+  await expect(page.getByRole('contentinfo')).toHaveText(`${host} runs Atmosphere Groups`);
   // Its one button opens the dialog: the apps of the Atmosphere, what an
   // account is, the handle, and where to make one.
   await page.getByRole('main').getByRole('button', { name: 'Sign in' }).click();
@@ -100,7 +100,7 @@ test("a group's page signed out", async () => {
   await expect(page.locator('.identity, .rules, .standing')).toHaveCount(0);
   // Nor does the host tell anyone not signed in more of it.
   const { group } = await fetch(
-    `${world.host}/xrpc/fyi.opensocial.internal.getGroup?group=${world.riders}`
+    `${world.host}/xrpc/org.atgrp.internal.getGroup?group=${world.riders}`
   ).then((r) => r.json());
   expect(group).toEqual({ did: world.riders, handle: 'riders.groups.test' });
 });
@@ -133,7 +133,7 @@ test('seeing her groups', async () => {
 
 test('coming back to her groups by a link, the page drawn in the browser', async () => {
   await page.goto(url('/new'));
-  await page.getByRole('link', { name: 'opensocial' }).click();
+  await page.getByRole('link', { name: 'Atmosphere Groups' }).click();
   await page.waitForURL(url('/'));
   await expect(page.getByRole('heading', { name: 'Your groups' })).toBeVisible();
   await expect(page.locator('.group-row', { hasText: 'Riders' }).first()).toBeVisible();
@@ -499,7 +499,7 @@ test("hiding a group's profile, and showing it again", async () => {
         '/xrpc/com.atproto.identity.resolveHandle?handle=hikers.groups.test'
       ).then((r) => r.json());
       const res = await fetch(
-        `/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=fyi.opensocial.declaration&rkey=self`
+        `/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=org.atgrp.declaration&rkey=self`
       );
       return res.ok;
     });

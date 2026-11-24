@@ -1,0 +1,85 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.labeler",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "The group as a moderation service: the label values it applies and what it accepts reports about. Written by the group into the meta space.",
+      "record": {
+        "type": "object",
+        "required": [
+          "policies"
+        ],
+        "properties": {
+          "policies": {
+            "type": "ref",
+            "ref": "#policies"
+          },
+          "reasonTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 256,
+              "knownValues": [
+                "spam",
+                "violation",
+                "misleading",
+                "nsfw",
+                "rude",
+                "other",
+                "appeal"
+              ]
+            },
+            "description": "Accepted report reasons. Omit to accept all."
+          },
+          "subjectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "knownValues": [
+                "account",
+                "record"
+              ]
+            },
+            "description": "Accepted report subject types. Omit to accept all."
+          },
+          "subjectCollections": {
+            "type": "array",
+            "description": "Record types that can be reported. Omit to accept all.",
+            "items": {
+              "type": "string",
+              "format": "nsid"
+            }
+          }
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "description": "The group's label values and their definitions.",
+      "required": [
+        "labelValues"
+      ],
+      "properties": {
+        "labelValues": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValue"
+          },
+          "description": "The label values it applies."
+        },
+        "labelValueDefinitions": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#labelValueDefinition"
+          },
+          "description": "Its own label values, defined."
+        }
+      }
+    }
+  }
+}

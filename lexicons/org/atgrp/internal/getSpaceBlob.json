@@ -1,0 +1,22 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.getSpaceBlob",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "A picture or file in one of the group's spaces, for a caller the space lets read it: the host reads it from whoever wrote it, as the space's authority, so a page never reaches anyone's own server.",
+      "parameters": {
+        "type": "params",
+        "required": ["group", "space", "repo", "cid"],
+        "properties": {
+          "group": { "type": "string", "format": "did" },
+          "space": { "type": "string", "description": "The space, by its URI." },
+          "repo": { "type": "string", "format": "did", "description": "Who wrote it." },
+          "cid": { "type": "string", "format": "cid" }
+        }
+      },
+      "output": { "encoding": "*/*" },
+      "errors": [{ "name": "NotFound" }, { "name": "NotAuthorized" }]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 //! The lines the host logs, kept to read back for its operators
-//! (`fyi.opensocial.internal.getLogs`, `opensocial admin logs`).
+//! (`org.atgrp.internal.getLogs`, `atgrp admin logs`).
 //!
 //! Each JSON line the host writes to stdout ([`Tee`]) is kept here too,
 //! in `logs.sqlite` beside its database, written a second at a time off

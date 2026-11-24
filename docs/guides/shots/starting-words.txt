@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@alice.test"
 - main:
   - link "← Book club":
@@ -59,4 +59,4 @@
   - paragraph: Switching the group off hides it from everyone until an admin switches it back on. Deleting it can't be undone.
   - button "Switch off"
   - button "Delete the group"
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

@@ -3,7 +3,7 @@
 For every agent working here: CLAUDE.md is this file, imported.
 
 This is a group host for atproto, built in Rust and Svelte,
-implementing the opensocial proposal
+implementing the Atmosphere Groups proposal
 (https://tangled.org/opensocial.group/proposal). `docs/design/README.md`
 says what is here, what is still to come, and in what order.
 
@@ -62,13 +62,13 @@ right, and come before the code they test.
 
 - `crates/group-host`: the server (axum, SQLite through rusqlite). It is
   the PDS for its groups, the authority for their spaces, their OAuth
-  server, and answers the `fyi.opensocial.*` methods. It serves the
+  server, and answers the `org.atgrp.*` methods. It serves the
   console's pages' queries as XRPC, each with its lexicon under
   `lexicons/`.
 - `crates/group-host-mcp`: the MCP protocol and tools, the core's
   methods asked as the member who connected an MCP client; the host serves
   them at `/mcp`.
-- `crates/opensocial`: a client for group hosts, and the `opensocial`
+- `crates/atgrp`: a client for group hosts, and the `atgrp`
   command (creating, inspecting and running groups; seeding; moving a group
   or a host), as `packages/cli` and the host's scripts were.
 - `web/`: the console, a SvelteKit app. Its TypeScript types are made from
@@ -81,11 +81,11 @@ right, and come before the code they test.
 
 ## Commands and tools
 
-A command is `opensocial <group> <action> <group> ...`: the group a
+A command is `atgrp <group> <action> <group> ...`: the group a
 singular noun for what it acts on (`group`, `role`, `member`, `invite`,
 `mod`), then the action, then the group it acts in, then the arguments
 it takes in order, then flags. An opposite is `--undo` on the action
-(`invite send --undo`), never an `un-` command. `opensocial --help`
+(`invite send --undo`), never an `un-` command. `atgrp --help`
 lists them by group.
 
 A command and its MCP tool land together, in one pull, from one entry in
@@ -161,11 +161,11 @@ description of when: a client is to tell one refusal from another by its
 name, never by its message. An error the host cannot reach from that
 method is not listed.
 
-Every schema of ours (`fyi.opensocial.*`) follows the Lexicon Style Guide
+Every schema of ours (`org.atgrp.*`) follows the Lexicon Style Guide
 (https://atproto.com/guides/lexinomicon) and passes `just lex`: goat's
 linter, then `harness/lexicons.mjs` for what it does not see (`knownValues`
 rather than `enum`; arrays of objects, which can grow, not bare values,
-with the small shared ones in `fyi.opensocial.defs`; a description on
+with the small shared ones in `org.atgrp.defs`; a description on
 every `main`; a `maxLength` on strings people write; accounts by DID, a
 handle only as an account's own `handle`), and that every schema only
 grows from main's. Nothing is let off but what the space alpha brings and
@@ -184,7 +184,7 @@ that page in the same pull:
 - an XRPC method or route: `docs/reference/api.md`; an MCP tool:
   `docs/reference/mcp.md`
 - a new page: the sidebar in `docs-site/astro.config.mjs`
-- a command of `opensocial`, or a `just` recipe: `docs/reference/cli.md`
+- a command of `atgrp`, or a `just` recipe: `docs/reference/cli.md`
 - building, testing, the checks, releasing: `docs/development.md`
 - a flow in the console a guide shows: that guide, its pictures drawn
   again with `just shots` (the `e2e` check fails until they are)
@@ -243,7 +243,7 @@ owner, turns them into the version and CHANGELOG.md with `knope
 release`, in the `Release <version>` pull; merging it releases, and the
 next `just release` tags it `v<version>`. Commit titles stay prose: no
 conventional commits. The `check` check fails a pull that changes
-`crates/*/src`, `web/src`, `web/messages` or `lexicons/fyi` and adds no
+`crates/*/src`, `web/src`, `web/messages` or `lexicons/org` and adds no
 change file, unless one of its commits says, on a line of its message,
 `Changeset: none`: for a change no one running or using the host sees.
 

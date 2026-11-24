@@ -1,4 +1,4 @@
-import type * as getActorGroups from '#lib/lexicons/fyi/opensocial/internal/getActorGroups.ts';
+import type * as getActorGroups from '#lib/lexicons/org/atgrp/internal/getActorGroups.ts';
 import type { PageLoad } from './$types';
 import { xrpc } from '#lib/data.ts';
 
@@ -11,12 +11,8 @@ import { xrpc } from '#lib/data.ts';
 export const load: PageLoad = async (event) => {
   const { viewer } = await event.parent();
   if (!viewer) return { mine: null };
-  const mine = await xrpc<typeof getActorGroups.main>(
-    event,
-    'fyi.opensocial.internal.getActorGroups',
-    {
-      actor: viewer.did
-    }
-  );
+  const mine = await xrpc<typeof getActorGroups.main>(event, 'org.atgrp.internal.getActorGroups', {
+    actor: viewer.did
+  });
   return { mine: mine.groups };
 };

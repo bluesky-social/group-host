@@ -7,8 +7,8 @@ use common::groups::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const LOGS: &str = "fyi.opensocial.internal.getLogs";
-const STATS: &str = "fyi.opensocial.internal.getStats";
+const LOGS: &str = "org.atgrp.internal.getLogs";
+const STATS: &str = "org.atgrp.internal.getStats";
 
 /// A host whose operator is the first of three people, who sign in at a
 /// directory the host reads: the people, and the host.
@@ -96,7 +96,7 @@ async fn counts_each_request_by_its_route_and_what_the_host_holds() {
         let method = reqwest::Method::from_bytes(method.as_bytes()).unwrap();
         let asked = h.http.request(
             method,
-            format!("{}/xrpc/fyi.opensocial.internal.getGroup", h.url),
+            format!("{}/xrpc/org.atgrp.internal.getGroup", h.url),
         );
         asked.send().await.unwrap();
     }
@@ -110,7 +110,7 @@ async fn counts_each_request_by_its_route_and_what_the_host_holds() {
     assert_eq!(today["spacesMade"], 2);
     let routes = said["routes"].as_array().unwrap();
     let route = |r: &str| routes.iter().find(|x| x["route"] == r).cloned();
-    let made = route("/xrpc/fyi.opensocial.internal.createGroup").unwrap();
+    let made = route("/xrpc/org.atgrp.internal.createGroup").unwrap();
     assert_eq!(
         (made["method"].as_str(), made["requests"].as_i64()),
         (Some("POST"), Some(1))
@@ -120,7 +120,7 @@ async fn counts_each_request_by_its_route_and_what_the_host_holds() {
     let others: Vec<&Json> = routes.iter().filter(|x| x["method"] == "OTHER").collect();
     assert_eq!(others.len(), 1, "{routes:?}");
     assert_eq!(others[0]["requests"], 2);
-    assert_eq!(others[0]["route"], "/xrpc/fyi.opensocial.internal.getGroup");
+    assert_eq!(others[0]["route"], "/xrpc/org.atgrp.internal.getGroup");
     assert_eq!(route("/xrpc/_health"), None);
     // A week unless asked.
     let (_, said) = get(&h, STATS, "", &[auth(&h, &alice, STATS)]).await;

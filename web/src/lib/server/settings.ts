@@ -3,10 +3,10 @@
 // which each page's +page.server.ts takes the ones of it wants.
 
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
-import type * as getGroup from '#lib/lexicons/fyi/opensocial/internal/getGroup.ts';
-import type * as listAppPasswords from '#lib/lexicons/fyi/opensocial/internal/listAppPasswords.ts';
-import type * as listGroupTokens from '#lib/lexicons/fyi/opensocial/internal/listGroupTokens.ts';
-import type * as listRecoveryKeys from '#lib/lexicons/fyi/opensocial/internal/listRecoveryKeys.ts';
+import type * as getGroup from '#lib/lexicons/org/atgrp/internal/getGroup.ts';
+import type * as listAppPasswords from '#lib/lexicons/org/atgrp/internal/listAppPasswords.ts';
+import type * as listGroupTokens from '#lib/lexicons/org/atgrp/internal/listGroupTokens.ts';
+import type * as listRecoveryKeys from '#lib/lexicons/org/atgrp/internal/listRecoveryKeys.ts';
 import { fail, redirect, type Action } from '@sveltejs/kit';
 import { act, xrpc, type Answer } from '#lib/data.ts';
 import { refusal, refused } from '#lib/errors.ts';
@@ -50,19 +50,15 @@ export function changes(view: Answer<typeof getGroup.main>) {
  */
 export async function settings(event: Event) {
   const group = await groupOf(event);
-  const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.internal.getGroup', {
+  const view = await xrpc<typeof getGroup.main>(event, 'org.atgrp.internal.getGroup', {
     group
   });
   const { configures, issues } = changes(view);
   const passwords =
     configures || issues
-      ? await xrpc<typeof listAppPasswords.main>(
-          event,
-          'fyi.opensocial.internal.listAppPasswords',
-          {
-            group
-          }
-        )
+      ? await xrpc<typeof listAppPasswords.main>(event, 'org.atgrp.internal.listAppPasswords', {
+          group
+        })
       : null;
   return { ...view, configures, passwords: passwords?.passwords ?? null };
 }
@@ -75,13 +71,13 @@ export function listed(view: Answer<typeof getGroup.main>) {
 
 /** The apps acting as the group, and what they did lately: to one who configures it. */
 export const tokensOf = (event: Event, group: string) =>
-  xrpc<typeof listGroupTokens.main>(event, 'fyi.opensocial.internal.listGroupTokens', {
+  xrpc<typeof listGroupTokens.main>(event, 'org.atgrp.internal.listGroupTokens', {
     group: group as Did
   });
 
 /** The group's recovery keys, or null where the host does not keep them. */
 export const recoveryOf = (event: Event, group: string) =>
-  xrpc<typeof listRecoveryKeys.main>(event, 'fyi.opensocial.internal.listRecoveryKeys', {
+  xrpc<typeof listRecoveryKeys.main>(event, 'org.atgrp.internal.listRecoveryKeys', {
     group: group as Did
   }).catch(() => null);
 
@@ -91,8 +87,8 @@ async function asked(event: Event & { request: Request }) {
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
-const PROFILE = 'fyi.opensocial.profile';
-const RULE = 'fyi.opensocial.rule';
+const PROFILE = 'org.atgrp.profile';
+const RULE = 'org.atgrp.rule';
 type Did = `did:${string}:${string}`;
 
 /**
@@ -112,13 +108,9 @@ async function picture(event: Event, did: string, cid?: string) {
  * whole with what is changed: what the form does not show is kept.
  */
 async function profileNow(event: Event, group: string) {
-  const { group: now } = await xrpc<typeof getGroup.main>(
-    event,
-    'fyi.opensocial.internal.getGroup',
-    {
-      group: group as `did:${string}:${string}`
-    }
-  );
+  const { group: now } = await xrpc<typeof getGroup.main>(event, 'org.atgrp.internal.getGroup', {
+    group: group as `did:${string}:${string}`
+  });
   const kept = Object.fromEntries(
     ['description', 'url'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : []))
   );
@@ -183,7 +175,7 @@ const all = {
     const { group, form } = await asked(event);
     const { group: now, spaces } = await xrpc<typeof getGroup.main>(
       event,
-      'fyi.opensocial.internal.getGroup',
+      'org.atgrp.internal.getGroup',
       { group }
     );
     const meta = spaces?.find((s) => s.uri === now.meta);
@@ -191,7 +183,7 @@ const all = {
     const policy = {
       grants: [],
       ...meta?.policy,
-      $type: 'fyi.opensocial.policy',
+      $type: 'org.atgrp.policy',
       publicRead: text(form, 'seen') === 'public'
     };
     return withGroup(event, group, now.meta ?? '', (session) =>
@@ -233,7 +225,7 @@ const all = {
     const key = text(form, 'role');
     const { roles, bindings } = await xrpc<typeof getGroup.main>(
       event,
-      'fyi.opensocial.internal.getGroup',
+      'org.atgrp.internal.getGroup',
       {
         group: group as Did
       }
@@ -251,7 +243,7 @@ const all = {
     const actions = form.getAll('action').map((a) => SCOPES[String(a) as keyof typeof SCOPES]);
     const chosen = [...sets, ...actions].filter((s) => s !== undefined);
     const role = {
-      $type: 'fyi.opensocial.role',
+      $type: 'org.atgrp.role',
       ...(was?.description ? { description: was.description } : {}),
       ...(was?.bot ? { bot: true } : {}),
       displayName: text(form, 'name'),
@@ -263,7 +255,7 @@ const all = {
     return applyAsGroup(event, group, membersOf(group), [
       {
         action: was ? 'update' : 'create',
-        collection: 'fyi.opensocial.role',
+        collection: 'org.atgrp.role',
         rkey: key,
         value: role
       }
@@ -273,19 +265,19 @@ const all = {
     const { group, form } = await asked(event);
     const key = text(form, 'role');
     return applyAsGroup(event, group, membersOf(group), [
-      { action: 'delete', collection: 'fyi.opensocial.role', rkey: key }
+      { action: 'delete', collection: 'org.atgrp.role', rkey: key }
     ]);
   },
   revoke: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.revokeGroupToken', {
+    return act(event, 'org.atgrp.internal.revokeGroupToken', {
       group,
       tokenId: text(form, 'tokenId')
     });
   },
   password: async (event) => {
     const { group, form } = await asked(event);
-    const res = await event.fetch('/xrpc/fyi.opensocial.internal.createAppPassword', {
+    const res = await event.fetch('/xrpc/org.atgrp.internal.createAppPassword', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -300,18 +292,18 @@ const all = {
   },
   key: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.addRecoveryKey', { group, key: text(form, 'key') });
+    return act(event, 'org.atgrp.internal.addRecoveryKey', { group, key: text(form, 'key') });
   },
   unkey: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.removeRecoveryKey', {
+    return act(event, 'org.atgrp.internal.removeRecoveryKey', {
       group,
       key: text(form, 'key')
     });
   },
   unpassword: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.revokeAppPassword', {
+    return act(event, 'org.atgrp.internal.revokeAppPassword', {
       group,
       name: text(form, 'name')
     });
@@ -329,18 +321,18 @@ const all = {
     const { group } = await asked(event);
     // Off, its page is where it is switched back on.
     return (
-      (await act(event, 'fyi.opensocial.internal.deactivateGroup', { group })) ??
+      (await act(event, 'org.atgrp.internal.deactivateGroup', { group })) ??
       redirect(303, `/g/${event.params.handle}`)
     );
   },
   activate: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.activateGroup', { group });
+    return act(event, 'org.atgrp.internal.activateGroup', { group });
   },
   define: async (event) => {
     const { group, form } = await asked(event);
     const label = text(form, 'label').toLowerCase().replace(/\s+/g, '-');
-    return act(event, 'fyi.opensocial.internal.putLabelDefinition', {
+    return act(event, 'org.atgrp.internal.putLabelDefinition', {
       group,
       label,
       name: text(form, 'name'),
@@ -353,14 +345,14 @@ const all = {
   },
   undefine: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.deleteLabelDefinition', {
+    return act(event, 'org.atgrp.internal.deleteLabelDefinition', {
       group,
       label: text(form, 'label')
     });
   },
   domain: async (event) => {
     const { group, form } = await asked(event);
-    const res = await event.fetch('/xrpc/fyi.opensocial.internal.putGroupDomain', {
+    const res = await event.fetch('/xrpc/org.atgrp.internal.putGroupDomain', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ group })
@@ -376,14 +368,12 @@ const all = {
   },
   undomain: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.deleteGroupDomain', { group });
+    return act(event, 'org.atgrp.internal.deleteGroupDomain', { group });
   },
   delete: async (event) => {
     const { group } = await asked(event);
     // Gone, there is no page of it to come back to.
-    return (
-      (await act(event, 'fyi.opensocial.internal.deleteGroup', { group })) ?? redirect(303, '/')
-    );
+    return (await act(event, 'org.atgrp.internal.deleteGroup', { group })) ?? redirect(303, '/');
   }
 } satisfies Record<string, Action<{ handle: string }>>;
 
@@ -396,7 +386,7 @@ const pick = <K extends keyof typeof all>(...names: K[]) =>
  * the host's refusal is one they can act on.
  */
 async function newHandle(event: Event, group: string, handle: string) {
-  const res = await event.fetch('/xrpc/fyi.opensocial.internal.updateGroupHandle', {
+  const res = await event.fetch('/xrpc/org.atgrp.internal.updateGroupHandle', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ group, handle })

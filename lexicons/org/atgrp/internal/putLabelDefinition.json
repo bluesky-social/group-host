@@ -1,0 +1,73 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.putLabelDefinition",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Define one of the group's own labels, or change one it defines: what it means and how apps should show it, in its labeler, with the label among the values it applies. Changing one replaces how apps show it, and its name and description only in the given language: those in other languages stay. Requires group.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group", "label", "name", "description"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 100,
+              "maxGraphemes": 100,
+              "description": "The label's value, as it is applied: lowercase letters and hyphens."
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 640,
+              "maxGraphemes": 64,
+              "description": "What people see it called, in its lang."
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 20000,
+              "maxGraphemes": 2000,
+              "description": "What it means, for people deciding how to see what wears it, in its lang."
+            },
+            "lang": {
+              "type": "string",
+              "format": "language",
+              "description": "The language of its name and description, which replace any it has in that language and leave the others. en unless given."
+            },
+            "severity": {
+              "type": "string",
+              "knownValues": ["inform", "alert", "none"],
+              "description": "How apps should convey it: inform, alert, or none. inform unless given."
+            },
+            "blurs": {
+              "type": "string",
+              "knownValues": ["content", "media", "none"],
+              "description": "What apps should hide behind it: content, media, or none. none unless given."
+            },
+            "defaultSetting": {
+              "type": "string",
+              "knownValues": ["ignore", "warn", "hide"],
+              "description": "How apps should show it to someone who has not chosen: ignore, warn, or hide. warn unless given."
+            },
+            "adultOnly": {
+              "type": "boolean",
+              "description": "Whether only those who show adult content may choose to see what wears it."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "com.atproto.label.defs#labelValueDefinition"
+        }
+      }
+    }
+  }
+}

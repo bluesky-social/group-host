@@ -1,5 +1,5 @@
 //! How the host is used, day by day, for its operators
-//! (`fyi.opensocial.internal.getStats`, `opensocial admin stats`).
+//! (`org.atgrp.internal.getStats`, `atgrp admin stats`).
 //!
 //! - Every request but the health checks is counted by the day (UTC), by
 //!   the route that answered it (its pattern, not its path), its method

@@ -34,17 +34,17 @@ their PDS or through the console's session (see [signing
 in](signing-in.md)). The host refuses a caller without the action with
 `403 Forbidden`. An MCP client a member connects can read the queue,
 label and resolve as that member, within the same roles. It does that
-with the `mod_*` tools, which mirror the `opensocial mod` commands (see
+with the `mod_*` tools, which mirror the `atgrp mod` commands (see
 [MCP](mcp.md)).
 
 Details:
 
-- `mod.read` is granted by `rpc:fyi.opensocial.listModSubjects`,
-  `mod.resolve` by `rpc:fyi.opensocial.resolveModSubject`, and `label` by
+- `mod.read` is granted by `rpc:org.atgrp.listModSubjects`,
+  `mod.resolve` by `rpc:org.atgrp.resolveModSubject`, and `label` by
   `space:*?collection=com.atproto.label.record`, or any `space:*` scope
   covering that collection, which label in every space of the group's.
-  `include:fyi.opensocial.authModerate` and
-  `include:fyi.opensocial.authManageGroup` carry `mod.read` and
+  `include:org.atgrp.authModerate` and
+  `include:org.atgrp.authManageGroup` carry `mod.read` and
   `mod.resolve`. They label only in the meta and members spaces, the
   ones their permissions name, so they don't carry `label`
   ([membership](membership.md#roles-and-what-they-grant)).
@@ -103,7 +103,7 @@ Details:
   in the meta and members spaces; `space:*?collection=com.atproto.label.record`,
   or a scope naming every collection, in every space; or a scope the
   space's policy grants the role, in that space alone. So a moderator
-  whose role holds only `include:fyi.opensocial.authModerate` labels
+  whose role holds only `include:org.atgrp.authModerate` labels
   accounts, and records in the meta and members spaces, but nothing in
   the group's other spaces. The token's scope must cover the write, as
   for any record.
@@ -208,7 +208,7 @@ its own, shown the same way when it's reviewed.
 
 A report comes from someone who can see what they report. So a group
 hears from the people its content reaches, and strangers can't report.
-A report arrives at `fyi.opensocial.createReport`, by service auth or the
+A report arrives at `org.atgrp.createReport`, by service auth or the
 console's session. It names the `group`, the `subject` and its `cid`,
 a `reasonType`, and optionally a `reason` and the `rule` it cites. It
 needs no role. A reason is a word: `spam`, `violation`, `misleading`,

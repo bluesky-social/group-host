@@ -60,8 +60,8 @@ async fn answers_health_and_refuses_unknown_methods() {
     );
 
     for req in [
-        http.get(format!("{}/xrpc/fyi.opensocial.noSuchQuery", host.1)),
-        http.post(format!("{}/xrpc/fyi.opensocial.noSuchProcedure", host.1)),
+        http.get(format!("{}/xrpc/org.atgrp.noSuchQuery", host.1)),
+        http.post(format!("{}/xrpc/org.atgrp.noSuchProcedure", host.1)),
     ] {
         let res = req.send().await.unwrap();
         assert_eq!(res.status(), 501);
@@ -79,7 +79,7 @@ async fn keeps_the_lines_it_logs_and_counts_its_requests() {
     let data = tempfile::tempdir().unwrap();
     let host = start_logging(data.path(), "info");
     let http = reqwest::Client::new();
-    let asked = http.get(format!("{}/xrpc/fyi.opensocial.noSuchQuery", host.1));
+    let asked = http.get(format!("{}/xrpc/org.atgrp.noSuchQuery", host.1));
     let res = asked.send().await.unwrap();
     let trace = res.headers()["x-trace-id"].to_str().unwrap().to_string();
     assert_eq!(trace.len(), 32);
@@ -104,11 +104,11 @@ async fn keeps_the_lines_it_logs_and_counts_its_requests() {
     let fields = &lines[0]["fields"];
     assert_eq!(fields["message"], "request");
     assert_eq!(fields["route"], "/xrpc/{nsid}");
-    assert_eq!(fields["path"], "/xrpc/fyi.opensocial.noSuchQuery");
+    assert_eq!(fields["path"], "/xrpc/org.atgrp.noSuchQuery");
     assert_eq!(fields["status"], 501);
     // A failure says why, as its answer did.
     assert_eq!(fields["error"], "MethodNotImplemented");
-    let said = "fyi.opensocial.noSuchQuery is not a method this host answers";
+    let said = "org.atgrp.noSuchQuery is not a method this host answers";
     assert_eq!(fields["error_message"], said);
     // The health checks are logged at debug, below what it was told.
     assert!(read(Some(&health), None).is_empty());

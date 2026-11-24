@@ -5,13 +5,13 @@
 // set alone, which dan holds: he runs the group, but may not give a role
 // labels in every space, nor spaces to make, change or end.
 
-export default async ({ opensocial, who }) => {
+export default async ({ atgrp, who }) => {
   const g = 'lanterns.groups.test';
   const members = (write) =>
-    `space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=${write}`;
+    `space:org.atgrp.members?skey=self&collection=org.atgrp.membership&action=${write}`;
   const invite =
-    'space:fyi.opensocial.invites?authority=*&skey=self&collection=fyi.opensocial.invite&action=read_self&action=create&action=update&action=delete';
-  opensocial(
+    'space:org.atgrp.invites?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete';
+  atgrp(
     'alice',
     'role',
     'set',
@@ -24,7 +24,7 @@ export default async ({ opensocial, who }) => {
     '--assignable',
     'member'
   );
-  opensocial(
+  atgrp(
     'alice',
     'role',
     'set',
@@ -33,9 +33,9 @@ export default async ({ opensocial, who }) => {
     '--display-name',
     'Steward',
     '--scopes',
-    'include:fyi.opensocial.authManageGroup',
+    'include:org.atgrp.authManageGroup',
     '--assignable',
     'member,greeter,moderator,steward'
   );
-  opensocial('alice', 'member', 'assign', g, who.dan.handle, 'member,steward');
+  atgrp('alice', 'member', 'assign', g, who.dan.handle, 'member,steward');
 };

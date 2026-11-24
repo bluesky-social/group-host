@@ -1,9 +1,9 @@
-// What a role may do, as the host's methods ask (fyi.opensocial.internal.defs#action).
+// What a role may do, as the host's methods ask (org.atgrp.internal.defs#action).
 // The lexicon's types carry its known values only as a type, so the list is
 // written here and held to that type both ways: a value it does not know, or
 // one it knows and the list leaves out, fails svelte-check.
 
-import type { Action } from '#lib/lexicons/fyi/opensocial/internal/defs.defs.ts';
+import type { Action } from '#lib/lexicons/org/atgrp/internal/defs.defs.ts';
 
 const KNOWN = [
   'mod.read',
@@ -28,9 +28,9 @@ void whole;
 
 export const ACTIONS: string[] = [...KNOWN];
 
-const rpc = (method: string) => `rpc:fyi.opensocial.${method}?aud=*`;
+const rpc = (method: string) => `rpc:org.atgrp.${method}?aud=*`;
 const members = (write: string) =>
-  `space:fyi.opensocial.members?skey=self&collection=fyi.opensocial.membership&action=${write}`;
+  `space:org.atgrp.members?skey=self&collection=org.atgrp.membership&action=${write}`;
 
 /**
  * The scope that grants each action, as a role's record holds it among
@@ -41,17 +41,17 @@ export const SCOPES: Record<(typeof KNOWN)[number], string> = {
   'mod.resolve': rpc('resolveModSubject'),
   label: 'space:*?collection=com.atproto.label.record',
   invite:
-    'space:fyi.opensocial.invites?authority=*&skey=self&collection=fyi.opensocial.invite&action=read_self&action=create&action=update&action=delete',
+    'space:org.atgrp.invites?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete',
   admit: members('create'),
   eject: members('delete'),
   'role.assign': members('update'),
   'space.create': 'space:*?manage=create',
   'space.configure': 'space:*?manage=update',
   'space.delete': 'space:*?manage=delete',
-  'group.configure': 'include:fyi.opensocial.authManageGroup'
+  'group.configure': 'include:org.atgrp.authManageGroup'
 };
 
-const set = (name: string) => `include:fyi.opensocial.${name}`;
+const set = (name: string) => `include:org.atgrp.${name}`;
 // Not `label`, labels in every space: the sets label only in the meta and members spaces.
 const MODERATES = ['mod.read', 'mod.resolve', 'invite', 'admit', 'eject', 'role.assign'];
 

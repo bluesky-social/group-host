@@ -14,7 +14,7 @@ protocol instead of the page.
   MCP client a member signs in gets what those roles allow and nothing more.
 - The host is one Rust server over SQLite, with a console (a SvelteKit
   app) where people start and run groups and approve apps, and a command,
-  `opensocial`, that does the same from a terminal.
+  `atgrp`, that does the same from a terminal.
 
 ## The reader
 
@@ -33,7 +33,7 @@ for more.
   **handle** is a changeable name that resolves to it. A **PLC
   operation** changes a `did:plc` document, signed by a **rotation key**.
 - **record / collection / rkey**: a JSON document in a collection (an
-  NSID such as `fyi.opensocial.rule`) in an account's repo, addressed by a
+  NSID such as `org.atgrp.rule`) in an account's repo, addressed by a
   key.
 - **blob**: binary data stored beside records (an avatar, a file).
 - **space**: a private record store from atproto's permissioned-data
@@ -46,7 +46,7 @@ for more.
 - **OAuth / DPoP**: atproto's OAuth, where a client signs in to an
   account at its authorization server; DPoP binds each token to a key the
   client holds.
-- **lexicon**: the schema for a record or method (`lexicons/fyi/opensocial/`).
+- **lexicon**: the schema for a record or method (`lexicons/org/atgrp/`).
 - **label**: a moderation tag on a record or account.
 - **MCP**: the protocol an AI app uses to call tools on a server.
 

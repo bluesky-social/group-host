@@ -15,9 +15,9 @@ const RIDERS: &str = "riders.groups.test";
 
 fn create(rkey: &str, text: &str) -> Write {
     Write::Create {
-        collection: "fyi.opensocial.rule".into(),
+        collection: "org.atgrp.rule".into(),
         rkey: rkey.into(),
-        value: json!({"$type": "fyi.opensocial.rule", "title": text, "createdAt": "2026-11-03T00:00:00Z"}),
+        value: json!({"$type": "org.atgrp.rule", "title": text, "createdAt": "2026-11-03T00:00:00Z"}),
     }
 }
 
@@ -157,11 +157,11 @@ async fn writes_records_as_signed_commits() {
             &did,
             &[
                 Write::Update {
-                    collection: "fyi.opensocial.rule".into(),
+                    collection: "org.atgrp.rule".into(),
                     rkey: "b".into(),
-                    value: json!({"$type": "fyi.opensocial.rule", "title": "Be kinder", "createdAt": "2026-11-03T00:00:00Z"}),
+                    value: json!({"$type": "org.atgrp.rule", "title": "Be kinder", "createdAt": "2026-11-03T00:00:00Z"}),
                 },
-                Write::Delete { collection: "fyi.opensocial.rule".into(), rkey: "c".into() },
+                Write::Delete { collection: "org.atgrp.rule".into(), rkey: "c".into() },
             ],
         )
         .unwrap();
@@ -170,24 +170,24 @@ async fn writes_records_as_signed_commits() {
     let (status, b) = h
         .get(
             "com.atproto.repo.getRecord",
-            &format!("repo={did}&collection=fyi.opensocial.rule&rkey=b"),
+            &format!("repo={did}&collection=org.atgrp.rule&rkey=b"),
         )
         .await;
     assert_eq!(status, 200);
     assert_eq!(b["value"]["title"], "Be kinder");
-    assert_eq!(b["uri"], format!("at://{did}/fyi.opensocial.rule/b"));
+    assert_eq!(b["uri"], format!("at://{did}/org.atgrp.rule/b"));
     let cid = b["cid"].as_str().unwrap();
     let (status, _) = h
         .get(
             "com.atproto.repo.getRecord",
-            &format!("repo={RIDERS}&collection=fyi.opensocial.rule&rkey=b&cid={cid}"),
+            &format!("repo={RIDERS}&collection=org.atgrp.rule&rkey=b&cid={cid}"),
         )
         .await;
     assert_eq!(status, 200);
     let (status, gone) = h
         .get(
             "com.atproto.repo.getRecord",
-            &format!("repo={did}&collection=fyi.opensocial.rule&rkey=c"),
+            &format!("repo={did}&collection=org.atgrp.rule&rkey=c"),
         )
         .await;
     assert_eq!(
@@ -197,14 +197,14 @@ async fn writes_records_as_signed_commits() {
     let (status, _) = h
         .get(
             "com.atproto.repo.getRecord",
-            &format!("repo={did}&collection=fyi.opensocial.rule&rkey=a&cid={cid}"),
+            &format!("repo={did}&collection=org.atgrp.rule&rkey=a&cid={cid}"),
         )
         .await;
     assert_eq!(status, 400);
 
     // Newest key first, a page at a time; oldest first with reverse.
     let lists = "com.atproto.repo.listRecords";
-    let list = |q: &str| format!("repo={did}&collection=fyi.opensocial.rule&{q}");
+    let list = |q: &str| format!("repo={did}&collection=org.atgrp.rule&{q}");
     let (_, page) = h.get(lists, &list("limit=1")).await;
     assert_eq!(page["records"][0]["value"]["title"], "Be kinder");
     assert_eq!(page["cursor"], "b");
@@ -228,7 +228,7 @@ async fn writes_records_as_signed_commits() {
     let (_, repo) = h
         .get("com.atproto.repo.describeRepo", &format!("repo={did}"))
         .await;
-    assert_eq!(repo["collections"], json!(["fyi.opensocial.rule"]));
+    assert_eq!(repo["collections"], json!(["org.atgrp.rule"]));
 
     // The whole repo, as a CAR: the commit first, signed by the account,
     // and the tree its keys make, with every record.
@@ -263,7 +263,7 @@ async fn writes_records_as_signed_commits() {
     assert!(commit.verify(&signing));
     let tree = Tree::read(commit.data, &car.blocks).unwrap();
     let keys: Vec<&str> = tree.leaves().into_iter().map(|(k, _)| k).collect();
-    assert_eq!(keys, ["fyi.opensocial.rule/a", "fyi.opensocial.rule/b"]);
+    assert_eq!(keys, ["org.atgrp.rule/a", "org.atgrp.rule/b"]);
     assert!(
         tree.leaves()
             .iter()
@@ -317,30 +317,30 @@ async fn refuses_writes_it_cannot_make() {
     );
     assert_eq!(
         refused(&[create("a", "again")]).message,
-        "there is a record already at fyi.opensocial.rule/a"
+        "there is a record already at org.atgrp.rule/a"
     );
     let missing = Write::Delete {
-        collection: "fyi.opensocial.rule".into(),
+        collection: "org.atgrp.rule".into(),
         rkey: "z".into(),
     };
     assert_eq!(
         refused(&[missing]).message,
-        "there is no record at fyi.opensocial.rule/z"
+        "there is no record at org.atgrp.rule/z"
     );
     let float = Write::Create {
-        collection: "fyi.opensocial.rule".into(),
+        collection: "org.atgrp.rule".into(),
         rkey: "f".into(),
-        value: json!({"$type": "fyi.opensocial.rule", "n": 1.5}),
+        value: json!({"$type": "org.atgrp.rule", "n": 1.5}),
     };
     assert_eq!(refused(&[float]).message, "1.5 is not an integer");
     let mistyped = Write::Create {
-        collection: "fyi.opensocial.rule".into(),
+        collection: "org.atgrp.rule".into(),
         rkey: "t".into(),
-        value: json!({"$type": "fyi.opensocial.role"}),
+        value: json!({"$type": "org.atgrp.role"}),
     };
     assert_eq!(
         refused(&[mistyped]).message,
-        "a record in fyi.opensocial.rule has $type fyi.opensocial.rule"
+        "a record in org.atgrp.rule has $type org.atgrp.rule"
     );
 }
 
@@ -443,7 +443,7 @@ async fn serves_its_own_did_document() {
         Some("https://host.test")
     );
     assert_eq!(
-        atproto::did::service(&doc, "#opensocial").as_deref(),
+        atproto::did::service(&doc, "#atgrp").as_deref(),
         Some("https://host.test")
     );
 

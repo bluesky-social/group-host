@@ -51,31 +51,31 @@ type Say = (inputs: { doer: string; who: string }) => string;
 
 /** What each operation is said as, of a record of each collection. */
 const SAID: Record<string, (op: string) => Say | undefined> = {
-  'fyi.opensocial.membership': (op) =>
+  'org.atgrp.membership': (op) =>
     ({
       create: m.activity_membership_create,
       update: m.activity_membership_update,
       delete: m.activity_membership_delete
     })[op],
-  'fyi.opensocial.invite': (op) =>
+  'org.atgrp.invite': (op) =>
     ({
       create: m.activity_invite_create,
       update: m.activity_invite_update,
       delete: m.activity_invite_delete
     })[op],
-  'fyi.opensocial.rule': (op) =>
+  'org.atgrp.rule': (op) =>
     ({
       create: m.activity_rule_create,
       update: m.activity_rule_update,
       delete: m.activity_rule_delete
     })[op],
-  'fyi.opensocial.role': (op) =>
+  'org.atgrp.role': (op) =>
     ({
       create: m.activity_role_create,
       update: m.activity_role_update,
       delete: m.activity_role_delete
     })[op],
-  'fyi.opensocial.profile': (op) =>
+  'org.atgrp.profile': (op) =>
     op === 'delete' ? m.activity_profile_delete : m.activity_profile_change,
   'com.atproto.label.record': (op) =>
     op === 'delete' ? m.activity_label_delete : m.activity_label_create,

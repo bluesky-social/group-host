@@ -28,7 +28,7 @@ function resolve(page, url, base) {
       .replace(/(^|\/)README$/, '');
     return `${base}${slug ? `${slug.toLowerCase()}/` : ''}${hash}`;
   }
-  // A directory has no extension: lexicons/fyi/opensocial, web.
+  // A directory has no extension: lexicons/org/atgrp, web.
   const kind = posix.extname(target) ? 'blob' : 'tree';
   return `${REPO}/${kind}/main/${target}${hash}`;
 }

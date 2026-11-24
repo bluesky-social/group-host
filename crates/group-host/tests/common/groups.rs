@@ -8,9 +8,9 @@ use super::spaces::{Authority, authority, now, read};
 use atproto::service_auth::{self, Claims};
 use serde_json::Value as Json;
 
-pub const NS: &str = "fyi.opensocial";
+pub const NS: &str = "org.atgrp";
 /// The host's own methods and views, beside the proposal's.
-pub const INTERNAL: &str = "fyi.opensocial.internal";
+pub const INTERNAL: &str = "org.atgrp.internal";
 
 /// The NSID of our method `name`: the host's own if it has a lexicon
 /// there, else the proposal's.

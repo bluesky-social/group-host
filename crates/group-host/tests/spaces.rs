@@ -42,7 +42,7 @@ async fn fixture() -> Fixture {
         .public()
         .did_key();
     let authority = authority(&h, false, true).await;
-    let space = format!("at://{}/space/fyi.opensocial.content/self", authority.did);
+    let space = format!("at://{}/space/org.atgrp.content/self", authority.did);
     let syncer = syncer(&authority, &space);
     Fixture {
         h,
@@ -171,9 +171,9 @@ async fn a_write_stands_when_its_authority_does_not_hear_of_it() {
     let refusing = authority(&h, true, true).await;
     let pdsless = authority(&h, false, false).await;
     for space in [
-        format!("at://{}/space/fyi.opensocial.content/self", refusing.did),
-        format!("at://{}/space/fyi.opensocial.content/self", pdsless.did),
-        "at://did:plc:unpublished/space/fyi.opensocial.content/self".to_string(),
+        format!("at://{}/space/org.atgrp.content/self", refusing.did),
+        format!("at://{}/space/org.atgrp.content/self", pdsless.did),
+        "at://did:plc:unpublished/space/org.atgrp.content/self".to_string(),
     ] {
         let written = h
             .host
@@ -213,7 +213,7 @@ async fn a_write_waits_on_its_authority_no_longer_than_the_timeout() {
         .send()
         .await
         .unwrap();
-    let space = format!("at://{did}/space/fyi.opensocial.content/self");
+    let space = format!("at://{did}/space/org.atgrp.content/self");
     let started = std::time::Instant::now();
     h.host
         .space_write(&group, &space, &[create(RULE, "one", rule("Be kind"))])
@@ -265,9 +265,9 @@ async fn serves_a_repo_to_a_syncer_vouched_for() {
         .iter()
         .map(|k| create(RULE, k, rule("Be kind")))
         .chain([create(
-            "fyi.opensocial.ruleset",
+            "org.atgrp.ruleset",
             "self",
-            json!({"$type": "fyi.opensocial.ruleset", "name": "Rules"}),
+            json!({"$type": "org.atgrp.ruleset", "name": "Rules"}),
         )])
         .collect();
     let commit =
@@ -406,15 +406,15 @@ async fn list(f: &Fixture, rest: String) -> Json {
 #[tokio::test]
 async fn lists_a_repos_records_a_page_at_a_time() {
     let f = fixture().await;
-    // `fyi.opensocial.rule.x/…` sorts before `fyi.opensocial.rule/…` by
+    // `org.atgrp.rule.x/…` sorts before `org.atgrp.rule/…` by
     // path, as `.` comes before `/`.
     let writes = [
         create(RULE, "a", rule("A")),
         create(RULE, "b", rule("B")),
         create(
-            "fyi.opensocial.rule.x",
+            "org.atgrp.rule.x",
             "a",
-            json!({"$type": "fyi.opensocial.rule.x"}),
+            json!({"$type": "org.atgrp.rule.x"}),
         ),
     ];
     f.h.host
@@ -441,7 +441,7 @@ async fn lists_a_repos_records_a_page_at_a_time() {
         [
             format!("{RULE}/b"),
             format!("{RULE}/a"),
-            "fyi.opensocial.rule.x/a".into()
+            "org.atgrp.rule.x/a".into()
         ]
     );
     assert_eq!(all["records"][0]["value"], rule("B"));
@@ -452,7 +452,7 @@ async fn lists_a_repos_records_a_page_at_a_time() {
     let cursor = first["cursor"].as_str().unwrap().to_string();
     assert_eq!(cursor, format!("{}/{}/{RULE}/a", f.space, f.group));
     let rest = list(&f, format!("&limit=2&cursor={cursor}")).await;
-    assert_eq!(paths(&rest), ["fyi.opensocial.rule.x/a".to_string()]);
+    assert_eq!(paths(&rest), ["org.atgrp.rule.x/a".to_string()]);
 
     let rules = list(&f, format!("&collection={RULE}&excludeValues=true")).await;
     assert_eq!(paths(&rules), [format!("{RULE}/b"), format!("{RULE}/a")]);
@@ -584,12 +584,12 @@ async fn serves_and_lists_a_spaces_blobs() {
             .upload_blob(&f.group, b"elsewhere", "image/png")
             .unwrap();
     let link = |r: &Json| r["ref"]["$link"].as_str().unwrap().to_string();
-    let profile = |avatar: &Json| json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "avatar": avatar});
+    let profile = |avatar: &Json| json!({"$type": "org.atgrp.profile", "displayName": "Riders", "avatar": avatar});
     f.h.host
         .space_write(
             &f.group,
             &f.space,
-            &[create("fyi.opensocial.profile", "self", profile(&picture))],
+            &[create("org.atgrp.profile", "self", profile(&picture))],
         )
         .await
         .unwrap();
@@ -597,11 +597,7 @@ async fn serves_and_lists_a_spaces_blobs() {
     f.h.host
         .write(
             &f.group,
-            &[create(
-                "fyi.opensocial.profile",
-                "self",
-                profile(&elsewhere),
-            )],
+            &[create("org.atgrp.profile", "self", profile(&elsewhere))],
         )
         .unwrap();
 
@@ -652,12 +648,12 @@ async fn serves_and_lists_a_spaces_blobs() {
         .space_write(
             &f.group,
             &f.space,
-            &[create("fyi.opensocial.profile", "other", profile(&picture))],
+            &[create("org.atgrp.profile", "other", profile(&picture))],
         )
         .await
         .unwrap();
     let delete = |rkey: &str| Write::Delete {
-        collection: "fyi.opensocial.profile".into(),
+        collection: "org.atgrp.profile".into(),
         rkey: rkey.into(),
     };
     f.h.host
@@ -685,23 +681,19 @@ async fn keeps_a_blob_of_a_deleted_space_its_repo_still_references() {
     let f = fixture().await;
     let host = &f.h.host;
     let picture = host.upload_blob(&f.group, b"picture", "image/png").unwrap();
-    let profile =
-        json!({"$type": "fyi.opensocial.profile", "displayName": "Riders", "avatar": picture});
+    let profile = json!({"$type": "org.atgrp.profile", "displayName": "Riders", "avatar": picture});
     let own = host
-        .create_space(&f.group, "fyi.opensocial.content", "own", &open())
+        .create_space(&f.group, "org.atgrp.content", "own", &open())
         .unwrap();
     host.space_write(
         &f.group,
         &own,
-        &[create("fyi.opensocial.profile", "self", profile.clone())],
+        &[create("org.atgrp.profile", "self", profile.clone())],
     )
     .await
     .unwrap();
-    host.write(
-        &f.group,
-        &[create("fyi.opensocial.profile", "self", profile)],
-    )
-    .unwrap();
+    host.write(&f.group, &[create("org.atgrp.profile", "self", profile)])
+        .unwrap();
     host.end_space(&f.group, &own).unwrap();
     let cid = picture["ref"]["$link"].as_str().unwrap();
     let url = format!(
@@ -749,10 +741,7 @@ async fn reads_only_with_a_credential_the_authority_issued() {
         signed(&s, &f.group, &f.kem, COMMIT_MAC).0
     };
     let other_key = Keypair::generate(Curve::P256);
-    let elsewhere = format!(
-        "at://{}/space/fyi.opensocial.content/other",
-        f.authority.did
-    );
+    let elsewhere = format!("at://{}/space/org.atgrp.content/other", f.authority.did);
     let stranger = Authority {
         did: f.authority.did.clone(),
         key: Keypair::generate(Curve::K256),
@@ -809,7 +798,7 @@ async fn reads_only_with_a_credential_the_authority_issued() {
             bearing(
                 &credential(
                     &f.authority,
-                    "at://did:plc:unknown/space/fyi.opensocial.content/self",
+                    "at://did:plc:unknown/space/org.atgrp.content/self",
                     &f.syncer.key,
                     "did:plc:unknown",
                 ),
@@ -1228,7 +1217,7 @@ async fn a_space_of_a_did_web_authority() {
         pds: String::new(),
         last: None,
     };
-    let space = format!("at://{}/space/fyi.opensocial.content/self", authority.did);
+    let space = format!("at://{}/space/org.atgrp.content/self", authority.did);
     let commit = h
         .host
         .space_write(&group, &space, &[create(RULE, "a", rule("A"))])

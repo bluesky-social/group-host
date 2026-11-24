@@ -8,7 +8,7 @@ use common::spaces::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const PROVISION: &str = "fyi.opensocial.internal.provisionGroup";
+const PROVISION: &str = "org.atgrp.internal.provisionGroup";
 const SCOPE: &str = "atproto repo:app.bsky.feed.post";
 
 /// Asks `app` to provision as `who` with `body`, once more with the nonce
@@ -67,13 +67,13 @@ async fn makes_a_group_and_a_session_on_it_for_the_app() {
         said.body["meta"]
             .as_str()
             .unwrap()
-            .ends_with("/space/fyi.opensocial.meta/self")
+            .ends_with("/space/org.atgrp.meta/self")
     );
     assert!(
         said.body["members"]
             .as_str()
             .unwrap()
-            .ends_with("/space/fyi.opensocial.members/self")
+            .ends_with("/space/org.atgrp.members/self")
     );
     let session = &said.body["session"];
     assert_eq!(session["token_type"], "DPoP");
@@ -153,7 +153,7 @@ async fn refuses_before_it_makes_anything() {
 async fn gives_the_app_what_it_declares_and_the_founder_may() {
     let h = start(&[("PROVISIONING_CLIENTS", "*")], false).await;
     let [alice, bob, _] = people(&h).await;
-    let app = App::loopback(&format!("{SCOPE} rpc:fyi.opensocial.listModSubjects?aud=*"));
+    let app = App::loopback(&format!("{SCOPE} rpc:org.atgrp.listModSubjects?aud=*"));
     for (scope, refused) in [
         ("repo:app.bsky.feed.post", "the scope must include atproto"),
         (
@@ -172,7 +172,7 @@ async fn gives_the_app_what_it_declares_and_the_founder_may() {
         assert_eq!(said.body["message"], refused);
     }
     // A method of this host's is the founder's own to call, never the app's.
-    let scope = format!("{SCOPE} rpc:fyi.opensocial.listModSubjects?aud=*");
+    let scope = format!("{SCOPE} rpc:org.atgrp.listModSubjects?aud=*");
     let said = provision(
         &h,
         &app,

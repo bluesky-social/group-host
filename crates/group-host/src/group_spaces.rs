@@ -3,13 +3,13 @@
 //! createSpace`, `updateSpace`, `getSpace`, `deleteSpace`), by a session
 //! as the group: an app's, or a group token from `getGroupAuth`.
 //!
-//! Each space is kept under a policy, `fyi.opensocial.policy`: for each
+//! Each space is kept under a policy, `org.atgrp.policy`: for each
 //! role, whether its holders read the space, whether they write in it in
 //! their own name (and so are in its writer set), and the scopes they hold
 //! there acting as the group; whether anyone may read it; and whether it
 //! is left out of the group's index. The host keeps the policy, publishes
 //! it in the space as the group's `com.atproto.space.policy/self`, and
-//! keeps the index, the `fyi.opensocial.space` entries in the members
+//! keeps the index, the `org.atgrp.space` entries in the members
 //! space, in step with it: both are written by the host alone. A space
 //! under any other policy is refused (`UnsupportedPolicy`).
 //!

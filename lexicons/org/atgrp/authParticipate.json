@@ -1,0 +1,67 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.authParticipate",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "description": "For personal sessions, acting as the user rather than the group.",
+      "title": "Groups",
+      "detail": "See groups and your invites, join or leave groups, and report content.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "org.atgrp.meta",
+          "authority": "*",
+          "skey": "self",
+          "action": [
+            "read"
+          ]
+        },
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "org.atgrp.members",
+          "authority": "*",
+          "skey": "self",
+          "collection": [
+            "org.atgrp.acceptance"
+          ],
+          "action": [
+            "read",
+            "create",
+            "update",
+            "delete"
+          ]
+        },
+        {
+          "type": "permission",
+          "resource": "space",
+          "spaceType": "org.atgrp.invites",
+          "authority": "self",
+          "skey": "self",
+          "action": [
+            "read"
+          ],
+          "manage": [
+            "create"
+          ]
+        },
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "aud": "*",
+          "lxm": [
+            "org.atgrp.requestJoin",
+            "org.atgrp.cancelJoinRequest",
+            "org.atgrp.internal.getJoinRequest",
+            "org.atgrp.leaveGroup",
+            "org.atgrp.internal.getActorInvites",
+            "org.atgrp.internal.declineInvite",
+            "org.atgrp.createReport"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,9 +1,9 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
-import type * as getActor from '#lib/lexicons/fyi/opensocial/internal/getActor.ts';
-import type * as getGroup from '#lib/lexicons/fyi/opensocial/internal/getGroup.ts';
-import type * as getModSubjectHistory from '#lib/lexicons/fyi/opensocial/getModSubjectHistory.ts';
-import type * as listModSubjects from '#lib/lexicons/fyi/opensocial/listModSubjects.ts';
-import type * as listSpaceRecords from '#lib/lexicons/fyi/opensocial/internal/listSpaceRecords.ts';
+import type * as getActor from '#lib/lexicons/org/atgrp/internal/getActor.ts';
+import type * as getGroup from '#lib/lexicons/org/atgrp/internal/getGroup.ts';
+import type * as getModSubjectHistory from '#lib/lexicons/org/atgrp/getModSubjectHistory.ts';
+import type * as listModSubjects from '#lib/lexicons/org/atgrp/listModSubjects.ts';
+import type * as listSpaceRecords from '#lib/lexicons/org/atgrp/internal/listSpaceRecords.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { applyAsGroup, asGroup } from '#lib/asGroup.ts';
@@ -34,7 +34,7 @@ async function groupOf(event: Event) {
 async function history(event: Event, group: Did, key: `${string}:${string}`) {
   const { events, record } = await xrpc<typeof getModSubjectHistory.main>(
     event,
-    'fyi.opensocial.getModSubjectHistory',
+    'org.atgrp.getModSubjectHistory',
     { group, subject: key }
   );
   return { events: events as Happened[], record: record as Reviewed | undefined };
@@ -47,22 +47,17 @@ async function history(event: Event, group: Did, key: `${string}:${string}`) {
  */
 export const load: PageServerLoad = async (event) => {
   const group = await groupOf(event);
-  const { group: view } = await xrpc<typeof getGroup.main>(
-    event,
-    'fyi.opensocial.internal.getGroup',
-    {
-      group
-    }
-  );
+  const { group: view } = await xrpc<typeof getGroup.main>(event, 'org.atgrp.internal.getGroup', {
+    group
+  });
   const actions = view.viewer?.actions ?? [];
   const asked = event.url.searchParams.get('status') ?? '';
   const status = (STATUSES.includes(asked) ? asked : 'open') as Status;
   if (!actions.includes('mod.read')) return { group: view, actions, status, subjects: null };
-  const { subjects } = await xrpc<typeof listModSubjects.main>(
-    event,
-    'fyi.opensocial.listModSubjects',
-    { group, status }
-  );
+  const { subjects } = await xrpc<typeof listModSubjects.main>(event, 'org.atgrp.listModSubjects', {
+    group,
+    status
+  });
   const listed: Subject[] = await Promise.all(
     subjects.map(async (s) => {
       const key = s.subject as `${string}:${string}`;
@@ -86,7 +81,7 @@ export const load: PageServerLoad = async (event) => {
     const did = authorOf(review);
     const actor = await xrpc<typeof getActor.main>(
       event,
-      'fyi.opensocial.internal.getActor',
+      'org.atgrp.internal.getActor',
       { actor: did },
       true
     );
@@ -102,7 +97,7 @@ export const load: PageServerLoad = async (event) => {
     };
   }
   // The rules a report may cite, by their record key, and by their URI.
-  const meta = `at://${group}/space/fyi.opensocial.meta/self/${group}/fyi.opensocial.rule`;
+  const meta = `at://${group}/space/org.atgrp.meta/self/${group}/org.atgrp.rule`;
   const rules = Object.fromEntries((view.rules ?? []).map((r) => [r.rkey, r.title]));
   const ruleList = (view.rules ?? []).map((r) => ({ uri: `${meta}/${r.rkey}`, title: r.title }));
   return {
@@ -143,7 +138,7 @@ export const actions: Actions = {
     const form = await event.request.formData();
     const subject = String(form.get('subject'));
     const note = String(form.get('note') ?? '').trim();
-    return act(event, 'fyi.opensocial.resolveModSubject', {
+    return act(event, 'org.atgrp.resolveModSubject', {
       group,
       subject,
       status: String(form.get('status')),
@@ -170,7 +165,7 @@ export const actions: Actions = {
     // A label is taken back by deleting the group's records of it on the subject.
     const { records } = await xrpc<typeof listSpaceRecords.main>(
       event,
-      'fyi.opensocial.internal.listSpaceRecords',
+      'org.atgrp.internal.listSpaceRecords',
       { group, space, collection: LABEL, field: 'uri', equals: uri, limit: 100 }
     );
     const rkeys = records
@@ -185,7 +180,7 @@ export const actions: Actions = {
     const form = await event.request.formData();
     const reason = String(form.get('reason') ?? '').trim();
     const rule = String(form.get('rule') ?? '');
-    return act(event, 'fyi.opensocial.createReport', {
+    return act(event, 'org.atgrp.createReport', {
       group,
       subject: String(form.get('did')),
       reasonType: String(form.get('reasonType')),

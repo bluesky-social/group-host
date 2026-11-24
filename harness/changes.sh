@@ -20,8 +20,8 @@ base="$KNOTLESS_RUN_BASE"
 git config --global --add safe.directory '*'
 
 changed=$(git diff --name-only "$base" HEAD -- \
-  crates/group-host/src crates/group-host-mcp/src crates/opensocial/src \
-  web/src web/messages lexicons/fyi)
+  crates/group-host/src crates/group-host-mcp/src crates/atgrp/src \
+  web/src web/messages lexicons/org)
 if [ -z "$changed" ]; then
   echo "nothing anyone uses is changed: no change file needed"
   exit 0

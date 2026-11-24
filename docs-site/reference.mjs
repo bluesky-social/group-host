@@ -5,7 +5,7 @@
 // parameters, input and output, read from lexicons/ so it cannot drift. An
 // MCP tool has the lexicon its table's Lexicon column names: the method it
 // asks, or the record it writes. Each method there is an anchor, its NSID,
-// and a method named in code on any page, `fyi.opensocial.internal.addRecoveryKey` or
+// and a method named in code on any page, `org.atgrp.internal.addRecoveryKey` or
 // `addRecoveryKey`, links to it.
 // docs/ stays plain Markdown: all of this happens as the site is built.
 
@@ -17,9 +17,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const LEXICONS = join(here, '../lexicons');
 import { REPO } from './plugins.mjs';
 
-/** Every fyi.opensocial lexicon, the host's own internal ones too, by NSID. */
+/** Every org.atgrp lexicon, the host's own internal ones too, by NSID. */
 const lexicons = new Map(
-  ['fyi/opensocial', 'fyi/opensocial/internal']
+  ['org/atgrp', 'org/atgrp/internal']
     .map((dir) => join(LEXICONS, dir))
     .filter((dir) => existsSync(dir))
     .flatMap((dir) =>
@@ -63,7 +63,7 @@ const escape = (s) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-/** `GET /refs`, `POST fyi.opensocial.x`, `fyi.opensocial.x?q=`: its method, and the NSID it names, if any. */
+/** `GET /refs`, `POST org.atgrp.x`, `org.atgrp.x?q=`: its method, and the NSID it names, if any. */
 function route(code) {
   const m = code.match(/^(GET|POST|PUT|DELETE|PATCH|HEAD)\s+(\S+)/);
   const path = m ? m[2] : code;
@@ -93,11 +93,11 @@ function type(field) {
       if (field.maxLength) bits.push(`at most ${field.maxLength}`);
       break;
     case 'ref':
-      bits.push(field.ref.replace(/^#/, '').replace(/^fyi\.opensocial\.(internal\.)?/, ''));
+      bits.push(field.ref.replace(/^#/, '').replace(/^org\.atgrp\.(internal\.)?/, ''));
       break;
     case 'union':
       bits.push(
-        `one of ${field.refs.map((r) => r.replace(/^#/, '').replace(/^fyi\.opensocial\.(internal\.)?/, '')).join(', ')}`
+        `one of ${field.refs.map((r) => r.replace(/^#/, '').replace(/^org\.atgrp\.(internal\.)?/, '')).join(', ')}`
       );
       break;
     default:
@@ -300,7 +300,7 @@ export function remarkReference({ base = '/' } = {}) {
           node.children.length === 1 &&
           node.children[0].type === 'inlineCode'
         ) {
-          // `### \`GET /healthz\``, `### \`fyi.opensocial.internal.getGroup\``: the method a badge before it. The
+          // `### \`GET /healthz\``, `### \`org.atgrp.internal.getGroup\``: the method a badge before it. The
           // anchor is fixed first, from the heading as written, so links to it still land.
           const code = node.children[0];
           const { method, nsid } = route(code.value);

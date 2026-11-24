@@ -104,8 +104,7 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
     )
     .await;
     // Its face for admins alone.
-    let admins =
-        json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "admin", "read": true}]});
+    let admins = json!({"$type": "org.atgrp.policy", "grants": [{"role": "admin", "read": true}]});
     let meta = group_host::group::meta_space(&quiet);
     h.host.store.set_policy(&meta, &admins).unwrap();
     join(&h, &riders, &bob.did).await;

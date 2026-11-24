@@ -130,7 +130,7 @@ the host it leaves controls it, and a failed receive leaves nothing at
 the new one. After it, the new host holds it, switched off until
 activated.
 
-The `opensocial group move` command makes the four calls in order
+The `atgrp group move` command makes the four calls in order
 ([cli](../reference/cli.md)). If it handed the group over but couldn't
 switch it on, running it again does only that. The console has no page
 for this move.
@@ -180,7 +180,7 @@ stops before the account's identity moves.
 For each space the account governs, its state comes first, then its
 files, then the account's repo there. A repo the account keeps in
 another's space comes too. Each space's policy becomes an
-`fyi.opensocial.policy` that sets `unlisted`, so it's out of the group's
+`org.atgrp.policy` that sets `unlisted`, so it's out of the group's
 index. A personal space stays the account's alone. A member space's
 public reading becomes `publicRead`, and its members become grants of
 their own beside the policy, each reading and writing as before. Any
@@ -226,7 +226,7 @@ it gives them back. "Copy it here" copies the account and its spaces and
 has the code emailed. "Finish moving it" takes the code and completes
 the move. "Stop, and sign out of it" discards an unfinished copy.
 
-`opensocial account import` does the same from a terminal. It signs in
+`atgrp account import` does the same from a terminal. It signs in
 to the account with its password and finishes with the emailed code
 ([cli](../reference/cli.md)).
 

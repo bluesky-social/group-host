@@ -66,7 +66,7 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
         &h,
         &did,
         "moderator",
-        &[&eject[0], &eject[1], "repo:fyi.opensocial.post"],
+        &[&eject[0], &eject[1], "repo:org.atgrp.post"],
         &["member"],
     );
     moderator["description"] = json!("Keeps the peace.");
@@ -76,7 +76,7 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
     assert_eq!(kept["displayName"], "moderator");
     let g = grant_of(&h, &did, "moderator").unwrap();
     assert_eq!(g.assignable, ["member"]);
-    assert!(g.scopes.contains(&"repo:fyi.opensocial.post".to_string()));
+    assert!(g.scopes.contains(&"repo:org.atgrp.post".to_string()));
     assert_eq!(grant_of(&h, &did, "admin").unwrap().assignable, ["*"]);
     // Given on joining, and its people bots, as the record says.
     let mut flagged = granting(&h, &did, "moderator", &[&eject[1]], &["member"]);
@@ -90,7 +90,7 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
     );
     // A scope given is one the giver's roles hold, as written or within
     // one they hold: a permission set of theirs is the scopes it lists.
-    let rule = "space:fyi.opensocial.meta?skey=self&collection=fyi.opensocial.rule&action=create";
+    let rule = "space:org.atgrp.meta?skey=self&collection=org.atgrp.rule&action=create";
     let more = granting(
         &h,
         &did,
@@ -187,11 +187,7 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
                 &h,
                 "role",
                 "moderator",
-                with(
-                    "moderator",
-                    &["include:fyi.opensocial.authParticipate"],
-                    &[],
-                ),
+                with("moderator", &["include:org.atgrp.authParticipate"], &[]),
             )
             .await,
             (400, "ScopeNotHeld"),
@@ -272,13 +268,7 @@ async fn a_writer_changes_only_the_grants_of_roles_they_may_give() {
     let steward = granting(&h, &did, "steward", &[&configure], &["member", "steward"]);
     keep(&h, &did, "role", "steward", steward).await;
     join(&h, &did, &bob.did, &["member", "steward"]).await;
-    let bobs = Session::of(
-        &h,
-        &bob,
-        &did,
-        "atproto include:fyi.opensocial.authManageGroup",
-    )
-    .await;
+    let bobs = Session::of(&h, &bob, &did, "atproto include:org.atgrp.authManageGroup").await;
     let with = |role: &str, scopes: &[&str], assignable: &[&str]| {
         granting(&h, &did, role, scopes, assignable)
     };

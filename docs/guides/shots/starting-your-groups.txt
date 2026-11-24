@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@alice.test"
 - main:
   - heading "Your groups" [level=1]
@@ -12,4 +12,4 @@
     - listitem:
       - link "Riders":
       - text: "@riders.groups.test"
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

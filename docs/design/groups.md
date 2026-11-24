@@ -18,9 +18,9 @@ writes in their own repo in it, on their own PDS, and the space's
 authority decides who may read and write. The group is the authority of
 both of its spaces, and [spaces](spaces.md) explains them.
 
-- `meta` (`at://<group>/space/fyi.opensocial.meta/self`) holds the
+- `meta` (`at://<group>/space/org.atgrp.meta/self`) holds the
   profile, the rules and the labeler.
-- `members` (`at://<group>/space/fyi.opensocial.members/self`) holds
+- `members` (`at://<group>/space/org.atgrp.members/self`) holds
   roles, permissions, memberships, and the index of the group's spaces.
 
 Everything a group is lives in records the group writes in its own repos
@@ -89,7 +89,7 @@ There's no owner to ask, so the group's records answer "may this person
 do that?"
 
 A member's roles are the `roles` list of their membership in `members`. A
-space's policy, `fyi.opensocial.policy`, gives each role a grant there,
+space's policy, `org.atgrp.policy`, gives each role a grant there,
 one entry a role. A role granted `read` reads the space, and one granted
 `write` writes there in its members' own names. A role granted a space
 scope naming collections writes those as the group there. The policy
@@ -121,7 +121,7 @@ Details:
 - When a group is made, anyone may read `meta` unless `createGroup` sets
   `metaPublicRead: false`. Its policy grants `member` `read`, and `admin`
   `read` and
-  `space:fyi.opensocial.meta?collection=fyi.opensocial.profile&collection=fyi.opensocial.rule`,
+  `space:org.atgrp.meta?collection=org.atgrp.profile&collection=org.atgrp.rule`,
   so admins write the profile and rules as the group. The policy of
   `members` grants `member` `read` and `write`, so members' own records
   there sync.
@@ -154,7 +154,7 @@ they may switch it back on, since the host reads nothing else of their
 standing.
 
 A group that wants to be found says so with its declaration. That's a
-`fyi.opensocial.declaration` record in its public repo pointing at
+`org.atgrp.declaration` record in its public repo pointing at
 `meta`. The host writes it while the policy of `meta` sets `publicRead`
 and removes it when it doesn't. The host keeps no list of its groups for
 people to browse. How groups are found across the network is still to
@@ -168,8 +168,8 @@ caller.
 
 ## Changing its profile, rules and pictures
 
-A group's profile (`fyi.opensocial.profile`, at `self`) and its rules
-(`fyi.opensocial.rule`) are records in `meta`. An app changes them by
+A group's profile (`org.atgrp.profile`, at `self`) and its rules
+(`org.atgrp.rule`) are records in `meta`. An app changes them by
 writing them as the group, with a token for the group
 ([signing in](signing-in.md)). It uses `com.atproto.space.putRecord`,
 `createRecord`, `deleteRecord` and `applyWrites`. The token's scope must
@@ -222,7 +222,7 @@ Details:
   changing `publicRead` in the policy of `meta` through
   `com.atproto.space.updateSpace`, and members read it either way.
 - An MCP client changes them with the `profile_set`, `rule_set` and
-  `rule_delete` tools, and you can with the `opensocial` commands of the
+  `rule_delete` tools, and you can with the `atgrp` commands of the
   same names. Both make the same writes as their member
   ([MCP](../reference/mcp.md)).
 
@@ -271,7 +271,7 @@ too. The handle proves the group controls the domain. It doesn't prove
 the domain's web traffic reaches this host, since its A record may still
 name a site the group is leaving. So the host serves the group at the
 domain only when a steward switches it on, with
-`fyi.opensocial.internal.putGroupDomain` (for `group.configure`), and
+`org.atgrp.internal.putGroupDomain` (for `group.configure`), and
 only if the domain then answers as this host. The host asks
 `https://<domain>/xrpc/com.atproto.server.describeServer`, or
 `DOMAIN_CHECK_AT` with the domain as its `Host`, for its own DID. If the
@@ -284,14 +284,14 @@ domain, redirects (301) to the same path and query at the domain, except
 for the host's own paths at the address. At the domain, a `GET` or
 `HEAD` of `/` redirects to the group's page in the console, and anything
 else is a plain 404. The group's view names the domain as `domain`.
-`fyi.opensocial.internal.deleteGroupDomain` switches it off again. So
+`org.atgrp.internal.deleteGroupDomain` switches it off again. So
 does the group taking another handle, since the host never checked that
 handle's domain.
 
 In the console, the Domain card on a group's settings page, beside its
 handle, says whether the group is served at its domain. It switches that
 on, telling you which DNS records to add first, and off again.
-`opensocial group domain <group>` switches it on and `--undo` off. An
+`atgrp group domain <group>` switches it on and `--undo` off. An
 MCP client does the same with `group_domain`.
 
 The host's proxy gets each domain's certificate the first time it's

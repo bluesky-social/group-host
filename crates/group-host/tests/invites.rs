@@ -15,7 +15,7 @@ use group_host::store::Invite;
 use group_host::time::now_millis;
 use serde_json::{Value as Json, json};
 
-const NS: &str = "fyi.opensocial";
+const NS: &str = "org.atgrp";
 const CREATE: &str = "com.atproto.space.createRecord";
 const DELETE: &str = "com.atproto.space.deleteRecord";
 

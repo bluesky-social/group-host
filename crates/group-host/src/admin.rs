@@ -1,6 +1,6 @@
 //! What the host's operators, the accounts `HOST_ADMINS` names, may read
-//! of it: the lines it logged (`fyi.opensocial.internal.getLogs`) and how it is
-//! used (`fyi.opensocial.internal.getStats`); and the writing of both, as it
+//! of it: the lines it logged (`org.atgrp.internal.getLogs`) and how it is
+//! used (`org.atgrp.internal.getStats`); and the writing of both, as it
 //! serves.
 
 use crate::Host;

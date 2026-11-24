@@ -1,0 +1,93 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.createReport",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Report an account or record in a group, or a member's record in their public repo, opening or reopening it in the moderation queue. Uses service auth from the caller, who must be able to read the subject's space: a record's own, or the members space for an account or a public record. A report whose reasonType is appeal is an appeal, which only its subject may file: the account itself, or the record's author; one the queue already has is taken though its author is no longer in the group.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group",
+            "subject",
+            "reasonType"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID."
+            },
+            "subject": {
+              "type": "string",
+              "format": "uri",
+              "description": "An account DID or record URI."
+            },
+            "cid": {
+              "type": "string",
+              "format": "cid",
+              "description": "If set, a specific version of the record."
+            },
+            "reasonType": {
+              "type": "string",
+              "maxLength": 256,
+              "knownValues": [
+                "spam",
+                "violation",
+                "misleading",
+                "nsfw",
+                "rude",
+                "other",
+                "appeal"
+              ],
+              "description": "For violation, cite the broken rule in rule. appeal asks the group to undo what it did to the subject."
+            },
+            "reason": {
+              "type": "string",
+              "maxGraphemes": 2000,
+              "maxLength": 20000
+            },
+            "rule": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "The group rule the subject breaks."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "id",
+            "createdAt"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "datetime"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "GroupNotFound",
+          "description": "The group isn't hosted here."
+        },
+        {
+          "name": "InvalidSubject",
+          "description": "The subject isn't an account or record in this group, nor a member's public record."
+        }
+      ]
+    }
+  }
+}

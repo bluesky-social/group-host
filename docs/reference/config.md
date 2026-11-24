@@ -47,9 +47,9 @@ carry (512K by default). Set `BODY_SIZE_LIMIT` to at least
 `BLOB_UPLOAD_LIMIT`, or the console refuses a larger upload before the
 host sees it.
 
-The `opensocial` command reads its own: `OPENSOCIAL_AS` and
-`OPENSOCIAL_PASSWORD` (who it signs in as), `PDS_URL` (where),
-`OPENSOCIAL_HOST` and `OPENSOCIAL_HOST_DID` (the host it asks),
-`OPENSOCIAL_SEED_INVITE` (who `group seed` invites),
-`OPENSOCIAL_IMPORT_PASSWORD` (the account `account import` moves). See
-[the commands](cli.md#opensocial).
+The `atgrp` command reads its own: `ATGRP_AS` and
+`ATGRP_PASSWORD` (who it signs in as), `PDS_URL` (where),
+`ATGRP_HOST` and `ATGRP_HOST_DID` (the host it asks),
+`ATGRP_SEED_INVITE` (who `group seed` invites),
+`ATGRP_IMPORT_PASSWORD` (the account `account import` moves). See
+[the commands](cli.md#atgrp).

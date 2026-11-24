@@ -14,7 +14,7 @@ use serde_json::{Value as Json, json};
 const CALENDAR: &str = "com.example.calendar";
 const EVENT: &str = "com.example.event";
 const LABEL: &str = "com.atproto.label.record";
-const GET_GROUP_AUTH: &str = "fyi.opensocial.internal.getGroupAuth";
+const GET_GROUP_AUTH: &str = "org.atgrp.internal.getGroupAuth";
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let value = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
@@ -39,7 +39,7 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
         {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
     ]});

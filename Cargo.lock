@@ -42,6 +42,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "atgrp"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "atproto",
+ "axum",
+ "group-host",
+ "group-host-mcp",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1149,22 +1165,6 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
-
-[[package]]
-name = "opensocial"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "atproto",
- "axum",
- "group-host",
- "group-host-mcp",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
 
 [[package]]
 name = "p256"

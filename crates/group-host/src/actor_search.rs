@@ -1,5 +1,5 @@
 //! Finding an account by what is typed of its handle, for the console's
-//! handle fields (`fyi.opensocial.internal.searchActors`), anyone may ask, as the
+//! handle fields (`org.atgrp.internal.searchActors`), anyone may ask, as the
 //! sign-in field does before anyone has.
 //!
 //! Where it looks is `ACTOR_SEARCH`. On the network everyone is on, a

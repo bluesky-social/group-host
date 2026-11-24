@@ -27,10 +27,10 @@ use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
-const CHECK: &str = "fyi.opensocial.internal.checkImport";
-const IMPORT: &str = "fyi.opensocial.internal.importAccount";
-const COMPLETE: &str = "fyi.opensocial.internal.completeImport";
-const BRING: &str = "fyi.opensocial.internal.importAccountSpace";
+const CHECK: &str = "org.atgrp.internal.checkImport";
+const IMPORT: &str = "org.atgrp.internal.importAccount";
+const COMPLETE: &str = "org.atgrp.internal.completeImport";
+const BRING: &str = "org.atgrp.internal.importAccountSpace";
 const CREATE_ACCOUNT: &str = "com.atproto.server.createAccount";
 const AVATAR: &[u8] = &[1, 2, 3, 4];
 
@@ -428,14 +428,9 @@ async fn copies_its_repo_and_files_switched_off_and_says_what_the_directory_shou
     assert_eq!(host.read_blob(&w.did, &avatar).unwrap().unwrap().1, AVATAR);
     // No group yet.
     assert!(
-        host.group_record(
-            &w.did,
-            &meta_space(&w.did),
-            "fyi.opensocial.profile",
-            "self"
-        )
-        .unwrap()
-        .is_none()
+        host.group_record(&w.did, &meta_space(&w.did), "org.atgrp.profile", "self")
+            .unwrap()
+            .is_none()
     );
 }
 
@@ -726,12 +721,7 @@ async fn sends_the_operation_switches_it_on_and_makes_a_group_its_mover_runs() {
     assert_eq!(done["meta"], meta_space(&w.did).as_str());
     assert_eq!(done["members"], members_space(&w.did).as_str());
     let profile = host
-        .group_record(
-            &w.did,
-            &meta_space(&w.did),
-            "fyi.opensocial.profile",
-            "self",
-        )
+        .group_record(&w.did, &meta_space(&w.did), "org.atgrp.profile", "self")
         .unwrap()
         .unwrap();
     assert_eq!(profile["displayName"], "Harbor Cycling Club");

@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@erin.test"
 - main:
   - heading "Choir" [level=1]
@@ -39,4 +39,4 @@
         - listitem: What is waiting in the moderation queue?
   - paragraph: No AI app connected yet
   - paragraph: Add the address above to an AI app, and it shows up here.
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

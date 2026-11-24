@@ -17,7 +17,7 @@ use group_host::store::{Notice, Registration, SyncerNotice, SyncerUpdate};
 use serde_json::{Value as Json, json};
 use std::sync::atomic::Ordering;
 
-const KIND: &str = "fyi.opensocial.content";
+const KIND: &str = "org.atgrp.content";
 const AUTHORIZE: &str = "com.atproto.space.authorizeSpaceSync";
 const REPO_WRITE: &str = "com.atproto.space.defs#repoWrite";
 const REPO_REMOVED: &str = "com.atproto.space.defs#repoRemoved";

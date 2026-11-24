@@ -101,12 +101,12 @@ fn answers_each_action_by_its_scope() {
     assert_eq!(scope_of("fly"), None);
     let none: [&str; 0] = [];
     for nothing in [
-        "rpc:fyi.opensocial.fly?aud=*",
+        "rpc:org.atgrp.fly?aud=*",
         "rpc:com.example.thing",
         "repo:*",
         "blob:*/*",
         // An inbox scope for anything but invites.
-        "space:fyi.opensocial.invites?collection=fyi.opensocial.rule",
+        "space:org.atgrp.invites?collection=org.atgrp.rule",
     ] {
         assert_eq!(
             actions_of(&[nothing.into()])
@@ -138,18 +138,18 @@ fn answers_each_action_by_its_scope() {
     // put out, as far as the scope's writes go; the set for running
     // members does all of that, and invites.
     let of = of_scope;
-    let members = "space:fyi.opensocial.members?collection=fyi.opensocial.membership";
+    let members = "space:org.atgrp.members?collection=org.atgrp.membership";
     assert_eq!(of(members), ["admit", "eject", "role.assign"]);
     assert_eq!(of(&format!("{members}&action=update")), ["role.assign"]);
     assert_eq!(
-        of("space:fyi.opensocial.members?collection=fyi.opensocial.role"),
+        of("space:org.atgrp.members?collection=org.atgrp.role"),
         none
     );
     assert_eq!(
-        of("space:fyi.opensocial.meta?collection=fyi.opensocial.membership"),
+        of("space:org.atgrp.meta?collection=org.atgrp.membership"),
         none
     );
-    assert_eq!(of("space:fyi.opensocial.members?manage=create"), none);
+    assert_eq!(of("space:org.atgrp.members?manage=create"), none);
     // The tiered sets: moderating gives memberships, invites and the
     // moderation methods, and labels in the meta and members spaces alone,
     // not `label`, which is labels in every space; administering, those
@@ -163,12 +163,12 @@ fn answers_each_action_by_its_scope() {
         "mod.resolve",
         "role.assign",
     ];
-    assert_eq!(of("include:fyi.opensocial.authModerate"), moderates);
+    assert_eq!(of("include:org.atgrp.authModerate"), moderates);
     assert_eq!(
-        of("include:fyi.opensocial.authManageGroup"),
+        of("include:org.atgrp.authManageGroup"),
         [&["admit", "eject", "group.configure"][..], &moderates[2..]].concat()
     );
-    assert_eq!(of("include:fyi.opensocial.authManageProfile"), none);
+    assert_eq!(of("include:org.atgrp.authManageProfile"), none);
     let manage = actions_of(&["space:*?manage=create&manage=delete".into()]);
     assert_eq!(
         manage.into_iter().collect::<Vec<_>>(),
@@ -249,7 +249,7 @@ fn keys_a_membership_by_its_member_s_did() {
 
 #[test]
 fn grants_the_queue_by_the_moderation_methods() {
-    let rpc = |m: &str| format!("rpc:fyi.opensocial.{m}?aud=*");
+    let rpc = |m: &str| format!("rpc:org.atgrp.{m}?aud=*");
     assert_eq!(scope_of("mod.read").unwrap(), rpc("listModSubjects"));
     assert_eq!(scope_of("mod.resolve").unwrap(), rpc("resolveModSubject"));
     let scopes = [rpc("listModSubjects"), rpc("resolveModSubject")];
@@ -265,7 +265,7 @@ fn reads_a_join_policy_as_the_lexicon_words_it() {
     assert_eq!(join_policy(Some("approval")).unwrap(), "approval");
     assert_eq!(join_policy(Some("open")).unwrap(), "open");
     assert_eq!(join_policy(Some("invite")).unwrap(), "invite");
-    for other in ["sometimes", "fyi.opensocial.profile#open", "request"] {
+    for other in ["sometimes", "org.atgrp.profile#open", "request"] {
         assert_eq!(
             join_policy(Some(other)).unwrap_err().message,
             format!("joinPolicy is open, approval or invite, not {other}")

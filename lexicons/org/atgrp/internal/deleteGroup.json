@@ -1,0 +1,37 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.deleteGroup",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Delete the group: its account, its repo and its spaces on this host, and the host's own state about it. Irreversible. Requires group.configure, or, for a deactivated group, having held it when the group was switched off. Records members wrote into its spaces live on their own PDSes and are not touched. If no steward holds a recovery key, the group's did:plc is tombstoned too, since nobody could ever use it again; with one, the DID is left for its holders.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["group"],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            }
+          }
+        }
+      },
+      "errors": [],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "tombstoned": {
+              "type": "boolean",
+              "description": "Whether the group's DID was ended in the directory."
+            }
+          }
+        }
+      }
+    }
+  }
+}

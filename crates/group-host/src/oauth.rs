@@ -6,7 +6,7 @@
 //! with their roles. So there is no sign-in form here. The authorization
 //! endpoint sends the browser to the console, where the member, signed
 //! in as themselves, picks the group and approves; the console tells this
-//! host so with `fyi.opensocial.internal.approveAuthorization` (`authorization.rs`).
+//! host so with `org.atgrp.internal.approveAuthorization` (`authorization.rs`).
 //!
 //! Tokens are opaque and kept, as their hashes, so a grant ends the moment
 //! it is revoked or its member is put out of the group.

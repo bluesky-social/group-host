@@ -47,7 +47,7 @@ Picture: [target/look/...png]
 - `[code]`: what the picture cannot show, read in `web/src`: what each
   field takes and refuses, what is said when it does, what happens once
   it is sent, which pages it reaches.
-- `[cli]`: the `opensocial` command and MCP tool doing the same, from
+- `[cli]`: the `atgrp` command and MCP tool doing the same, from
   `TOOLS` in `crates/group-host-mcp/src/lib.rs`, or none.
 
 Walk every branch a reader meets: an empty list before it fills, a

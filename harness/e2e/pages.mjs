@@ -39,7 +39,7 @@ export const joins = async (name, handle) => {
   const { did } = await fetch(
     `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`
   ).then((r) => r.json());
-  const lxm = 'fyi.opensocial.requestJoin';
+  const lxm = 'org.atgrp.requestJoin';
   const token = await serviceAuth(world.pds, who[name], world.did, lxm);
   const res = await fetch(`${world.host}/xrpc/${lxm}`, {
     method: 'POST',
@@ -50,13 +50,13 @@ export const joins = async (name, handle) => {
   expect(said.status, JSON.stringify(said)).toBe('admitted');
 };
 
-/// Stands in for the host's handle search (fyi.opensocial.internal.searchActors)
+/// Stands in for the host's handle search (org.atgrp.internal.searchActors)
 /// in the browser `context`, as the typeahead service it asks would on the
 /// whole network, with names and pictures the reference directory has
 /// none of: the world's accounts whose handle holds what is typed, named
 /// for themselves. The host's own search is tested in its own tests.
 export const suggests = (context) =>
-  context.route('**/xrpc/fyi.opensocial.internal.searchActors?*', (route) => {
+  context.route('**/xrpc/org.atgrp.internal.searchActors?*', (route) => {
     const asked = new URL(route.request().url()).searchParams;
     const q = asked.get('q').toLowerCase();
     const actors = world.accounts
@@ -267,7 +267,7 @@ export const makeInbox = async (account) => {
       authorization: `Bearer ${await pdsSession(account)}`
     },
     body: JSON.stringify({
-      spaceType: 'fyi.opensocial.invites',
+      spaceType: 'org.atgrp.invites',
       skey: 'self',
       policy: { $type: 'com.atproto.memberspace.policy', publicWrite: true }
     })

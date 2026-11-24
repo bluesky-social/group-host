@@ -44,25 +44,25 @@ const base =
 // Paths whose change from the base is let through. Once the base has none
 // of it, an entry matches nothing and can go.
 const retracted = new Set([
-  'fyi.opensocial.membership#main.record.member',
-  'fyi.opensocial.defs#actorLink',
-  'fyi.opensocial.invite#main.record.by',
-  'fyi.opensocial.profile#main.record.joinPolicy',
-  'fyi.opensocial.listJoinRequests#main.output.requests[]',
-  'fyi.opensocial.labeler#main.record.policies',
-  'fyi.opensocial.labeler#main.record.subjectCollections[]',
-  'fyi.opensocial.space#main.record.name',
-  'fyi.opensocial.labeler#main.record.createdAt',
-  'fyi.opensocial.profile#main.record.location',
+  'org.atgrp.membership#main.record.member',
+  'org.atgrp.defs#actorLink',
+  'org.atgrp.invite#main.record.by',
+  'org.atgrp.profile#main.record.joinPolicy',
+  'org.atgrp.listJoinRequests#main.output.requests[]',
+  'org.atgrp.labeler#main.record.policies',
+  'org.atgrp.labeler#main.record.subjectCollections[]',
+  'org.atgrp.space#main.record.name',
+  'org.atgrp.labeler#main.record.createdAt',
+  'org.atgrp.profile#main.record.location',
   ...[
     'defs#joinRequest.actor',
     'defs#modSubjectView.actor',
     'defs#moderationEvent.creator',
     'getModSubjectHistory#main.output.record'
-  ].map((at) => `fyi.opensocial.${at}`)
+  ].map((at) => `org.atgrp.${at}`)
 ]);
 
-// Where the opensocial proposal's shape, which the host takes, differs
+// Where the Atmosphere Groups proposal's shape, which the host takes, differs
 // from the style above: each finding, exactly as said. A space policy's
 // grant's scopes, and a role's scopes and assignable roles, are bare
 // strings, as OAuth scopes and record keys are. A membership's roles are
@@ -74,22 +74,22 @@ const retracted = new Set([
 // plain words, not atproto's moderation defs.
 const proposal = new Set([
   ...['maxLength went from 1000 to 640', 'maxGraphemes went from 100 to 64'].map(
-    (m) => `fyi.opensocial.rule#main.record.title: ${m}: what was valid must stay so`
+    (m) => `org.atgrp.rule#main.record.title: ${m}: what was valid must stay so`
   ),
-  'fyi.opensocial.policy#grant.scopes: an array holds objects, which can grow, not bare values',
+  'org.atgrp.policy#grant.scopes: an array holds objects, which can grow, not bare values',
   ...['scopes', 'assignable'].map(
     (f) =>
-      `fyi.opensocial.role#main.record.${f}: an array holds objects, which can grow, not bare values`
+      `org.atgrp.role#main.record.${f}: an array holds objects, which can grow, not bare values`
   ),
-  'fyi.opensocial.membership#main.record.roles: maxLength went from none to 100: what was valid must stay so',
-  'fyi.opensocial.membership#main.record.roles[]: was {"type":"ref","ref":"fyi.opensocial.defs#roleId"}, now {"type":"string","format":"record-key"}: a field is never retyped',
+  'org.atgrp.membership#main.record.roles: maxLength went from none to 100: what was valid must stay so',
+  'org.atgrp.membership#main.record.roles[]: was {"type":"ref","ref":"org.atgrp.defs#roleId"}, now {"type":"string","format":"record-key"}: a field is never retyped',
   ...['createReport', 'defs'].map(
-    (n) => `fyi.opensocial.${n}: field-name-syntax: name is a commonly reserved keyword: id`
+    (n) => `org.atgrp.${n}: field-name-syntax: name is a commonly reserved keyword: id`
   ),
   ...[
     [
       'createReport#main.input.subject',
-      '{"type":"union","refs":["fyi.opensocial.defs#accountSubject","fyi.opensocial.defs#recordSubject"]}',
+      '{"type":"union","refs":["org.atgrp.defs#accountSubject","org.atgrp.defs#recordSubject"]}',
       '{"type":"string","format":"uri"}'
     ],
     ...[
@@ -108,16 +108,16 @@ const proposal = new Set([
     ],
     [
       'defs#statusEvent.status',
-      '{"type":"ref","ref":"fyi.opensocial.defs#subjectStatus"}',
+      '{"type":"ref","ref":"org.atgrp.defs#subjectStatus"}',
       '{"type":"string"}'
     ]
-  ].map(([p, was, now]) => `fyi.opensocial.${p}: was ${was}, now ${now}: a field is never retyped`),
+  ].map(([p, was, now]) => `org.atgrp.${p}: was ${was}, now ${now}: a field is never retyped`),
   ...[
     'defs#modSubjectView.status',
     'defs#statusEvent.status',
     'listModSubjects#main.parameters.status',
     'resolveModSubject#main.input.status'
-  ].map((p) => `fyi.opensocial.${p}: knownValues, not enum: an enum can never grow`)
+  ].map((p) => `org.atgrp.${p}: knownValues, not enum: an enum can never grow`)
 ]);
 
 const problems = [];
@@ -128,7 +128,7 @@ const say = (at, what) =>
 // The schemas held to the guide are this host's own. Those under
 // lexicons/upstream are others', copied as they are for what ours refer
 // to, and are only checked to grow from main's.
-const ours = (id) => typeof id === 'string' && id.startsWith('fyi.opensocial.');
+const ours = (id) => typeof id === 'string' && id.startsWith('org.atgrp.');
 
 // What the space alpha brings, which goat does not know yet: a space's
 // reference (format `space-ref`), and a permission over a space
@@ -296,24 +296,24 @@ const loosened = (before, after, path) => {
 // change may remove, and a space type's collections may drop: what is
 // said of each is why.
 // - com.atproto.moderation.createReport: reports come to the group's own
-//   fyi.opensocial.createReport, as the opensocial proposal has them.
+//   org.atgrp.createReport, as the Atmosphere Groups proposal has them.
 // - com.atproto.managedspace.checkAccess: an inbox is a memberspace its
 //   owner's app makes, which asks no one.
 // - com.atproto.label.label: atproto names the label record
-//   com.atproto.label.record, as the opensocial proposal does.
+//   com.atproto.label.record, as the Atmosphere Groups proposal does.
 // - com.atproto.moderation.defs: a report's reason and a labeler's are
-//   plain words, as the opensocial proposal has them, and nothing else
-//   here refers to it.
-// - fyi.opensocial.permissions: each role record carries its own
-//   group-wide scopes and assignable roles, as the opensocial proposal's
-//   do, so the members space keeps no record of them all.
-// - fyi.opensocial.access: each space's policy (fyi.opensocial.policy),
+//   plain words, as the Atmosphere Groups proposal has them, and nothing
+//   else here refers to it.
+// - org.atgrp.permissions: each role record carries its own
+//   group-wide scopes and assignable roles, as the Atmosphere Groups
+//   proposal's do, so the members space keeps no record of them all.
+// - org.atgrp.access: each space's policy (org.atgrp.policy),
 //   kept by the host and published as com.atproto.space.policy, took its
-//   place, as the opensocial proposal has it.
-// - fyi.opensocial.configure, manageSpaces, manageMembers and moderate:
+//   place, as the Atmosphere Groups proposal has it.
+// - org.atgrp.configure, manageSpaces, manageMembers and moderate:
 //   tiered as authManageProfile, within authModerate, within
 //   authManageGroup, and participate named authParticipate, as the
-//   opensocial proposal's permission sets are.
+//   Atmosphere Groups proposal's permission sets are.
 // - community.lexicon.location.address, geo, fsq and hthree: a group's
 //   profile no longer says where it meets, so nothing here refers to them.
 const RETIRED = new Set([
@@ -321,13 +321,13 @@ const RETIRED = new Set([
   'com.atproto.managedspace.checkAccess',
   'com.atproto.label.label',
   'com.atproto.moderation.defs',
-  'fyi.opensocial.permissions',
-  'fyi.opensocial.access',
-  'fyi.opensocial.configure',
-  'fyi.opensocial.manageSpaces',
-  'fyi.opensocial.manageMembers',
-  'fyi.opensocial.moderate',
-  'fyi.opensocial.participate',
+  'org.atgrp.permissions',
+  'org.atgrp.access',
+  'org.atgrp.configure',
+  'org.atgrp.manageSpaces',
+  'org.atgrp.manageMembers',
+  'org.atgrp.moderate',
+  'org.atgrp.participate',
   'community.lexicon.location.address',
   'community.lexicon.location.geo',
   'community.lexicon.location.fsq',
@@ -353,7 +353,7 @@ const code = git('ls-files', '--', 'crates', 'web/src', 'harness')
   .join('\n');
 
 /// Whether `text` names `id` whole: not as the start of a longer name, as
-/// `fyi.opensocial.labeler` starts with `fyi.opensocial.label`.
+/// `org.atgrp.labeler` starts with `org.atgrp.label`.
 const names = (text, id, before = '') =>
   new RegExp(`${before}${id.replace(/[.#]/g, '\\$&')}(?![\\w.])`).test(text);
 
@@ -373,12 +373,19 @@ const referred = (id) => {
 const mayGo = (id, field) =>
   ours(id.split('#')[0]) && !PUBLISHED && (field ? !code.includes(`"${field}"`) : !referred(id));
 
+// Each lexicon file in `base`, by its path and NSIDs as they are now, so
+// each schema of ours is compared with its own past under the namespace
+// it had there.
+const today = (text) => text.replace(/fyi([./])opensocial\1/g, 'org$1atgrp$1');
+const past = base
+  ? git('ls-tree', '-r', '--name-only', base, '--', 'lexicons')
+      .split('\n')
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => [today(f), JSON.parse(today(git('show', `${base}:${f}`)))])
+  : [];
+
 if (base) {
-  const listed = git('ls-tree', '-r', '--name-only', base, '--', 'lexicons')
-    .split('\n')
-    .filter((f) => f.endsWith('.json'));
-  for (const file of listed) {
-    const before = JSON.parse(git('show', `${base}:${file}`));
+  for (const [file, before] of past) {
     const after = now.get(file);
     if (!after && (RETIRED.has(before.id) || mayGo(before.id))) continue;
     if (!after) {
@@ -405,11 +412,7 @@ if (base) {
 // A query's parameters are the exception: XRPC lets them hold only values.
 if (base) {
   const published = new Set();
-  const listed = git('ls-tree', '-r', '--name-only', base, '--', 'lexicons')
-    .split('\n')
-    .filter((f) => f.endsWith('.json'));
-  for (const file of listed) {
-    const before = JSON.parse(git('show', `${base}:${file}`));
+  for (const [, before] of past) {
     for (const [name, def] of Object.entries(before.defs ?? {}))
       walk(def, `${before.id}#${name}`, (_, path) => published.add(path));
   }

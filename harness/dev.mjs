@@ -72,15 +72,15 @@ const unalias = () => {
 // Hikers, bob's, inviting alice: an invite waiting for her when she signs
 // in, as the header, its menu and the home page mark one.
 const as = (account, ...args) =>
-  execFileSync(join(root, 'target/debug/opensocial'), args, {
+  execFileSync(join(root, 'target/debug/atgrp'), args, {
     stdio: 'ignore',
     env: {
       ...process.env,
-      OPENSOCIAL_HOST: w.host,
-      OPENSOCIAL_HOST_DID: w.did,
+      ATGRP_HOST: w.host,
+      ATGRP_HOST_DID: w.did,
       PDS_URL: w.net.pds,
-      OPENSOCIAL_AS: account.handle,
-      OPENSOCIAL_PASSWORD: account.password
+      ATGRP_AS: account.handle,
+      ATGRP_PASSWORD: account.password
     }
   });
 const [alice, bob] = ['alice.test', 'bob.test'].map((h) =>
@@ -132,6 +132,6 @@ move here from ${w.base}/move; the code its server emails is at
 A group's address sends a browser to its page here: https://riders.${groups}
 
 The command, as alice:
-  OPENSOCIAL_HOST=${w.host} PDS_URL=${w.net.pds} OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=password just opensocial group show riders.${groups}
+  ATGRP_HOST=${w.host} PDS_URL=${w.net.pds} ATGRP_AS=alice.test ATGRP_PASSWORD=password just atgrp group show riders.${groups}
 
 ctrl-c stops it all.`);

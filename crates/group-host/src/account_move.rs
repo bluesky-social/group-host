@@ -172,7 +172,7 @@ impl Host {
     /// this host's `createAccount`, its identity, and reading its own
     /// repos and files in spaces, read_self reaching nobody else's.
     pub(crate) fn move_scope(&self) -> String {
-        let aud = escaped(&format!("{}#opensocial", self.config.service_did));
+        let aud = escaped(&format!("{}#atgrp", self.config.service_did));
         format!(
             "rpc:com.atproto.server.createAccount?aud={aud} identity:* space:*?authority=*&action=read_self"
         )
@@ -510,7 +510,7 @@ pub async fn start_account_move(
 ) -> Answer {
     let me = signed_in(&host, &headers, &format!("{INTERNAL}.startAccountMove")).await?;
     let mut m = moving(&host, &me)?;
-    let aud = format!("{}#opensocial", host.config.service_did);
+    let aud = format!("{}#atgrp", host.config.service_did);
     let asked = [
         ("aud", aud.as_str()),
         ("lxm", "com.atproto.server.createAccount"),

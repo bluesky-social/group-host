@@ -149,7 +149,7 @@ export async function start({
 
     // A group of alice's, as her own client would make one.
     const alice = net.accounts.find((a) => a.handle === 'alice.test');
-    const lxm = 'fyi.opensocial.internal.createGroup';
+    const lxm = 'org.atgrp.internal.createGroup';
     const made = await fetch(`${host}/xrpc/${lxm}`, {
       method: 'POST',
       headers: {

@@ -15,14 +15,14 @@ use atproto::space::SpaceRef;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const NS: &str = "fyi.opensocial";
+pub const NS: &str = "org.atgrp";
 /// The host's own methods and the views they answer with, beside the
 /// proposal's.
-pub const INTERNAL: &str = "fyi.opensocial.internal";
+pub const INTERNAL: &str = "org.atgrp.internal";
 /// A label, as a record the group writes beside its subject.
 pub const LABEL: &str = "com.atproto.label.record";
 /// The space policy group spaces are kept under, as a policy's `$type`.
-pub const POLICY: &str = "fyi.opensocial.policy";
+pub const POLICY: &str = "org.atgrp.policy";
 
 /// The actions the host's methods ask about.
 pub const ACTIONS: [&str; 11] = [
@@ -54,7 +54,7 @@ pub fn listed(record: &Value, key: &str, field: &str) -> Vec<String> {
 }
 
 /// The roles a membership record gives, each by its id, as the
-/// opensocial proposal lists them: `["member", "admin"]`.
+/// Atmosphere Groups proposal lists them: `["member", "admin"]`.
 pub fn roles_of(membership: &Value) -> Vec<String> {
     let roles = membership["roles"].as_array().into_iter().flatten();
     roles.filter_map(Value::as_str).map(String::from).collect()
@@ -71,7 +71,7 @@ pub struct PolicyGrant {
     pub scopes: Vec<String>,
 }
 
-/// A space's policy (`fyi.opensocial.policy`), as read, for the space it
+/// A space's policy (`org.atgrp.policy`), as read, for the space it
 /// is the policy of.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Policy {
@@ -186,7 +186,7 @@ const BY_METHOD: [(&str, &str); 2] = [
     ("resolveModSubject", "mod.resolve"),
 ];
 
-/// The actions holding `fyi.opensocial.authModerate` gives, as its
+/// The actions holding `org.atgrp.authModerate` gives, as its
 /// permissions do: memberships, invites, join requests and the
 /// moderation methods. Its labels are the meta and members spaces' alone
 /// ([`label_writes`]), so it gives no `label`, which is labels in every

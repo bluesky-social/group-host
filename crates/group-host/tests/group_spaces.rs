@@ -16,8 +16,8 @@ use group_host::repo::Write;
 use group_host::store::Registration;
 use serde_json::{Value as Json, json};
 
-const CALENDAR: &str = "fyi.opensocial.calendar";
-const POLICY: &str = "fyi.opensocial.policy";
+const CALENDAR: &str = "org.atgrp.calendar";
+const POLICY: &str = "org.atgrp.policy";
 const PUBLISHED: &str = "com.atproto.space.policy";
 
 fn calendar(did: &str, skey: &str) -> String {
@@ -130,7 +130,7 @@ async fn an_admin_makes_a_space() {
     let rides = calendar(&did, "rides");
     let made = policy(json!([
         {"role": "member", "read": true},
-        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=fyi.opensocial.event")]},
+        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=org.atgrp.event")]},
     ]));
     let body = json!({"spaceType": CALENDAR, "skey": "rides", "policy": made});
     let said = method(&h, &alice, &did, &rides, "createSpace", body).await;
@@ -216,7 +216,7 @@ async fn an_admin_makes_a_space() {
         ),
         (
             at("laps"),
-            json!({"spaceType": CALENDAR, "skey": "laps", "policy": policy(json!([{"role": "member", "scopes": ["repo:fyi.opensocial.event"]}]))}),
+            json!({"spaceType": CALENDAR, "skey": "laps", "policy": policy(json!([{"role": "member", "scopes": ["repo:org.atgrp.event"]}]))}),
             (400, "InvalidRequest"),
         ),
         // The meta and members spaces come with the group.
@@ -522,7 +522,7 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
         (
             &rides,
             change(
-                json!([{"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?collection=fyi.opensocial.event")]}, admin]),
+                json!([{"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?collection=org.atgrp.event")]}, admin]),
             ),
         ),
         // Reading, where he does not read.
@@ -551,7 +551,7 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
     let body = change(json!([
         {"role": "host", "read": true, "write": true},
         {"role": "member", "read": true, "scopes": [
-            format!("space:{CALENDAR}?collection=fyi.opensocial.event"),
+            format!("space:{CALENDAR}?collection=org.atgrp.event"),
             format!("space:{CALENDAR}?action=read_self"),
             "space:*?manage=delete",
         ]},
@@ -600,9 +600,9 @@ async fn an_admin_ends_a_space() {
             &did,
             &rides,
             &[Write::Create {
-                collection: "fyi.opensocial.event".into(),
+                collection: "org.atgrp.event".into(),
                 rkey: "first".into(),
-                value: json!({"$type": "fyi.opensocial.event", "name": "First ride", "map": picture}),
+                value: json!({"$type": "org.atgrp.event", "name": "First ride", "map": picture}),
             }],
         )
         .await

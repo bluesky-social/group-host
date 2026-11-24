@@ -67,7 +67,7 @@ steps:
     run: |
       export PATH=/opt/node/bin:$PATH
       # The host and the console side by side, as neither needs the other.
-      cargo build -p group-host -p opensocial & cargo=$!
+      cargo build -p group-host -p atgrp & cargo=$!
       (cd web && npm run build) || { kill $cargo; exit 1; }
       wait $cargo
   - name: flows

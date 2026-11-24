@@ -9,7 +9,7 @@
   let { data, form } = $props();
 </script>
 
-<svelte:head><title>opensocial</title></svelte:head>
+<svelte:head><title>{m.route_home_head()}</title></svelte:head>
 
 {#if !data.viewer}
   <Welcome title={m.route_home_welcome_title({ host: page.url.hostname })}

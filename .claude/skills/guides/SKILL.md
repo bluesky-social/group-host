@@ -93,7 +93,7 @@ path, and facts about it, one a line, tagged:
   refuses and what it then says, a limit, what happens after (name the
   file).
 - `[both]`
-- `[cli]` the `opensocial` command and MCP tool for the same act, from
+- `[cli]` the `atgrp` command and MCP tool for the same act, from
   `TOOLS` in `crates/group-host-mcp/src/lib.rs` and
   `docs/reference/cli.md`.
 

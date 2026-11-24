@@ -1,0 +1,18 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.meta",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:self",
+      "title": "Group: about",
+      "description": "The group's public face. Profile, rules, how to get in. Often readable by anyone, though may be private to members.",
+      "collections": [
+        "org.atgrp.profile",
+        "org.atgrp.rule",
+        "org.atgrp.labeler",
+        "com.atproto.label.record"
+      ]
+    }
+  }
+}

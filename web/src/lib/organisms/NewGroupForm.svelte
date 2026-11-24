@@ -33,7 +33,7 @@
   // address. A host that cannot say leaves it to the host to refuse.
   const free = async (l: string) => {
     const asked = await fetch(
-      `/xrpc/fyi.opensocial.internal.checkAddress?address=${encodeURIComponent(l + domain)}`
+      `/xrpc/org.atgrp.internal.checkAddress?address=${encodeURIComponent(l + domain)}`
     ).catch(() => null);
     const said: { available?: boolean } | null = asked?.ok ? await asked.json() : null;
     return said?.available !== false;

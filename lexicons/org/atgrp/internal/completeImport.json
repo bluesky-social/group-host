@@ -1,0 +1,71 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.completeImport",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Finish moving an account here: send the PLC operation its old server signed, which must give it to this host as importAccount said, switch it on and tell the network, and make the group's spaces with the caller as its admin. Only for whoever started the move.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did",
+            "operation"
+          ],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "operation": {
+              "type": "unknown",
+              "description": "The signed PLC operation, as com.atproto.identity.signPlcOperation answers it."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did",
+            "handle",
+            "address",
+            "meta",
+            "members"
+          ],
+          "properties": {
+            "did": {
+              "type": "string",
+              "format": "did"
+            },
+            "handle": {
+              "type": "string",
+              "format": "handle"
+            },
+            "address": {
+              "type": "string",
+              "description": "Its address here: one label under this host's handle domain."
+            },
+            "meta": {
+              "type": "string"
+            },
+            "members": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "InvalidOperation"
+        }
+      ]
+    }
+  }
+}

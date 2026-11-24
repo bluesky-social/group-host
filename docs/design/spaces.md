@@ -19,13 +19,13 @@ and the authority for each group's own spaces.
 ## The spaces a group keeps
 
 Starting a group makes two spaces. Meta,
-`at://<group>/space/fyi.opensocial.meta/self`, holds the group's profile,
+`at://<group>/space/org.atgrp.meta/self`, holds the group's profile,
 its rules and its labeler. Members,
-`at://<group>/space/fyi.opensocial.members/self`, holds the roles, the
+`at://<group>/space/org.atgrp.members/self`, holds the roles, the
 permissions and the memberships. It also holds the index: a
-`fyi.opensocial.space` record, `{space, createdAt}`, for each of the
+`org.atgrp.space` record, `{space, createdAt}`, for each of the
 group's listed spaces, which apps read to find them. A group listed on
-the network points at its meta space from a `fyi.opensocial.declaration`
+the network points at its meta space from a `org.atgrp.declaration`
 record in its public repo.
 
 A group makes more spaces, and changes and ends them, through atproto's
@@ -53,7 +53,7 @@ repo, the space, the revision and that digest.
 
 The group also writes in spaces it isn't the authority for. An invite
 goes in the group's repo in the invitee's inbox,
-`at://<invitee>/space/fyi.opensocial.invites/self`. The invitee's app
+`at://<invitee>/space/org.atgrp.invites/self`. The invitee's app
 makes it a `com.atproto.memberspace.policy` space with `publicWrite` set
 and no members, so any group may write there and only its owner reads
 it. The host tells the invitee's PDS of each write
@@ -76,7 +76,7 @@ Details:
 ## Deciding who reads and writes
 
 Members and roles change, so a space's rule can't be a fixed list of
-people. Each space is kept under a policy, `fyi.opensocial.policy`, that
+people. Each space is kept under a policy, `org.atgrp.policy`, that
 speaks of roles. The host keeps it, and checks it against the user's
 roles on every request. It holds:
 
@@ -110,7 +110,7 @@ refused, and they change only when the policy does.
 A space is made, changed, ended and read by atproto's own methods,
 `com.atproto.space.createSpace`, `updateSpace`, `deleteSpace` and
 `getSpace`, called as the group. That's an app signed in as the group,
-or a group token from `fyi.opensocial.internal.getGroupAuth`
+or a group token from `org.atgrp.internal.getGroupAuth`
 ([signing in](signing-in.md)). An app password can't call them, since
 its session never reaches spaces. Each call is checked twice:
 
@@ -125,7 +125,7 @@ its session never reaches spaces. Each call is checked twice:
   its policy.
 
 `createSpace` takes a type, a key (or makes a new one) and a policy. Any
-policy but `fyi.opensocial.policy` fails `UnsupportedPolicy`. The host
+policy but `org.atgrp.policy` fails `UnsupportedPolicy`. The host
 also refuses a grant of a role the group doesn't have, two grants of one
 role, a scope that's no space scope, and the meta and members types. A
 space is made whole or not at all: if its policy can't be published,
@@ -249,7 +249,7 @@ for. The host keeps documents five minutes. When the kept key turns a
 signature away, the host checks it again against a fresh document, so a
 key that just changed still works.
 
-`fyi.opensocial.internal.getSpaceBlob` serves a file from the member who wrote
+`org.atgrp.internal.getSpaceBlob` serves a file from the member who wrote
 it, with the group's credential. It fetches only from a repo in the
 space's writer set, so a caller can't point the host at a server of
 their choosing. The bytes must hash to the CID asked for.
@@ -262,8 +262,8 @@ Details:
 
 ## Reading a space through the host
 
-The `fyi.opensocial.*` methods answer from the index.
-`fyi.opensocial.internal.listSpaceRecords` brings the index up to date, waiting
+The `org.atgrp.*` methods answer from the index.
+`org.atgrp.internal.listSpaceRecords` brings the index up to date, waiting
 at most 5 seconds, then answers newest first. It orders by when the
 index first saw each record, its `createdAt`, which reading a repo again
 doesn't move. It and `getSpaceBlob` check the policy on every call, so

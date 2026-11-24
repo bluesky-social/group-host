@@ -44,5 +44,11 @@ steps:
       # target kept in debug/deps from before are stale, and cargo-llvm-cov,
       # walking the whole directory, would count their lines as never run.
       rm -rf target/llvm-cov-target/debug/deps
+      # So are those under debug/build/ of a package Cargo.lock no longer
+      # names, such as a crate taken out of the workspace.
+      known=$(sed -n 's/^name = "\(.*\)"$/\1/p' Cargo.lock)
+      for dir in target/llvm-cov-target/debug/build/*/; do
+        echo "$known" | grep -qx "$(basename "$dir")" || rm -rf "$dir"
+      done
       cargo llvm-cov --workspace --ignore-filename-regex '(tests/|harness/)' \
         --fail-under-lines 100 --fail-under-functions 100 --show-missing-lines

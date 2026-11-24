@@ -21,7 +21,7 @@ use serde_json::{Value as Json, json};
 use std::sync::{Arc, Mutex};
 
 pub const RIDERS: &str = "riders.groups.test";
-pub const RULE: &str = "fyi.opensocial.rule";
+pub const RULE: &str = "org.atgrp.rule";
 
 pub fn now() -> u64 {
     now_millis() as u64 / 1000
@@ -33,12 +33,12 @@ pub fn rule(title: &str) -> Json {
 
 /// A group space's policy that grants nobody anything.
 pub fn closed() -> Json {
-    json!({"$type": "fyi.opensocial.policy", "grants": []})
+    json!({"$type": "org.atgrp.policy", "grants": []})
 }
 
 /// A group space's policy that lets anyone read.
 pub fn open() -> Json {
-    json!({"$type": "fyi.opensocial.policy", "publicRead": true, "grants": []})
+    json!({"$type": "org.atgrp.policy", "publicRead": true, "grants": []})
 }
 
 pub fn create(collection: &str, rkey: &str, value: Json) -> Write {

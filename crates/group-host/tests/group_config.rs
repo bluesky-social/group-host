@@ -144,7 +144,7 @@ async fn refuses_a_profile_it_should_not_keep() {
         riders(json!({"displayName": "  "})),
         riders(json!({"joinPolicy": "sometimes"})),
         // A join policy is one of the words the lexicon knows.
-        riders(json!({"joinPolicy": "fyi.opensocial.profile#invite"})),
+        riders(json!({"joinPolicy": "org.atgrp.profile#invite"})),
         riders(json!({"url": "ftp://riders.example"})),
         // Pictures that are not the group's own images, as it kept them.
         riders(json!({"avatar": words})),
@@ -332,7 +332,8 @@ async fn declares_the_group_while_anyone_may_read_its_meta() {
     assert_eq!(said.status, 200, "{}", said.body);
     assert!(declared());
     // It names the group's own meta, at self.
-    let elsewhere = json!({"$type": collection, "meta": "at://did:plc:elsewhere/space/fyi.opensocial.meta/self"});
+    let elsewhere =
+        json!({"$type": collection, "meta": "at://did:plc:elsewhere/space/org.atgrp.meta/self"});
     assert_eq!(
         put("self", elsewhere).await.error(),
         (400, "InvalidRequest")

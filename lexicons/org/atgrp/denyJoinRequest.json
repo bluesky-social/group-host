@@ -1,0 +1,44 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.denyJoinRequest",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Deny a pending join request. Requires admit. The requester sees it as no request at all, and may ask again.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group",
+            "member"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "member": {
+              "type": "string",
+              "format": "did",
+              "description": "Who asked to join."
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "JoinRequestNotFound"
+        }
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
+}

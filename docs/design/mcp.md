@@ -80,9 +80,9 @@ Details:
 
 ## Tools and calls
 
-Each tool is the twin of a command of `opensocial`
-([the commands](../reference/cli.md#opensocial)). For example,
-`opensocial member assign` is the tool `member_assign`. It takes the
+Each tool is the twin of a command of `atgrp`
+([the commands](../reference/cli.md#atgrp)). For example,
+`atgrp member assign` is the tool `member_assign`. It takes the
 same arguments, with its flags named in snake case. Both come from one
 list of tools in `crates/group-host-mcp`, so they can't drift. The tools
 are grouped the way the commands are: the group, its profile, rules,

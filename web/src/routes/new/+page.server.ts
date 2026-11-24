@@ -1,4 +1,4 @@
-import type * as getViewer from '#lib/lexicons/fyi/opensocial/internal/getViewer.ts';
+import type * as getViewer from '#lib/lexicons/org/atgrp/internal/getViewer.ts';
 import type * as describeServer from '#lib/lexicons/com/atproto/server/describeServer.ts';
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
@@ -20,11 +20,7 @@ async function domainOf(event: Pick<Event, 'fetch'>) {
 
 /** Who is starting a group, whether this host lets them, and the domain its address is under. */
 export const load: PageServerLoad = async (event) => {
-  const { actor } = await xrpc<typeof getViewer.main>(
-    event,
-    'fyi.opensocial.internal.getViewer',
-    {}
-  );
+  const { actor } = await xrpc<typeof getViewer.main>(event, 'org.atgrp.internal.getViewer', {});
   return { actor: actor ?? null, domain: await domainOf(event) };
 };
 
@@ -40,7 +36,7 @@ export const actions: Actions = {
       description: text('description') || undefined,
       joinPolicy: text('joinPolicy') || undefined
     };
-    const res = await event.fetch('/xrpc/fyi.opensocial.internal.createGroup', {
+    const res = await event.fetch('/xrpc/org.atgrp.internal.createGroup', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input)

@@ -10,7 +10,7 @@ versioned_files = [
     "Cargo.toml",
     { path = "Cargo.lock", dependency = "group-host" },
     { path = "Cargo.lock", dependency = "group-host-mcp" },
-    { path = "Cargo.lock", dependency = "opensocial" },
+    { path = "Cargo.lock", dependency = "atgrp" },
 ]
 changelog = "CHANGELOG.md"
 

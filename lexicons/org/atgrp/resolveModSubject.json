@@ -1,0 +1,67 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.resolveModSubject",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Resolve or escalate a subject, optionally with a note. Repeating the current status adds the note. Requires mod.resolve.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group",
+            "subject",
+            "status"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "subject": {
+              "type": "string",
+              "format": "uri",
+              "description": "An account DID or record URI."
+            },
+            "cid": {
+              "type": "string",
+              "format": "cid",
+              "description": "If set, a specific version of the record."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "escalated"
+              ]
+            },
+            "note": {
+              "type": "string",
+              "maxGraphemes": 2000,
+              "maxLength": 20000
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "org.atgrp.defs#modSubjectView"
+        }
+      },
+      "errors": [
+        {
+          "name": "InvalidSubject",
+          "description": "The subject isn't an account, a record in this group, or a record in a public repo."
+        },
+        {
+          "name": "SubjectNotFound",
+          "description": "The subject has never been reported."
+        }
+      ]
+    }
+  }
+}

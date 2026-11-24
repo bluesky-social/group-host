@@ -1,0 +1,15 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.invites",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:self",
+      "title": "Group invites",
+      "description": "A user's inbox for group invites, under their own DID. Created with a memberspace policy that sets publicWrite, so groups may write invites here and read only their own.",
+      "collections": [
+        "org.atgrp.invite"
+      ]
+    }
+  }
+}

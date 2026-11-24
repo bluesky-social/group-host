@@ -8,7 +8,7 @@
 //!   and by whom.
 //! - **The queue** (subjects, their status, what happened to each) is the
 //!   host's to keep, not the group's to publish.
-//! - **Reports** come through `fyi.opensocial.createReport`, from whoever
+//! - **Reports** come through `org.atgrp.createReport`, from whoever
 //!   can read what they report: an account in the group, a record in one
 //!   of its spaces here, or a member's record in their public repo.
 
@@ -424,23 +424,23 @@ fn subject_view(s: &Subject, actors: &HashMap<String, Value>) -> Value {
 fn event_view(e: &Event, actors: &HashMap<String, Value>) -> Value {
     let event = match e.kind.as_str() {
         "report" => json!({
-            "$type": "fyi.opensocial.defs#reportEvent",
+            "$type": "org.atgrp.defs#reportEvent",
             "reasonType": e.reason_type,
             "reason": e.reason,
             "rule": e.rule,
         }),
         "status" => json!({
-            "$type": "fyi.opensocial.defs#statusEvent",
+            "$type": "org.atgrp.defs#statusEvent",
             "status": e.status,
             "note": e.note,
         }),
         "label" | "negate" => json!({
-            "$type": "fyi.opensocial.defs#labelEvent",
+            "$type": "org.atgrp.defs#labelEvent",
             "uri": e.uri,
             "val": e.val,
             "deleted": e.kind == "negate",
         }),
-        _ => json!({"$type": "fyi.opensocial.defs#ejectEvent"}),
+        _ => json!({"$type": "org.atgrp.defs#ejectEvent"}),
     };
     present(json!({
         "id": e.seq.to_string(),

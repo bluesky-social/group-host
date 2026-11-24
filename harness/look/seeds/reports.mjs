@@ -5,7 +5,7 @@
 
 import { serviceAuth } from '../../world.mjs';
 
-export default async ({ world, who, opensocial }) => {
+export default async ({ world, who, atgrp }) => {
   const g = 'lanterns.groups.test';
   const call = async (name, lxm, body, query) => {
     const token = await serviceAuth(world.pds, who[name], world.did, lxm);
@@ -24,10 +24,10 @@ export default async ({ world, who, opensocial }) => {
   const { did } = await fetch(
     `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=${g}`
   ).then((r) => r.json());
-  const { group } = await call('alice', 'fyi.opensocial.internal.getGroup', null, `group=${did}`);
+  const { group } = await call('alice', 'org.atgrp.internal.getGroup', null, `group=${did}`);
   const [rule] = group.rules ?? [];
   const space = `at://${did}/space/com.example.forum/talk`;
-  opensocial(
+  atgrp(
     'alice',
     'space',
     'create',
@@ -43,7 +43,7 @@ export default async ({ world, who, opensocial }) => {
     ['off-topic', 'Off-topic', 'Not about walking, lanterns or the ridge.', 'warn'],
     ['selling', 'Selling', 'Selling something, outside the swap thread.', 'hide']
   ])
-    opensocial(
+    atgrp(
       'alice',
       'label',
       'define',
@@ -58,7 +58,7 @@ export default async ({ world, who, opensocial }) => {
     );
   // What a report is about: its subject, and the version of a record.
   const report = (name, about, reasonType, words, cites) =>
-    call(name, 'fyi.opensocial.createReport', {
+    call(name, 'org.atgrp.createReport', {
       group: did,
       ...about,
       reasonType,
@@ -72,9 +72,7 @@ export default async ({ world, who, opensocial }) => {
     account('dan'),
     'rude',
     'Told a new member to stay home if they cannot keep up.',
-    rule
-      ? `at://${did}/space/fyi.opensocial.meta/self/${did}/fyi.opensocial.rule/${rule.rkey}`
-      : null
+    rule ? `at://${did}/space/org.atgrp.meta/self/${did}/org.atgrp.rule/${rule.rkey}` : null
   );
   await report(
     'carol',
@@ -89,7 +87,7 @@ export default async ({ world, who, opensocial }) => {
   await report('dan', account('erin'), 'other');
   await report('frank', account('bob'), 'spam', 'Sells headlamps.');
   const resolve = (name, key, status, note) =>
-    call(name, 'fyi.opensocial.resolveModSubject', {
+    call(name, 'org.atgrp.resolveModSubject', {
       group: did,
       ...account(key),
       status,

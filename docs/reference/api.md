@@ -1,12 +1,12 @@
 # HTTP and XRPC API
 
 This is what the host answers over HTTP, at `PUBLIC_URL` ([config](config.md)).
-Each `fyi.opensocial.*` method has its lexicon under
-`lexicons/fyi/opensocial`, which says what it takes and answers, and the
-docs site shows it under the method. The `fyi.opensocial.internal.*`
-methods, under `lexicons/fyi/opensocial/internal`, are this host's own,
+Each `org.atgrp.*` method has its lexicon under
+`lexicons/org/atgrp`, which says what it takes and answers, and the
+docs site shows it under the method. The `org.atgrp.internal.*`
+methods, under `lexicons/org/atgrp/internal`, are this host's own,
 for its console, its command and its operators. They aren't part of the
-opensocial proposal, and may change. The design pages say why each part
+Atmosphere Groups proposal, and may change. The design pages say why each part
 works the way it does.
 
 An XRPC error is JSON, the same as atproto's servers send: an HTTP status
@@ -15,7 +15,7 @@ any method may answer these:
 
 | Error                                                          | When                                                                                                                                                                                                                                                   |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `InvalidRequest`                                               | a parameter is missing or bad. The host checks a `fyi.opensocial.*` method's parameters and JSON input against its lexicon before anything else, and says where and what is wrong (`input.roles[2].role must not be longer than 64 bytes`)             |
+| `InvalidRequest`                                               | a parameter is missing or bad. The host checks a `org.atgrp.*` method's parameters and JSON input against its lexicon before anything else, and says where and what is wrong (`input.roles[2].role must not be longer than 64 bytes`)             |
 | `PayloadTooLarge`                                              | a JSON input is over 2 MiB                                                                                                                                                                                                                             |
 | `AuthMissing`                                                  | the method needs a caller and there isn't one                                                                                                                                                                                                          |
 | `BadJwt`, `BadJwtAudience`, `BadJwtIss`, `BadJwtLexiconMethod` | service auth doesn't hold up: a bad token, a token for another service, a signer whose key can't be found, or a token for another method                                                                                                               |
@@ -27,7 +27,7 @@ any method may answer these:
 
 The atproto methods answer with atproto's own names (`RepoNotFound`,
 `BlobNotFound`, `InvalidSwap`, `CredentialRevoked`, …). When an app
-writes a record as a group in one of our own `fyi.opensocial.*`
+writes a record as a group in one of our own `org.atgrp.*`
 collections, the host checks it against its lexicon and answers
 `validationStatus: "valid"`. It keeps a record of any other collection
 without reading it and answers `unknown`. A GET or POST under `/xrpc/`
@@ -40,8 +40,8 @@ The host's own methods know their caller in one of two ways:
 - Service auth. That's `Authorization: Bearer <jwt>`, from the caller's
   own PDS (`com.atproto.server.getServiceAuth`), with the host's
   `SERVICE_DID` as `aud` (or `SERVICE_DID#<service>`, the way a PDS
-  proxying to the host's `#opensocial` service names it) and the
-  method's NSID as `lxm`. An app, or the `opensocial` command, calls as
+  proxying to the host's `#atgrp` service names it) and the
+  method's NSID as `lxm`. An app, or the `atgrp` command, calls as
   a person this way.
 - The console's cookie, `__Host-group_host_session` (`group_host_session`
   where the console isn't on https). The host signs it once someone
@@ -60,16 +60,16 @@ spaces through the atproto methods below.
 
 | Method                                  | What it does                                                                                                                                                                                                                              |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST fyi.opensocial.internal.createGroup`       | starts a group, with the caller as its founder and first admin. `metaPublicRead: false` keeps its `meta` space from anyone but its members                                                                                                |
-| `GET fyi.opensocial.internal.getGroup`           | shows a group as the caller may see it. Someone signed in who may read `meta` gets its profile and rules, and one who may read `members` also gets its member count, roles and spaces. A member is told, as `grantable`, which actions' scopes and permission sets they hold enough of to give a role, and as `labelSpaces` the spaces where their roles write labels. Someone not signed in gets only its DID and handle |
-| `GET fyi.opensocial.internal.checkAddress`       | says whether an address (one label under `HANDLE_DOMAIN`) is free for a new group. Anyone may ask                                                                                                                                         |
-| `GET fyi.opensocial.internal.checkGroupHandle`   | says whether a domain names the group yet, so it can be its handle                                                                                                                                                                        |
-| `POST fyi.opensocial.internal.updateGroupHandle` | gives the group a handle on its own domain, or gives its address back                                                                                                                                                                     |
-| `POST fyi.opensocial.internal.putGroupDomain`    | serves the group at its handle's own domain once that domain answers as this host. Its address and `www.` under the domain redirect there (`NoOwnDomain`, `NotReaching`) ([its own domain](../design/groups.md#its-own-domain)) |
-| `POST fyi.opensocial.internal.deleteGroupDomain` | stops serving the group at its own domain                                                                                                                                                                                                 |
-| `POST fyi.opensocial.internal.deactivateGroup`   | switches a group off until `activateGroup`                                                                                                                                                                                                |
-| `POST fyi.opensocial.internal.activateGroup`     | switches a deactivated group back on                                                                                                                                                                                                      |
-| `POST fyi.opensocial.internal.deleteGroup`       | deletes a group for good ([groups](../design/groups.md))                                                                                                                                                                                  |
+| `POST org.atgrp.internal.createGroup`       | starts a group, with the caller as its founder and first admin. `metaPublicRead: false` keeps its `meta` space from anyone but its members                                                                                                |
+| `GET org.atgrp.internal.getGroup`           | shows a group as the caller may see it. Someone signed in who may read `meta` gets its profile and rules, and one who may read `members` also gets its member count, roles and spaces. A member is told, as `grantable`, which actions' scopes and permission sets they hold enough of to give a role, and as `labelSpaces` the spaces where their roles write labels. Someone not signed in gets only its DID and handle |
+| `GET org.atgrp.internal.checkAddress`       | says whether an address (one label under `HANDLE_DOMAIN`) is free for a new group. Anyone may ask                                                                                                                                         |
+| `GET org.atgrp.internal.checkGroupHandle`   | says whether a domain names the group yet, so it can be its handle                                                                                                                                                                        |
+| `POST org.atgrp.internal.updateGroupHandle` | gives the group a handle on its own domain, or gives its address back                                                                                                                                                                     |
+| `POST org.atgrp.internal.putGroupDomain`    | serves the group at its handle's own domain once that domain answers as this host. Its address and `www.` under the domain redirect there (`NoOwnDomain`, `NotReaching`) ([its own domain](../design/groups.md#its-own-domain)) |
+| `POST org.atgrp.internal.deleteGroupDomain` | stops serving the group at its own domain                                                                                                                                                                                                 |
+| `POST org.atgrp.internal.deactivateGroup`   | switches a group off until `activateGroup`                                                                                                                                                                                                |
+| `POST org.atgrp.internal.activateGroup`     | switches a deactivated group back on                                                                                                                                                                                                      |
+| `POST org.atgrp.internal.deleteGroup`       | deletes a group for good ([groups](../design/groups.md))                                                                                                                                                                                  |
 
 A group's address, and its own domain once it's served there, answer
 these too. A request to the host's own name never does:
@@ -84,20 +84,20 @@ these too. A request to the host's own name never does:
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.internal.listMembers` | lists the group's members and their roles, a page at a time in DID order (`limit`, `cursor`), filtered to those whose handle or DID contains `q`. It's for a caller who may read the members space |
-| `POST fyi.opensocial.leaveGroup` | leaves a group, unless no one else could configure it (`LastConfigurer`) |
-| `POST fyi.opensocial.requestJoin` | asks to join, or redeems an invite |
-| `GET fyi.opensocial.internal.getJoinRequest` | shows the caller's own request to join while it waits |
-| `POST fyi.opensocial.cancelJoinRequest` | withdraws that request |
-| `GET fyi.opensocial.listJoinRequests` | lists the waiting requests, for those who admit people. A cursor it never gave fails with `InvalidCursor` |
-| `POST fyi.opensocial.denyJoinRequest` | turns a request down |
-| `GET fyi.opensocial.internal.listInvites` | lists the group's invites that are still waiting, each with the invitee's handle |
-| `GET fyi.opensocial.internal.getActorInvites` | lists the caller's own invites from groups here |
-| `POST fyi.opensocial.internal.declineInvite` | turns an invite down |
+| `GET org.atgrp.internal.listMembers` | lists the group's members and their roles, a page at a time in DID order (`limit`, `cursor`), filtered to those whose handle or DID contains `q`. It's for a caller who may read the members space |
+| `POST org.atgrp.leaveGroup` | leaves a group, unless no one else could configure it (`LastConfigurer`) |
+| `POST org.atgrp.requestJoin` | asks to join, or redeems an invite |
+| `GET org.atgrp.internal.getJoinRequest` | shows the caller's own request to join while it waits |
+| `POST org.atgrp.cancelJoinRequest` | withdraws that request |
+| `GET org.atgrp.listJoinRequests` | lists the waiting requests, for those who admit people. A cursor it never gave fails with `InvalidCursor` |
+| `POST org.atgrp.denyJoinRequest` | turns a request down |
+| `GET org.atgrp.internal.listInvites` | lists the group's invites that are still waiting, each with the invitee's handle |
+| `GET org.atgrp.internal.getActorInvites` | lists the caller's own invites from groups here |
+| `POST org.atgrp.internal.declineInvite` | turns an invite down |
 
 A group's roles, what each may do, and who holds them are records in its
-members space: `fyi.opensocial.role`, each with its scopes and the roles
-it may assign (`*` for every role), and `fyi.opensocial.membership`.
+members space: `org.atgrp.role`, each with its scopes and the roles
+it may assign (`*` for every role), and `org.atgrp.membership`.
 They're written as the group with the `com.atproto.space.*` writes
 [below](#signing-apps-in-as-a-group). Writing a membership for someone
 waiting to join lets them in. Writing one for a member changes their
@@ -113,7 +113,7 @@ roles, and deleting one puts the member out
 | `MemberRole` | a membership leaves out `member` |
 | `JoinRequestNotFound` | a membership is made for someone who isn't waiting to join |
 
-A group invites someone by writing an `fyi.opensocial.invite` record in
+A group invites someone by writing an `org.atgrp.invite` record in
 their inbox as the group. It takes the invite back by deleting it, with
 the same writes ([membership](../design/membership.md#invites)).
 
@@ -121,10 +121,10 @@ the same writes ([membership](../design/membership.md#invites)).
 
 | Method                              | What it does                                                                                                                                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET fyi.opensocial.internal.getViewer`      | says who's asking, by the console's cookie or service auth. It also lists the other accounts the browser is signed in to (`accounts`), and where someone without an account makes one (`signUpAt`, `SIGNUP_PDS`)               |
-| `GET fyi.opensocial.internal.getActor`       | gives a person's DID and handle to someone signed in, about themselves or anyone the host shows (a member of a group here, or someone asking to join one). Asked about themselves, it also says whether they may start a group |
-| `GET fyi.opensocial.internal.getActorGroups` | lists the groups here a person is in, as far as the caller shares them                                                                                                                                                         |
-| `GET fyi.opensocial.internal.searchActors`   | finds accounts whose handle matches what's typed, from the source `ACTOR_SEARCH` names. Anyone may ask                                                                                                                         |
+| `GET org.atgrp.internal.getViewer`      | says who's asking, by the console's cookie or service auth. It also lists the other accounts the browser is signed in to (`accounts`), and where someone without an account makes one (`signUpAt`, `SIGNUP_PDS`)               |
+| `GET org.atgrp.internal.getActor`       | gives a person's DID and handle to someone signed in, about themselves or anyone the host shows (a member of a group here, or someone asking to join one). Asked about themselves, it also says whether they may start a group |
+| `GET org.atgrp.internal.getActorGroups` | lists the groups here a person is in, as far as the caller shares them                                                                                                                                                         |
+| `GET org.atgrp.internal.searchActors`   | finds accounts whose handle matches what's typed, from the source `ACTOR_SEARCH` names. Anyone may ask                                                                                                                         |
 | `GET /img/<did>/<cid>`              | serves a group's or a person's image to anyone who may see it. That's anyone for an image in a public repo, and otherwise only someone signed in to the console. One the group has taken down in a space, by its writer or a record holding it, it serves to nobody; a moderator reads it through `getModSubjectBlob` |
 
 ## Spaces
@@ -133,8 +133,8 @@ A group's spaces, and the records in them ([spaces](../design/spaces.md)).
 
 | Method | What it does |
 | --- | --- |
-| `GET fyi.opensocial.internal.listSpaceRecords` | lists the records in a space from the host's index of it, for someone signed in who may read it, but none the group has taken down with a `!takedown` label, for a moderator as for anyone |
-| `GET fyi.opensocial.internal.getSpaceBlob` | serves a file in a space, read from the repo of whoever wrote it, unless the group has taken down its writer or a record holding it |
+| `GET org.atgrp.internal.listSpaceRecords` | lists the records in a space from the host's index of it, for someone signed in who may read it, but none the group has taken down with a `!takedown` label, for a moderator as for anyone |
+| `GET org.atgrp.internal.getSpaceBlob` | serves a file in a space, read from the repo of whoever wrote it, unless the group has taken down its writer or a record holding it |
 
 The host is the spaces' authority and the PDS of the group's own repo in
 each, so it answers the space alpha's methods:
@@ -163,16 +163,16 @@ The host is each group's OAuth server ([signing in](../design/signing-in.md)):
 
 | Method                                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST fyi.opensocial.internal.provisionGroup`       | lets an app that `PROVISIONING_CLIENTS` names start a group for a person, and signs the app in to it. It takes `metaPublicRead` as `createGroup` does                                                                                                                                                                                                                                                                           |
-| `POST fyi.opensocial.internal.getGroupAuth`         | gives a member with a DPoP proof a 15-minute token to act as the group. In one of the group's spaces, it's scoped to what their roles may write there as the group, and to the `manage=` operations they may use on it. For a space not made yet, that's `manage=create`, if their roles hold `space.create`. In someone's inbox, it lets a member who may invite write invites there. It answers `Forbidden` if that's nothing |
-| `GET fyi.opensocial.internal.getAuthorization`      | shows an app's request to sign in as a group, as the caller would approve it                                                                                                                                                                                                                                                                                                                                                    |
-| `POST fyi.opensocial.internal.approveAuthorization` | approves the request with what the caller's roles allow                                                                                                                                                                                                                                                                                                                                                                         |
-| `POST fyi.opensocial.internal.declineAuthorization` | declines the request                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `GET fyi.opensocial.internal.listGroupTokens`       | lists the apps signed in as the group and what they did lately, each with the handle of whoever let it in. A write also comes in its parts (`write`: operation, collection, key, space) and with whom it's about (`subject`)                                                                                                                                                                                                    |
-| `POST fyi.opensocial.internal.revokeGroupToken`     | signs one app out                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `POST fyi.opensocial.internal.createAppPassword`    | makes an app password for the group, for an app that signs in with one                                                                                                                                                                                                                                                                                                                                                          |
-| `GET fyi.opensocial.internal.listAppPasswords`      | lists the group's app passwords, each with its owner's handle. It never shows the passwords                                                                                                                                                                                                                                                                                                                                     |
-| `POST fyi.opensocial.internal.revokeAppPassword`    | revokes one, and signs out its apps                                                                                                                                                                                                                                                                                                                                                                                             |
+| `POST org.atgrp.internal.provisionGroup`       | lets an app that `PROVISIONING_CLIENTS` names start a group for a person, and signs the app in to it. It takes `metaPublicRead` as `createGroup` does                                                                                                                                                                                                                                                                           |
+| `POST org.atgrp.internal.getGroupAuth`         | gives a member with a DPoP proof a 15-minute token to act as the group. In one of the group's spaces, it's scoped to what their roles may write there as the group, and to the `manage=` operations they may use on it. For a space not made yet, that's `manage=create`, if their roles hold `space.create`. In someone's inbox, it lets a member who may invite write invites there. It answers `Forbidden` if that's nothing |
+| `GET org.atgrp.internal.getAuthorization`      | shows an app's request to sign in as a group, as the caller would approve it                                                                                                                                                                                                                                                                                                                                                    |
+| `POST org.atgrp.internal.approveAuthorization` | approves the request with what the caller's roles allow                                                                                                                                                                                                                                                                                                                                                                         |
+| `POST org.atgrp.internal.declineAuthorization` | declines the request                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `GET org.atgrp.internal.listGroupTokens`       | lists the apps signed in as the group and what they did lately, each with the handle of whoever let it in. A write also comes in its parts (`write`: operation, collection, key, space) and with whom it's about (`subject`)                                                                                                                                                                                                    |
+| `POST org.atgrp.internal.revokeGroupToken`     | signs one app out                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `POST org.atgrp.internal.createAppPassword`    | makes an app password for the group, for an app that signs in with one                                                                                                                                                                                                                                                                                                                                                          |
+| `GET org.atgrp.internal.listAppPasswords`      | lists the group's app passwords, each with its owner's handle. It never shows the passwords                                                                                                                                                                                                                                                                                                                                     |
+| `POST org.atgrp.internal.revokeAppPassword`    | revokes one, and signs out its apps                                                                                                                                                                                                                                                                                                                                                                                             |
 
 An app signed in this way, or with an app password, uses these as the
 group:
@@ -183,7 +183,7 @@ group:
 | `POST com.atproto.server.createSession`, `POST com.atproto.server.refreshSession`, `POST com.atproto.server.deleteSession`                                                             | handle an app password's sessions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `POST com.atproto.repo.createRecord`, `POST com.atproto.repo.putRecord`, `POST com.atproto.repo.deleteRecord`, `POST com.atproto.repo.applyWrites`, `POST com.atproto.repo.uploadBlob` | write to the group's public repo                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `POST com.atproto.space.createRecord`, `POST com.atproto.space.putRecord`, `POST com.atproto.space.deleteRecord`, `POST com.atproto.space.applyWrites`                                 | write to the group's repo in a space. That's one of its own spaces, or someone's inbox, where it writes and deletes its invites to them (`AlreadyMember`, `InviteNotFound`). A label (`com.atproto.label.record`) is written and deleted in any of the group's spaces, beside its subject. A label on a member's record in their public repo goes in the members space ([moderation](../design/moderation.md#labels))                                                                                                                                                                                     |
-| `POST com.atproto.space.createSpace`                                                                                                                                                   | makes a space of `spaceType` (and `skey`, or a new one) under `policy`, an `fyi.opensocial.policy`. It publishes the policy and lists the space in the index unless the policy sets `unlisted`, and answers the `space`. It needs `manage=create` in the scope (`ScopeMissing`) and a role holding `space.create` (`NotAuthorized`). It refuses another policy type (`UnsupportedPolicy`), the meta and members types, a grant of a role the group lacks, two grants of one role, and a scope that's no space scope (`InvalidRequest`) ([spaces](../design/spaces.md#making-changing-and-ending-a-space)) |
+| `POST com.atproto.space.createSpace`                                                                                                                                                   | makes a space of `spaceType` (and `skey`, or a new one) under `policy`, an `org.atgrp.policy`. It publishes the policy and lists the space in the index unless the policy sets `unlisted`, and answers the `space`. It needs `manage=create` in the scope (`ScopeMissing`) and a role holding `space.create` (`NotAuthorized`). It refuses another policy type (`UnsupportedPolicy`), the meta and members types, a grant of a role the group lacks, two grants of one role, and a scope that's no space scope (`InvalidRequest`) ([spaces](../design/spaces.md#making-changing-and-ending-a-space)) |
 | `POST com.atproto.space.updateSpace`                                                                                                                                                   | puts the group's `space` under a new `policy`, published, and listed or unlisted as it says. It needs `manage=update` in the scope (`ScopeMissing`), and a role holding `space.configure` or a `manage=update` scope in the space's own policy (`NotAuthorized`). It refuses changing the grant of a role the caller may not assign, adding a scope their roles don't hold, and granting `read` or `write`, or turning on `publicRead`, where they don't have it (`NotAuthorized`). On the members space, it refuses a policy that takes `read` or `write` from `member` or turns on `publicRead` (`MembersSpaceFixed`). It refuses a policy as `createSpace` does, and a space the group doesn't have (`SpaceNotFound`) |
 | `POST com.atproto.space.deleteSpace`                                                                                                                                                   | ends the group's `space`: out of the index, its syncers told, and the group's repo in it gone. It needs `manage=delete` in the scope (`ScopeMissing`), and a role holding `space.delete` or a `manage=delete` scope in the space's policy (`NotAuthorized`). The meta and members spaces are never deleted (`NotAuthorized`), and a space the group doesn't have fails `SpaceNotFound`                                                                                                                                                                                                                    |
 | `GET com.atproto.space.getSpace`                                                                                                                                                       | answers the group's `space` and its `policy`, for a scope that reads it (`ScopeMissing`) and a member who reads it or may change it (`NotAuthorized`, `SpaceNotFound`)                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -205,20 +205,20 @@ Its tools are in [MCP tools](mcp.md).
 
 | Method                                   | What it does                                          |
 | ---------------------------------------- | ----------------------------------------------------- |
-| `GET fyi.opensocial.internal.listConnectedApps`   | lists the MCP clients the caller connected to a group |
-| `POST fyi.opensocial.internal.revokeConnectedApp` | disconnects one                                       |
+| `GET org.atgrp.internal.listConnectedApps`   | lists the MCP clients the caller connected to a group |
+| `POST org.atgrp.internal.revokeConnectedApp` | disconnects one                                       |
 
 ## Moderation
 
 | Method | What it does |
 | --- | --- |
-| `POST fyi.opensocial.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo: `subject` is an account's DID or a record's URI, with an optional `cid`. The reporter must be able to read its space (the members space for a member or their public record), and the group's labeler must take reports. It answers the report's `id` and `createdAt`. `reasonType` is `spam`, `violation`, `misleading`, `nsfw`, `rude`, `other` or `appeal`. An appeal only its subject may file (the account itself, or the record's author). Anyone else gets `InvalidRequest`. The host takes an appeal even from someone put out, as long as the queue already has the subject. A reason or note is at most 2,000 characters (20,000 bytes) |
-| `GET fyi.opensocial.listModSubjects` | lists the moderation queue for one status, `open` by default. A cursor it never gave fails with `InvalidCursor` |
-| `GET fyi.opensocial.getModSubjectHistory` | lists a subject's events, oldest first, a page at a time. With a `cid`, it lists those about that version. A cursor it never gave fails with `InvalidCursor`. For a record in one of the group's spaces that the caller may read, it also answers the `record` as the host's index holds it, with `takenDown` true if the group has taken that version down |
-| `GET fyi.opensocial.internal.getModSubjectBlob` | serves a file the record `subject` holds, by its `cid`, to someone with `mod.read` whom the record's space lets read it, even if the group has taken the record down. A file the record doesn't hold, or a record the caller can't read there, fails with `NotFound` |
-| `POST fyi.opensocial.resolveModSubject` | sets a subject (`subject`, and an optional `cid`) `resolved` or `escalated`, with an optional note, and answers the subject |
-| `POST fyi.opensocial.internal.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
-| `POST fyi.opensocial.internal.deleteLabelDefinition` | stops defining one. Labels already applied stay |
+| `POST org.atgrp.createReport` | reports a member, a record in one of the group's spaces here, or a member's record in their public repo: `subject` is an account's DID or a record's URI, with an optional `cid`. The reporter must be able to read its space (the members space for a member or their public record), and the group's labeler must take reports. It answers the report's `id` and `createdAt`. `reasonType` is `spam`, `violation`, `misleading`, `nsfw`, `rude`, `other` or `appeal`. An appeal only its subject may file (the account itself, or the record's author). Anyone else gets `InvalidRequest`. The host takes an appeal even from someone put out, as long as the queue already has the subject. A reason or note is at most 2,000 characters (20,000 bytes) |
+| `GET org.atgrp.listModSubjects` | lists the moderation queue for one status, `open` by default. A cursor it never gave fails with `InvalidCursor` |
+| `GET org.atgrp.getModSubjectHistory` | lists a subject's events, oldest first, a page at a time. With a `cid`, it lists those about that version. A cursor it never gave fails with `InvalidCursor`. For a record in one of the group's spaces that the caller may read, it also answers the `record` as the host's index holds it, with `takenDown` true if the group has taken that version down |
+| `GET org.atgrp.internal.getModSubjectBlob` | serves a file the record `subject` holds, by its `cid`, to someone with `mod.read` whom the record's space lets read it, even if the group has taken the record down. A file the record doesn't hold, or a record the caller can't read there, fails with `NotFound` |
+| `POST org.atgrp.resolveModSubject` | sets a subject (`subject`, and an optional `cid`) `resolved` or `escalated`, with an optional note, and answers the subject |
+| `POST org.atgrp.internal.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
+| `POST org.atgrp.internal.deleteLabelDefinition` | stops defining one. Labels already applied stay |
 
 ## Operating the host
 
@@ -228,8 +228,8 @@ refuses anyone else with `Forbidden`.
 
 | Method                        | What it does                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET fyi.opensocial.internal.getLogs`  | returns the lines the host logged, oldest first, each as it wrote it. It returns one request's lines by its `trace`, or the last lines of a `message`, at a `level` and above, or that took `minMs` or longer. It returns 100 unless `limit` asks for up to 500, and 500 for a trace. The read itself is logged as `logs read`, with who asked and for what |
-| `GET fyi.opensocial.internal.getStats` | shows how the host was used over the last `days` (7 by default, 400 at most), day by day in UTC, and what it holds. It counts requests by route and by status class, slow ones, MCP tools called by name, and groups and spaces made. Nothing in it names who asked                                                                                         |
+| `GET org.atgrp.internal.getLogs`  | returns the lines the host logged, oldest first, each as it wrote it. It returns one request's lines by its `trace`, or the last lines of a `message`, at a `level` and above, or that took `minMs` or longer. It returns 100 unless `limit` asks for up to 500, and 500 for a trace. The read itself is logged as `logs read`, with who asked and for what |
+| `GET org.atgrp.internal.getStats` | shows how the host was used over the last `days` (7 by default, 400 at most), day by day in UTC, and what it holds. It counts requests by route and by status class, slow ones, MCP tools called by name, and groups and spaces made. Nothing in it names who asked                                                                                         |
 
 The host logs every request as a `request` line, with its method, route,
 path (never its query), status and `duration_ms`. When it refuses or
@@ -244,9 +244,9 @@ method other than HTTP's own seven is counted as `OTHER`.
 
 | Method                                  | What it does                                                                                     |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET fyi.opensocial.internal.listRecoveryKeys`   | lists the rotation keys on the group's `did:plc` that matter ([recovery](../design/recovery.md)) |
-| `POST fyi.opensocial.internal.addRecoveryKey`    | adds a steward's key, ahead of the host's                                                        |
-| `POST fyi.opensocial.internal.removeRecoveryKey` | takes one off                                                                                    |
+| `GET org.atgrp.internal.listRecoveryKeys`   | lists the rotation keys on the group's `did:plc` that matter ([recovery](../design/recovery.md)) |
+| `POST org.atgrp.internal.addRecoveryKey`    | adds a steward's key, ahead of the host's                                                        |
+| `POST org.atgrp.internal.removeRecoveryKey` | takes one off                                                                                    |
 
 ## Moving
 
@@ -254,19 +254,19 @@ Moving groups between hosts, and accounts here to become groups ([moving](../des
 
 | Method                                   | What it does                                                       |
 | ---------------------------------------- | ------------------------------------------------------------------ |
-| `POST fyi.opensocial.internal.migratePrepare`     | on the host a group leaves, starts the move                        |
-| `GET fyi.opensocial.internal.migrateExport`       | on that host, serves what the destination pulls of the group       |
-| `POST fyi.opensocial.internal.migrateReceive`     | on the destination, takes the group in, switched off               |
-| `POST fyi.opensocial.internal.migrateComplete`    | on the host it leaves, points its DID at the destination           |
-| `POST fyi.opensocial.internal.migrateActivate`    | on the destination, switches it on                                 |
-| `GET fyi.opensocial.internal.checkImport`         | shows what moving an account here would make of it                 |
-| `POST fyi.opensocial.internal.importAccount`      | starts moving an account here                                      |
-| `POST fyi.opensocial.internal.importAccountSpace` | brings over one of its spaces while the move waits                 |
-| `POST fyi.opensocial.internal.completeImport`     | finishes the move                                                  |
-| `GET fyi.opensocial.internal.getAccountMove`      | shows the account the caller signed in to from the console to move |
-| `POST fyi.opensocial.internal.startAccountMove`   | starts that move                                                   |
-| `POST fyi.opensocial.internal.finishAccountMove`  | finishes it with the code the account's server emailed             |
-| `POST fyi.opensocial.internal.cancelAccountMove`  | stops it                                                           |
+| `POST org.atgrp.internal.migratePrepare`     | on the host a group leaves, starts the move                        |
+| `GET org.atgrp.internal.migrateExport`       | on that host, serves what the destination pulls of the group       |
+| `POST org.atgrp.internal.migrateReceive`     | on the destination, takes the group in, switched off               |
+| `POST org.atgrp.internal.migrateComplete`    | on the host it leaves, points its DID at the destination           |
+| `POST org.atgrp.internal.migrateActivate`    | on the destination, switches it on                                 |
+| `GET org.atgrp.internal.checkImport`         | shows what moving an account here would make of it                 |
+| `POST org.atgrp.internal.importAccount`      | starts moving an account here                                      |
+| `POST org.atgrp.internal.importAccountSpace` | brings over one of its spaces while the move waits                 |
+| `POST org.atgrp.internal.completeImport`     | finishes the move                                                  |
+| `GET org.atgrp.internal.getAccountMove`      | shows the account the caller signed in to from the console to move |
+| `POST org.atgrp.internal.startAccountMove`   | starts that move                                                   |
+| `POST org.atgrp.internal.finishAccountMove`  | finishes it with the code the account's server emailed             |
+| `POST org.atgrp.internal.cancelAccountMove`  | stops it                                                           |
 
 ## The console
 
@@ -289,7 +289,7 @@ repos as any PDS does:
 | `GET com.atproto.sync.getRepo`, `GET com.atproto.sync.getLatestCommit`, `GET com.atproto.sync.listRepos`, `GET com.atproto.sync.getBlob`, `GET com.atproto.sync.listBlobs` | sync the repos. A blob only a space holds isn't served or listed. `listRepos` and `listBlobs` answer pages of up to 1000 (500 by default), as atproto's lexicons have them |
 | `GET com.atproto.sync.subscribeRepos`                                                                                                                                      | the firehose, over a WebSocket                                                                                                                                             |
 | `GET com.atproto.identity.resolveHandle`                                                                                                                                   | resolves a handle here to its DID. For a caller who's signed in, it resolves any handle through `HANDLE_RESOLVERS`                                                         |
-| `GET /.well-known/did.json`                                                                                                                                                | the host's own DID document when `SERVICE_DID` is a `did:web`, with its `#atproto_pds` and `#opensocial` services at `PUBLIC_URL`                                          |
+| `GET /.well-known/did.json`                                                                                                                                                | the host's own DID document when `SERVICE_DID` is a `did:web`, with its `#atproto_pds` and `#atgrp` services at `PUBLIC_URL`                                          |
 | `GET /.well-known/atproto-did`                                                                                                                                             | the DID of the group whose address the request's host names                                                                                                                |
 | `GET /xrpc/_health`                                                                                                                                                        | says the host is up, with its `version` and the `commit` its image was built from (`null` in a build of a checkout)                                                        |
 

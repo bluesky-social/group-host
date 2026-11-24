@@ -56,7 +56,7 @@ async fn a_group_on_the_reference_network() {
         .json()
         .await
         .unwrap();
-    let space = format!("at://{group}/space/fyi.opensocial.members/self");
+    let space = format!("at://{group}/space/org.atgrp.members/self");
     let res = http
         .get(format!(
             "{}/xrpc/com.atproto.space.getDelegationToken",
@@ -138,7 +138,7 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
         "com.atproto.space.createSpace",
         jwt,
         &json!({
-            "spaceType": "fyi.opensocial.content",
+            "spaceType": "org.atgrp.content",
             "skey": "climbs",
             "policy": {"$type": "com.atproto.memberspace.policy"},
         }),
@@ -157,14 +157,15 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
     .await;
 
     // The group writes there, and its host tells Bob's PDS.
-    let rule = json!({"$type": "fyi.opensocial.rule", "title": "Clip in", "createdAt": "2026-11-03T00:00:00Z"});
+    let rule =
+        json!({"$type": "org.atgrp.rule", "title": "Clip in", "createdAt": "2026-11-03T00:00:00Z"});
     let commit = h
         .host
         .space_write(
             &group,
             &space,
             &[Write::Create {
-                collection: "fyi.opensocial.rule".into(),
+                collection: "org.atgrp.rule".into(),
                 rkey: "one".into(),
                 value: rule.clone(),
             }],
@@ -244,7 +245,7 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
     let (read, _) = read_repo_star(&bytes, &space, &group, &share, &secret, header).unwrap();
     assert_eq!(read, commit);
     let records = BTreeMap::from([(
-        "fyi.opensocial.rule/one".to_string(),
+        "org.atgrp.rule/one".to_string(),
         atproto::drisl::encode(&atproto::Value::from_json(&rule).unwrap()),
     )]);
     assert_eq!(bytes, star(&commit, &records));
@@ -280,7 +281,7 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
     let group = h.host.create_account("runners.groups.test").await.unwrap();
     let space = h
         .host
-        .create_space(&group, "fyi.opensocial.content", "self", &closed())
+        .create_space(&group, "org.atgrp.content", "self", &closed())
         .unwrap();
     let alice = &net.accounts[0];
     h.host.grant(&space, &alice.did, true, true).unwrap();
@@ -295,12 +296,13 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
 
     // Alice writes in the group's space at her own PDS, which tells the
     // host, the space's authority.
-    let note = json!({"$type": "fyi.opensocial.note", "text": "Hello", "createdAt": "2026-11-03T00:00:00Z"});
+    let note =
+        json!({"$type": "org.atgrp.note", "text": "Hello", "createdAt": "2026-11-03T00:00:00Z"});
     let made = call(
         &net.pds,
         "com.atproto.space.createRecord",
         jwt,
-        &json!({"space": space, "repo": alice.did, "collection": "fyi.opensocial.note", "rkey": "one", "record": note}),
+        &json!({"space": space, "repo": alice.did, "collection": "org.atgrp.note", "rkey": "one", "record": note}),
     )
     .await;
     let mut writers = Vec::new();
@@ -378,7 +380,7 @@ async fn the_host_as_authority_for_a_member_on_the_reference_pds() {
         &[
             ("space", space.as_str()),
             ("repo", alice.did.as_str()),
-            ("collection", "fyi.opensocial.note"),
+            ("collection", "org.atgrp.note"),
             ("rkey", "one"),
         ],
         &headers,
@@ -445,7 +447,7 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         "com.atproto.space.createSpace",
         jwt,
         &json!({
-            "spaceType": "fyi.opensocial.invites",
+            "spaceType": "org.atgrp.invites",
             "skey": "self",
             "policy": {"$type": "com.atproto.memberspace.policy", "publicWrite": true},
         }),
@@ -463,8 +465,8 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
     )
     .await;
     let invite = json!({
-        "collection": "fyi.opensocial.invite",
-        "record": {"$type": "fyi.opensocial.invite", "createdAt": "2026-11-03T00:00:00Z"},
+        "collection": "org.atgrp.invite",
+        "record": {"$type": "org.atgrp.invite", "createdAt": "2026-11-03T00:00:00Z"},
     });
     let create = "com.atproto.space.createRecord";
     let made = common::oauth::inbox_write(&h, &founder, &group, &inbox, create, invite).await;

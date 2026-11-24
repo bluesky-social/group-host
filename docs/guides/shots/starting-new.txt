@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@alice.test"
 - main:
   - heading "Start a group" [level=1]
@@ -24,4 +24,4 @@
     - text: Or
     - link "move an account you already have":
     - text: here, to become a group.
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

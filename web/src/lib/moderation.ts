@@ -68,7 +68,7 @@ export function filesOf(value: unknown, field = ''): Held[] {
 export function reviewedFile(uri: string, cid: string): string {
   const group = uri.slice('at://'.length).split('/')[0];
   const asked = new URLSearchParams({ group, subject: uri, cid });
-  return `/xrpc/fyi.opensocial.internal.getModSubjectBlob?${asked}`;
+  return `/xrpc/org.atgrp.internal.getModSubjectBlob?${asked}`;
 }
 
 /** What an event is: `reportEvent`, `statusEvent`, `labelEvent`, `ejectEvent`. */
@@ -108,7 +108,7 @@ export function besideOf(group: string, key: string): string {
   const [authority, space, kind, skey] = key.slice('at://'.length).split('/');
   if (key.startsWith('at://') && space === 'space')
     return `at://${authority}/space/${kind}/${skey}`;
-  return `at://${group}/space/fyi.opensocial.members/self`;
+  return `at://${group}/space/org.atgrp.members/self`;
 }
 
 /** A subject's reports, oldest first. */

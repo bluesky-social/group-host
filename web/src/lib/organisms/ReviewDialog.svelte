@@ -191,7 +191,7 @@
       </div>
     {/if}
   {:else if !target}
-    <p class="mute">{m.review_dialog_no_version({ command: 'opensocial mod label' })}</p>
+    <p class="mute">{m.review_dialog_no_version({ command: 'atgrp mod label' })}</p>
   {/if}
 
   {#if s.status && can.resolve}

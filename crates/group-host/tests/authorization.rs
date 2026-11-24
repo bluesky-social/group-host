@@ -10,7 +10,7 @@ use common::spaces::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const SCOPE: &str = "atproto repo:app.bsky.feed.post include:fyi.opensocial.authManageGroup include:fyi.opensocial.authModerate";
+const SCOPE: &str = "atproto repo:app.bsky.feed.post include:org.atgrp.authManageGroup include:org.atgrp.authModerate";
 
 async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let membership = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
@@ -103,8 +103,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     assert_eq!(
         offered["labels"],
         json!([
-            {"scope": "include:fyi.opensocial.authManageGroup", "title": "Group administration", "text": "Manage everything in the group's info and member list, including its roles and what each role can do."},
-            {"scope": "include:fyi.opensocial.authModerate", "title": "Group moderation", "text": "Approve, invite, label, and remove members, change their roles, and review reports."},
+            {"scope": "include:org.atgrp.authManageGroup", "title": "Group administration", "text": "Manage everything in the group's info and member list, including its roles and what each role can do."},
+            {"scope": "include:org.atgrp.authModerate", "title": "Group moderation", "text": "Approve, invite, label, and remove members, change their roles, and review reports."},
         ])
     );
     let mut theirs = dids(&offered);
@@ -146,8 +146,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
         scopes(&at_riders["withheld"]),
         [
             "repo:app.bsky.feed.post",
-            "include:fyi.opensocial.authManageGroup",
-            "include:fyi.opensocial.authModerate"
+            "include:org.atgrp.authManageGroup",
+            "include:org.atgrp.authModerate"
         ]
     );
 
@@ -179,25 +179,25 @@ async fn offers_the_tier_a_moderator_holds_of_the_one_asked() {
         value: json!({"$type": format!("{NS}.membership"), "roles": ["member", "moderator"], "createdAt": "2026-11-03T00:00:00Z"}),
     };
     h.host.space_write(&riders, &space, &[write]).await.unwrap();
-    let app = App::loopback("atproto include:fyi.opensocial.authManageGroup");
+    let app = App::loopback("atproto include:org.atgrp.authManageGroup");
     let request_uri = app.push(&h, &[]).await;
     let (status, offered) = offer(&h, &bob, &request_uri).await;
     assert_eq!(status, 200, "{offered}");
     let at_riders = &offered["groups"][0];
     assert_eq!(
         scopes(&at_riders["granted"]),
-        ["atproto", "include:fyi.opensocial.authModerate"]
+        ["atproto", "include:org.atgrp.authModerate"]
     );
     assert_eq!(
         scopes(&at_riders["withheld"]),
-        ["include:fyi.opensocial.authManageGroup"]
+        ["include:org.atgrp.authManageGroup"]
     );
     // Both named, for the page to say what each is.
     assert_eq!(
         scopes(&offered["labels"]),
         [
-            "include:fyi.opensocial.authManageGroup",
-            "include:fyi.opensocial.authModerate"
+            "include:org.atgrp.authManageGroup",
+            "include:org.atgrp.authModerate"
         ]
     );
 }
@@ -247,7 +247,7 @@ async fn shows_the_groups_picture() {
     assert_eq!(param(avatar, "cid").unwrap(), cid);
     // Where any file in the space is served, to whoever may read it.
     let query = avatar
-        .strip_prefix("https://host.test/xrpc/fyi.opensocial.internal.getSpaceBlob?")
+        .strip_prefix("https://host.test/xrpc/org.atgrp.internal.getSpaceBlob?")
         .unwrap();
     let lxm = format!("{INTERNAL}.getSpaceBlob");
     let (k, v) = auth(&h, &alice, &lxm);
@@ -373,9 +373,14 @@ async fn gives_each_permission_set_as_the_scopes_it_lists() {
     let tokens = App::loopback(SCOPE).sign_in(&h, &alice, &riders).await;
     let scope = tokens["scope"].as_str().unwrap();
     assert!(!scope.contains("include:"), "{scope}");
-    assert!(scope.contains(&format!("space:fyi.opensocial.meta?authority={riders}&skey=self&collection=fyi.opensocial.profile")), "{scope}");
     assert!(
-        scope.contains("rpc:fyi.opensocial.listModSubjects?aud=*"),
+        scope.contains(&format!(
+            "space:org.atgrp.meta?authority={riders}&skey=self&collection=org.atgrp.profile"
+        )),
+        "{scope}"
+    );
+    assert!(
+        scope.contains("rpc:org.atgrp.listModSubjects?aud=*"),
         "{scope}"
     );
 }

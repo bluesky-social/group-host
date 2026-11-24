@@ -41,7 +41,7 @@
 //                           or of --element, as <name>-<size>.txt
 //
 // A seed is a module whose default export is given `tools` below and
-// writes what a page should show: `opensocial(name, ...args)` runs the
+// writes what a page should show: `atgrp(name, ...args)` runs the
 // command as that account; `ask(name, handle, message?)` asks to join a
 // group as them; `exists(handle)` says whether a group is here;
 // `page(name)` is a page of the console signed in as them, for what only
@@ -247,17 +247,17 @@ async function signedIn(names) {
 const tools = {
   world,
   who,
-  /// The opensocial command, as `name`: what it prints.
-  opensocial: (name, ...args) =>
-    execFileSync(join(root, 'target/debug/opensocial'), args, {
+  /// The atgrp command, as `name`: what it prints.
+  atgrp: (name, ...args) =>
+    execFileSync(join(root, 'target/debug/atgrp'), args, {
       encoding: 'utf8',
       env: {
         ...process.env,
-        OPENSOCIAL_HOST: world.host,
-        OPENSOCIAL_HOST_DID: world.did,
+        ATGRP_HOST: world.host,
+        ATGRP_HOST_DID: world.did,
         PDS_URL: world.pds,
-        OPENSOCIAL_AS: who[name].handle,
-        OPENSOCIAL_PASSWORD: who[name].password
+        ATGRP_AS: who[name].handle,
+        ATGRP_PASSWORD: who[name].password
       }
     }),
   /// Whether the group `handle` is here already: a seed that failed
@@ -272,7 +272,7 @@ const tools = {
     const { did } = await fetch(
       `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`
     ).then((r) => r.json());
-    const lxm = 'fyi.opensocial.requestJoin';
+    const lxm = 'org.atgrp.requestJoin';
     const token = await serviceAuth(world.pds, who[name], world.did, lxm);
     const res = await fetch(`${world.host}/xrpc/${lxm}`, {
       method: 'POST',

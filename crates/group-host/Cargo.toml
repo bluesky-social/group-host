@@ -1,6 +1,6 @@
 [package]
 name = "group-host"
-description = "The opensocial group host: the PDS, space authority and OAuth server for groups, and the fyi.opensocial methods that run them"
+description = "The Atmosphere Groups host: the PDS, space authority and OAuth server for groups, and the org.atgrp methods that run them"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

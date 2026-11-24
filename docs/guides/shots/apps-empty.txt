@@ -1,5 +1,5 @@
 - banner:
-  - link "opensocial":
+  - link "Atmosphere Groups":
   - group: "@bob.test"
 - main:
   - link "← Night shift":
@@ -22,4 +22,4 @@
   - paragraph: Each write an app made while signed in as the group, newest first.
   - paragraph: No app has written anything yet
   - paragraph: When an app signed in as the group writes something, it shows up here.
-- contentinfo: console.group-host.internal runs opensocial
+- contentinfo: console.group-host.internal runs Atmosphere Groups

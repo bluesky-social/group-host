@@ -1,9 +1,9 @@
 import type * as resolveHandle from '#lib/lexicons/com/atproto/identity/resolveHandle.ts';
-import type * as getActorInvites from '#lib/lexicons/fyi/opensocial/internal/getActorInvites.ts';
-import type * as getGroup from '#lib/lexicons/fyi/opensocial/internal/getGroup.ts';
-import type * as listConnectedApps from '#lib/lexicons/fyi/opensocial/internal/listConnectedApps.ts';
-import type * as listInvites from '#lib/lexicons/fyi/opensocial/internal/listInvites.ts';
-import type * as listMembers from '#lib/lexicons/fyi/opensocial/internal/listMembers.ts';
+import type * as getActorInvites from '#lib/lexicons/org/atgrp/internal/getActorInvites.ts';
+import type * as getGroup from '#lib/lexicons/org/atgrp/internal/getGroup.ts';
+import type * as listConnectedApps from '#lib/lexicons/org/atgrp/internal/listConnectedApps.ts';
+import type * as listInvites from '#lib/lexicons/org/atgrp/internal/listInvites.ts';
+import type * as listMembers from '#lib/lexicons/org/atgrp/internal/listMembers.ts';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { act, xrpc } from '#lib/data.ts';
@@ -14,7 +14,7 @@ import { m } from '#lib/paraglide/messages.js';
 type Handle = `${string}.${string}`;
 
 /** Someone's inbox, where groups write their invites to them. */
-const inboxOf = (did: string) => `at://${did}/space/fyi.opensocial.invites/self`;
+const inboxOf = (did: string) => `at://${did}/space/org.atgrp.invites/self`;
 
 /** The group the page's address names, by its handle: its DID. */
 async function groupOf(event: { fetch: typeof fetch; params: { handle?: string } }) {
@@ -39,7 +39,7 @@ const STEP = 5;
  */
 export const load: PageServerLoad = async (event) => {
   const group = await groupOf(event);
-  const view = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.internal.getGroup', {
+  const view = await xrpc<typeof getGroup.main>(event, 'org.atgrp.internal.getGroup', {
     group
   });
   const viewer = view.group.viewer;
@@ -49,37 +49,29 @@ export const load: PageServerLoad = async (event) => {
   const page =
     view.group.memberCount === undefined
       ? null
-      : await xrpc<typeof listMembers.main>(event, 'fyi.opensocial.internal.listMembers', {
+      : await xrpc<typeof listMembers.main>(event, 'org.atgrp.internal.listMembers', {
           group,
           limit: shown,
           ...(q ? { q } : {})
         });
   const invites = viewer?.actions?.includes('invite')
-    ? (await xrpc<typeof listInvites.main>(event, 'fyi.opensocial.internal.listInvites', { group }))
+    ? (await xrpc<typeof listInvites.main>(event, 'org.atgrp.internal.listInvites', { group }))
         .invites
     : null;
   // The AI apps a member connected here, and where they connect one.
   const apps = viewer?.member
     ? (
-        await xrpc<typeof listConnectedApps.main>(
-          event,
-          'fyi.opensocial.internal.listConnectedApps',
-          {
-            group
-          }
-        )
+        await xrpc<typeof listConnectedApps.main>(event, 'org.atgrp.internal.listConnectedApps', {
+          group
+        })
       ).apps
     : null;
   const invited =
     viewer && !viewer.member && !view.group.deactivated
       ? (
-          await xrpc<typeof getActorInvites.main>(
-            event,
-            'fyi.opensocial.internal.getActorInvites',
-            {
-              group
-            }
-          )
+          await xrpc<typeof getActorInvites.main>(event, 'org.atgrp.internal.getActorInvites', {
+            group
+          })
         ).invites.length > 0
       : false;
   const { configures, issues } = changes(view);
@@ -107,7 +99,7 @@ async function asked(event: {
   return { group: await groupOf(event), who: String(form.get('did') ?? ''), form };
 }
 
-const MEMBERSHIP = 'fyi.opensocial.membership';
+const MEMBERSHIP = 'org.atgrp.membership';
 
 /**
  * Writes `who`'s membership of `group`, holding `roles`, as the group:
@@ -137,7 +129,7 @@ export const actions: Actions = {
     const { group, form } = await asked(event);
     // Their note to whoever looks at the request, if they wrote one.
     const message = String(form.get('message') ?? '').trim();
-    const failed = await act(event, 'fyi.opensocial.requestJoin', {
+    const failed = await act(event, 'org.atgrp.requestJoin', {
       group,
       ...(message ? { message } : {})
     });
@@ -145,20 +137,20 @@ export const actions: Actions = {
   },
   decline: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.declineInvite', { group });
+    return act(event, 'org.atgrp.internal.declineInvite', { group });
   },
   cancel: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.cancelJoinRequest', { group });
+    return act(event, 'org.atgrp.cancelJoinRequest', { group });
   },
   leave: async (event) => {
     const { group } = await asked(event);
-    return act(event, 'fyi.opensocial.leaveGroup', { group });
+    return act(event, 'org.atgrp.leaveGroup', { group });
   },
   admit: async (event) => {
     const { group, who } = await asked(event);
     // With the roles every new member gets, and member, which everyone holds.
-    const { roles } = await xrpc<typeof getGroup.main>(event, 'fyi.opensocial.internal.getGroup', {
+    const { roles } = await xrpc<typeof getGroup.main>(event, 'org.atgrp.internal.getGroup', {
       group: group as `did:${string}:${string}`
     });
     const given = (roles ?? []).filter((r) => r.default).map((r) => r.key);
@@ -166,7 +158,7 @@ export const actions: Actions = {
   },
   deny: async (event) => {
     const { group, who } = await asked(event);
-    return act(event, 'fyi.opensocial.denyJoinRequest', { group, member: who });
+    return act(event, 'org.atgrp.denyJoinRequest', { group, member: who });
   },
   roles: async (event) => {
     const { group, who, form } = await asked(event);
@@ -193,18 +185,18 @@ export const actions: Actions = {
     // Written as the group, in their own inbox, with the note if there is one.
     const message = String(form.get('message') ?? '').trim();
     const record = {
-      $type: 'fyi.opensocial.invite',
+      $type: 'org.atgrp.invite',
       ...(message ? { message } : {}),
       createdAt: new Date().toISOString()
     };
     return asGroup(event, group, inboxOf(did), 'com.atproto.space.createRecord', {
-      collection: 'fyi.opensocial.invite',
+      collection: 'org.atgrp.invite',
       record
     });
   },
   disconnect: async (event) => {
     const { group, form } = await asked(event);
-    return act(event, 'fyi.opensocial.internal.revokeConnectedApp', {
+    return act(event, 'org.atgrp.internal.revokeConnectedApp', {
       group,
       clientId: String(form.get('clientId'))
     });
@@ -215,7 +207,7 @@ export const actions: Actions = {
     const uri = String(form.get('uri') ?? '');
     const [inbox, rkey] = [uri.split(`/${group}/`)[0], uri.split('/').pop()];
     return asGroup(event, group, inbox, 'com.atproto.space.deleteRecord', {
-      collection: 'fyi.opensocial.invite',
+      collection: 'org.atgrp.invite',
       rkey
     });
   }

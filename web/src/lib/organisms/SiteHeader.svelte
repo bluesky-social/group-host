@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '#lib/paraglide/messages.js';
   import SignIn from '#lib/molecules/SignIn.svelte';
   import SignInDialog from '#lib/organisms/SignInDialog.svelte';
   import UserMenu from '#lib/molecules/UserMenu.svelte';
@@ -19,7 +20,7 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="/">opensocial</a>
+    <a class="brand" href="/">{m.site_header_brand()}</a>
     {#if viewer}
       <UserMenu did={viewer.did} handle={viewer.handle} {invites} {accounts} />
     {:else}

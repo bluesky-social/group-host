@@ -257,7 +257,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         json!({"$type": format!("{NS}.policy"), "grants": [{"role": "admin", "read": true}]});
     let admins = h
         .host
-        .create_space(&did, "fyi.opensocial.board", "self", &only)
+        .create_space(&did, "org.atgrp.board", "self", &only)
         .unwrap();
     h.host
         .space_write(
@@ -293,7 +293,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     let hidden = json!({"$type": format!("{NS}.policy"), "unlisted": true, "grants": [{"role": "admin", "read": true}]});
     let vault = h
         .host
-        .create_space(&did, "fyi.opensocial.board", "vault", &hidden)
+        .create_space(&did, "org.atgrp.board", "vault", &hidden)
         .unwrap();
     let hers = view(&h, &did, Some(&carol)).await;
     let shown = |view: &Json| {
@@ -513,7 +513,7 @@ async fn refuses_a_group_it_should_not_start() {
         ),
         (
             body(json!({})),
-            vec![auth(&h, &alice, "fyi.opensocial.internal.getGroup")],
+            vec![auth(&h, &alice, "org.atgrp.internal.getGroup")],
             (401, "BadJwtLexiconMethod"),
         ),
         (
@@ -556,7 +556,7 @@ async fn refuses_a_group_it_should_not_start() {
         );
     }
     // A token for one of this host's services is for it.
-    let service = format!("{}#opensocial", h.host.config.service_did);
+    let service = format!("{}#atgrp", h.host.config.service_did);
     let said = post(
         &h,
         &lxm,
@@ -625,7 +625,7 @@ async fn keeps_a_groups_address_for_it_after_it_takes_a_handle_of_its_own() {
     .await;
     let free = async |address: &str| {
         h.get(
-            "fyi.opensocial.internal.checkAddress",
+            "org.atgrp.internal.checkAddress",
             &format!("address={address}"),
         )
         .await

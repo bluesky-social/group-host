@@ -131,7 +131,7 @@ export async function withGroup(
   const prover = new Prover(resource);
   const given = await prover.post(
     load,
-    'fyi.opensocial.internal.getGroupAuth',
+    'org.atgrp.internal.getGroupAuth',
     JSON.stringify({ group, space }),
     'application/json'
   );
@@ -169,7 +169,7 @@ export type Write = {
 };
 
 /** A group's members space. */
-export const membersOf = (group: string) => `at://${group}/space/fyi.opensocial.members/self`;
+export const membersOf = (group: string) => `at://${group}/space/org.atgrp.members/self`;
 
 /** Makes `writes` at once as `group`, in `space`, as {@link asGroup} makes one. */
 export function applyAsGroup(load: Load, group: string, space: string, writes: Write[]) {

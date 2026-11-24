@@ -1,6 +1,6 @@
 # group-host
 
-> **Alpha.** group-host is early and changes often. Its `fyi.opensocial.*`
+> **Alpha.** group-host is early and changes often. Its `org.atgrp.*`
 > lexicons are not yet published and will change, as will the space
 > alpha it builds on, so apps and records written against today's will
 > break. Don't run it for a group you can't afford to lose.
@@ -10,11 +10,11 @@ its own, with no password and no one person behind it. The host is the
 group's PDS, the authority for its private spaces and its OAuth server,
 and its members' roles decide what anyone may do there. Members keep
 their own accounts on their own PDSes, anywhere on the network. It
-implements the [opensocial proposal](https://tangled.org/opensocial.group/proposal).
+implements the [Atmosphere Groups proposal](https://tangled.org/opensocial.group/proposal).
 
 It's one Rust server over SQLite, with a console (a SvelteKit app) where
 people start and run groups and approve apps, and a command,
-`opensocial`, that does the same from a terminal.
+`atgrp`, that does the same from a terminal.
 
 ## Highlights
 
@@ -34,7 +34,7 @@ people start and run groups and approve apps, and a command,
 - **Apps sign in as the group.** A member approves an app over OAuth,
   and it gets what that member's roles allow, checked again at every
   write. → [Signing in](docs/design/signing-in.md)
-- **One command, one tool.** An `opensocial` command acts in a group
+- **One command, one tool.** An `atgrp` command acts in a group
   as you, and its MCP tool twin acts the same way for a member through an
   AI app they connect. Only the commands that make, move or end a group
   or an account have no tool. → [MCP](docs/design/mcp.md),
@@ -63,8 +63,8 @@ prints the rest: the other accounts, where to read the codes the PDS
 emails, and how to run the command against it, such as:
 
 ```sh
-OPENSOCIAL_HOST=… PDS_URL=… OPENSOCIAL_AS=alice.test OPENSOCIAL_PASSWORD=password \
-  just opensocial group show riders.groups.localtest.me
+ATGRP_HOST=… PDS_URL=… ATGRP_AS=alice.test ATGRP_PASSWORD=password \
+  just atgrp group show riders.groups.localtest.me
 ```
 
 [Development](docs/development.md) has the rest of the dev world, and
@@ -87,7 +87,7 @@ The same pages are a site, made by `docs-site/`.
 | [Guides](docs/guides/README.md) | Doing each thing in the console, step by step, with a picture of each screen |
 | [Design](docs/design/README.md) | What the host is to a group, where each kind of data lives, and why each part works the way it does |
 | [API](docs/reference/api.md) | Every HTTP route and XRPC method, and the errors each answers |
-| [Commands](docs/reference/cli.md) | Every `opensocial` command and `just` recipe |
+| [Commands](docs/reference/cli.md) | Every `atgrp` command and `just` recipe |
 | [MCP tools](docs/reference/mcp.md) | Every tool, and the command it's the twin of |
 | [Configuration](docs/reference/config.md) | Every environment variable the host reads |
 | [Deploying](docs/deploying.md) | The image, running it behind a proxy, and what to back up |
@@ -95,7 +95,7 @@ The same pages are a site, made by `docs-site/`.
 
 ## The pieces
 
-The server is `crates/group-host`, the command `crates/opensocial`, the
+The server is `crates/group-host`, the command `crates/atgrp`, the
 MCP tools `crates/group-host-mcp` and the console `web/`. The atproto
 primitives are the `atproto` crate, in
 [its own repository](https://knotless.dev/chadtmiller.com/atproto).

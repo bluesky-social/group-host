@@ -3,10 +3,10 @@
 // passwords for it, and of its settings sees only those. Its admins may
 // give it, as they may give every role.
 
-export default async ({ opensocial, ask, who }) => {
+export default async ({ atgrp, ask, who }) => {
   const g = 'nightshift.groups.test';
   const role = 'poster';
-  opensocial('bob', 'role', 'set', g, role, '--display-name', 'Poster', '--scopes', 'repo:*');
+  atgrp('bob', 'role', 'set', g, role, '--display-name', 'Poster', '--scopes', 'repo:*');
   await ask('carol', g);
-  opensocial('bob', 'member', 'assign', g, who.carol.handle, `member,${role}`);
+  atgrp('bob', 'member', 'assign', g, who.carol.handle, `member,${role}`);
 };

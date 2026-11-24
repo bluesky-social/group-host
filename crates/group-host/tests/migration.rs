@@ -21,10 +21,10 @@ use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
-const PREPARE: &str = "fyi.opensocial.internal.migratePrepare";
-const RECEIVE: &str = "fyi.opensocial.internal.migrateReceive";
-const COMPLETE: &str = "fyi.opensocial.internal.migrateComplete";
-const ACTIVATE: &str = "fyi.opensocial.internal.migrateActivate";
+const PREPARE: &str = "org.atgrp.internal.migratePrepare";
+const RECEIVE: &str = "org.atgrp.internal.migrateReceive";
+const COMPLETE: &str = "org.atgrp.internal.migrateComplete";
+const ACTIVATE: &str = "org.atgrp.internal.migrateActivate";
 
 /// The host a group leaves, with Riders, Alice's, Bob in it, a picture, a
 /// rule, a post, and a calendar Carol writes in and Bob may write in by a
@@ -61,7 +61,7 @@ async fn two_hosts_with(
         .call(&a, "com.atproto.space.createRecord", &token, Some(&rule))
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
-    let readers = json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "member", "read": true, "write": true}]});
+    let readers = json!({"$type": "org.atgrp.policy", "grants": [{"role": "member", "read": true, "write": true}]});
     let calendar = make_space(&a, &alice, &did, "com.example.calendar", "rides", readers).await;
     let post = group_host::repo::Write::Create {
         collection: "app.bsky.feed.post".into(),
@@ -212,7 +212,7 @@ async fn moves_a_group_whole_to_another_host() {
     let token = prepared["exportToken"].as_str().unwrap();
     let (status, _) = a
         .get(
-            "fyi.opensocial.internal.migrateExport",
+            "org.atgrp.internal.migrateExport",
             &format!("group={did}&token={token}&part=blobs"),
         )
         .await;
@@ -261,7 +261,7 @@ async fn prepares_only_for_one_who_configures_and_exports_only_with_the_token() 
     let token = prepared["exportToken"].as_str().unwrap();
     let export = |q: String| {
         a.get(
-            "fyi.opensocial.internal.migrateExport",
+            "org.atgrp.internal.migrateExport",
             Box::leak(q.into_boxed_str()),
         )
     };
@@ -584,10 +584,7 @@ async fn fake_export(
 async fn from_fake(b: &Running, alice: &Authority, fake: Arc<Fake>, key: &Keypair) -> (u16, Json) {
     let router = Router::new()
         .route("/xrpc/com.atproto.sync.getRepo", route(fake_repo))
-        .route(
-            "/xrpc/fyi.opensocial.internal.migrateExport",
-            route(fake_export),
-        )
+        .route("/xrpc/org.atgrp.internal.migrateExport", route(fake_export))
         .with_state(fake.clone());
     let url = serve(router).await;
     let rotation = Keypair::generate(Curve::K256);
@@ -625,7 +622,7 @@ async fn from_fake(b: &Running, alice: &Authority, fake: Arc<Fake>, key: &Keypai
             .or_insert_with(|| br#"{"blobs": []}"#.to_vec());
         // Under a policy granting nobody anything, unless a test gives one.
         let policy = said.get("policy").map_or_else(
-            || json!({"$type": "fyi.opensocial.policy", "grants": []}),
+            || json!({"$type": "org.atgrp.policy", "grants": []}),
             |p| serde_json::from_slice(p).unwrap(),
         );
         said.entry("meta".into())
@@ -756,7 +753,7 @@ async fn takes_in_nothing_it_cannot_check() {
     // A space under a policy of this host's that is not as its lexicon
     // has it.
     let fake = Arc::new(Fake::default());
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": "everyone"});
+    let policy = json!({"$type": "org.atgrp.policy", "grants": "everyone"});
     fake.said
         .lock()
         .unwrap()

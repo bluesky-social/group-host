@@ -1,4 +1,4 @@
-//! Every `fyi.opensocial.*` method's parameters and input, checked against
+//! Every `org.atgrp.*` method's parameters and input, checked against
 //! its lexicon before its handler runs.
 
 mod common;
@@ -29,7 +29,7 @@ async fn refuses_what_a_lexicon_does_not_describe_before_its_handler() {
     // Nobody signed in: the refusals come before the handler would ask.
     let said = send(
         &h,
-        "fyi.opensocial.internal.deactivateGroup",
+        "org.atgrp.internal.deactivateGroup",
         b"{\"group\": 1}".to_vec(),
     )
     .await;
@@ -38,14 +38,14 @@ async fn refuses_what_a_lexicon_does_not_describe_before_its_handler() {
     assert_eq!(said.1["message"], "input.group must be a string");
     let said = send(
         &h,
-        "fyi.opensocial.internal.deactivateGroup",
+        "org.atgrp.internal.deactivateGroup",
         b"not json".to_vec(),
     )
     .await;
     assert_eq!(said.1["message"], "the input is not JSON");
     let said = send(
         &h,
-        "fyi.opensocial.internal.deactivateGroup",
+        "org.atgrp.internal.deactivateGroup",
         vec![b' '; INPUT_AT_MOST + 1],
     )
     .await;
@@ -54,29 +54,26 @@ async fn refuses_what_a_lexicon_does_not_describe_before_its_handler() {
         (413, Some("PayloadTooLarge"))
     );
     let (status, said) = h
-        .get("fyi.opensocial.internal.getGroup", "group=not-a-did")
+        .get("org.atgrp.internal.getGroup", "group=not-a-did")
         .await;
     assert_eq!(status, 400, "{said}");
-    let (status, said) = h.get("fyi.opensocial.internal.getGroup", "").await;
+    let (status, said) = h.get("org.atgrp.internal.getGroup", "").await;
     assert_eq!(
         (status, said["message"].as_str()),
         (400, Some("params must have the property \"group\""))
     );
     // What the lexicon lets through reaches the handler.
     let (status, said) = h
-        .get("fyi.opensocial.internal.getGroup", "group=did:plc:nothing")
+        .get("org.atgrp.internal.getGroup", "group=did:plc:nothing")
         .await;
     assert_eq!(
         (status, said["error"].as_str()),
         (400, Some("GroupNotFound"))
     );
     // A method asked the wrong way is the router's to refuse.
-    assert_eq!(
-        h.get("fyi.opensocial.internal.deactivateGroup", "").await.0,
-        405
-    );
+    assert_eq!(h.get("org.atgrp.internal.deactivateGroup", "").await.0, 405);
     // A method with no lexicon here is not looked at.
-    let (status, _) = h.get("fyi.opensocial.noSuchMethod", "").await;
+    let (status, _) = h.get("org.atgrp.noSuchMethod", "").await;
     assert_eq!(status, 501);
 }
 

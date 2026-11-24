@@ -142,7 +142,7 @@ items, field labels, dialog titles, notes and errors ("Invite someone",
 "Asking to join", "Sign out"). Only the first word and proper nouns take
 a capital: Atmosphere, Bluesky, PDS, DID, AI. Labels end with no full
 stop; what is said, a sentence, ends with one. Names stay as written:
-opensocial, handles, roles such as `admin`. No `text-transform`.
+Atmosphere Groups, handles, roles such as `admin`. No `text-transform`.
 
 **Optional fields.** A text field a form can be sent without says so
 after its label, `<span>Note <span class="optional">(optional)</span></span>`,

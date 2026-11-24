@@ -14,7 +14,7 @@ use group_host::repo::Write;
 use group_host::store::Registration;
 use serde_json::{Value as Json, json};
 
-const NS: &str = "fyi.opensocial";
+const NS: &str = "org.atgrp";
 
 async fn call(h: &Running, who: &Authority, method: &str, did: &str) -> (u16, Json) {
     let lxm = nsid(method);

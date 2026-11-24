@@ -1,0 +1,19 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.members",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:self",
+      "title": "Group: members",
+      "description": "Roles and their group-wide grants, who holds them, and the space index. Usually gated to members.",
+      "collections": [
+        "org.atgrp.space",
+        "org.atgrp.role",
+        "org.atgrp.membership",
+        "org.atgrp.acceptance",
+        "com.atproto.label.record"
+      ]
+    }
+  }
+}

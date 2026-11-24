@@ -93,7 +93,7 @@ web-dev:
 # each time; the host and the command are built again first.
 dev:
     cd web && npm run lex
-    {{cargo}} build -p group-host -p opensocial
+    {{cargo}} build -p group-host -p atgrp
     node harness/dev.mjs
 
 # The console used as people use it (harness/e2e/flows.spec.mjs): in
@@ -108,7 +108,7 @@ e2e *args: web
 # guides named, or all of them. No `look-up` may be running.
 [positional-arguments]
 shots *guides:
-    {{cargo}} build -p group-host -p opensocial
+    {{cargo}} build -p group-host -p atgrp
     cd web && npm run lex
     node harness/shots.mjs "$@"
 
@@ -121,17 +121,17 @@ shots *guides:
 # `look-up` keeps.
 [positional-arguments]
 look *args:
-    {{cargo}} build -p group-host -p opensocial
+    {{cargo}} build -p group-host -p atgrp
     cd web && npm run lex
     node harness/look/look.mjs "$@"
 
 # A world for `just look` to draw over, kept up until ctrl-c: each look
 # then takes seconds, not the half minute starting one does.
 look-up:
-    {{cargo}} build -p group-host -p opensocial
+    {{cargo}} build -p group-host -p atgrp
     cd web && npm run lex
     node harness/look/look.mjs --up
 
-# The opensocial command.
-opensocial *args:
-    {{cargo}} run -q -p opensocial -- {{args}}
+# The atgrp command.
+atgrp *args:
+    {{cargo}} run -q -p atgrp -- {{args}}

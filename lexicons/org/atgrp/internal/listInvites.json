@@ -1,0 +1,48 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.listInvites",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Outstanding invites. Requires invite.",
+      "parameters": {
+        "type": "params",
+        "required": ["group"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did",
+            "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+          },
+          "limit": {
+            "type": "integer",
+            "default": 50,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["invites"],
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "invites": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "org.atgrp.internal.defs#inviteView"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

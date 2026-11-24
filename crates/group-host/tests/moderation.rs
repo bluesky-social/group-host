@@ -102,7 +102,7 @@ fn kinds(history: &Json) -> Vec<String> {
         e["event"]["$type"]
             .as_str()
             .unwrap()
-            .replace("fyi.opensocial.defs#", "")
+            .replace("org.atgrp.defs#", "")
     };
     events.iter().map(kind).collect()
 }
@@ -117,7 +117,7 @@ async fn group(h: &Running) -> (String, String, Json, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let readers = json!({"$type": "fyi.opensocial.policy", "grants": [{"role": "member", "read": true, "write": true}]});
+    let readers = json!({"$type": "org.atgrp.policy", "grants": [{"role": "member", "read": true, "write": true}]});
     let space = common::oauth::make_space(h, &alice, &did, CALENDAR, "rides", readers).await;
     membership(h, &did, &bob.did, &["member"]).await;
     let post = json!({"$type": "com.atproto.repo.strongRef", "uri": format!("{space}/{}/com.example.event/ride", bob.did), "cid": CID});
@@ -161,7 +161,7 @@ async fn takes_a_report_from_one_who_reads_it() {
     assert_eq!(event["id"], said["id"]);
     assert_eq!(event["createdBy"], bob.did.as_str());
     assert_eq!(event["creator"]["did"], bob.did.as_str());
-    assert_eq!(event["event"]["$type"], "fyi.opensocial.defs#reportEvent");
+    assert_eq!(event["event"]["$type"], "org.atgrp.defs#reportEvent");
     assert_eq!(event["event"]["reasonType"], "rude");
     assert_eq!(event["event"]["rule"], rule);
     // The account in the queue, by its DID.
@@ -613,7 +613,7 @@ async fn labels_only_in_the_spaces_the_roles_scopes_reach() {
 
     // A space whose policy grants moderators labels: there, and only
     // there.
-    let policy = json!({"$type": "fyi.opensocial.policy", "grants": [
+    let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true},
         {"role": "moderator", "read": true, "scopes": [every]},
     ]});
@@ -974,7 +974,7 @@ async fn answers_an_ejection_as_one() {
     let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
     assert_eq!(
         history["events"][0]["event"],
-        json!({"$type": "fyi.opensocial.defs#ejectEvent"})
+        json!({"$type": "org.atgrp.defs#ejectEvent"})
     );
 }
 
@@ -1088,7 +1088,7 @@ async fn defines_the_groups_own_labels_for_one_who_configures_it() {
     let meta = meta_space(&did);
     let labeler = h
         .host
-        .group_record(&did, &meta, "fyi.opensocial.labeler", "self");
+        .group_record(&did, &meta, "org.atgrp.labeler", "self");
     let labeler = labeler.unwrap().unwrap();
     assert_eq!(
         labeler["policies"]["labelValues"],
@@ -1136,7 +1136,7 @@ async fn defines_the_groups_own_labels_for_one_who_configures_it() {
     assert_eq!(labels().await, json!([]));
     let labeler = h
         .host
-        .group_record(&did, &meta, "fyi.opensocial.labeler", "self");
+        .group_record(&did, &meta, "org.atgrp.labeler", "self");
     assert_eq!(
         labeler.unwrap().unwrap()["policies"]["labelValues"],
         json!(["!hide", "!takedown"])

@@ -10,13 +10,13 @@
 //!   (`com.atproto.space.getRepo`), checked against its commit's set hash.
 //! - `blob`: one of its files in a space, before the repos that hold it.
 //!
-//! A space's policy becomes this host's over it, `fyi.opensocial.policy`,
+//! A space's policy becomes this host's over it, `org.atgrp.policy`,
 //! left out of the group's index: a memberspace's public reading its
 //! `publicRead`, and its members, each kept as an account's grant beside
 //! the policy (reading, writing). Anything this host would not do as the
 //! policy says (anyone writing, only some apps, a managing app) refuses
 //! the space rather than quietly widening or narrowing who uses it. A
-//! space already under `fyi.opensocial.policy`, as a group moving between
+//! space already under `org.atgrp.policy`, as a group moving between
 //! hosts brings its spaces, keeps its policy as it is.
 //!
 //! Its repos tell their spaces' authorities nothing while the account is

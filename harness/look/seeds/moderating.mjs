@@ -3,15 +3,15 @@
 // members read and write, a post of frank's there with a picture,
 // maximilianaquinces reporting that post, and frank reporting
 // maximilianaquinces's account, as members report, by
-// fyi.opensocial.createReport, which no command or page of the console
+// org.atgrp.createReport, which no command or page of the console
 // sends.
 
 import { serviceAuth } from '../../world.mjs';
 
-export default async ({ world, opensocial, ask, page, who, exists, picture }) => {
+export default async ({ world, atgrp, ask, page, who, exists, picture }) => {
   const g = 'gardens.groups.test';
   if (!(await exists(g)))
-    opensocial(
+    atgrp(
       'dan',
       'group',
       'create',
@@ -41,7 +41,7 @@ export default async ({ world, opensocial, ask, page, who, exists, picture }) =>
   await p.context().close();
   for (const name of ['frank', 'maximilianaquinces']) {
     await ask(name, g);
-    opensocial(
+    atgrp(
       'dan',
       'member',
       'assign',
@@ -52,7 +52,7 @@ export default async ({ world, opensocial, ask, page, who, exists, picture }) =>
   }
   // A board its members read and write, and a post on it to report.
   const policy = { grants: [{ role: 'member', read: true, write: true }] };
-  opensocial(
+  atgrp(
     'dan',
     'space',
     'create',
@@ -101,7 +101,7 @@ export default async ({ world, opensocial, ask, page, who, exists, picture }) =>
   );
   const post = { subject: written.uri, cid: written.cid };
   const report = async (name, subject, reasonType, reason) => {
-    const lxm = 'fyi.opensocial.createReport';
+    const lxm = 'org.atgrp.createReport';
     const token = await serviceAuth(world.pds, who[name], world.did, lxm);
     const res = await fetch(`${world.host}/xrpc/${lxm}`, {
       method: 'POST',

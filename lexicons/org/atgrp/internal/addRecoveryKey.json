@@ -1,0 +1,57 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.internal.addRecoveryKey",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Add a steward's recovery key to the group's did:plc, ahead of this host's own key. Only the public did:key is sent; the private half stays with the steward. Requires group.configure.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "group",
+            "key"
+          ],
+          "properties": {
+            "group": {
+              "type": "string",
+              "format": "did",
+              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            },
+            "key": {
+              "type": "string",
+              "description": "A did:key (secp256k1 or P-256). Only the public key: the host never sees the private half.",
+              "format": "did"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "InvalidKey"
+        },
+        {
+          "name": "AlreadyAdded"
+        },
+        {
+          "name": "TooManyKeys"
+        },
+        {
+          "name": "NotController"
+        },
+        {
+          "name": "InvalidOperation",
+          "description": "The PLC directory refused the change, as when another was made first: ask again."
+        }
+      ],
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
+}

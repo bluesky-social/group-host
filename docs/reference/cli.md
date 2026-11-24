@@ -9,7 +9,7 @@
 
 Anything else fails with its usage.
 
-## `opensocial`
+## `atgrp`
 
 It acts as a person. It signs in to your own PDS and asks it for a
 service token for each method it calls, as an app does, so an account on
@@ -17,7 +17,7 @@ any PDS can run it against any host. To write as a group (an invite, a
 rule or a membership), it takes a group token from the host for that
 space (`getGroupAuth`).
 
-Every command is `opensocial <group> <action>`, followed by the group it
+Every command is `atgrp <group> <action>`, followed by the group it
 acts in, then the arguments the command takes in order, then its flags.
 The group is a handle or a DID, which the host's `resolveHandle`
 resolves as you. The command groups are singular nouns for what they act
@@ -53,7 +53,7 @@ group's requests in it, while an MCP client acts in one group.
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `group create <handle> [--display-name] [--description] [--join-policy open\|approval\|invite]` | starts a group that you run. Its name defaults to the handle's first label and its join policy to `approval`                                                                                                                                                                                                  |
 | `group show <group>`                                                                            | shows the group as you may see it: its roles, its first hundred members and its spaces                                                                                                                                                                                                                        |
-| `group seed <handle>`                                                                           | makes a group to try things on, joined by approval. It has two rules, a moderator role (`include:fyi.opensocial.authModerate`, and labels in every space) that the founder may give, written as the group, and an invite for each of `OPENSOCIAL_SEED_INVITE`                                                  |
+| `group seed <handle>`                                                                           | makes a group to try things on, joined by approval. It has two rules, a moderator role (`include:org.atgrp.authModerate`, and labels in every space) that the founder may give, written as the group, and an invite for each of `ATGRP_SEED_INVITE`                                                            |
 | `group move <group> --to <address> [--to-did <did>]`                                            | moves a whole group from this host to another, making the four calls in turn. If a run handed the group over but couldn't switch it on, running it again switches it on. `--to-did` defaults to the did:web of `--to` ([moving](../design/moving.md))                                                         |
 | `group deactivate <group> [--undo]`                                                             | switches the group off, so nothing reads its spaces or writes as it. With `--undo`, it switches the group back on, for someone who held `group.configure` when it went off ([switching off](../design/groups.md#switching-off-on-and-deleting))                                                               |
 | `group handle <group> <handle>`                                                                 | gives the group a handle on a domain of its own once the domain names it, or gives its own address back. Until the domain names it, the host refuses with `NotPointing` and says what the domain's `_atproto` record should be ([a handle on its own domain](../design/groups.md#a-handle-on-its-own-domain)) |
@@ -114,7 +114,7 @@ group's requests in it, while an MCP client acts in one group.
 
 | Command                                                                                                       | What it does                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `space create <group> <type> --policy <json> [--skey <key>]`                                                  | makes a space of `<type>` in the group under the `fyi.opensocial.policy` given, with `com.atproto.space.createSpace` and a group token for the space. Without `--skey`, it gets a new key |
+| `space create <group> <type> --policy <json> [--skey <key>]`                                                  | makes a space of `<type>` in the group under the `org.atgrp.policy` given, with `com.atproto.space.createSpace` and a group token for the space. Without `--skey`, it gets a new key |
 | `space records <group> <space> [--collection] [--field <path> --equals <value>] [--uri] [--limit] [--cursor]` | lists the records in one of the group's spaces                                                                                                                                            |
 
 ### mod
@@ -150,12 +150,12 @@ An unknown command or flag fails with its usage, and any failure exits 1.
 
 | Variable                               | What it is                                                                                                                                                                       |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPENSOCIAL_AS`, `OPENSOCIAL_PASSWORD` | the handle you sign in as and its password (an app password is enough)                                                                                                           |
+| `ATGRP_AS`, `ATGRP_PASSWORD`           | the handle you sign in as and its password (an app password is enough)                                                                                                           |
 | `PDS_URL`                              | where you sign in · `http://localhost:2583`                                                                                                                                      |
-| `OPENSOCIAL_HOST`                      | the host · `http://localhost:2600`                                                                                                                                               |
-| `OPENSOCIAL_HOST_DID`                  | its DID · the did:web of its address                                                                                                                                             |
-| `OPENSOCIAL_SEED_INVITE`               | who `group seed` invites, comma-separated                                                                                                                                        |
-| `OPENSOCIAL_IMPORT_PASSWORD`           | the password at its own server of the account `account import` moves. It has to be the account's own password, since its server won't sign its identity over for an app password |
+| `ATGRP_HOST`                           | the host · `http://localhost:2600`                                                                                                                                               |
+| `ATGRP_HOST_DID`                       | its DID · the did:web of its address                                                                                                                                             |
+| `ATGRP_SEED_INVITE`                    | who `group seed` invites, comma-separated                                                                                                                                        |
+| `ATGRP_IMPORT_PASSWORD`                | the password at its own server of the account `account import` moves. It has to be the account's own password, since its server won't sign its identity over for an app password |
 
 ## `just`
 
@@ -174,7 +174,7 @@ An unknown command or flag fails with its usage, and any failure exits 1.
 | `look-up`                  | runs a world for `look` to draw over, kept until ctrl-c                                                                                                                                                                                                                                              |
 | `shots [--check] [guide]…` | redraws the guides' pictures and their text into `docs/guides/shots`, from the look line above each, with each guide over a fresh world. With `--check`, it writes nothing and fails if a picture's text has changed, as the `e2e` check does ([development](../development.md#the-guides-pictures)) |
 | `e2e <args>`               | builds the console and the host, then runs the console's flows in Chromium over the reference PDS, as the `e2e` check does                                                                                                                                                                           |
-| `opensocial <args>`        | runs the command                                                                                                                                                                                                                                                                                     |
+| `atgrp <args>`             | runs the command                                                                                                                                                                                                                                                                                     |
 | `docs`                     | checks the docs' links and anchors, as the `docs` check runs it                                                                                                                                                                                                                                      |
 | `docs-site`                | serves the docs as their site at http://localhost:4321/, updating as they change                                                                                                                                                                                                                     |
 | `docs-deploy`              | builds the docs site and deploys it as the repository's ([development](../development.md#the-docs-site))                                                                                                                                                                                             |

@@ -1,0 +1,68 @@
+{
+  "lexicon": 1,
+  "id": "org.atgrp.listModSubjects",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "List subjects in the moderation queue. Requires mod.read.",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "group"
+        ],
+        "properties": {
+          "group": {
+            "type": "string",
+            "format": "did",
+            "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "escalated",
+              "resolved"
+            ],
+            "default": "open"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "subjects"
+          ],
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "subjects": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "org.atgrp.defs#modSubjectView"
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "InvalidCursor",
+          "description": "The cursor isn't one this host gave."
+        }
+      ]
+    }
+  }
+}
