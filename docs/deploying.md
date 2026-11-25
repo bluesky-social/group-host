@@ -12,14 +12,24 @@ One image, `group-host:current`, carries three programs. The host, `group-host`,
 
 ## Pulling the image
 
-Each released version is published as an image. Pull the one you want, and name it as the steps below do:
+Each released version is published as an image, tagged with its version, in two registries that hold the same image, digest and all: `knotless.dev/chadtmiller.com/group-host` and `ghcr.io/bluesky-social/group-host`. Pull one from either and name it as the steps below do:
 
 ```sh
-docker pull knotless.dev/chadtmiller.com/group-host:0.2.0
-docker tag knotless.dev/chadtmiller.com/group-host:0.2.0 group-host:current
+docker pull ghcr.io/bluesky-social/group-host:<version>
+docker tag ghcr.io/bluesky-social/group-host:<version> group-host:current
 ```
 
-`latest` is the highest version. What changed in each is in `CHANGELOG.md`.
+For example, to run 0.3.0, from either registry:
+
+```sh
+docker pull ghcr.io/bluesky-social/group-host:0.3.0
+docker tag ghcr.io/bluesky-social/group-host:0.3.0 group-host:current
+
+docker pull knotless.dev/chadtmiller.com/group-host:0.3.0
+docker tag knotless.dev/chadtmiller.com/group-host:0.3.0 group-host:current
+```
+
+The versions, and what changed in each, are in `CHANGELOG.md`. Pin the one you run, and move to a newer one on purpose, since the host holds keys that can't be replaced. `latest` names the highest version in both, if you'd rather take each as it comes.
 
 ## Building the image
 
@@ -178,8 +188,8 @@ Compose checks the host at `/xrpc/_health` and the console at `/_app/version.jso
 The host's SQLite database holds the groups' repos, spaces and members. The host makes its writes take turns within its own process, so two hosts over one data directory would interleave commits to the same repos. So never run the host twice over one data directory. To upgrade, make the new `group-host:current`, pulled or built as above, then stop the old host and start the new one:
 
 ```sh
-docker pull knotless.dev/chadtmiller.com/group-host:0.2.0
-docker tag knotless.dev/chadtmiller.com/group-host:0.2.0 group-host:current
+docker pull ghcr.io/bluesky-social/group-host:<version>
+docker tag ghcr.io/bluesky-social/group-host:<version> group-host:current
 docker compose stop host
 docker compose up -d host
 docker compose up -d console
