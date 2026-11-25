@@ -65,9 +65,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto"
-version = "0.3.0"
+version = "0.3.1"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "13ce204ed0ba7aaf46dc4f54ea6553252cb856d28eced00bed82b5de8f2824af"
+checksum = "1e429768e66c5615c072c9a0a7ab2e41e3e353c0be86518a93a8b38b6643b071"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -1848,7 +1848,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

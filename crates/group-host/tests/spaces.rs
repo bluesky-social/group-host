@@ -823,17 +823,30 @@ async fn reads_only_with_a_credential_the_authority_issued() {
             ),
             (401, "BadJwtSub"),
         ),
-        // For the space, but sent for another repo.
+        // For the space, but signed for another repo.
+        (
+            signed(&f.syncer, "did:plc:other", &f.kem, COMMIT_MAC).0,
+            (401, "BadSpaceAudience"),
+        ),
+        // An audience changed after the request was signed, gone, or not a DID.
         (
             with("atproto-space-audience", "did:plc:other".into()),
-            (400, "BadSpaceAudience"),
+            (401, "BadSpaceSignature"),
+        ),
+        (
+            without("atproto-space-audience"),
+            (401, "BadSpaceSignature"),
+        ),
+        (
+            with("atproto-space-audience", "nobody".into()),
+            (401, "BadSpaceSignature"),
         ),
         // The request signed with a key the credential is not bound to.
         (
             bearing(&f.syncer.credential, &other_key),
-            (401, "BadSignature"),
+            (401, "BadSpaceSignature"),
         ),
-        (without("signature"), (401, "BadSignature")),
+        (without("signature"), (401, "BadSpaceSignature")),
         (without("accept-signature"), (400, "InvalidSpaceMac")),
         // Asking for a MAC of a record of a read that vouches for a commit
         // asks for none of what it can give.

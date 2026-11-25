@@ -15,7 +15,7 @@ use atproto::space::{
     read_accept_signature, record_header, star,
 };
 use atproto::space_auth::{self, CLOCK_SKEW, CREDENTIAL_MAX_AGE, Expect, Kind, TokenError};
-use atproto::{Cid, drisl};
+use atproto::{Cid, drisl, syntax};
 use axum::Json;
 use axum::extract::{Query, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
@@ -81,13 +81,10 @@ pub(crate) async fn credential(
     let checked = checked
         .ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", token.iss)))?;
     checked.map_err(refused)?;
-    if text("atproto-space-audience") != Some(repo) {
-        return Err(XrpcError::new(
-            StatusCode::BAD_REQUEST,
-            "BadSpaceAudience",
-            "the space audience is not the repo asked for",
-        ));
-    }
+    let audience = text("atproto-space-audience").filter(|a| syntax::is_did(a));
+    let audience = audience.ok_or_else(|| {
+        unauthorized("BadSpaceSignature", "missing or invalid space audience DID")
+    })?;
     let cnf = token.cnf.as_deref().unwrap_or_default();
     space_auth::verify_request(text, cnf).map_err(refused)?;
     let revoked = host.store.revoked(space, &token.jti, now() as i64);
@@ -95,6 +92,12 @@ pub(crate) async fn credential(
         return Err(unauthorized(
             "CredentialRevoked",
             "space credential has been revoked",
+        ));
+    }
+    if audience != repo {
+        return Err(unauthorized(
+            "BadSpaceAudience",
+            "the space audience is not the repo asked for",
         ));
     }
     Ok(())
