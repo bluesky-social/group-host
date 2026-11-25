@@ -3,8 +3,6 @@
 # package `group-host`, named as the repository, `docker pull
 # knotless.dev/chadtmiller.com/group-host:<version>`, with the version's
 # CHANGELOG.md section as its notes and the commit it was built from.
-# Where it runs is not this repository's to say: next.opensocial.fyi pulls
-# the version hetzner-infra names.
 #
 # The host, the command and the console are built as the Dockerfile builds
 # them, and the image made from them with no container engine, which this

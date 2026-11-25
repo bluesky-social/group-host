@@ -226,8 +226,7 @@ there. Nothing is pushed to that copy but from here. `release`: once a
 Release pull lands and its checks pass, the version's image is built,
 published as a knotless release, and copied as it is to
 ghcr.io/bluesky-social/group-host (`docs/development.md`, The image).
-Nothing here deploys: next.opensocial.fyi runs the version hetzner-infra
-names. Every workflow names `runner.knotless.dev`.
+Every workflow names `runner.knotless.dev`.
 
 On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
 what they read; otherwise each passes at once, noted as skipped.

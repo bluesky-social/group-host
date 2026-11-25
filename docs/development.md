@@ -305,5 +305,3 @@ knotless secret set knotless://chadtmiller.com/group-host GHCR_TOKEN \
   --runner runner.knotless.dev --ref refs/heads/main
 knotless run rerun knotless://chadtmiller.com/group-host --ref refs/heads/main --workflow release
 ```
-
-Nothing here deploys it. next.opensocial.fyi runs the version hetzner-infra names (its `stacks/opensocial`), pulled from knotless.dev; moving it to a new version is a change there.
