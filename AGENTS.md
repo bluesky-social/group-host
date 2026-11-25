@@ -224,8 +224,9 @@ the same commit to a private copy on GitHub
 (github.com/bluesky-social/group-host), for those who read the code
 there. Nothing is pushed to that copy but from here. `deploy`: each push
 to `main`, which takes a pull only once its checks pass,
-is built on the machine serving next.opensocial.fyi and goes up there
-(`docs/deploying.md`). Every workflow but `deploy` names
+is built on the machine serving next.opensocial.fyi and goes up there,
+its image published as a knotless release the first time a version goes
+up (`docs/development.md`). Every workflow but `deploy` names
 `runner.knotless.dev`; `deploy` alone runs on `ci.knotless.dev`, which
 runs only its owner's repositories, and holds its secrets.
 

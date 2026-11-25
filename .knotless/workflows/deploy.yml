@@ -11,10 +11,10 @@
 # (hetzner-infra's stacks/opensocial). This run reaches it with
 # GROUP_HOST_DEPLOY_KEY, a key the box takes only for its forced command,
 # group-host-deploy, which can build group-host from an archive, bring a
-# build up, or drop one, and nothing else (hetzner-infra's
-# stacks/opensocial/files/group-host-deploy.sh). The key is sealed to
-# ci.knotless.dev, the runner that runs only its owner's repositories, for
-# pushes to main alone, so no other run sees it.
+# build up, drop one, or save the one running, and nothing else
+# (hetzner-infra's stacks/opensocial/files/group-host-deploy.sh). The key
+# is sealed to ci.knotless.dev, the runner that runs only its owner's
+# repositories, for pushes to main alone, so no other run sees it.
 #
 # The commit is built on the box as group-host:build-<commit>, then goes
 # up: the running image is kept as group-host:before-<commit> to roll back
@@ -22,19 +22,30 @@
 # then as the network reaches it. Deploys run one at a time, in the order
 # main moved (superseded: finish), so none is cut off halfway and an older
 # commit never goes up after a newer one.
+#
+# Once up, the image is published as the release of the `group-host`
+# package at main's version, if that version has none yet: `box save`
+# streams `docker save` of the running image, an OCI image layout, into
+# `knotless release publish --oci`, as the owner, with RELEASE_PASSWORD,
+# an app password of theirs sealed to this runner for main alone, the
+# version's CHANGELOG.md section as its notes. It is then `docker pull
+# knotless.dev/chadtmiller.com/group-host:<version>`, the image
+# next.opensocial.fyi runs. Without RELEASE_PASSWORD, nothing is published.
 on:
   push:
     refs: [refs/heads/main]
 superseded: finish
 runners: [ci.knotless.dev]
 image: alpine:3.22
-secrets: [GROUP_HOST_DEPLOY_KEY]
+secrets: [GROUP_HOST_DEPLOY_KEY, RELEASE_PASSWORD]
 env:
   # The grain box, which serves next.opensocial.fyi, and its host key, as
   # hetzner-infra's ci/known_hosts pins it.
   GROUP_HOST_BOX: root@opensocial.fyi
   GRAIN_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaUk4YyxTjCsPg1XOsCIJiB1NlEakc9/tnS+QeYRRNQ
   GROUP_HOST_URL: https://next.opensocial.fyi
+  REPO: knotless://chadtmiller.com/group-host
+  KNOTLESS_APPVIEW: https://knotless.dev
 steps:
   - name: tools
     run: |
@@ -68,3 +79,20 @@ steps:
       echo "the box runs group-host:current at this commit, but it is not healthy;"
       echo "to roll back: docker tag group-host:before-$(echo "$KNOTLESS_RUN_SHA" | cut -c1-12) group-host:current, then docker compose up -d in /etc/group-host"
       exit 1
+  - name: image
+    run: |
+      [ -n "$RELEASE_PASSWORD" ] || { echo "no RELEASE_PASSWORD: not publishing the image"; exit 0; }
+      curl -fsSL "$KNOTLESS_APPVIEW/install.sh" | KNOTLESS_INSTALL_DIR=/usr/local/bin sh
+      version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+      if knotless release list "$REPO" group-host | cut -f2 | grep -qxF "$version"; then
+        echo "group-host $version is published already"
+        exit 0
+      fi
+      dir=$(mktemp -d)
+      box save | tar -x -C "$dir"
+      # The version's section of the changelog, less its heading.
+      awk -v v="$version" '/^## / { on = ($2 == v); next } on' CHANGELOG.md > ~/.notes
+      KNOTLESS_IDENTIFIER=chadtmiller.com KNOTLESS_PASSWORD="$RELEASE_PASSWORD" \
+        knotless release publish "$REPO" group-host "$version" --oci "$dir" --commit "$KNOTLESS_RUN_SHA" --notes - < ~/.notes
+      echo "published: docker pull knotless.dev/chadtmiller.com/group-host:$version"
+    timeout: 20

@@ -285,5 +285,20 @@ The owner runs it, signed in with `knotless login`, with knope
 installed (`cargo install knope`). No workflow can, for the same reason
 as the docs site: reading or writing a private repository takes an OAuth
 login's space credential, and an app password, all a run could sign in
-with, can't get one. For the same reason, nothing is published as a
-knotless release: knotless refuses a private repository's releases.
+with, can't get one. Each version's image is published by the first
+deploy that carries it ([below](#the-deploy-and-its-image)).
+
+## The deploy and its image
+
+The host at next.opensocial.fyi deploys itself: `.knotless/workflows/deploy.yml` runs on each push to `main`. A pull is merged into `main` once its own checks (`check`, `test`, `web`, `lexicons`, `e2e` and `docs`) have passed on it merged with `main`, and the review bot has approved it. The workflow sends a `git archive` of the commit to the machine over SSH, which builds it as `group-host:build-<commit>`. That image then becomes `group-host:current`, and the image it replaces is kept as `group-host:before-<commit>`. Compose brings the host and the console up from the compose file at that commit, as [an upgrade](deploying.md#upgrading) does. The deploy passes once `/xrpc/_health` names the commit, on the machine and then through the proxy, within a minute.
+
+One deploy runs at a time, in the order `main` moved, and a newer commit's deploy waits for the one before it to finish instead of cutting it off.
+
+The workflow runs only on `ci.knotless.dev`, the runner that runs only its owner's repositories. Every other workflow names `runner.knotless.dev`. Two secrets are sealed to `ci.knotless.dev` for `refs/heads/main`. `GROUP_HOST_DEPLOY_KEY` is an SSH key the machine accepts only to run its deploy command. That command can build, bring up or throw away a group-host image, or save the one running, and can't do anything else. The deploy command, how its key is installed, and how to roll back are in the machine's own configuration (hetzner-infra's `stacks/opensocial`). `RELEASE_PASSWORD` is an app password of the owner's, for publishing the image.
+
+Once a deploy is up, the workflow publishes the image it runs as the release of the `group-host` package at `main`'s version, unless that version is published already. So each version is published once, by the first deploy that carries it, with its `CHANGELOG.md` section as the release's notes. The image is `docker save` of `group-host:current` on the machine, an OCI image layout, published with `knotless release publish --oci`, and [pulled](deploying.md#pulling-the-image) from knotless.dev. Without `RELEASE_PASSWORD`, the deploy publishes nothing. The owner seals it once, an app password of theirs on stdin, to the trusted runner for `main` alone:
+
+```sh
+knotless secret set knotless://chadtmiller.com/group-host RELEASE_PASSWORD \
+  --runner ci.knotless.dev --ref refs/heads/main
+```

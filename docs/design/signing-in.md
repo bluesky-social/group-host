@@ -62,8 +62,7 @@ shows its sign-up. On return the token's `sub` is the account it made,
 which nobody named before. So the host resolves it, as it would a typed
 handle, and signs you in only if that account's own authorization server
 is the one that answered. The sign-in field's example handle is under
-the sign-up PDS's own name, `you.bsky.social` or
-`you.pds.next.opensocial.fyi`.
+the sign-up PDS's own name, such as `you.bsky.social`.
 
 As you type, the field suggests the accounts whose handle matches, with
 each one's picture, name and handle where they're known. Picking one

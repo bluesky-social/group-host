@@ -10,9 +10,20 @@ A group is an atproto account of its own, with no password and no one person beh
 
 One image, `group-host:current`, carries three programs. The host, `group-host`, is a Rust server over SQLite. The console is a SvelteKit app where people start and run groups, built into `/app/build`. The command is `atgrp`. The host and the console run as two containers from that image, behind one domain.
 
+## Pulling the image
+
+Each released version is published as an image. Pull the one you want, and name it as the steps below do:
+
+```sh
+docker pull knotless.dev/chadtmiller.com/group-host:0.2.0
+docker tag knotless.dev/chadtmiller.com/group-host:0.2.0 group-host:current
+```
+
+`latest` is the highest version. What changed in each is in `CHANGELOG.md`.
+
 ## Building the image
 
-Build from the repository root, and name the commit you're building:
+Or build it yourself from the repository root, and name the commit you're building:
 
 ```sh
 docker build --build-arg GROUP_HOST_COMMIT=$(git rev-parse HEAD) -t group-host:current .
@@ -164,24 +175,17 @@ Compose checks the host at `/xrpc/_health` and the console at `/_app/version.jso
 
 ## Upgrading
 
-The host's SQLite database holds the groups' repos, spaces and members. The host makes its writes take turns within its own process, so two hosts over one data directory would interleave commits to the same repos. So never run the host twice over one data directory. To upgrade, stop the old host, then start the new one:
+The host's SQLite database holds the groups' repos, spaces and members. The host makes its writes take turns within its own process, so two hosts over one data directory would interleave commits to the same repos. So never run the host twice over one data directory. To upgrade, make the new `group-host:current`, pulled or built as above, then stop the old host and start the new one:
 
 ```sh
-docker build --build-arg GROUP_HOST_COMMIT=$(git rev-parse HEAD) -t group-host:current .
+docker pull knotless.dev/chadtmiller.com/group-host:0.2.0
+docker tag knotless.dev/chadtmiller.com/group-host:0.2.0 group-host:current
 docker compose stop host
 docker compose up -d host
 docker compose up -d console
 ```
 
 On SIGTERM the host answers the requests already under way, within its 30-second grace period, then exits. The proxy holds new requests until the new host answers. Compose replaces the console the same way. It keeps no state, so a rollout could start a new console beside the old one instead. Neither service sets `container_name`, so that stays possible. When it's stopped, the console finishes its requests within a 35-second grace period.
-
-## Deploying on each merge
-
-The host at next.opensocial.fyi deploys itself: `.knotless/workflows/deploy.yml` runs on each push to `main`. A pull is merged into `main` once its own checks (`check`, `test`, `web`, `lexicons`, `e2e` and `docs`) have passed on it merged with `main`, and the review bot has approved it. So the deploy doesn't wait for `main`'s own checks, since a workflow's step can't read a private repository's checks. The merge queue, which would check each batch as it lands, is off while knotless can't land a private repository's queue. The workflow sends a `git archive` of the commit to the machine over SSH, which builds it as `group-host:build-<commit>`. That image then becomes `group-host:current`, and the image it replaces is kept as `group-host:before-<commit>`. Compose brings the host and the console up from the compose file at that commit, as the upgrade above does. The deploy passes once `/xrpc/_health` names the commit, on the machine and then through the proxy, within a minute.
-
-One deploy runs at a time, in the order `main` moved, and a newer commit's deploy waits for the one before it to finish instead of cutting it off.
-
-The workflow runs only on `ci.knotless.dev`, the runner that runs only its owner's repositories. Every other workflow names `runner.knotless.dev`. One secret is sealed to `ci.knotless.dev` for `refs/heads/main`. It's `GROUP_HOST_DEPLOY_KEY`, an SSH key the machine accepts only to run its deploy command. That command can build, bring up or throw away a group-host image and can't do anything else. The deploy command, how its key is installed, and how to roll back are in the machine's own configuration (hetzner-infra's `stacks/opensocial`).
 
 ## Backing up
 
