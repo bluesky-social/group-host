@@ -298,4 +298,12 @@ knotless secret set knotless://chadtmiller.com/group-host RELEASE_PASSWORD \
 knotless run rerun knotless://chadtmiller.com/group-host --ref refs/heads/<branch> --workflow release
 ```
 
+The image it published is then copied, digest and all, to GitHub's registry beside the repository's copy there, `ghcr.io/bluesky-social/group-host:<version>`, tagged `latest` too while it is the highest version. That takes `GHCR_TOKEN`, a GitHub token of `GHCR_USER`'s (the workflow's `env`) with `write:packages`, sealed the same way. Without it, nothing is copied. A version published before the copy existed, or whose copy failed, is copied when the workflow is asked for on `main` again; it builds nothing then, as the version is published already:
+
+```sh
+knotless secret set knotless://chadtmiller.com/group-host GHCR_TOKEN \
+  --runner runner.knotless.dev --ref refs/heads/main
+knotless run rerun knotless://chadtmiller.com/group-host --ref refs/heads/main --workflow release
+```
+
 Nothing here deploys it. next.opensocial.fyi runs the version hetzner-infra names (its `stacks/opensocial`), pulled from knotless.dev; moving it to a new version is a change there.

@@ -1,4 +1,4 @@
-# A private copy on GitHub, bluesky-social/group-host, for those who read
+# A copy on GitHub, bluesky-social/group-host, for those who read
 # the code there. Each push to main or a tag pushes the same commit there;
 # only the code goes, as pulls and issues stay here. MIRROR_KEY is that
 # repository's deploy key, with write access, given to the runners for

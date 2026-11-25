@@ -220,11 +220,12 @@ pulls into it or into a `feature/` branch:
   build.
 
 Two more check nothing. `mirror`: each push to `main` or a tag pushes
-the same commit to a private copy on GitHub
+the same commit to a copy on GitHub
 (github.com/bluesky-social/group-host), for those who read the code
 there. Nothing is pushed to that copy but from here. `release`: once a
-Release pull lands and its checks pass, the version's image is built
-and published as a knotless release (`docs/development.md`, The image).
+Release pull lands and its checks pass, the version's image is built,
+published as a knotless release, and copied as it is to
+ghcr.io/bluesky-social/group-host (`docs/development.md`, The image).
 Nothing here deploys: next.opensocial.fyi runs the version hetzner-infra
 names. Every workflow names `runner.knotless.dev`.
 

@@ -19,6 +19,15 @@
 # for pushes to main alone. Asked for on another branch, `knotless run
 # rerun knotless://chadtmiller.com/group-host --ref refs/heads/<branch>
 # --workflow release`, it builds the image and publishes nothing.
+#
+# The published image is then copied as it is, the same digest, to GitHub's
+# registry beside the repository's copy there,
+# ghcr.io/bluesky-social/group-host:<version>, and `latest` while it is the
+# highest version, with GHCR_TOKEN, a token of GHCR_USER's that may write
+# packages, sealed as RELEASE_PASSWORD is. A version published already and
+# missing there is copied when this is asked for on main again; without
+# GHCR_TOKEN, nothing is.
+#
 # Bookworm, as the Dockerfile builds and the image's base is: built on a
 # newer Debian, the binaries would ask for a glibc the base has not.
 image: rust:1.100-bookworm
@@ -29,7 +38,7 @@ on:
 after: [check, test, web, lexicons, e2e, docs]
 superseded: finish
 cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/node, /opt/tools, web/node_modules]
-secrets: [RELEASE_PASSWORD]
+secrets: [RELEASE_PASSWORD, GHCR_TOKEN]
 env:
   # The image's toolchain, over the cached rustup's default (check.yml).
   RUSTUP_TOOLCHAIN: "1.100.0"
@@ -39,6 +48,8 @@ env:
   CRANE_SHA256: 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
   TINI_VERSION: 0.19.0
   TINI_SHA256: c5b0666b4cb676901f90dfcb37106783c5fe2077b04590973b885950611b30ee
+  GHCR: ghcr.io/bluesky-social/group-host
+  GHCR_USER: bigmoves
 steps:
   - name: version
     run: |
@@ -69,9 +80,8 @@ steps:
       GROUP_HOST_COMMIT=$KNOTLESS_RUN_SHA cargo build --profile deploy --locked \
         --target-dir target/bookworm -p group-host --bin group-host -p atgrp --bin atgrp
     timeout: 45
-  - name: image
+  - name: crane
     run: |
-      [ ! -e ~/.done ] || exit 0
       mkdir -p /opt/tools/bin
       if [ "$(cat /opt/tools/.crane 2>/dev/null)" != "$CRANE_VERSION" ]; then
         cd /tmp
@@ -79,8 +89,10 @@ steps:
         echo "$CRANE_SHA256  go-containerregistry_Linux_x86_64.tar.gz" | sha256sum -c -
         tar -xzf go-containerregistry_Linux_x86_64.tar.gz -C /opt/tools/bin crane
         echo "$CRANE_VERSION" > /opt/tools/.crane
-        cd - > /dev/null
       fi
+  - name: image
+    run: |
+      [ ! -e ~/.done ] || exit 0
       if [ "$(cat /opt/tools/.tini 2>/dev/null)" != "$TINI_VERSION" ]; then
         curl -fsSL -o /opt/tools/bin/tini-static "https://github.com/krallin/tini/releases/download/v$TINI_VERSION/tini-static-amd64"
         echo "$TINI_SHA256  /opt/tools/bin/tini-static" | sha256sum -c -
@@ -100,3 +112,22 @@ steps:
       # The version's section of the changelog, less its heading.
       awk -v v="$version" '/^## / { on = ($2 == v); next } on' CHANGELOG.md > ~/.notes
       knotless release publish "$REPO" group-host "$version" --oci target/image --commit "$KNOTLESS_RUN_SHA" --notes - < ~/.notes
+  - name: ghcr
+    on: {refs: [refs/heads/main]}
+    run: |
+      [ -n "$GHCR_TOKEN" ] || { echo "no GHCR_TOKEN: not copying to GitHub's registry"; exit 0; }
+      version=$(cat ~/.version)
+      published=$(knotless release list "$REPO" group-host | cut -f2)
+      echo "$published" | grep -qxF "$version" || { echo "group-host $version is not published: nothing to copy"; exit 0; }
+      export PATH=/opt/tools/bin:$PATH
+      echo "$GHCR_TOKEN" | crane auth login ghcr.io -u "$GHCR_USER" --password-stdin
+      if crane digest "$GHCR:$version" > /dev/null 2>&1; then
+        echo "$GHCR:$version is there already"
+      else
+        crane copy "knotless.dev/chadtmiller.com/group-host:$version" "$GHCR:$version"
+      fi
+      # `latest`, as knotless.dev computes it: the highest version.
+      if [ "$(echo "$published" | head -1)" = "$version" ]; then
+        crane tag "$GHCR:$version" latest
+      fi
+      echo "$GHCR:$version is $(crane digest "$GHCR:$version")"
