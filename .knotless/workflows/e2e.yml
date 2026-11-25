@@ -15,7 +15,7 @@
 # and the build are kept between runs, as main's runs leave them: nothing
 # is fetched again until what it is made from changes.
 image: rust:1.100
-# The shared runner host; ci.knotless.dev, also this repository's, runs only deploy.yml.
+# The shared runner host, as every workflow here.
 runners: [runner.knotless.dev]
 # Every push to main, and pulls into it or a feature/ branch that change
 # the console, the host it asks, the

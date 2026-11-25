@@ -1,0 +1,102 @@
+# Publishes the host's image once main's version, in Cargo.toml, has no
+# release yet and the checks have passed at its commit: the release of the
+# package `group-host`, named as the repository, `docker pull
+# knotless.dev/chadtmiller.com/group-host:<version>`, with the version's
+# CHANGELOG.md section as its notes and the commit it was built from.
+# Where it runs is not this repository's to say: next.opensocial.fyi pulls
+# the version hetzner-infra names.
+#
+# The host, the command and the console are built as the Dockerfile builds
+# them, and the image made from them with no container engine, which this
+# runner's jobs have none of (.knotless/image.sh). `just release` keeps a
+# pull open that raises the version; once it lands, this publishes it, and
+# the next `just release` tags it. A version CHANGELOG.md has no section
+# for is no release (knope writes one for each), so a pull that touches
+# Cargo.toml for another reason publishes nothing, and a version published
+# already is left alone.
+#
+# RELEASE_PASSWORD is an app password of the owner's, sealed to this runner
+# for pushes to main alone. Asked for on another branch, `knotless run
+# rerun knotless://chadtmiller.com/group-host --ref refs/heads/<branch>
+# --workflow release`, it builds the image and publishes nothing.
+# Bookworm, as the Dockerfile builds and the image's base is: built on a
+# newer Debian, the binaries would ask for a glibc the base has not.
+image: rust:1.100-bookworm
+runners: [runner.knotless.dev]
+on:
+  push: {refs: [refs/heads/main], paths: [Cargo.toml]}
+  asked: {refs: [refs/heads/*]}
+after: [check, test, web, lexicons, e2e, docs]
+superseded: finish
+cache: [target, /usr/local/cargo/registry, /usr/local/rustup, /opt/node, /opt/tools, web/node_modules]
+secrets: [RELEASE_PASSWORD]
+env:
+  # The image's toolchain, over the cached rustup's default (check.yml).
+  RUSTUP_TOOLCHAIN: "1.100.0"
+  REPO: knotless://chadtmiller.com/group-host
+  KNOTLESS_APPVIEW: https://knotless.dev
+  CRANE_VERSION: 0.22.1
+  CRANE_SHA256: 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
+  TINI_VERSION: 0.19.0
+  TINI_SHA256: c5b0666b4cb676901f90dfcb37106783c5fe2077b04590973b885950611b30ee
+steps:
+  - name: version
+    run: |
+      curl -fsSL https://knotless.dev/install.sh | KNOTLESS_INSTALL_DIR=/usr/local/bin sh
+      version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+      echo "$version" > ~/.version
+      if knotless release list "$REPO" group-host | cut -f2 | grep -qxF "$version"; then
+        echo "group-host $version is published already"
+        touch ~/.done
+      elif ! grep -q "^## $version " CHANGELOG.md; then
+        echo "CHANGELOG.md has no section for $version: no release to publish"
+        [ "$KNOTLESS_RUN_REF" != refs/heads/main ] || touch ~/.done
+      elif [ "$KNOTLESS_RUN_REF" != refs/heads/main ]; then
+        echo "on $KNOTLESS_RUN_REF: building $version, publishing nothing"
+      fi
+  - uses: chadtmiller.com/steps/node@1
+    with: {version: 24.22.1}
+  - uses: chadtmiller.com/steps/npm-ci@1
+    with: {dir: web}
+  # The console, then the host and the command: as the Dockerfile's
+  # stages build them, the commit compiled into the host.
+  - name: build
+    run: |
+      [ ! -e ~/.done ] || exit 0
+      (cd web && PATH=/opt/node/bin:$PATH npm run build)
+      # A target directory of its own, so nothing a build on another
+      # Debian left in the cache is taken for this one.
+      GROUP_HOST_COMMIT=$KNOTLESS_RUN_SHA cargo build --profile deploy --locked \
+        --target-dir target/bookworm -p group-host --bin group-host -p atgrp --bin atgrp
+    timeout: 45
+  - name: image
+    run: |
+      [ ! -e ~/.done ] || exit 0
+      mkdir -p /opt/tools/bin
+      if [ "$(cat /opt/tools/.crane 2>/dev/null)" != "$CRANE_VERSION" ]; then
+        cd /tmp
+        curl -fsSLO "https://github.com/google/go-containerregistry/releases/download/v$CRANE_VERSION/go-containerregistry_Linux_x86_64.tar.gz"
+        echo "$CRANE_SHA256  go-containerregistry_Linux_x86_64.tar.gz" | sha256sum -c -
+        tar -xzf go-containerregistry_Linux_x86_64.tar.gz -C /opt/tools/bin crane
+        echo "$CRANE_VERSION" > /opt/tools/.crane
+        cd - > /dev/null
+      fi
+      if [ "$(cat /opt/tools/.tini 2>/dev/null)" != "$TINI_VERSION" ]; then
+        curl -fsSL -o /opt/tools/bin/tini-static "https://github.com/krallin/tini/releases/download/v$TINI_VERSION/tini-static-amd64"
+        echo "$TINI_SHA256  /opt/tools/bin/tini-static" | sha256sum -c -
+        echo "$TINI_VERSION" > /opt/tools/.tini
+      fi
+      command -v jq > /dev/null || { apt-get update -qq && apt-get install -y -qq --no-install-recommends jq > /dev/null; }
+      git config --global --add safe.directory "$PWD"
+      PATH=/opt/tools/bin:$PATH SOURCE_DATE_EPOCH=$(git log -1 --format=%ct HEAD) TINI=/opt/tools/bin/tini-static \
+        .knotless/image.sh target/bookworm/deploy web "$(cat ~/.version)" "$KNOTLESS_RUN_SHA" target/image
+  - name: publish
+    on: {refs: [refs/heads/main]}
+    run: |
+      [ ! -e ~/.done ] || exit 0
+      version=$(cat ~/.version)
+      owner=${REPO#knotless://}
+      export KNOTLESS_IDENTIFIER=${owner%%/*} KNOTLESS_PASSWORD="$RELEASE_PASSWORD"
+      # The version's section of the changelog, less its heading.
+      awk -v v="$version" '/^## / { on = ($2 == v); next } on' CHANGELOG.md > ~/.notes
+      knotless release publish "$REPO" group-host "$version" --oci target/image --commit "$KNOTLESS_RUN_SHA" --notes - < ~/.notes

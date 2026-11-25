@@ -37,6 +37,8 @@ RUN npm run build
 
 # adapter-node bundles what the console imports, so it needs no
 # node_modules beside it; the host's healthcheck asks with node's fetch.
+# A release's image is this stage made with no engine (.knotless/image.sh):
+# a change here changes it there.
 FROM node:24.22.1-bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tini \

@@ -222,13 +222,11 @@ pulls into it or into a `feature/` branch:
 Two more check nothing. `mirror`: each push to `main` or a tag pushes
 the same commit to a private copy on GitHub
 (github.com/bluesky-social/group-host), for those who read the code
-there. Nothing is pushed to that copy but from here. `deploy`: each push
-to `main`, which takes a pull only once its checks pass,
-is built on the machine serving next.opensocial.fyi and goes up there,
-its image published as a knotless release the first time a version goes
-up (`docs/development.md`). Every workflow but `deploy` names
-`runner.knotless.dev`; `deploy` alone runs on `ci.knotless.dev`, which
-runs only its owner's repositories, and holds its secrets.
+there. Nothing is pushed to that copy but from here. `release`: once a
+Release pull lands and its checks pass, the version's image is built
+and published as a knotless release (`docs/development.md`, The image).
+Nothing here deploys: next.opensocial.fyi runs the version hetzner-infra
+names. Every workflow names `runner.knotless.dev`.
 
 On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
 what they read; otherwise each passes at once, noted as skipped.
