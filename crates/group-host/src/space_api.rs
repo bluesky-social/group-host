@@ -71,9 +71,12 @@ pub(crate) async fn credential(
             "space credential issuer is not the space authority",
         ));
     }
+    // The space it is for is held to the one asked for last, as the
+    // reference does: a credential for another space is a bad request,
+    // not a bad token.
     let expect = Expect {
         aud: None,
-        sub: Some(space),
+        sub: None,
     };
     let check =
         |key: &atproto::PublicKey| space_auth::verify(Kind::Credential, jwt, key, &expect, now());
@@ -87,7 +90,7 @@ pub(crate) async fn credential(
     })?;
     let cnf = token.cnf.as_deref().unwrap_or_default();
     space_auth::verify_request(text, cnf).map_err(refused)?;
-    let revoked = host.store.revoked(space, &token.jti, now() as i64);
+    let revoked = host.store.revoked(&token.sub, &token.jti, now() as i64);
     if revoked.map_err(XrpcError::internal)? {
         return Err(unauthorized(
             "CredentialRevoked",
@@ -98,6 +101,13 @@ pub(crate) async fn credential(
         return Err(unauthorized(
             "BadSpaceAudience",
             "the space audience is not the repo asked for",
+        ));
+    }
+    if token.sub != space {
+        return Err(XrpcError::new(
+            StatusCode::BAD_REQUEST,
+            "InvalidCredential",
+            "the space credential is not for this space",
         ));
     }
     Ok(())

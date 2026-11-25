@@ -815,13 +815,14 @@ async fn reads_only_with_a_credential_the_authority_issued() {
             (401, "BadJwtSignature"),
         ),
         (bearing(&expired, &f.syncer.key), (401, "JwtExpired")),
-        // For another space of the same authority.
+        // For another space of the same authority: a sound credential, for
+        // the wrong space.
         (
             bearing(
                 &credential(&f.authority, &elsewhere, &f.syncer.key, &f.authority.did),
                 &f.syncer.key,
             ),
-            (401, "BadJwtSub"),
+            (400, "InvalidCredential"),
         ),
         // For the space, but signed for another repo.
         (
