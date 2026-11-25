@@ -1,6 +1,6 @@
 # group-host
 
-> **Alpha.** group-host is early and changes often. Its `org.atgrp.*`
+> **Beta.** group-host is early and changes often. Its `org.atgrp.*`
 > lexicons are not yet published and will change, as will the space
 > alpha it builds on, so apps and records written against today's will
 > break. Don't run it for a group you can't afford to lose.
