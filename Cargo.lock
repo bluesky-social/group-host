@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "atgrp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "atproto",
@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "group-host"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "atproto",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "group-host-mcp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "tokio",
