@@ -4,6 +4,48 @@ What changed in each version of the group host, its console and the
 `opensocial` command for those who run and use them, from the change
 files in `.changeset/` (see `knope.toml`).
 
+## 0.4.0 (2026-11-26)
+
+### Breaking Changes
+
+#### The host follows the Atmosphere Groups spec as released
+
+The host now follows the Atmosphere Groups spec (tangled.org/atmospheregroups.org/spec) as it was released. Groups made before this change keep their old records, which the host no longer reads.
+
+- A group's profile is now two records in its meta space: `org.atgrp.about` (display name, description, avatar and `website`, which was `url`) and `org.atgrp.config` (its join policy). The banner is gone. A group's rules and labeler moved to its members space. Its declaration is empty.
+- Records and spaces were renamed: `acceptance` is now `confirmation`, and the `invites` inbox space is now `inbox`. In roles and space policies, `scopes` is now `permissions`, and in roles, `assignable` is now `canAssign`. A role's ID is lowercase letters and `-`, at least three of them.
+- The permission sets are now `authManageBasic`, `authManageMembers`, `authModerate` and `authManageAdmin`. `authModerate` no longer admits, invites or assigns roles.
+- Moderation methods are now under `org.atgrp.mod.*`: `submitReport`, `querySubjects`, `querySubjectHistory` and `updateSubject`. A subject is either open or resolved. Moderators tag subjects instead of escalating them, and can reopen a resolved one. Report reasons are `org.atgrp.mod.defs#reason*` tokens. Appeals go through the new `mod.submitAppeal`, and an account reads its own history with `mod.querySelfHistory`.
+- An app signed in as the group no longer passes `group` to the group methods.
+- `requestJoin` now returns the caller's existing request or membership, where before it refused them.
+- `atgrp`: `role set` and `role grant` now take `--permissions` and `--can-assign`, `profile set` takes `--website`, `mod list` filters by tags and sorts, and `mod update` replaces `mod resolve`.
+
+### Features
+
+#### Space URIs are at:space/
+
+The host names a space `at:space/<authority>/<type>/<skey>`, and a record in one `at:space/<authority>/<type>/<skey>/<repo>/<collection>/<rkey>`, as the spaces alpha of November 24, 2026 does (@atproto/space 0.0.0-spaces-alpha-20261124235736). They were `at://<authority>/space/…`. Every method, the console, `atgrp` and the MCP tools answer and take the new form; a space or a record in one named the old way is refused, as anything that is not one is. The host renames the spaces its database keeps, and the moderation subjects and events that name them, when it starts.
+
+#### An app signed in as a group reads its spaces
+
+`com.atproto.space.getDelegationToken` answers an app signed in as a group, as a PDS answers one signed in as its account: a delegation token the group signs for one of its spaces, which buys a credential from `com.atproto.space.authorizeSpaceSync` to read the space, with `notify` if the app wants to hear of its changes. The session's scope must read the space (`space:<type>?action=read`, `ScopeMissing` otherwise), and the member who approved it must read it at that moment (`NotAuthorized`). So an app an admin approves once reads a group's `meta`, `members` and its own spaces, the members' records in them at their PDSes included, the Atmosphere Groups proposal's shared application session. Before, a group session could write in its spaces and read none of them.
+
+#### An app signed in as a group calls its methods with rpc: scopes, and what its grant bought ends with it
+
+Approval keeps `rpc:org.atgrp.listJoinRequests`, `denyJoinRequest`, `listModSubjects`, `getModSubjectHistory` and `resolveModSubject` (for this host or `aud=*`) when the approving member's roles hold the action each asks (`admit`, `mod.read`, `mod.resolve`). Those methods then answer the group session's DPoP token as well as a member's service auth, asking the member's roles again at each call (`Forbidden`), and the scope (`ScopeMissing`).
+
+The delegation tokens a group session is given, and the space credentials and `notify` registrations they buy, are kept with its grant. When the grant ends (`revokeGroupToken`, `/oauth/revoke`, `deleteSession`, its member put out), or its member reads a space no more after a members-space write or a policy change, its credentials there are revoked, the writers' PDSes told, its registrations withdrawn, and its unspent delegations buy nothing.
+
+#### /oauth/token names the approving member
+
+A token response, to a code or a refresh, carries `member`, the DID of the member who approved the grant: this host's own field, beside `sub`, the group.
+
+### Fixes
+
+#### LastConfigurer says what to do, in words a person reads
+
+`leaveGroup`, refused because nobody else could run the group, says "You're the group's only admin. Make someone else an admin first." A write to the members space that would leave nobody running it says "That would leave the group with no admin. Make someone else an admin first." `leaveGroup`'s lexicon describes `LastConfigurer` in the same words, so an app can show it to the person.
+
 ## 0.3.0 (2026-11-25)
 
 ### Features
