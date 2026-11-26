@@ -683,9 +683,12 @@ async fn the_last_who_runs_it_is_neither_put_out_nor_stripped() {
     let h = start(&[], false).await;
     let (did, [alice, bob, _]) = group(&h).await;
     let runs = Session::runs(&h, &alice, &did).await;
-    refused(
-        &runs.delete(&h, "membership", &alice.did).await,
-        (400, "LastConfigurer"),
+    // Said as a person reads it: no DIDs, method names or codes.
+    let said = runs.delete(&h, "membership", &alice.did).await;
+    refused(&said, (400, "LastConfigurer"));
+    assert_eq!(
+        said.body["message"],
+        "That would leave the group with no admin. Make someone else an admin first."
     );
     let plain = membership(&["member"]);
     refused(
@@ -739,9 +742,11 @@ async fn members_leave_but_the_last_who_runs_it_stays() {
         error(&call(&h, &carol, "leaveGroup", json!({"group": did})).await),
         (400, "NotAMember")
     );
+    let said = call(&h, &alice, "leaveGroup", json!({"group": did})).await;
+    assert_eq!(error(&said), (400, "LastConfigurer"));
     assert_eq!(
-        error(&call(&h, &alice, "leaveGroup", json!({"group": did})).await),
-        (400, "LastConfigurer")
+        said.1["message"],
+        "You're the group's only admin. Make someone else an admin first."
     );
     // With another to run it, she may.
     join(&h, &did, &carol.did, &["admin", "member"]).await;

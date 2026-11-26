@@ -8,12 +8,14 @@ use crate::Host;
 use crate::api::{Params, page, param};
 use crate::group::{Made, NewGroup, members_space, meta_space, rkey_did};
 use crate::member_writes::{expanded, held};
+use crate::oauth_resource::Refusal;
 use crate::rbac::{
     ACTIONS, Grant, INTERNAL, NS, actions_for, actions_of, label_writes_in, listed,
     repo_collections_for, roles_of, scope_of,
 };
 use crate::scopes::covers;
 use crate::space_api::{service_caller, unauthorized};
+use crate::token_writes::missing;
 use crate::xrpc::XrpcError;
 use axum::Json;
 use axum::extract::{Query, State};
@@ -62,6 +64,46 @@ pub(crate) async fn signed_in(
 ) -> Result<String, XrpcError> {
     let who = caller(host, headers, lxm).await?;
     who.ok_or_else(|| unauthorized("AuthMissing", "service auth is required"))
+}
+
+/// Who calls `lxm`, one of the host's own methods, sent with HTTP `verb`,
+/// to do `action` in `group`: a member holding it, by their service auth
+/// or the console's cookie; or an app signed in as the group (a DPoP
+/// token), whose scope holds `rpc:lxm` and whose member holds `action` at
+/// this call, as a session's writes are checked. The answer is the member.
+pub(crate) async fn doing(
+    host: &Host,
+    headers: &HeaderMap,
+    verb: &str,
+    lxm: &str,
+    group: &str,
+    action: &str,
+) -> Result<String, Refusal> {
+    let scheme = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|a| a.split_once(' '));
+    let me = if scheme.is_some_and(|(s, _)| s.eq_ignore_ascii_case("DPoP")) {
+        let acting = host.acting(headers, verb, &format!("/xrpc/{lxm}"))?;
+        if acting.grant.group != group {
+            return Err(forbidden("a session for another group").into());
+        }
+        if !acting.permissions.calls(lxm, |aud| for_host(host, aud)) {
+            return Err(missing(format!("rpc:{lxm}")).into());
+        }
+        acting.grant.member
+    } else {
+        signed_in(host, headers, lxm).await?
+    };
+    group_of(host, group)?;
+    if !host.may_do(group, &me, action)? {
+        return Err(forbidden(format!("missing {action}")).into());
+    }
+    Ok(me)
+}
+
+fn forbidden(message: impl Into<String>) -> XrpcError {
+    XrpcError::new(StatusCode::FORBIDDEN, "Forbidden", message)
 }
 
 fn strings(body: &Value, key: &str, field: &str) -> Option<Vec<String>> {

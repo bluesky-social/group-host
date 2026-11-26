@@ -141,7 +141,7 @@ impl<'a> Members<'a> {
         }
         Err(bad(
             "LastConfigurer",
-            "nobody would be left who can run this group: give that to someone else first",
+            "You're the group's only admin. Make someone else an admin first.",
         ))
     }
 }
@@ -170,13 +170,15 @@ pub(crate) async fn acting<'a>(
 
 impl Host {
     /// Ends what `member` holds of `group`: the credentials they hold are
-    /// revoked, the apps they signed in as the group end, and their app
-    /// passwords go.
+    /// revoked, the apps they signed in as the group end, with what those
+    /// bought of its spaces, and their app passwords go.
     pub(crate) async fn cut_off(&self, group: &str, member: &str) -> Result<(), XrpcError> {
         let revoked = self.revoke_credentials(group, member).await;
         revoked.map_err(XrpcError::internal)?;
         let ended = self.store.revoke_member_grants(group, member);
         ended.map_err(XrpcError::internal)?;
+        let bought = self.end_grant_reads(group).await;
+        bought.map_err(XrpcError::internal)?;
         let dropped = self.store.drop_members_app_passwords(group, member);
         dropped.map_err(XrpcError::internal)?;
         Ok(())

@@ -100,6 +100,8 @@ async fn keeps_for_each_role_what_its_grants_hold() {
             "repo:app.bsky.feed.post?action=create",
             "repo:app.bsky.feed.like",
             "rpc:app.bsky.feed.getTimeline?aud=*",
+            // One of the host's own, as an admin holds mod.read.
+            "rpc:org.atgrp.listModSubjects?aud=*",
             "blob:*/*",
         ])
     );

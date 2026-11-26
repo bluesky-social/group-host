@@ -12,9 +12,10 @@
 use crate::Host;
 use crate::api::{Params, invalid_cursor, page, param};
 use crate::group::meta_space;
-use crate::group_api::{group_of, signed_in};
+use crate::group_api::{doing, group_of, signed_in};
 use crate::group_invites::invite_uri;
-use crate::group_members::{Members, acting};
+use crate::group_members::Members;
+use crate::oauth_resource::Refusal;
 use crate::rbac::{INTERNAL, NS};
 use crate::store::JoinRequest;
 use crate::time::{iso, now_millis};
@@ -125,22 +126,16 @@ pub async fn get_join_request(
     }))
 }
 
-/// The requests waiting to join, newest first, for one holding `admit`.
+/// The requests waiting to join, newest first, for one holding `admit`,
+/// or an app signed in as the group with its `rpc:` scope.
 pub async fn list_join_requests(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
-) -> Answer {
+) -> Result<Json<Value>, Refusal> {
     let group = param(&p, "group")?;
-    let body = json!({ "group": group });
-    let (members, _, _) = acting(
-        &host,
-        &headers,
-        &body,
-        &format!("{NS}.listJoinRequests"),
-        Some("admit"),
-    )
-    .await?;
+    let lxm = format!("{NS}.listJoinRequests");
+    doing(&host, &headers, "GET", &lxm, group, "admit").await?;
     let limit = page(&p, 50, 100)?;
     let before = match p.get("cursor") {
         None => None,
@@ -148,7 +143,7 @@ pub async fn list_join_requests(
     };
     let waiting = host
         .store
-        .asking(&members.group, before, limit)
+        .asking(group, before, limit)
         .map_err(XrpcError::internal)?;
     let cursor = waiting
         .last()
@@ -158,24 +153,20 @@ pub async fn list_join_requests(
     Ok(Json(json!({"requests": requests, "cursor": cursor})))
 }
 
-/// Turns down one who asked, for one holding `admit`. They may ask again.
+/// Turns down one who asked, for one holding `admit`, or an app signed in
+/// as the group with its `rpc:` scope. They may ask again.
 pub async fn deny_join_request(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
-) -> Answer {
-    let (members, _, _) = acting(
-        &host,
-        &headers,
-        &body,
-        &format!("{NS}.denyJoinRequest"),
-        Some("admit"),
-    )
-    .await?;
+) -> Result<Json<Value>, Refusal> {
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    let lxm = format!("{NS}.denyJoinRequest");
+    doing(&host, &headers, "POST", &lxm, group, "admit").await?;
     let did = body["member"].as_str().expect("its lexicon requires it");
-    let decided = host.store.decide(&members.group, did);
+    let decided = host.store.decide(group, did);
     if !decided.map_err(XrpcError::internal)? {
-        return Err(no_request());
+        return Err(no_request().into());
     }
     Ok(Json(json!({})))
 }

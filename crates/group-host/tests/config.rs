@@ -49,6 +49,7 @@ fn the_environment_names_the_host() {
         ("GROUP_FOUNDERS", "did:plc:a, did:plc:b,"),
         ("HANDLE_RESOLVERS", "https://resolver.example/, /"),
         ("PDS_CRAWLERS", "https://relay.example/"),
+        ("DID_WEB_HOSTS", "grain.social=127.0.0.1:2584, "),
     ])
     .unwrap();
     // A service's URL is taken without its trailing slash.
@@ -57,6 +58,10 @@ fn the_environment_names_the_host() {
     assert_eq!(c.group_founders, ["did:plc:a", "did:plc:b"]);
     assert_eq!(c.service_did, "did:web:other.example");
     assert_eq!(c.did_web_scheme, "http");
+    assert_eq!(
+        c.did_web_hosts,
+        [("grain.social".to_string(), "127.0.0.1:2584".to_string())].into()
+    );
     let c = config(&[
         ("CONSOLE_URL", "https://console.example.com/"),
         (
@@ -96,6 +101,10 @@ fn refuses_what_does_not_read() {
     assert_eq!(
         err(&[("DID_WEB_SCHEME", "ftp")]),
         "DID_WEB_SCHEME is https or http, not ftp"
+    );
+    assert_eq!(
+        err(&[("DID_WEB_HOSTS", "grain.social")]),
+        "DID_WEB_HOSTS is host=address pairs, not grain.social"
     );
     assert_eq!(
         err(&[("HANDLE_DOMAIN", "example.com")]),

@@ -367,7 +367,7 @@ impl Host {
         if before.run() && !book.run() {
             return Err(bad(
                 "LastConfigurer",
-                "nobody would be left who can run this group: give that to someone else first",
+                "That would leave the group with no admin. Make someone else an admin first.",
             ));
         }
         Ok(())

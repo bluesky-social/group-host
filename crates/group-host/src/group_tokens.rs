@@ -388,6 +388,9 @@ pub async fn revoke_group_token(
         ));
     };
     host.store.end_grant(id).map_err(XrpcError::internal)?;
+    // What it bought of the group's spaces ends with it.
+    let bought = host.end_grant_reads(group).await;
+    bought.map_err(XrpcError::internal)?;
     let ended = format!("revoked {}'s grant to {}", grant.member, grant.client_id);
     host.record(group, &me, Some(&grant.client_id), &ended)
         .map_err(XrpcError::internal)?;

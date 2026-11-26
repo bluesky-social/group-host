@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "Get a subject's moderation history, oldest first, and for a record in one of the group's spaces, the record itself, taken down or not. Requires mod.read.",
+      "description": "Get a subject's moderation history, oldest first, and for a record in one of the group's spaces, the record itself, taken down or not. Requires mod.read: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call.",
       "parameters": {
         "type": "params",
         "required": [

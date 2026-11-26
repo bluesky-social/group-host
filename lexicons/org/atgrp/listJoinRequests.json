@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "The pending-requests queue. Requires admit.",
+      "description": "The pending-requests queue. Requires admit: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call.",
       "parameters": {
         "type": "params",
         "required": ["group"],

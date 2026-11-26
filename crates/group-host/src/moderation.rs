@@ -17,8 +17,9 @@ use crate::api::{Params, invalid, invalid_cursor, page, param};
 use crate::authority::Access;
 use crate::blobs::blob_refs;
 use crate::group::{members_space, meta_space};
-use crate::group_api::{group_of, signed_in};
+use crate::group_api::{doing, group_of, signed_in};
 use crate::index_api::served;
+use crate::oauth_resource::Refusal;
 use crate::rbac::{INTERNAL, LABEL, NS};
 use crate::repo::Write;
 use crate::store::Store;
@@ -453,20 +454,16 @@ fn event_view(e: &Event, actors: &HashMap<String, Value>) -> Value {
 }
 
 /// The group's queue, of a status (`open` unless asked), the latest
-/// changed first.
+/// changed first, for one holding `mod.read`, or an app signed in as the
+/// group with its `rpc:` scope.
 pub async fn list_mod_subjects(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
-) -> Answer {
+) -> Result<Json<Value>, Refusal> {
     let group = param(&p, "group")?;
-    host.moderator(
-        &headers,
-        &format!("{NS}.listModSubjects"),
-        group,
-        "mod.read",
-    )
-    .await?;
+    let lxm = format!("{NS}.listModSubjects");
+    doing(&host, &headers, "GET", &lxm, group, "mod.read").await?;
     let limit = page(&p, 50, 100)?;
     let cursor = p
         .get("cursor")
@@ -497,20 +494,16 @@ pub async fn list_mod_subjects(
 
 /// What happened to a subject in the group's queue, oldest first, a page
 /// at a time; and a record subject itself, as a moderator reviews it.
+/// For one holding `mod.read`, or an app signed in as the group with its
+/// `rpc:` scope, which sees the record as its member would.
 pub async fn get_mod_subject_history(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
-) -> Answer {
+) -> Result<Json<Value>, Refusal> {
     let group = param(&p, "group")?;
-    let me = host
-        .moderator(
-            &headers,
-            &format!("{NS}.getModSubjectHistory"),
-            group,
-            "mod.read",
-        )
-        .await?;
+    let lxm = format!("{NS}.getModSubjectHistory");
+    let me = doing(&host, &headers, "GET", &lxm, group, "mod.read").await?;
     let subject = param(&p, "subject")?;
     subject_of(group, subject)?;
     let limit = page(&p, 50, 100)?;
@@ -581,26 +574,21 @@ pub async fn get_mod_subject_blob(
 }
 
 /// Resolves or escalates a subject, with a note if one is given; setting
-/// the status it has keeps the note.
+/// the status it has keeps the note. For one holding `mod.resolve`, or an
+/// app signed in as the group with its `rpc:` scope, as its member.
 pub async fn resolve_mod_subject(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
-) -> Answer {
+) -> Result<Json<Value>, Refusal> {
     let group = body["group"].as_str().expect("its lexicon requires it");
-    let me = host
-        .moderator(
-            &headers,
-            &format!("{NS}.resolveModSubject"),
-            group,
-            "mod.resolve",
-        )
-        .await?;
+    let lxm = format!("{NS}.resolveModSubject");
+    let me = doing(&host, &headers, "POST", &lxm, group, "mod.resolve").await?;
     let (subject, cid) = subject_in(group, &body)?;
     let status = body["status"].as_str().expect("its lexicon requires it");
     let found = host.store.subject(group, &subject);
     if found.map_err(XrpcError::internal)?.is_none() {
-        return Err(not_found());
+        return Err(not_found().into());
     }
     let event = Event {
         kind: "status".into(),

@@ -171,7 +171,8 @@ async fn gives_the_app_what_it_declares_and_the_founder_may() {
         assert_eq!(said.error(), (400, "InvalidScope"));
         assert_eq!(said.body["message"], refused);
     }
-    // A method of this host's is the founder's own to call, never the app's.
+    // A method of this host's a group session calls is kept, as the
+    // founder, an admin, holds mod.read; asked again at each call.
     let scope = format!("{SCOPE} rpc:org.atgrp.listModSubjects?aud=*");
     let said = provision(
         &h,
@@ -180,7 +181,8 @@ async fn gives_the_app_what_it_declares_and_the_founder_may() {
         &asking(&app, json!({"scope": scope})),
     )
     .await;
-    assert_eq!(said.body["session"]["scope"], SCOPE);
+    assert_eq!(said.body["session"]["scope"], scope);
+    assert_eq!(said.body["session"]["member"], alice.did.as_str());
     // A handle taken is refused as createGroup refuses it.
     let said = provision(&h, &app, Some(&bob), &asking(&app, json!({}))).await;
     assert_eq!(said.status, 400, "{}", said.body);

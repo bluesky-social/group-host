@@ -6,6 +6,7 @@ import {
   ScopePermissionsTransition,
   SpacePermission
 } from '@atproto/oauth-scopes';
+import { intl } from '#lib/locale.ts';
 import { m } from '#lib/paraglide/messages.js';
 
 /**
@@ -182,7 +183,7 @@ export function permissions(
         out.push({
           kind: 'authenticate',
           title: m.permissions_authenticate_title(),
-          says: m.permissions_authenticate_other(),
+          says: hostsOwn(c) ?? m.permissions_authenticate_other(),
           about: m.permissions_authenticate_about(),
           calls: c
         });
@@ -192,12 +193,52 @@ export function permissions(
       out.push({
         kind: 'spaces',
         title: m.permissions_spaces_title(),
-        says: m.permissions_spaces_says(),
+        says: readsOnly(spaces, group) ?? m.permissions_spaces_says(),
         about: m.permissions_spaces_about(),
         spaces
       });
   }
   return out;
+}
+
+/** What each of the host's own methods a group session may call lets it do, in words. */
+const HOST_METHODS: Record<string, () => string> = {
+  'org.atgrp.listJoinRequests': () => m.permissions_host_join_requests(),
+  'org.atgrp.denyJoinRequest': () => m.permissions_host_deny(),
+  'org.atgrp.listModSubjects': () => m.permissions_host_reports(),
+  'org.atgrp.getModSubjectHistory': () => m.permissions_host_reports(),
+  'org.atgrp.resolveModSubject': () => m.permissions_host_resolve()
+};
+
+const listed = (parts: string[]) =>
+  new Intl.ListFormat(intl(), { type: 'conjunction' }).format([...new Set(parts)]);
+
+/** The calls said plainly, when every one is one of the host's own methods. */
+function hostsOwn(calls: { method: string }[]): string | undefined {
+  const said = calls.map((c) => HOST_METHODS[c.method]?.());
+  if (said.some((s) => s === undefined)) return undefined;
+  return m.permissions_authenticate_host({ what: listed(said as string[]) });
+}
+
+/** The spaces said plainly, when the app only reads, and only the group's. */
+function readsOnly(spaces: Spaces[], group: { handle: string }): string | undefined {
+  const own = `@${group.handle}`;
+  if (!spaces.every((s) => s.owner === own && s.read && !s.manage && !s.data.length))
+    return undefined;
+  // The group's own spaces first, as a person thinks of the group.
+  const rank = (s: Spaces) => ['org.atgrp.meta', 'org.atgrp.members'].indexOf(s.type) >>> 0;
+  const named = [...spaces]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((s) =>
+      s.type === 'org.atgrp.meta'
+        ? m.permissions_reads_meta()
+        : s.type === 'org.atgrp.members'
+          ? m.permissions_reads_members()
+          : s.type === '*'
+            ? m.permissions_reads_every()
+            : m.permissions_reads_space({ type: s.type })
+    );
+  return m.permissions_spaces_read({ spaces: listed(named) });
 }
 
 /** What the PDS warns of before an app gets so much: every space anywhere, or the whole identity. */

@@ -528,6 +528,9 @@ pub(crate) fn token_response(access: &str, refresh: &str, grant: &Grant) -> Valu
         "refresh_token": refresh,
         "scope": grant.scope,
         "sub": grant.group,
+        // Host-specific: the member who approved the grant, whose roles
+        // bound it (signing-in.md).
+        "member": grant.member,
     })
 }
 
@@ -577,6 +580,12 @@ pub async fn revoke(State(host): State<Arc<Host>>, form: OAuthForm) -> Response 
     if let Some(token) = form.get("token") {
         let revoked = host.store.revoke_token(&jose::sha256(token));
         tracing::info!(?revoked, "revoked");
+        // What the grant bought of the group's spaces ends with it. The
+        // grant is gone already, and the answer is the same either way.
+        if let Ok(Some(group)) = revoked {
+            let ended = host.end_grant_reads(&group).await;
+            tracing::info!(?ended, "ended what the revoked grant bought");
+        }
     }
     answer(&host, StatusCode::OK, json!({}))
 }

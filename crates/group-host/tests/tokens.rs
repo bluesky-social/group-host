@@ -4,10 +4,12 @@
 
 mod common;
 
+use atproto::space_auth::{self, Kind, sign_request};
+use atproto::{Curve, Keypair};
 use common::groups::*;
 use common::oauth::*;
 use common::spaces::*;
-use common::{Running, start};
+use common::{Running, start, start_reachable};
 use group_host::group::{members_space, meta_space};
 use group_host::repo::Write;
 use serde_json::{Value as Json, json};
@@ -641,6 +643,59 @@ async fn writes_in_a_space_as_its_policy_grants_now() {
 }
 
 #[tokio::test]
+async fn reads_a_space_with_a_delegation_while_its_member_may() {
+    let h = start(&[], false).await;
+    let (did, calendar, [_, bob, _]) = group(&h).await;
+    let scope = format!("atproto space:{CALENDAR}?action=read space:{NS}.members?action=read");
+    let app = App::loopback(&scope);
+    let access = token(&h, &app, &bob, &did).await;
+    let delegate = |space: String| {
+        let nsid = format!("com.atproto.space.getDelegationToken?space={space}");
+        let (app, access, h) = (&app, &access, &h);
+        async move { app.call(h, &nsid, access, None).await }
+    };
+    // The group signs it, for this space and the host, its authority.
+    let said = delegate(calendar.clone()).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let delegation = said.body["token"].as_str().unwrap();
+    let (_, claims) = space_auth::parse(Kind::Delegation, delegation).unwrap();
+    assert_eq!(
+        (claims.iss.as_str(), claims.sub.as_str()),
+        (did.as_str(), calendar.as_str())
+    );
+    // It buys a credential, which reads the group's repo there.
+    let key = Keypair::generate(Curve::P256);
+    let ask = json!({"space": calendar, "credentialKey": key.public().did_key(), "delegationToken": delegation});
+    let (status, issued) = post(&h, "com.atproto.space.authorizeSpaceSync", &ask, &[]).await;
+    assert_eq!(status, 200, "{issued}");
+    let authorization = format!(
+        "Atproto-Space-Credential {}",
+        issued["credential"].as_str().unwrap()
+    );
+    let mut read = h
+        .http
+        .get(format!("{}/xrpc/com.atproto.space.listRecords", h.url));
+    read = read.query(&[("space", calendar.as_str()), ("repo", did.as_str())]);
+    for (k, v) in sign_request(&key, &authorization, &did).unwrap() {
+        read = read.header(k, v);
+    }
+    let res = read.send().await.unwrap();
+    assert_eq!(res.status(), 200, "{}", res.text().await.unwrap());
+    // None for a space its scope does not read, or one not the group's.
+    let said = delegate(meta_space(&did)).await;
+    assert_eq!(said.error(), (403, "ScopeMissing"), "{}", said.body);
+    let elsewhere = format!("at://did:plc:elsewhere/space/{CALENDAR}/rides");
+    assert_eq!(delegate(elsewhere).await.error(), (400, "SpaceNotFound"));
+    // Nor once Bob reads the calendar no more: the session reads no more
+    // than its member, at each credential.
+    let readers =
+        json!({"$type": format!("{NS}.policy"), "grants": [{"role": "admin", "read": true}]});
+    h.host.store.set_policy(&calendar, &readers).unwrap();
+    let said = delegate(calendar.clone()).await;
+    assert_eq!(said.error(), (403, "NotAuthorized"), "{}", said.body);
+}
+
+#[tokio::test]
 async fn configures_the_group_as_its_methods_would() {
     let h = start(&[], false).await;
     let (did, _, [alice, ..]) = group(&h).await;
@@ -906,4 +961,248 @@ async fn asks_everything_of_the_repo_as_it_is_when_written() {
         .call(&h, "com.atproto.space.putRecord", &access, Some(&event))
         .await;
     assert_eq!(said.error(), (403, "ScopeMissing"));
+}
+
+#[tokio::test]
+async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
+    let h = start(&[], false).await;
+    let (did, _, [alice, bob, carol]) = group(&h).await;
+    let methods = [
+        "listJoinRequests",
+        "denyJoinRequest",
+        "listModSubjects",
+        "getModSubjectHistory",
+        "resolveModSubject",
+    ];
+    let rpc = |m: &str| format!("rpc:{NS}.{m}?aud=*");
+    let mut asked: Vec<String> = methods.iter().map(|m| rpc(m)).collect();
+    asked.push(format!("rpc:{INTERNAL}.listInvites?aud=*"));
+    asked.push(format!(
+        "rpc:{NS}.listJoinRequests?aud=did:web:elsewhere.test"
+    ));
+    let app = App::loopback(&format!("atproto {}", asked.join(" ")));
+    // Approval keeps those Alice's roles may call, for this host or any:
+    // never an internal method, nor one for another service.
+    let tokens = app.sign_in(&h, &alice, &did).await;
+    let mut kept = vec!["atproto".to_string()];
+    kept.extend(methods.iter().map(|m| rpc(m)));
+    assert_eq!(tokens["scope"], kept.join(" "));
+    let access = tokens["access_token"].as_str().unwrap();
+    // Bob holds none of their actions, so a grant of his holds none.
+    let theirs = app.sign_in(&h, &bob, &did).await;
+    assert_eq!(theirs["scope"], "atproto");
+
+    let get = async |q: String| app.call(&h, &q, access, None).await;
+    let said = get(format!("{NS}.listJoinRequests?group={did}")).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(said.body["requests"], json!([]));
+    let deny = json!({"group": did, "member": carol.did});
+    let said = app
+        .call(&h, &format!("{NS}.denyJoinRequest"), access, Some(&deny))
+        .await;
+    assert_eq!(said.error(), (400, "JoinRequestNotFound"));
+    let said = get(format!("{NS}.listModSubjects?group={did}")).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let history = format!(
+        "{NS}.getModSubjectHistory?group={did}&subject={}",
+        carol.did
+    );
+    assert_eq!(get(history.clone()).await.status, 200);
+    let resolve = json!({"group": did, "subject": carol.did, "status": "resolved"});
+    let said = app
+        .call(
+            &h,
+            &format!("{NS}.resolveModSubject"),
+            access,
+            Some(&resolve),
+        )
+        .await;
+    assert_eq!(said.error(), (400, "SubjectNotFound"));
+
+    // Or for this host by name, or through one of its permission sets.
+    let ours = &h.host.config.service_did;
+    let named = format!("atproto rpc:{NS}.listModSubjects?aud={ours}");
+    for scope in [named.as_str(), "atproto include:org.atgrp.authModerate"] {
+        let app = App::loopback(scope);
+        let access = token(&h, &app, &alice, &did).await;
+        let nsid = format!("{NS}.listModSubjects?group={did}");
+        let said = app.call(&h, &nsid, &access, None).await;
+        assert_eq!(said.status, 200, "{scope}: {}", said.body);
+    }
+
+    // Not without the scope, nor for another group.
+    let other = App::loopback(&format!("atproto space:{CALENDAR}?action=read"));
+    let without = token(&h, &other, &alice, &did).await;
+    let said = other
+        .call(
+            &h,
+            &format!("{NS}.listModSubjects?group={did}"),
+            &without,
+            None,
+        )
+        .await;
+    assert_eq!(said.error(), (403, "ScopeMissing"));
+    let said = get(format!("{NS}.listJoinRequests?group=did:plc:elsewhere")).await;
+    assert_eq!(said.error(), (403, "Forbidden"));
+
+    // Asked again at each call: once Alice admits nobody, nor does it.
+    membership(&h, &did, &bob.did, &["member", "admin"]).await;
+    membership(&h, &did, &alice.did, &["member"]).await;
+    let said = get(format!("{NS}.listJoinRequests?group={did}")).await;
+    assert_eq!(said.error(), (403, "Forbidden"));
+    assert_eq!(get(history).await.error(), (403, "Forbidden"));
+}
+
+/// A delegation token for `space` from `app`'s session `access`.
+async fn delegation(h: &Running, app: &App, access: &str, space: &str) -> String {
+    let nsid = format!("com.atproto.space.getDelegationToken?space={space}");
+    let said = app.call(h, &nsid, access, None).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    said.body["token"].as_str().unwrap().to_string()
+}
+
+/// What `delegation` buys of `space`: a credential, bound to a new key,
+/// and, with `notify`, a syncer told of the space's changes; the
+/// status and error, the credential and its key.
+async fn buy(
+    h: &Running,
+    space: &str,
+    delegation: &str,
+    notify: Option<Json>,
+) -> ((u16, String), String, Keypair) {
+    let key = Keypair::generate(Curve::P256);
+    let mut ask = json!({"space": space, "credentialKey": key.public().did_key(), "delegationToken": delegation});
+    if let Some(notify) = notify {
+        ask["notify"] = notify;
+    }
+    let (status, issued) = post(h, "com.atproto.space.authorizeSpaceSync", &ask, &[]).await;
+    let error = issued["error"].as_str().unwrap_or_default().to_string();
+    let credential = issued["credential"].as_str().unwrap_or_default();
+    ((status, error), credential.to_string(), key)
+}
+
+/// What reading the group's repo in `space` with `credential` answers.
+async fn read_with(h: &Running, did: &str, space: &str, credential: &str, key: &Keypair) -> u16 {
+    let authorization = format!("Atproto-Space-Credential {credential}");
+    let mut read = h
+        .http
+        .get(format!("{}/xrpc/com.atproto.space.listRecords", h.url));
+    read = read.query(&[("space", space), ("repo", did)]);
+    for (k, v) in sign_request(key, &authorization, did).unwrap() {
+        read = read.header(k, v);
+    }
+    read.send().await.unwrap().status().as_u16()
+}
+
+/// An event the group writes in `space`, which its syncers are told of.
+async fn event(h: &Running, did: &str, space: &str, rkey: &str) {
+    let write = Write::Create {
+        collection: EVENT.into(),
+        rkey: rkey.into(),
+        value: record(EVENT, "Night ride"),
+    };
+    h.host.space_write(did, space, &[write]).await.unwrap();
+}
+
+#[tokio::test]
+async fn what_a_grant_bought_ends_when_it_is_revoked() {
+    // Over http, as its syncer's endpoint is.
+    let h = start_reachable(&[]).await;
+    let (did, calendar, [alice, bob, _]) = group(&h).await;
+    let app = App::loopback(&format!("atproto space:{CALENDAR}?action=read"));
+    let access = token(&h, &app, &bob, &did).await;
+    let (url, heard) = endpoint().await;
+    let notify = json!({"endpoint": url, "token": "bobs-app"});
+    let first = delegation(&h, &app, &access, &calendar).await;
+    let (status, credential, key) = buy(&h, &calendar, &first, Some(notify)).await;
+    assert_eq!(status, (200, String::new()));
+    let spare = delegation(&h, &app, &access, &calendar).await;
+    assert_eq!(read_with(&h, &did, &calendar, &credential, &key).await, 200);
+    // Alice signs the app in too, and her grant buys its own.
+    let hers = token(&h, &app, &alice, &did).await;
+    let (url, heard_hers) = endpoint().await;
+    let notify = json!({"endpoint": url, "token": "alices-app"});
+    let bought = delegation(&h, &app, &hers, &calendar).await;
+    let (status, kept, kept_key) = buy(&h, &calendar, &bought, Some(notify)).await;
+    assert_eq!(status, (200, String::new()));
+    event(&h, &did, &calendar, "one").await;
+    heard.told(1).await;
+    heard_hers.told(1).await;
+
+    let grants = h.host.store.grants_of(&did, 0).unwrap();
+    let grant = grants.iter().find(|g| g.member == bob.did).unwrap();
+    let lxm = format!("{INTERNAL}.revokeGroupToken");
+    let body = json!({"group": did, "tokenId": grant.id});
+    let (status, said) = post(&h, &lxm, &body, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{said}");
+
+    // At once: its credential reads nothing, a delegation it was given
+    // buys nothing, and its syncer is told nothing more.
+    assert_eq!(read_with(&h, &did, &calendar, &credential, &key).await, 401);
+    let refused = buy(&h, &calendar, &spare, None).await.0;
+    assert_eq!(refused, (400, "SpaceNotFound".to_string()));
+    event(&h, &did, &calendar, "two").await;
+    assert_eq!(heard.told_by_now().await.len(), 1);
+    // What Alice's grant bought lasts.
+    assert_eq!(read_with(&h, &did, &calendar, &kept, &kept_key).await, 200);
+    heard_hers.told(2).await;
+}
+
+#[tokio::test]
+async fn what_a_grant_bought_ends_once_its_member_reads_no_more() {
+    let h = start_reachable(&[]).await;
+    let (did, calendar, [alice, bob, _]) = group(&h).await;
+    // The calendar is for its ride leaders; Bob leads rides.
+    let leaders = json!({"$type": format!("{NS}.policy"), "grants": [
+        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        {"role": "leader", "read": true},
+    ]});
+    h.host.store.set_policy(&calendar, &leaders).unwrap();
+    let role = Write::Create {
+        collection: format!("{NS}.role"),
+        rkey: "leader".into(),
+        value: json!({"$type": format!("{NS}.role"), "displayName": "Ride leader", "createdAt": "2026-11-03T00:00:00Z"}),
+    };
+    h.host
+        .space_write(&did, &members_space(&did), &[role])
+        .await
+        .unwrap();
+    membership(&h, &did, &bob.did, &["member", "leader"]).await;
+
+    let app = App::loopback(&format!("atproto space:{CALENDAR}?action=read"));
+    let access = token(&h, &app, &bob, &did).await;
+    let (url, heard) = endpoint().await;
+    let notify = json!({"endpoint": url, "token": "bobs-app"});
+    let first = delegation(&h, &app, &access, &calendar).await;
+    let (status, credential, key) = buy(&h, &calendar, &first, Some(notify)).await;
+    assert_eq!(status, (200, String::new()));
+    let spare = delegation(&h, &app, &access, &calendar).await;
+    event(&h, &did, &calendar, "one").await;
+    heard.told(1).await;
+
+    // Alice, in her console, makes Bob a member alone.
+    let admin = App::loopback("atproto include:org.atgrp.authManageGroup");
+    let theirs = token(&h, &admin, &alice, &did).await;
+    let membership = json!({"repo": did, "space": members_space(&did), "collection": format!("{NS}.membership"), "rkey": bob.did,
+        "record": {"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}});
+    let said = admin
+        .call(
+            &h,
+            "com.atproto.space.putRecord",
+            &theirs,
+            Some(&membership),
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+
+    // The grant lasts, but reads the calendar no more, at once.
+    assert_eq!(read_with(&h, &did, &calendar, &credential, &key).await, 401);
+    let refused = buy(&h, &calendar, &spare, None).await.0;
+    assert_eq!(refused, (400, "SpaceNotFound".to_string()));
+    event(&h, &did, &calendar, "two").await;
+    assert_eq!(heard.told_by_now().await.len(), 1);
+    let said = app
+        .call(&h, "com.atproto.server.getSession", &access, None)
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
 }

@@ -115,8 +115,20 @@ pub async fn authorize_space_sync(
     let user = delegation.as_ref().map(|d| d.iss.as_str());
     let hosted = host.store.space(uri).map_err(XrpcError::internal)?;
     let hosted = hosted.ok_or_else(not_found)?;
+    // A delegation a group's grant was given here buys only while the
+    // grant lasts and its member reads the space.
+    let grant = match &delegation {
+        Some(d) => host.store.delegation_grant(&d.jti),
+        None => Ok(None),
+    };
+    let grant = grant.map_err(XrpcError::internal)?;
     let may = host.may(uri, &hosted, user, Access::Read);
-    if !may.map_err(XrpcError::internal)? {
+    let mut may = may.map_err(XrpcError::internal)?;
+    if let Some(id) = grant.as_deref().filter(|_| may) {
+        let reads = host.grant_reads(id, uri, &hosted);
+        may = reads.map_err(XrpcError::internal)?;
+    }
+    if !may {
         // A syncer that lost the space is told of it no more.
         if let Some(to) = &notify {
             let gone = host.store.unregister(uri, to);
@@ -156,11 +168,17 @@ pub async fn authorize_space_sync(
             .issued(uri, user, &issued.jti, issued.exp as i64, now() as i64)
             .map_err(XrpcError::internal)?;
     }
+    if let Some(id) = &grant {
+        let kept = host.store.bought(uri, &issued.jti, id);
+        kept.map_err(XrpcError::internal)?;
+    }
     // Renewed with each credential, so a syncer that keeps authorizing
     // stays registered.
     if let Some(to) = &notify {
         let kept = host.store.register(uri, to, issued.exp as i64);
         kept.map_err(XrpcError::internal)?;
+        let bound = host.store.bind_registration(uri, to, grant.as_deref());
+        bound.map_err(XrpcError::internal)?;
     }
     // Read once registered, so that any change after it is told.
     let space_rev = host.store.space_rev(uri).map_err(XrpcError::internal)?;

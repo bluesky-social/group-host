@@ -237,6 +237,25 @@ impl Host {
         Ok(rooms.iter().any(|r| !r.writable.is_empty()))
     }
 
+    /// Whether `scope`, `rpc:method?aud=…` for one of this host's own
+    /// methods, may be given to a holder of `held`: a method a group
+    /// session calls ([`ASKS`], but the `internal` ones), for this host
+    /// or any audience, and the roles hold the action it asks.
+    fn own_method(&self, scope: &str, method: &str, held: &BTreeSet<&'static str>) -> bool {
+        let internal = format!("{NS}.internal.");
+        let asks = ASKS
+            .iter()
+            .find(|(m, _)| *m == method && !m.starts_with(&internal));
+        let decoded = decoded(scope);
+        let query = decoded.split_once('?').map_or("", |(_, q)| q);
+        let mut auds = query.split('&').filter_map(|kv| kv.strip_prefix("aud="));
+        let ours = |aud: &str| aud == "*" || crate::group_api::for_host(self, aud);
+        let first = auds.next();
+        asks.is_some_and(|(_, action)| held.contains(action))
+            && first.is_some_and(ours)
+            && auds.all(ours)
+    }
+
     /// The scopes of `requested` a holder of `roles` in `group` may give
     /// an app acting as the group:
     ///
@@ -244,8 +263,10 @@ impl Host {
     /// - one of this host's permission sets for a group's session
     ///   ([`TIERS`]), as far as the roles grant it ([`parts`]);
     /// - `repo:C`, for roles whose grants hold `repo:C` or `repo:*`;
-    /// - `rpc:M`, a method of another service, for roles with `repo:*`,
-    ///   never one of this host's own;
+    /// - `rpc:M`, a method of another service, for roles with `repo:*`;
+    ///   or one of this host's own the proposal has a group session call
+    ///   ([`ASKS`], but the `internal` ones), for this host or any, for
+    ///   roles holding the action it asks, checked again at each call;
     /// - `space:T?…`, where some space of the group's of type `T` lets the
     ///   roles write each collection asked for, as asked, as the group; or
     ///   read it, if reading is all it asks;
@@ -285,7 +306,11 @@ impl Host {
                 everything || each
             } else if let Some(m) = s.strip_prefix("rpc:") {
                 let method = m.split('?').next().unwrap_or_default();
-                everything && method != "*" && !method.starts_with(&format!("{NS}."))
+                if method.starts_with(&format!("{NS}.")) {
+                    self.own_method(s, method, &held)
+                } else {
+                    everything && method != "*"
+                }
             } else if let Some(want) = space.as_ref().filter(|w| !w.manage.is_empty()) {
                 manages(want, &held, &rooms)
             } else if let Some(want) = inbox_scope(s) {

@@ -894,17 +894,21 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
 pub const LABEL: &str = "com.atproto.label.record";
 
 /// The space of `group`'s a label on `subject` goes in: a record's own,
-/// an account's the members space. None for a record in no space of the
-/// group's.
+/// an account's or a public record's the members space. None for a
+/// record in a space not the group's.
 pub fn label_space(group: &str, subject: &str) -> Option<String> {
+    let members = || format!("at://{group}/space/{MEMBERS}/self");
     if subject.starts_with("did:") {
-        return Some(format!("at://{group}/space/{MEMBERS}/self"));
+        return Some(members());
     }
     let parts: Vec<&str> = subject.strip_prefix("at://")?.split('/').collect();
-    let [authority, "space", kind, skey, _, _, _] = parts[..] else {
-        return None;
-    };
-    (authority == group).then(|| format!("at://{authority}/space/{kind}/{skey}"))
+    match parts[..] {
+        [_, _, _] => Some(members()),
+        [authority, "space", kind, skey, _, _, _] => {
+            (authority == group).then(|| format!("at://{authority}/space/{kind}/{skey}"))
+        }
+        _ => None,
+    }
 }
 
 /// A label record on `subject`, at the version `cid` if named, of `val`,

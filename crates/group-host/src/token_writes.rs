@@ -532,9 +532,12 @@ impl Host {
         };
         self.wrote(acting, Some(uri), &made)?;
         self.labelled(group, uri, &acting.grant.member, &made, &going)?;
-        // In the members space, what a write means is done too.
+        // In the members space, what a write means is done too, and an
+        // app's grant whose member reads less now ends those reads.
         if members {
             self.members_written(acting, &made, &leaving).await?;
+            let ended = self.end_grant_reads(group).await;
+            ended.map_err(XrpcError::internal)?;
         }
         Ok(true)
     }

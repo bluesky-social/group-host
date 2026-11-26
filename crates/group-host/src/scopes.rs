@@ -190,6 +190,17 @@ impl Permissions {
         let manage = |s: &String| query(s, "manage").contains(&op);
         self.scopes.iter().any(|s| manage(s) && self.at(s, space))
     }
+
+    /// May it call `method`, one of this host's own, here? An `rpc:`
+    /// scope naming it, for any audience or one `ours` says is this host.
+    /// A token carries a permission set of ours as the scopes it lists
+    /// (`oauth_scope::concrete`), so those it lists count too.
+    pub fn calls(&self, method: &str, ours: impl Fn(&str) -> bool) -> bool {
+        self.scopes.iter().any(|s| {
+            named(s, "rpc").is_some_and(|m| m == method)
+                && query(s, "aud").iter().any(|a| *a == "*" || ours(a))
+        })
+    }
 }
 
 /// Whether the scopes `held` grant all that `scope` does, for `group`:

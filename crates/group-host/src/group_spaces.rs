@@ -1,7 +1,10 @@
 //! A group's spaces as their authority keeps them, made, changed, read
 //! and ended through atproto's own methods (`com.atproto.space.
 //! createSpace`, `updateSpace`, `getSpace`, `deleteSpace`), by a session
-//! as the group: an app's, or a group token from `getGroupAuth`.
+//! as the group: an app's, or a group token from `getGroupAuth`. Such a
+//! session reads a space as any reader does, with a credential, for which
+//! it asks a delegation token here (`getDelegationToken`), as a PDS gives
+//! one to an app signed in as one of its accounts.
 //!
 //! Each space is kept under a policy, `org.atgrp.policy`: for each
 //! role, whether its holders read the space, whether they write in it in
@@ -27,6 +30,7 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
+use crate::authority::Access;
 use crate::group::{members_space, meta_space};
 use crate::group_config::put_in;
 use crate::lexicons::lexicons;
@@ -36,10 +40,12 @@ use crate::oauth_scope::SpaceScope;
 use crate::rbac::{Grant, NS, POLICY, Policy, PolicyGrant, assigns};
 use crate::repo::Write;
 use crate::scopes::covers;
+use crate::space_api::now;
 use crate::time::{iso, now_millis};
 use crate::token_writes::missing;
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
+use atproto::space_auth::{self, Kind, Make, space_host_aud};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -299,6 +305,9 @@ impl Host {
         let hosted = self.hosted_space(uri)?;
         let pruned = self.prune_writers(uri, &hosted, None);
         pruned.map_err(XrpcError::internal)?;
+        // An app's grant whose member reads it no more ends its reads.
+        let ended = self.end_grant_reads(group).await;
+        ended.map_err(XrpcError::internal)?;
         let logged = self.record(
             group,
             member,
@@ -463,4 +472,51 @@ pub async fn get_space(
     }
     let kept = host.hosted_space(uri)?;
     Ok(Json(json!({"space": uri, "policy": kept.policy})))
+}
+
+/// `com.atproto.space.getDelegationToken`, as the group: a delegation
+/// token the group signs, for the space's authority (this host) to give a
+/// credential for, as a PDS gives one to an app signed in as its account.
+/// For one of the group's spaces, to a session whose scope reads it, while
+/// its member may read it themselves: so a session never reads more than
+/// its member, at each credential. The token is kept as the grant's, so
+/// what it buys ends with the grant, or with its member's reading.
+pub async fn get_delegation_token(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+    headers: HeaderMap,
+) -> Answer {
+    let path = "/xrpc/com.atproto.space.getDelegationToken";
+    let acting = host.acting(&headers, "GET", path)?;
+    let (group, member) = (&acting.grant.group, &acting.grant.member);
+    let uri = param(&p, "space")?;
+    let (space, _) = host.own(group, uri)?;
+    if !acting.permissions.space(&space, None, "read") {
+        return Err(missing(format!("space:{}?action=read", space.kind)).into());
+    }
+    let hosted = host.hosted_space(uri)?;
+    let reads = host.may(uri, &hosted, Some(member), Access::Read);
+    if !reads.map_err(XrpcError::internal)? {
+        return Err(not_authorized("you do not read this space").into());
+    }
+    let account = host.store.account(group).map_err(XrpcError::internal)?;
+    let account = account.ok_or_else(not_found)?;
+    let (sub, aud) = (space.to_string(), space_host_aud(group));
+    let make = Make {
+        iss: group,
+        sub: &sub,
+        aud: Some(&aud),
+        ..Make::default()
+    };
+    let token = space_auth::create(Kind::Delegation, &make, &account.signing, now());
+    let token = token.map_err(XrpcError::internal)?;
+    let (_, claims) = space_auth::parse(Kind::Delegation, &token).map_err(XrpcError::internal)?;
+    let kept = host.store.delegated(
+        &claims.jti,
+        &acting.grant.id,
+        claims.exp as i64,
+        now() as i64,
+    );
+    kept.map_err(XrpcError::internal)?;
+    Ok(Json(json!({ "token": token })))
 }

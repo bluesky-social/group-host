@@ -5,7 +5,7 @@
 use anyhow::{Context, Result, bail};
 use atproto::{PublicKey, did};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -39,6 +39,7 @@ pub const LOOKUP: Duration = Duration::from_secs(3);
 pub struct Resolver {
     plc_url: String,
     did_web_scheme: String,
+    did_web_hosts: BTreeMap<String, String>,
     http: reqwest::Client,
     kept: Mutex<HashMap<String, (Instant, Value)>>,
     kept_for: Duration,
@@ -63,6 +64,7 @@ impl Resolver {
             kept_at_most,
             plc_url: plc_url.trim_end_matches('/').to_string(),
             did_web_scheme: did_web_scheme.to_string(),
+            did_web_hosts: BTreeMap::new(),
             // A document or handle is at a host the caller names: one that
             // redirects is not followed elsewhere.
             http: crate::client_builder()
@@ -73,6 +75,13 @@ impl Resolver {
         }
     }
 
+    /// This resolver, reading the documents of the `did:web`s of the hosts
+    /// `hosts` names at the address it gives each instead.
+    pub fn reading_at(mut self, hosts: &BTreeMap<String, String>) -> Resolver {
+        self.did_web_hosts = hosts.clone();
+        self
+    }
+
     /// Where `did`'s document is read.
     fn url(&self, did: &str) -> Result<String> {
         if let Some(host) = did.strip_prefix("did:web:") {
@@ -81,6 +90,7 @@ impl Resolver {
                 bail!("{did} is not a did:web of a host");
             }
             let host = host.replace("%3A", ":");
+            let host = self.did_web_hosts.get(&host).unwrap_or(&host);
             Ok(format!(
                 "{}://{host}/.well-known/did.json",
                 self.did_web_scheme

@@ -480,6 +480,19 @@ pub const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE space ADD COLUMN policy TEXT NOT NULL DEFAULT '{}';
 ",
+    // What an app signed in as a group bought with its grant: the
+    // delegation tokens it was given, and the credentials and syncer
+    // registrations those bought, so that they end with the grant.
+    "
+    CREATE TABLE grant_delegation (
+        jti TEXT PRIMARY KEY,
+        grant_id TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+    );
+    ALTER TABLE issued_credential ADD COLUMN grant_id TEXT;
+    CREATE INDEX issued_credential_grant ON issued_credential (grant_id);
+    ALTER TABLE space_registration ADD COLUMN grant_id TEXT;
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -599,6 +612,16 @@ const ISSUE: &str =
     "INSERT INTO issued_credential (space, did, jti, expires_at) VALUES (?1, ?2, ?3, ?4)";
 const FORGET_ISSUED: &str = "DELETE FROM issued_credential WHERE expires_at <= ?1";
 const ISSUED_TO: &str = "SELECT space, jti, expires_at FROM issued_credential WHERE did = ?1 AND expires_at > ?2 AND space IN (SELECT uri FROM space WHERE authority = ?3) ORDER BY space";
+const DELEGATE: &str =
+    "INSERT INTO grant_delegation (jti, grant_id, expires_at) VALUES (?1, ?2, ?3)";
+const FORGET_DELEGATED: &str = "DELETE FROM grant_delegation WHERE expires_at <= ?1";
+const DELEGATED: &str = "SELECT grant_id FROM grant_delegation WHERE jti = ?1";
+const BOUGHT: &str = "UPDATE issued_credential SET grant_id = ?3 WHERE space = ?1 AND jti = ?2";
+const BOUGHT_OF: &str = "SELECT space, jti, expires_at, grant_id FROM issued_credential WHERE grant_id IS NOT NULL AND expires_at > ?1 AND space IN (SELECT uri FROM space WHERE authority = ?2) ORDER BY space";
+const FORGET_BOUGHT: &str = "DELETE FROM issued_credential WHERE space = ?1 AND jti = ?2";
+const BIND_REGISTRATION: &str =
+    "UPDATE space_registration SET grant_id = ?4 WHERE space = ?1 AND endpoint = ?2 AND token = ?3";
+const BOUND_REGISTRATIONS: &str = "SELECT r.space, r.endpoint, r.token, r.grant_id FROM space_registration r JOIN space s ON s.uri = r.space WHERE s.authority = ?1 AND r.grant_id IS NOT NULL ORDER BY r.space";
 const UNINDEX_WRITER: &str = "DELETE FROM index_record WHERE space = ?1 AND did = ?2";
 const UNINDEX_STATE: &str = "DELETE FROM index_repo WHERE space = ?1 AND did = ?2";
 const ASK: &str = "INSERT INTO join_request (grp, did, message, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (grp, did) DO NOTHING";
@@ -1714,6 +1737,85 @@ impl Store {
         let mut q = conn.prepare(ISSUED_TO)?;
         let rows = q.query_map(params![did, now, authority], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Keeps that the delegation token `jti` was given to the grant
+    /// `grant_id`, until it lapses at `expires_at`; those lapsed by `now`
+    /// are forgotten.
+    pub fn delegated(&self, jti: &str, grant_id: &str, expires_at: i64, now: i64) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        tx.execute(FORGET_DELEGATED, [now])?;
+        tx.execute(DELEGATE, params![jti, grant_id, expires_at])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The grant the delegation token `jti` was given to, if a grant's.
+    pub fn delegation_grant(&self, jti: &str) -> Result<Option<String>> {
+        let conn = self.conn();
+        Ok(conn.query_row(DELEGATED, [jti], |r| r.get(0)).optional()?)
+    }
+
+    /// Keeps that the credential `jti` to `space`, kept as issued, was
+    /// bought with the grant `grant_id`.
+    pub fn bought(&self, space: &str, jti: &str, grant_id: &str) -> Result<()> {
+        self.conn().execute(BOUGHT, [space, jti, grant_id])?;
+        Ok(())
+    }
+
+    /// The credentials to `authority`'s spaces still good at `now` that a
+    /// grant bought: each space, jti, lapse and grant.
+    pub fn bought_of(
+        &self,
+        authority: &str,
+        now: i64,
+    ) -> Result<Vec<(String, String, i64, String)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(BOUGHT_OF)?;
+        let rows = q.query_map(params![now, authority], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        });
+        let rows = rows?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Forgets that the credential `jti` to `space` was issued.
+    pub fn forget_bought(&self, space: &str, jti: &str) -> Result<()> {
+        self.conn().execute(FORGET_BOUGHT, [space, jti])?;
+        Ok(())
+    }
+
+    /// Keeps which grant, if one, the registration `to` for `space` was
+    /// last renewed with.
+    pub fn bind_registration(
+        &self,
+        space: &str,
+        to: &Registration,
+        grant_id: Option<&str>,
+    ) -> Result<()> {
+        let row = params![space, to.endpoint, to.token, grant_id];
+        self.conn().execute(BIND_REGISTRATION, row)?;
+        Ok(())
+    }
+
+    /// The registrations for `authority`'s spaces a grant renewed last,
+    /// lapsed or not: each space, registration and grant.
+    pub fn bound_registrations(
+        &self,
+        authority: &str,
+    ) -> Result<Vec<(String, Registration, String)>> {
+        let conn = self.conn();
+        let mut q = conn.prepare(BOUND_REGISTRATIONS)?;
+        let rows = q.query_map([authority], |r| {
+            let to = Registration {
+                endpoint: r.get(1)?,
+                token: r.get(2)?,
+            };
+            Ok((r.get(0)?, to, r.get(3)?))
         });
         let rows = rows?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)

@@ -146,7 +146,10 @@ request to `/oauth/par` with PKCE and a DPoP proof, asking for `atproto`
 and only scopes its client metadata declares. `/oauth/authorize`
 forwards the browser to the console's approval page. After approval the
 app exchanges the code at `/oauth/token` for an access and a refresh
-token. Both are bound to its DPoP key, with `sub` the group's DID.
+token. Both are bound to its DPoP key, with `sub` the group's DID. The
+answer, to the code and to each refresh, also names `member`, the DID of
+the member who approved the grant: this host's own field, not OAuth's,
+so an app can keep whose roles bound its session.
 
 A client is the https URL of its metadata document, or the loopback
 client `http://localhost` for programs on the same machine. The host
@@ -236,8 +239,13 @@ are at that moment.
   session, at their PDS, and it's never kept for a group's.
 
 - `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
-- `rpc:M` is kept only if the roles hold `repo:*` and `M` is neither
-  `*` nor a `org.atgrp.*` method.
+- `rpc:M` for a method of another service is kept only if the roles
+  hold `repo:*` and `M` isn't `*`. For one of the host's own methods
+  the Atmosphere Groups proposal has a group session call
+  (`listJoinRequests`, `denyJoinRequest`, `listModSubjects`,
+  `getModSubjectHistory`, `resolveModSubject`), with `aud` this host or
+  `*`, it's kept if the roles hold the action the method asks, as for
+  the sets above. Never one of the `internal` methods.
 - `space:T?…` is kept if some space of type `T` lets the roles write
   what's asked there. For a scope that only reads, reading it there is
   enough. In the members space, the roles write its roles if they hold
@@ -271,19 +279,37 @@ both writes records and changes the space (one writing, one reading and
 changing), and an `rpc:` scope for each method. `authority=self` becomes
 the group's DID.
 
-A token calls none of the host's own methods, since those take a
-member's service auth. Of the sets, a token makes their writes in the
-meta and members spaces and in people's inboxes. Their `rpc:` and
-`manage=` scopes say what an app was given, as the Atmosphere Groups proposal
+A token calls the host's own methods its `rpc:` scopes name, a set's
+included, as its member: those methods take a member's service auth or
+the console's cookie, and a group session's DPoP token too. At each
+call, its member's roles must hold the method's action at that moment,
+or it fails `Forbidden`, and a scope without the method fails
+`ScopeMissing`. Of the sets, a token makes their writes in the meta and
+members spaces and in people's inboxes. Their `rpc:` and `manage=`
+scopes say what an app was given, as the Atmosphere Groups proposal
 lists them. A grant keeps this scope through every refresh. Refreshing
-doesn't ask the roles again, because each write does.
+doesn't ask the roles again, because each write and call does.
 
 ### Checking each write
 
 An app sends `Authorization: DPoP <token>` with a proof signed by the
 key the grant is bound to. A token writes only its own group's repo. It
 uses the `com.atproto.repo.*` writes, the same writes in a space
-(`com.atproto.space.*`), and `uploadBlob`.
+(`com.atproto.space.*`), and `uploadBlob`. It reads the group's spaces
+with a credential, bought with a delegation token the group signs
+(`com.atproto.space.getDelegationToken`), for a scope that reads the
+space and a member who reads it at that moment ([spaces](spaces.md#reading-a-space-through-the-host)).
+
+What a grant buys of a space ends with its reading. The host keeps each
+delegation token it gives a grant, and the credentials and syncer
+registrations those buy. A delegation buys nothing once its grant is
+gone or its member reads the space no more. When a grant ends (by
+`revokeGroupToken`, `/oauth/revoke`, `deleteSession`, or its member
+put out), or a write in the members space or a change of a space's
+policy leaves its member reading less, the host revokes its
+credentials to those spaces, telling the PDSes of the spaces' writers
+as it does when a member is put out, and withdraws its registrations,
+so `notify` tells it nothing more.
 
 The host checks each record write twice. The token's scope must allow
 it, or it fails `ScopeMissing`. The member's roles must allow it at that

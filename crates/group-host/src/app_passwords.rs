@@ -325,6 +325,8 @@ pub async fn delete_session(State(host): State<Arc<Host>>, headers: HeaderMap) -
     host.store
         .end_grant(&grant.id)
         .map_err(XrpcError::internal)?;
+    let bought = host.end_grant_reads(&grant.group).await;
+    bought.map_err(XrpcError::internal)?;
     Ok(Json(json!({})))
 }
 

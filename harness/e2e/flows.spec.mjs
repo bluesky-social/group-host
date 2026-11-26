@@ -818,6 +818,53 @@ test('signing an app in as her group', async () => {
   expect((await read.json()).value.text).toBe('Ride on Saturday');
 });
 
+test('approving an app that reads her group, and revoking it', async () => {
+  const asked = [
+    'atproto',
+    'space:org.atgrp.meta?action=read',
+    'space:org.atgrp.members?action=read',
+    'rpc:org.atgrp.listJoinRequests?aud=*'
+  ].join(' ');
+  const app = await new App(asked).listen();
+  await page.goto(await app.push());
+  // Said plainly: what it reads, that it writes nothing, and the
+  // host's methods it calls.
+  const riders = page.locator('form', { hasText: '@riders.groups.test' });
+  await expect(
+    riders.getByText(
+      "Read the group's profile and rules and its members, their roles and its labels, and write nothing"
+    )
+  ).toBeVisible();
+  await expect(
+    riders.getByText(
+      "Use the group's own methods here, as your roles let you: see requests to join"
+    )
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Sign it in as Riders' }).click();
+  const back = await app.back;
+  app.close();
+  const tokens = await app.exchange(back);
+  expect(tokens.scope.split(' ')).toContain('rpc:org.atgrp.listJoinRequests?aud=*');
+  const requests = () =>
+    app.send(
+      `${world.host}/xrpc/org.atgrp.listJoinRequests?group=${world.riders}`,
+      { method: 'GET' },
+      tokens.access_token
+    );
+  expect((await requests()).status).toBe(200);
+
+  // Listed among the apps acting as the group, and revoked there.
+  await page.goto(url('/g/riders.groups.test/settings/apps'));
+  await page.getByRole('button', { name: `Revoke ${app.id}'s access` }).click();
+  await page
+    .getByRole('dialog', { name: "Revoke this app's access?" })
+    .filter({ visible: true })
+    .getByRole('button', { name: 'Revoke', exact: true })
+    .click();
+  await expect(page.getByRole('button', { name: `Revoke ${app.id}'s access` })).toHaveCount(0);
+  expect((await requests()).status).toBe(401);
+});
+
 test('connecting an AI app, and disconnecting it', async () => {
   const client = await new McpClient().listen();
   await page.goto(await client.authorize('Pocket helper'));

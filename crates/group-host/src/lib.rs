@@ -114,7 +114,8 @@ impl Host {
         let logs = logs::Logs::open(&config.data_dir.join("logs.sqlite"), config.logs_keep)?;
         let stats = stats::Stats::open(&config.data_dir.join("stats.sqlite"))?;
         let plc = plc::Directory::new(&config.plc_url);
-        let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme);
+        let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme)
+            .reading_at(&config.did_web_hosts);
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
         let limits = limits::Limiter::new(config.rate_limits);
@@ -595,6 +596,10 @@ fn token_routes() -> Router<Arc<Host>> {
         .route(
             &x("com.atproto.space.getSpace"),
             get(group_spaces::get_space),
+        )
+        .route(
+            &x("com.atproto.space.getDelegationToken"),
+            get(group_spaces::get_delegation_token),
         )
         .route(
             &x("com.atproto.server.getSession"),

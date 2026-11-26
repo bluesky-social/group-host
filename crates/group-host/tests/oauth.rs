@@ -311,6 +311,7 @@ async fn gives_a_token_for_the_group_with_what_the_member_may_do() {
     let tokens = app.sign_in(&h, &alice, &did).await;
     assert_eq!(tokens["token_type"], "DPoP");
     assert_eq!(tokens["sub"], did.as_str());
+    assert_eq!(tokens["member"], alice.did.as_str());
     assert_eq!(tokens["scope"], SCOPE);
     assert_eq!(tokens["expires_in"], 3600);
     assert_ne!(tokens["access_token"], tokens["refresh_token"]);
@@ -414,6 +415,7 @@ async fn refreshes_into_a_new_pair_and_the_old_stops_working() {
     let said = app.refresh(&h, old).await;
     assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(said.body["sub"], did.as_str());
+    assert_eq!(said.body["member"], alice.did.as_str());
     assert_eq!(said.body["scope"], SCOPE);
     let new = said.body["refresh_token"].as_str().unwrap().to_string();
     assert_ne!(new, old);

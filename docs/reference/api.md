@@ -89,8 +89,8 @@ these too. A request to the host's own name never does:
 | `POST org.atgrp.requestJoin` | asks to join, or redeems an invite |
 | `GET org.atgrp.internal.getJoinRequest` | shows the caller's own request to join while it waits |
 | `POST org.atgrp.cancelJoinRequest` | withdraws that request |
-| `GET org.atgrp.listJoinRequests` | lists the waiting requests, for those who admit people. A cursor it never gave fails with `InvalidCursor` |
-| `POST org.atgrp.denyJoinRequest` | turns a request down |
+| `GET org.atgrp.listJoinRequests` | lists the waiting requests, for those who admit people, and an app signed in as the group with its `rpc:` scope. A cursor it never gave fails with `InvalidCursor` |
+| `POST org.atgrp.denyJoinRequest` | turns a request down, for the same |
 | `GET org.atgrp.internal.listInvites` | lists the group's invites that are still waiting, each with the invitee's handle |
 | `GET org.atgrp.internal.getActorInvites` | lists the caller's own invites from groups here |
 | `POST org.atgrp.internal.declineInvite` | turns an invite down |
@@ -187,6 +187,7 @@ group:
 | `POST com.atproto.space.updateSpace`                                                                                                                                                   | puts the group's `space` under a new `policy`, published, and listed or unlisted as it says. It needs `manage=update` in the scope (`ScopeMissing`), and a role holding `space.configure` or a `manage=update` scope in the space's own policy (`NotAuthorized`). It refuses changing the grant of a role the caller may not assign, adding a scope their roles don't hold, and granting `read` or `write`, or turning on `publicRead`, where they don't have it (`NotAuthorized`). On the members space, it refuses a policy that takes `read` or `write` from `member` or turns on `publicRead` (`MembersSpaceFixed`). It refuses a policy as `createSpace` does, and a space the group doesn't have (`SpaceNotFound`) |
 | `POST com.atproto.space.deleteSpace`                                                                                                                                                   | ends the group's `space`: out of the index, its syncers told, and the group's repo in it gone. It needs `manage=delete` in the scope (`ScopeMissing`), and a role holding `space.delete` or a `manage=delete` scope in the space's policy (`NotAuthorized`). The meta and members spaces are never deleted (`NotAuthorized`), and a space the group doesn't have fails `SpaceNotFound`                                                                                                                                                                                                                    |
 | `GET com.atproto.space.getSpace`                                                                                                                                                       | answers the group's `space` and its `policy`, for a scope that reads it (`ScopeMissing`) and a member who reads it or may change it (`NotAuthorized`, `SpaceNotFound`)                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `GET com.atproto.space.getDelegationToken` | answers a delegation `token` the group signs for its `space`, which buys a credential from `authorizeSpaceSync` to read the space as any reader does: the group's repo there, here, and its members' repos at their PDSes. It's for a scope that reads the space (`ScopeMissing`) and a member who reads it themselves at that moment (`NotAuthorized`), in one of the group's own spaces (`SpaceNotFound`) |
 
 A group's profile and rules, in `meta`, change only this way. An app
 writes the records as the group, and the host keeps each one only as the
@@ -219,6 +220,12 @@ Its tools are in [MCP tools](mcp.md).
 | `POST org.atgrp.resolveModSubject` | sets a subject (`subject`, and an optional `cid`) `resolved` or `escalated`, with an optional note, and answers the subject |
 | `POST org.atgrp.internal.putLabelDefinition` | defines or changes one of the group's own labels (lowercase letters and hyphens) in its labeler, for someone with `group.configure`. Its name and description are in `lang` (`en` unless given), and replace only those in that language. It answers the definition, and `getGroup` answers them as `labels` |
 | `POST org.atgrp.internal.deleteLabelDefinition` | stops defining one. Labels already applied stay |
+
+`listModSubjects`, `getModSubjectHistory` and `resolveModSubject`, like
+`listJoinRequests` and `denyJoinRequest`, also answer an app signed in
+as the group (a DPoP token) whose scope names the method (`rpc:`, or a
+set listing it), as its member, while their roles hold the method's
+action ([signing in](../design/signing-in.md#narrowing-at-approval)).
 
 ## Operating the host
 

@@ -288,8 +288,17 @@ that reader alone that this host answered. The host refuses a request
 without one, or with a share that isn't a P-256 key, with
 `InvalidSpaceMac`.
 
-The host doesn't yet let an app signed in as the group read its own
-repos. Parameters, limits and headers are in
+An app signed in as the group reads a space the same way, as an app
+signed in to a person's PDS does. It asks
+`com.atproto.space.getDelegationToken` for a delegation token the group
+signs, and buys a credential with it from `authorizeSpaceSync`. The
+session's scope must read the space, and its member must read it at that
+moment, so a session never reads more than the member who approved it.
+The credential is the group's, so it reads everything the space holds,
+but only while the grant lasts and its member reads the space: when
+either ends, the host revokes it and withdraws the registration it
+bought ([signing in](signing-in.md#checking-each-write)).
+Parameters, limits and headers are in
 [the API reference](../reference/api.md).
 
 ## Ending a space or a group

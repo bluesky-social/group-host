@@ -19,6 +19,7 @@ item of spaces and a trailing `/`.
 | `DATA_DIR` | where it keeps its database (`host.sqlite`), blobs and keys (`host-secrets.json`), the lines it logged (`logs.sqlite`) and its usage counts (`stats.sqlite`) | `data` |
 | `PLC_URL` | the PLC directory it publishes groups' `did:plc`s to | `https://plc.directory` |
 | `DID_WEB_SCHEME` | how it reads a `did:web`'s document (`https`, or `http` for test servers) | `https` |
+| `DID_WEB_HOSTS` | where it reads the documents of some `did:web`s instead of at their own host, as comma-separated `host=address` pairs, for test servers (`grain.social=127.0.0.1:2584`) | none |
 | `HANDLE_RESOLVERS` | how it resolves a handle, trying each in turn: `well-known:<scheme>` for the handle's own `/.well-known/atproto-did`, or a service answering `com.atproto.identity.resolveHandle` (which reads its DNS record). It drops a trailing `/` | `well-known:https,https://public.api.bsky.app` |
 | `GROUP_FOUNDERS` | who the host starts groups for, as comma-separated DIDs, by `createGroup`, `provisionGroup`, or moving a group or an account here | anyone |
 | `BLOB_UPLOAD_LIMIT` | the most bytes one blob may be, whether uploaded or brought with a group, an account or a space. `describeServer` answers it | 52428800 (50 MiB) |

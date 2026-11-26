@@ -555,9 +555,70 @@ impl Host {
     /// once for the repos here, and told to the host of each writer
     /// elsewhere in those spaces, best effort, as the authority.
     pub async fn revoke_credentials(&self, authority: &str, did: &str) -> Result<()> {
+        let issued = self.store.issued_to(authority, did, now())?;
+        self.revoke_issued(authority, issued).await
+    }
+
+    /// Whether the grant `id` still lasts, and its member reads `space`,
+    /// at `uri`, now: what a delegation it was given buys with.
+    pub fn grant_reads(&self, id: &str, uri: &str, space: &Space) -> Result<bool> {
+        let Some(grant) = self.store.grant_by_id(id)? else {
+            return Ok(false);
+        };
+        self.may(uri, space, Some(&grant.member), Access::Read)
+    }
+
+    /// Ends what the grants of apps signed in as `authority` bought of a
+    /// space of its that they read no more, the grant gone or its member
+    /// no longer reading there: their credentials revoked, as
+    /// `revoke_credentials` does, and their syncers' registrations
+    /// withdrawn, told nothing more.
+    pub async fn end_grant_reads(&self, authority: &str) -> Result<()> {
+        let mut asked = std::collections::BTreeMap::new();
+        let mut gone = Vec::new();
+        for (space, jti, expires_at, grant) in self.store.bought_of(authority, now())? {
+            if !self.still_reads(&mut asked, &grant, &space)? {
+                self.store.forget_bought(&space, &jti)?;
+                gone.push((space, jti, expires_at));
+            }
+        }
+        for (space, to, grant) in self.store.bound_registrations(authority)? {
+            if !self.still_reads(&mut asked, &grant, &space)? {
+                self.store.unregister(&space, &to)?;
+            }
+        }
+        self.revoke_issued(authority, gone).await
+    }
+
+    /// `grant_reads` for the grant `grant` and the space at `uri`, asked
+    /// once for each pair kept in `asked`.
+    fn still_reads(
+        &self,
+        asked: &mut std::collections::BTreeMap<(String, String), bool>,
+        grant: &str,
+        uri: &str,
+    ) -> Result<bool> {
+        let key = (grant.to_string(), uri.to_string());
+        if let Some(reads) = asked.get(&key) {
+            return Ok(*reads);
+        }
+        // `bought_of` and `bound_registrations` name only spaces here.
+        let space = self.store.space(uri)?.context("the space is here")?;
+        let reads = self.grant_reads(grant, uri, &space)?;
+        asked.insert(key, reads);
+        Ok(reads)
+    }
+
+    /// Revokes the credentials `issued` to `authority`'s spaces, each its
+    /// space, jti and lapse, as `revoke_credentials` says.
+    async fn revoke_issued(
+        &self,
+        authority: &str,
+        issued: Vec<(String, String, i64)>,
+    ) -> Result<()> {
         let mut by_space: std::collections::BTreeMap<String, (Vec<String>, i64)> =
             Default::default();
-        for (space, jti, expires_at) in self.store.issued_to(authority, did, now())? {
+        for (space, jti, expires_at) in issued {
             let (jtis, until) = by_space.entry(space).or_default();
             jtis.push(jti);
             *until = (*until).max(expires_at + 2 * space_auth::CLOCK_SKEW as i64);

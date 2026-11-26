@@ -232,8 +232,8 @@ fn plans_a_label_beside_its_subject() {
     assert!(label(json!({"val": "spam"})).is_err());
     assert!(label(json!({"subject": post})).is_err());
 
-    // Where it goes: an account's in the members space, a record's in its
-    // own, the group's.
+    // Where it goes: an account's, or a record in a public repo's, in the
+    // members space; a record's in a space in its own, the group's.
     let members = "at://did:plc:g/space/org.atgrp.members/self";
     assert_eq!(
         label_space("did:plc:g", "did:plc:a").as_deref(),
@@ -244,7 +244,11 @@ fn plans_a_label_beside_its_subject() {
         Some("at://did:plc:g/space/x.y/rides")
     );
     assert_eq!(label_space("did:plc:other", post), None);
-    assert_eq!(label_space("did:plc:g", "at://did:plc:g/x.y/rides"), None);
+    assert_eq!(
+        label_space("did:plc:g", "at://did:plc:a/x.y/rides").as_deref(),
+        Some(members)
+    );
+    assert_eq!(label_space("did:plc:g", "at://did:plc:g/x.y"), None);
     assert_eq!(label_space("did:plc:g", "https://example.com"), None);
 
     // The record, at a version if named, and which are the same label.

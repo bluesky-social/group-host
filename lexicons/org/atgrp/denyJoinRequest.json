@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Deny a pending join request. Requires admit. The requester sees it as no request at all, and may ask again.",
+      "description": "Deny a pending join request. Requires admit: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call. The requester sees it as no request at all, and may ask again.",
       "input": {
         "encoding": "application/json",
         "schema": {

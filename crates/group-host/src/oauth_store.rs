@@ -102,7 +102,8 @@ const RECORD: &str =
     "INSERT INTO group_activity (grp, member, client_id, action, at) VALUES (?1, ?2, ?3, ?4, ?5)";
 const ACTIVITY: &str = "SELECT member, client_id, action, at FROM group_activity WHERE grp = ?1 ORDER BY seq DESC LIMIT ?2";
 const ROTATE: &str = "UPDATE oauth_token SET access_hash = ?2, access_expires = ?3, refresh_hash = ?4, expires_at = ?5 WHERE refresh_hash = ?1 AND expires_at > ?6";
-const REVOKE: &str = "DELETE FROM oauth_token WHERE access_hash = ?1 OR refresh_hash = ?1";
+const REVOKE: &str =
+    "DELETE FROM oauth_token WHERE access_hash = ?1 OR refresh_hash = ?1 RETURNING grp";
 const REVOKE_MEMBER: &str = "DELETE FROM oauth_token WHERE grp = ?1 AND member = ?2";
 
 fn json(text: String) -> Value {
@@ -284,10 +285,11 @@ impl Store {
         Ok(changed > 0)
     }
 
-    /// Ends the grant either of whose tokens hashes to `hash`.
-    pub fn revoke_token(&self, hash: &str) -> Result<bool> {
+    /// Ends the grant either of whose tokens hashes to `hash`: the group
+    /// it acted as, if there was one.
+    pub fn revoke_token(&self, hash: &str) -> Result<Option<String>> {
         let conn = self.conn();
-        Ok(conn.execute(REVOKE, [hash])? > 0)
+        Ok(conn.query_row(REVOKE, [hash], |r| r.get(0)).optional()?)
     }
 
     /// The grant `id`, of any group.

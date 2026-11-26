@@ -67,6 +67,22 @@ async fn reads_what_it_can_and_refuses_the_rest() {
 }
 
 #[tokio::test]
+async fn reads_a_did_web_where_it_is_told_to() {
+    // A test server stands for grain.social: its document is read there.
+    let at = webs(1).await.remove(0);
+    let address = at.strip_prefix("did:web:").unwrap().replace("%3A", ":");
+    let hosts = [("grain.social".to_string(), address)].into();
+    let r = Resolver::new("http://127.0.0.1:9", "http").reading_at(&hosts);
+    // The document served there names another DID, so it is refused as
+    // another's: it was read from that server, not from grain.social.
+    let refused = r.document("did:web:grain.social").await.unwrap_err();
+    assert_eq!(
+        refused.to_string(),
+        "did:web:grain.social's document is another's"
+    );
+}
+
+#[tokio::test]
 async fn gives_no_key_where_a_document_names_none() {
     let r = Resolver::new("http://127.0.0.1:9", "http");
     let web = webs(1).await.remove(0);

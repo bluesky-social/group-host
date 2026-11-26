@@ -6,6 +6,7 @@ mod common;
 use atproto::{Commit, PublicKey, Value, car, drisl};
 use axum::Router;
 use axum::routing::post;
+use common::groups::{people, start_group};
 use common::{Running, start};
 use futures::{SinkExt, StreamExt};
 use group_host::repo::Write;
@@ -187,6 +188,109 @@ async fn follows_from_now_without_a_cursor() {
     let (header, body) = next(&mut socket).await;
     assert_eq!(text(field(&header, "t")), "#commit");
     assert_eq!(field(&body, "seq"), &Value::Integer(4));
+}
+
+/// What atproto's own consumer (`harness/firehose.mjs`, @atproto/sync's
+/// Firehose) made of every event of `h`'s firehose, reading as `mode`
+/// says (`authenticated`, as an AppView, each commit checked against the
+/// signing key of the account `dids` names; `unauthenticated`, as a
+/// Jetstream): a line of JSON for each.
+async fn as_sync_reads(h: &Running, dids: &[&str], mode: &'static str) -> Vec<serde_json::Value> {
+    let keys: Vec<String> = dids
+        .iter()
+        .map(|did| {
+            let account = h.host.store.account(did).unwrap().unwrap();
+            format!("{did}={}", account.signing.public().did_key())
+        })
+        .collect();
+    let url = h.url.clone();
+    tokio::task::spawn_blocking(move || node_reads(&url, mode, &keys))
+        .await
+        .unwrap()
+}
+
+fn node_reads(url: &str, mode: &str, keys: &[String]) -> Vec<serde_json::Value> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let out = std::process::Command::new("node")
+        .arg(root.join("harness/firehose.mjs"))
+        .args([url, mode])
+        .args(keys)
+        .output()
+        .expect("node runs harness/firehose.mjs (npm ci in harness/)");
+    let lines = String::from_utf8(out.stdout).unwrap();
+    lines
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+/// The ops among what `harness/firehose.mjs` made out, each as its
+/// action and at-uri; refused, for any event it could not read.
+fn ops_of(read: &[serde_json::Value]) -> Vec<(String, String)> {
+    let errors: Vec<_> = read.iter().filter(|e| e.get("error").is_some()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    read.iter()
+        .filter(|e| e["kind"] == "commit")
+        .map(|e| {
+            (
+                e["op"].as_str().unwrap().into(),
+                e["uri"].as_str().unwrap().into(),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn reads_as_atprotos_own_consumer_reads_it() {
+    let h = start(&[], false).await;
+    let did = h.host.create_account(RIDERS).await.unwrap();
+    // Enough records for a tree of more than one level, so each op's
+    // proof is a path through it; then one changed, and one taken out.
+    for i in 0..40 {
+        h.host.write(&did, &[create(&format!("r{i:02}"))]).unwrap();
+    }
+    let rule = json!({"$type": "org.atgrp.rule", "title": "Ride safer", "createdAt": "2026-11-03T00:00:00Z"});
+    let (collection, rkey) = ("org.atgrp.rule".to_string(), "r17".to_string());
+    let update = Write::Update {
+        collection: collection.clone(),
+        rkey: rkey.clone(),
+        value: rule,
+    };
+    h.host.write(&did, &[update]).unwrap();
+    h.host
+        .write(&did, &[Write::Delete { collection, rkey }])
+        .unwrap();
+
+    let uri = |rkey: &str| format!("at://{did}/org.atgrp.rule/{rkey}");
+    for mode in ["authenticated", "unauthenticated"] {
+        let read = as_sync_reads(&h, &[&did], mode).await;
+        // The account's first commit has no ops, so it makes no event.
+        assert_eq!(
+            (&read[0]["kind"], &read[1]["kind"]),
+            (&json!("identity"), &json!("account"))
+        );
+        let ops = ops_of(&read);
+        assert_eq!(ops.len(), 42, "{mode}");
+        assert_eq!(ops[0], ("create".into(), uri("r00")));
+        assert_eq!(ops[40], ("update".into(), uri("r17")));
+        assert_eq!(ops[41], ("delete".into(), uri("r17")));
+    }
+}
+
+#[tokio::test]
+async fn a_groups_events_read_as_a_jetstream_reads_them() {
+    let h = start(&[], false).await;
+    let [alice, ..] = people(&h).await;
+    let body = json!({"handle": RIDERS, "displayName": "Riders", "metaPublicRead": true});
+    let group = start_group(&h, &alice, body).await;
+    for mode in ["authenticated", "unauthenticated"] {
+        let ops = ops_of(&as_sync_reads(&h, &[&group], mode).await);
+        assert!(
+            ops.iter()
+                .any(|(_, uri)| uri.contains("/org.atgrp.declaration/")),
+            "{mode}: {ops:?}"
+        );
+    }
 }
 
 #[tokio::test]

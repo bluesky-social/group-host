@@ -3,6 +3,7 @@
 //! `docs/reference/config.md`.
 
 use anyhow::{Context, Result, bail};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +25,10 @@ pub struct Config {
     /// How a `did:web`'s document is read, `DID_WEB_SCHEME`: `https`, or
     /// `http` for a network of test servers.
     pub did_web_scheme: String,
+    /// Where a `did:web`'s document is read instead of at its own host,
+    /// `DID_WEB_HOSTS`, comma-separated `host=address` pairs, for a
+    /// network of test servers: `grain.social=127.0.0.1:2584`.
+    pub did_web_hosts: BTreeMap<String, String>,
     /// How a handle is resolved, `HANDLE_RESOLVERS`, comma-separated, each
     /// tried in turn: `well-known:<scheme>` for the handle's own
     /// `/.well-known/atproto-did`, or a service answering
@@ -122,6 +127,13 @@ impl Config {
                 .filter(|u| !u.is_empty())
                 .collect()
         };
+        let mut did_web_hosts = BTreeMap::new();
+        for pair in list("DID_WEB_HOSTS") {
+            let Some((host, address)) = pair.split_once('=') else {
+                bail!("DID_WEB_HOSTS is host=address pairs, not {pair}");
+            };
+            did_web_hosts.insert(host.to_string(), address.to_string());
+        }
         let group_founders = list("GROUP_FOUNDERS");
         let mut handle_resolvers = urls("HANDLE_RESOLVERS");
         if handle_resolvers.is_empty() {
@@ -175,6 +187,7 @@ impl Config {
             data_dir,
             plc_url,
             did_web_scheme,
+            did_web_hosts,
             handle_resolvers,
             group_founders,
             crawlers,

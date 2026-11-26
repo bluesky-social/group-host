@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Resolve or escalate a subject, optionally with a note. Repeating the current status adds the note. Requires mod.resolve.",
+      "description": "Resolve or escalate a subject, optionally with a note. Repeating the current status adds the note. Requires mod.resolve: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call.",
       "input": {
         "encoding": "application/json",
         "schema": {
