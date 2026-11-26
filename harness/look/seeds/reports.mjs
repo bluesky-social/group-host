@@ -26,7 +26,7 @@ export default async ({ world, who, atgrp }) => {
   ).then((r) => r.json());
   const { group } = await call('alice', 'org.atgrp.internal.getGroup', null, `group=${did}`);
   const [rule] = group.rules ?? [];
-  const space = `at://${did}/space/com.example.forum/talk`;
+  const space = `at:space/${did}/com.example.forum/talk`;
   atgrp(
     'alice',
     'space',
@@ -72,7 +72,7 @@ export default async ({ world, who, atgrp }) => {
     account('dan'),
     'reasonRude',
     'Told a new member to stay home if they cannot keep up.',
-    rule ? `at://${did}/space/org.atgrp.members/self/${did}/org.atgrp.rule/${rule.rkey}` : null
+    rule ? `at:space/${did}/org.atgrp.members/self/${did}/org.atgrp.rule/${rule.rkey}` : null
   );
   await report(
     'carol',

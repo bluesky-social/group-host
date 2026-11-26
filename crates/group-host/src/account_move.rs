@@ -32,6 +32,7 @@ use crate::store::Store;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use anyhow::Result;
+use atproto::space::SPACE_URI_PREFIX;
 use atproto::{Curve, Keypair, did, jose};
 use axum::Json;
 use axum::extract::{Query, State};
@@ -407,7 +408,7 @@ impl Host {
         let (mut records, mut files) = (0, 0);
         for space in &spaces {
             let at = [("space", space.as_str()), ("repo", did.as_str())];
-            let governs = space.starts_with(&format!("at://{did}/"));
+            let governs = space.starts_with(&format!("{SPACE_URI_PREFIX}{did}/"));
             if governs {
                 let meta = self
                     .moving_bytes(mover, m, "com.atproto.space.exportSpaceMeta", &at[..1])

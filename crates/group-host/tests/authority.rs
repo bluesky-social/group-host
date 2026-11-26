@@ -171,14 +171,9 @@ async fn makes_spaces_and_grants() {
         .unwrap_err();
     assert_eq!(bad.error, "InvalidRequest");
     assert_eq!(
-        host.grant(
-            "at://did:plc:none/space/a.b.c/self",
-            &x.alice.did,
-            true,
-            true
-        )
-        .unwrap_err()
-        .error,
+        host.grant("at:space/did:plc:none/a.b.c/self", &x.alice.did, true, true)
+            .unwrap_err()
+            .error,
         "SpaceNotFound"
     );
     assert_eq!(
@@ -188,7 +183,7 @@ async fn makes_spaces_and_grants() {
         "alice is no DID"
     );
     assert_eq!(
-        host.ungrant("at://did:plc:none/space/a.b.c/self", &x.alice.did)
+        host.ungrant("at:space/did:plc:none/a.b.c/self", &x.alice.did)
             .unwrap_err()
             .error,
         "SpaceNotFound"
@@ -280,8 +275,8 @@ async fn refuses_a_sync_it_should_not_authorize() {
     host.grant(&x.space, &x.alice.did, true, false).unwrap();
     let kid = Keypair::generate(Curve::P256).public().did_key();
     let token = |who: &Authority, space: &str, authority: &str| delegation(who, space, authority);
-    let elsewhere = format!("at://{}/space/{KIND}/self", x.alice.did);
-    let never_made = format!("at://{}/space/{KIND}/never", x.group);
+    let elsewhere = format!("at:space/{}/{KIND}/self", x.alice.did);
+    let never_made = format!("at:space/{}/{KIND}/never", x.group);
     let pretending = |did: &str| Authority {
         did: did.into(),
         key: Keypair::generate(Curve::K256),
@@ -672,7 +667,7 @@ async fn keeps_the_writers_repo_hosts_tell_it_of() {
                 &x.alice.did,
                 &x.alice.did,
                 &wrote(
-                    &format!("at://{}/space/{KIND}/self", x.alice.did),
+                    &format!("at:space/{}/{KIND}/self", x.alice.did),
                     &x.alice.did,
                     &rev(0),
                     &[3; 32],
@@ -1038,7 +1033,7 @@ async fn owes_an_authority_word_of_a_write_until_it_lands() {
     let h = start(&[], false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
     let elsewhere = authority(&h, true, true).await;
-    let space = format!("at://{}/space/{KIND}/self", elsewhere.did);
+    let space = format!("at:space/{}/{KIND}/self", elsewhere.did);
     let commit = h
         .host
         .space_write(&group, &space, &[create(RULE, "a", rule("A"))])

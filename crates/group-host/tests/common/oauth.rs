@@ -344,7 +344,7 @@ impl App {
         rkey: &str,
         record: Json,
     ) -> Said {
-        let group = space.split('/').nth(2).unwrap();
+        let group = atproto::space::SpaceRef::parse(space).unwrap().authority;
         let body = json!({"repo": group, "space": space, "collection": collection, "rkey": rkey, "record": record});
         self.call(h, "com.atproto.space.putRecord", token, Some(&body))
             .await
@@ -361,7 +361,7 @@ pub async fn give_avatar(
     bytes: &[u8],
 ) -> Json {
     let app = App::new("console");
-    let meta = format!("at://{group}/space/{NS}.meta/self");
+    let meta = format!("at:space/{group}/{NS}.meta/self");
     let token = app.token_for(h, who, group, &meta).await;
     let said = app.upload(h, &token, bytes.to_vec(), "image/png").await;
     assert_eq!(said.status, 200, "{}", said.body);
@@ -427,7 +427,7 @@ pub async fn make_space(
     skey: &str,
     policy: Json,
 ) -> String {
-    let uri = format!("at://{group}/space/{kind}/{skey}");
+    let uri = format!("at:space/{group}/{kind}/{skey}");
     let body = json!({"spaceType": kind, "skey": skey, "policy": policy});
     let nsid = "com.atproto.space.createSpace";
     let said = as_group(h, who, group, &uri, nsid, Some(&body)).await;

@@ -13,17 +13,29 @@ use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
 use atproto::drisl;
+use atproto::space::SpaceRef;
 use axum::http::StatusCode;
 use serde_json::{Value, json};
 
+/// The URI of `authority`'s space of `kind` at `skey`.
+pub fn space_uri(authority: &str, kind: &str, skey: &str) -> String {
+    let (authority, kind, skey) = (authority.into(), kind.into(), skey.into());
+    SpaceRef {
+        authority,
+        kind,
+        skey,
+    }
+    .to_string()
+}
+
 /// A group's meta space, at `did`.
 pub fn meta_space(did: &str) -> String {
-    format!("at://{did}/space/{NS}.meta/self")
+    space_uri(did, &format!("{NS}.meta"), "self")
 }
 
 /// A group's members space, at `did`.
 pub fn members_space(did: &str) -> String {
-    format!("at://{did}/space/{NS}.members/self")
+    space_uri(did, &format!("{NS}.members"), "self")
 }
 
 /// A DID as a record key: a record key holds no `%`, so a did:web's

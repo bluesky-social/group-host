@@ -302,7 +302,7 @@ async fn a_token_writes_invites_only_as_far_as_it_and_its_member_may() {
     assert_eq!(listed["invites"][0]["message"], "Come along");
 
     // An inbox is at self.
-    let odd = format!("at://{}/space/{NS}.inbox/other", bob.did);
+    let odd = format!("at:space/{}/{NS}.inbox/other", bob.did);
     let said = inbox_write(&h, &alice, &did, &odd, CREATE, invite(json!({}))).await;
     assert_eq!(said.error(), (400, "InvalidRequest"));
 

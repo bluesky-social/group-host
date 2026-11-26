@@ -684,7 +684,7 @@ async fn reads_a_space_with_a_delegation_while_its_member_may() {
     // None for a space its scope does not read, or one not the group's.
     let said = delegate(meta_space(&did)).await;
     assert_eq!(said.error(), (403, "ScopeMissing"), "{}", said.body);
-    let elsewhere = format!("at://did:plc:elsewhere/space/{CALENDAR}/rides");
+    let elsewhere = format!("at:space/did:plc:elsewhere/{CALENDAR}/rides");
     assert_eq!(delegate(elsewhere).await.error(), (400, "SpaceNotFound"));
     // Nor once Bob reads the calendar no more: the session reads no more
     // than its member, at each credential.
@@ -871,7 +871,7 @@ fn reads_a_scope_as_atproto_has_it() {
     assert!(Permissions::new("blob:*/*", group).blob("application/zip"));
     // Escaped values read as they are meant; an escape of what shapes a
     // scope, or none at all, stays as written.
-    let ours = SpaceRef::parse("at://did:plc:riders/space/com.example.calendar/rides").unwrap();
+    let ours = SpaceRef::parse("at:space/did:plc:riders/com.example.calendar/rides").unwrap();
     let p = Permissions::new(
         "space:com.example.calendar?authority=did%3Aplc%3Ariders&collection=a.b%2Ec",
         group,
@@ -884,8 +884,8 @@ fn reads_a_scope_as_atproto_has_it() {
     assert!(!p.repo("a.b.c", "delete") && !p.repo("a.b.c", "create"));
 
     let space = |uri: &str| SpaceRef::parse(uri).unwrap();
-    let ours = space("at://did:plc:riders/space/com.example.calendar/rides");
-    let theirs = space("at://did:plc:other/space/com.example.calendar/rides");
+    let ours = space("at:space/did:plc:riders/com.example.calendar/rides");
+    let theirs = space("at:space/did:plc:other/com.example.calendar/rides");
     let p = Permissions::new("space:com.example.calendar?collection=a.b.c", group);
     assert!(p.space(&ours, Some("a.b.c"), "create"));
     assert!(p.space(&ours, None, "read") && p.space(&ours, None, "read_self"));

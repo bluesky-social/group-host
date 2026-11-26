@@ -56,7 +56,7 @@ async fn a_group_on_the_reference_network() {
         .json()
         .await
         .unwrap();
-    let space = format!("at://{group}/space/org.atgrp.members/self");
+    let space = format!("at:space/{group}/org.atgrp.members/self");
     let res = http
         .get(format!(
             "{}/xrpc/com.atproto.space.getDelegationToken",

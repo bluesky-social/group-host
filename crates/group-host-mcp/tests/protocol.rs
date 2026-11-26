@@ -235,7 +235,7 @@ fn plans_a_label_beside_its_subject() {
             undo: false,
         })
     );
-    let post = "at://did:plc:g/space/x.y/rides/did:plc:a/com.example.post/1";
+    let post = "at:space/did:plc:g/x.y.z/rides/did:plc:a/com.example.post/1";
     assert_eq!(
         label(json!({"subject": post, "cid": "bafy", "val": "spam", "undo": true})),
         Ok(Plan::Label {
@@ -250,14 +250,14 @@ fn plans_a_label_beside_its_subject() {
 
     // Where it goes: an account's, or a record in a public repo's, in the
     // members space; a record's in a space in its own, the group's.
-    let members = "at://did:plc:g/space/org.atgrp.members/self";
+    let members = "at:space/did:plc:g/org.atgrp.members/self";
     assert_eq!(
         label_space("did:plc:g", "did:plc:a").as_deref(),
         Some(members)
     );
     assert_eq!(
         label_space("did:plc:g", post).as_deref(),
-        Some("at://did:plc:g/space/x.y/rides")
+        Some("at:space/did:plc:g/x.y.z/rides")
     );
     assert_eq!(label_space("did:plc:other", post), None);
     assert_eq!(
@@ -265,6 +265,10 @@ fn plans_a_label_beside_its_subject() {
         Some(members)
     );
     assert_eq!(label_space("did:plc:g", "at://did:plc:g/x.y"), None);
+    let old = "at://did:plc:g/space/x.y.z/rides/did:plc:a/com.example.post/1";
+    assert_eq!(label_space("did:plc:g", old), None);
+    let bad = "at:space/did:plc:g/x.y.z/rides/did:plc:a/com.example.post";
+    assert_eq!(label_space("did:plc:g", bad), None);
     assert_eq!(label_space("did:plc:g", "https://example.com"), None);
 
     // The record, at a version if named, and which are the same label.
@@ -325,7 +329,7 @@ fn plans_a_method_asked_with_its_arguments() {
         Plan::Call { nsid, input, .. } => (nsid, input),
         other => panic!("{other:?}"),
     };
-    let post = "at://did:plc:g/space/x/self/did:plc:a/com.example.post/1";
+    let post = "at:space/did:plc:g/x/self/did:plc:a/com.example.post/1";
     let asked = json!({"subject": post, "cid": "bafy", "status": "open", "add_tags": ["urgent"], "remove_tags": ["spam"]});
     let sent = json!({"subject": post, "cid": "bafy", "status": "open", "addTags": ["urgent"], "removeTags": ["spam"]});
     assert_eq!(call(asked), ("org.atgrp.mod.updateSubject".into(), sent));

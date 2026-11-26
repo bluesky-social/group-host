@@ -169,7 +169,7 @@ export type Write = {
 };
 
 /** A group's members space. */
-export const membersOf = (group: string) => `at://${group}/space/org.atgrp.members/self`;
+export const membersOf = (group: string) => `at:space/${group}/org.atgrp.members/self`;
 
 /** Makes `writes` at once as `group`, in `space`, as {@link asGroup} makes one. */
 export function applyAsGroup(load: Load, group: string, space: string, writes: Write[]) {

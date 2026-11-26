@@ -65,9 +65,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto"
-version = "0.3.1"
+version = "0.4.0"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "1e429768e66c5615c072c9a0a7ab2e41e3e353c0be86518a93a8b38b6643b071"
+checksum = "ed3fd1d892f62d57c8d54977e151f3c2615e171b751e0578a7cd119ca3b3335b"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -718,6 +718,7 @@ dependencies = [
 name = "group-host-mcp"
 version = "0.3.0"
 dependencies = [
+ "atproto",
  "serde_json",
  "tokio",
 ]

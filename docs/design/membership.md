@@ -8,7 +8,7 @@ The methods' parameters and errors are in [the API reference](../reference/api.m
 ## Where membership is recorded
 
 The group writes its roster in its members space,
-`at://<group>/space/org.atgrp.members/self`. A space is a private
+`at:space/<group>/org.atgrp.members/self`. A space is a private
 record store whose authority (here the group) decides who may read and
 write it ([spaces](spaces.md)). Any member's tools can read the roster
 there, and no one outside the group can. The group writes two kinds of
@@ -241,7 +241,7 @@ Details:
 
 An invite must reach someone outside the group, so the group writes it
 where they already look. That's their inbox,
-`at://<invitee>/space/org.atgrp.inbox/self`, a space of their own
+`at:space/<invitee>/org.atgrp.inbox/self`, a space of their own
 at their PDS. The invite is an `org.atgrp.invite` record in the
 group's repo there, with a `createdAt` and an optional `message` and
 `expiresAt`. The invitee's own app makes the inbox, with atproto's

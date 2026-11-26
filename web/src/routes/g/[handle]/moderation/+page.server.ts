@@ -10,6 +10,7 @@ import { applyAsGroup, asGroup } from '#lib/asGroup.ts';
 import { act, xrpc } from '#lib/data.ts';
 import {
   ESCALATED,
+  SPACE,
   besideOf,
   statusOf,
   tagsOf,
@@ -87,7 +88,7 @@ export const load: PageServerLoad = async (event) => {
   // a record by its URI, its author the account in it.
   const sought = params.get('review');
   let found: Subject | null = null;
-  const known = sought?.startsWith('did:') || sought?.startsWith('at://');
+  const known = ['did:', 'at://', SPACE].some((p) => sought?.startsWith(p));
   const review = known ? (sought as `${string}:${string}`) : null;
   if (review && !listed.some((s) => s.key === review)) {
     const did = authorOf(review);
@@ -110,7 +111,7 @@ export const load: PageServerLoad = async (event) => {
     };
   }
   // The rules a report may cite, by their record key, and by their URI.
-  const at = `at://${group}/space/org.atgrp.members/self/${group}/org.atgrp.rule`;
+  const at = `${SPACE}${group}/org.atgrp.members/self/${group}/org.atgrp.rule`;
   const rules = Object.fromEntries((view.rules ?? []).map((r) => [r.rkey, r.title]));
   const ruleList = (view.rules ?? []).map((r) => ({ uri: `${at}/${r.rkey}`, title: r.title }));
   return {
@@ -128,13 +129,13 @@ export const load: PageServerLoad = async (event) => {
 
 /**
  * Whose `key` is: an account itself; a record in a space, the repo it is
- * in (`at://<group>/space/<type>/<skey>/<repo>/…`); else a public record's
- * authority.
+ * in (`at:space/<group>/<type>/<skey>/<repo>/…`); else a public record's
+ * authority (`at://<repo>/…`).
  */
 function authorOf(key: string): Did {
   if (key.startsWith('did:')) return key as Did;
-  const parts = key.slice('at://'.length).split('/');
-  return (parts[1] === 'space' ? parts[4] : parts[0]) as Did;
+  const parts = key.split('/');
+  return (key.startsWith(SPACE) ? parts[4] : parts[2]) as Did;
 }
 
 const LABEL = 'com.atproto.label.record';

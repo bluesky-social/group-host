@@ -135,9 +135,9 @@ keeps the group's avatar unless given one already uploaded.
 
 ## mod
 
-`subject` is an account's DID or a record's `at://` URI. Where the method
-asks for a version, it comes with its `cid`, the way a label on a record
-does.
+`subject` is an account's DID or a record's URI: `at:space/…` in one of
+the group's spaces, `at://…` in a public repo. Where the method asks for
+a version, it comes with its `cid`, the way a label on a record does.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |

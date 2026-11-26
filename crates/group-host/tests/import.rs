@@ -309,7 +309,7 @@ impl World {
 
     /// The account's space of `kind` at `skey`.
     fn space(&self, kind: &str, skey: &str) -> String {
-        format!("at://{}/space/{kind}/{skey}", self.did)
+        format!("at:space/{}/{kind}/{skey}", self.did)
     }
 
     async fn finish(&self, who: &Authority, operation: Json) -> (u16, Json) {
@@ -1150,7 +1150,7 @@ async fn brings_only_what_this_host_would_keep_as_its_policy_says() {
 
     let is = |code: &str| (400, code.to_string());
     let (alice_key, alice_member) = member(&alice.did, true, true);
-    let others = format!("at://{}/space/com.example.forum/general", alice.did);
+    let others = format!("at:space/{}/com.example.forum/general", alice.did);
     for (archive, why) in [
         (b"not an archive".to_vec(), "InvalidArchive"),
         (

@@ -31,6 +31,7 @@ use crate::takedown::Reviewed;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
+use atproto::space::{SPACE_URI_PREFIX, SpaceRecordUri};
 use atproto::{Cid, drisl, syntax};
 use axum::Json;
 use axum::extract::{Query, State};
@@ -271,7 +272,7 @@ impl Store {
     pub fn subjects_of(&self, group: &str, account: &str) -> Result<Vec<String>> {
         let conn = self.conn();
         let public = format!("at://{account}/");
-        let spaces = format!("at://{group}/space/");
+        let spaces = format!("{SPACE_URI_PREFIX}{group}/");
         let sql = "SELECT subject FROM mod_subject WHERE grp = ?1 AND (subject = ?2
              OR substr(subject, 1, length(?3)) = ?3 OR substr(subject, 1, length(?4)) = ?4)
              ORDER BY subject";
@@ -335,21 +336,12 @@ fn invalid_subject(message: &str) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, "InvalidSubject", message)
 }
 
-/// The space a record's URI is in, `at://<authority>/space/<type>/<skey>`,
+/// The space a record's URI is in, `at:space/<authority>/<type>/<skey>`,
 /// and its authority, for a URI of a record inside one, each of its parts
 /// what it says: so a URI anyone sends is bounded, as its parts are.
 pub fn space_of(uri: &str) -> Option<(String, String)> {
-    let parts: Vec<&str> = uri.strip_prefix("at://")?.split('/').collect();
-    let [authority, "space", kind, skey, repo, collection, rkey] = parts[..] else {
-        return None;
-    };
-    let dids = syntax::is_did(authority) && syntax::is_did(repo);
-    let names = syntax::is_nsid(kind) && syntax::is_nsid(collection);
-    let keys = syntax::is_record_key(skey) && syntax::is_record_key(rkey);
-    (dids && names && keys).then(|| {
-        let space = format!("at://{authority}/space/{kind}/{skey}");
-        (space, authority.to_string())
-    })
+    let record = SpaceRecordUri::parse(uri).ok()?;
+    Some((record.space.to_string(), record.space.authority))
 }
 
 /// The account a public record's URI is in, `at://<did>/<collection>/<rkey>`,
@@ -528,12 +520,13 @@ fn present(mut value: Value) -> Value {
 /// The account a subject is, or whose record it is: a record's repo, as
 /// the queue keeps it, in a space or a public repo.
 fn account_of(key: &str) -> &str {
-    let Some(path) = key.strip_prefix("at://") else {
-        return key;
-    };
-    let parts: Vec<&str> = path.split('/').collect();
-    // A public record's repo comes first; one in a space's, after the space.
-    if parts.len() == 3 { parts[0] } else { parts[4] }
+    // One in a space's author comes after the space; a public record's
+    // repo first.
+    if let Some(path) = key.strip_prefix(SPACE_URI_PREFIX) {
+        return path.split('/').nth(3).expect("a record in a space");
+    }
+    let public = key.strip_prefix("at://");
+    public.map_or(key, |path| path.split('/').next().unwrap_or(path))
 }
 
 /// A subject as the queue answers it (`mod.defs#subjectView`), with
@@ -850,9 +843,8 @@ pub async fn submit_report(
     }
     // A record in a space is reported in its own; an account, or a
     // member's public record, in the members space, where its labels go.
-    let collection = subject
-        .strip_prefix("at://")
-        .map(|_| subject.rsplit('/').nth(1).expect("a record's URI"));
+    let collection =
+        (!syntax::is_did(&subject)).then(|| subject.rsplit('/').nth(1).expect("a record's URI"));
     let kind = if collection.is_some() {
         "record"
     } else {

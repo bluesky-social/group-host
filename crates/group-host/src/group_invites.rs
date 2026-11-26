@@ -43,7 +43,7 @@ fn bad(error: &'static str, message: impl Into<String>) -> XrpcError {
 
 /// Someone's inbox: where groups' invites to them arrive.
 pub fn inbox_of(did: &str) -> String {
-    format!("at://{did}/space/{NS}.inbox/self")
+    crate::group::space_uri(did, &format!("{NS}.inbox"), "self")
 }
 
 /// Where `invite` is: the group's record in the invitee's inbox.

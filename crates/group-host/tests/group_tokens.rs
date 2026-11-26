@@ -208,12 +208,46 @@ async fn refuses_a_group_token_it_should_not_give() {
     let app = App::new("console");
     let ask = async |who: &Authority, body: Json| group_auth(&h, &app, who, &body).await;
     let refused = [
-        (ask(&carol, json!({"group": did, "space": calendar})).await, (403, "Forbidden")),
-        (ask(&alice, json!({"group": did, "space": format!("at://{}/space/{CALENDAR}/rides", alice.did)})).await, (400, "InvalidRequest")),
-        (ask(&alice, json!({"group": did, "space": "nonsense"})).await, (400, "InvalidRequest")),
-        (ask(&alice, json!({"group": "did:plc:nothing", "space": calendar})).await, (400, "GroupNotFound")),
-        (ask(&alice, json!({"space": calendar})).await, (400, "InvalidRequest")),
-        (ask(&alice, json!({"group": did})).await, (400, "InvalidRequest")),
+        (
+            ask(&carol, json!({"group": did, "space": calendar})).await,
+            (403, "Forbidden"),
+        ),
+        (
+            ask(
+                &alice,
+                json!({"group": did, "space": format!("at:space/{}/{CALENDAR}/rides", alice.did)}),
+            )
+            .await,
+            (400, "InvalidRequest"),
+        ),
+        (
+            ask(
+                &alice,
+                json!({"group": did, "space": format!("at://{did}/space/{CALENDAR}/rides")}),
+            )
+            .await,
+            (400, "InvalidRequest"),
+        ),
+        (
+            ask(&alice, json!({"group": did, "space": "nonsense"})).await,
+            (400, "InvalidRequest"),
+        ),
+        (
+            ask(
+                &alice,
+                json!({"group": "did:plc:nothing", "space": calendar}),
+            )
+            .await,
+            (400, "GroupNotFound"),
+        ),
+        (
+            ask(&alice, json!({"space": calendar})).await,
+            (400, "InvalidRequest"),
+        ),
+        (
+            ask(&alice, json!({"group": did})).await,
+            (400, "InvalidRequest"),
+        ),
     ];
     for (said, error) in refused {
         assert_eq!(said.error(), error, "{}", said.body);
@@ -424,7 +458,7 @@ async fn gives_a_token_to_change_a_space_to_one_its_policy_lets() {
             .contains("manage=update")
     );
     // A space not made yet: a token only for one who may make it.
-    let later = json!({"group": did, "space": format!("at://{did}/space/{CALENDAR}/later")});
+    let later = json!({"group": did, "space": format!("at:space/{did}/{CALENDAR}/later")});
     let said = group_auth(&h, &app, &bob, &later).await;
     assert_eq!(said.error(), (403, "Forbidden"), "{}", said.body);
 }

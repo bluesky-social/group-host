@@ -13,7 +13,7 @@ fn roles(names: &[&str]) -> Vec<String> {
     names.iter().map(|r| r.to_string()).collect()
 }
 
-const CALENDAR: &str = "at://did:plc:g/space/xyz.app.calendar/rides";
+const CALENDAR: &str = "at:space/did:plc:g/xyz.app.calendar/rides";
 
 fn policy(value: serde_json::Value) -> Policy {
     Policy::of(&value, &SpaceRef::parse(CALENDAR).unwrap())

@@ -138,7 +138,7 @@ async fn starts_shows_and_runs_a_group() {
     let bob_did = &net().accounts[1].did;
     assert!(
         uri.starts_with(&format!(
-            "at://{bob_did}/space/org.atgrp.inbox/self/{did}/org.atgrp.invite/"
+            "at:space/{bob_did}/org.atgrp.inbox/self/{did}/org.atgrp.invite/"
         )),
         "{uri}"
     );
@@ -390,7 +390,7 @@ async fn writes_the_groups_rules_roles_and_profile() {
     ok(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
     let said_so = fails(&alice, &["mod", "label", group, bob, "spam", "--undo"]).await;
     assert!(said_so.contains("no spam label"), "{said_so}");
-    let elsewhere = format!("at://did:plc:other/space/x.y/z/{bob}/a.b.c/d");
+    let elsewhere = format!("at:space/did:plc:other/x.y/z/{bob}/a.b.c/d");
     let said_so = fails(&alice, &["mod", "label", group, &elsewhere, "spam"]).await;
     assert!(said_so.contains("not an account's DID"), "{said_so}");
     // Its history, newest first unless asked otherwise, each event named.
@@ -472,7 +472,7 @@ async fn writes_the_groups_rules_roles_and_profile() {
     ];
     let made = said(&ok(&alice, &make).await);
     let space = made["space"].as_str().unwrap();
-    let calendars = format!("at://{did}/space/com.example.calendar/");
+    let calendars = format!("at:space/{did}/com.example.calendar/");
     assert!(space.starts_with(&calendars), "{made}");
     let kept = h.host.store.space(space).unwrap().unwrap();
     assert_eq!(kept.policy["grants"][0]["role"], "member");

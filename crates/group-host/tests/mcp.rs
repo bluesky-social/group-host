@@ -586,7 +586,7 @@ async fn labels_as_the_group_beside_what_it_labels() {
         .as_str()
         .unwrap()
         .to_string();
-    let members = format!("at://{group}/space/{NS}.members/self");
+    let members = format!("at:space/{group}/{NS}.members/self");
     assert!(
         uri.starts_with(&format!("{members}/{group}/{label}/")),
         "{uri}"
@@ -616,10 +616,13 @@ async fn labels_as_the_group_beside_what_it_labels() {
     let made = json!({"type": "com.example.calendar", "policy": readers});
     let got = tool(&h, access, "space_create", made).await;
     let space = got["structuredContent"]["space"].as_str().unwrap();
-    let calendars = format!("at://{group}/space/com.example.calendar/");
+    let calendars = format!("at:space/{group}/com.example.calendar/");
     assert!(space.starts_with(&calendars), "{got}");
     let kept = h.host.store.space(space).unwrap().unwrap();
     assert_eq!(kept.policy["$type"], "org.atgrp.policy");
+    let odd = json!({"type": "NOT A TYPE", "policy": readers});
+    let got = tool(&h, access, "space_create", odd).await;
+    assert_eq!(got["isError"], true, "{got}");
     let post = format!("{space}/{}/com.example.event/ride", bob.did);
     let got = tool(&h, access, "mod_label", json!({"subject": post, "cid": "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm", "val": "!hide"})).await;
     assert!(got.get("isError").is_none(), "{got}");
@@ -630,8 +633,9 @@ async fn labels_as_the_group_beside_what_it_labels() {
     );
     // Nothing in the group's spaces, or no space at all, is no subject.
     for subject in [
-        format!("at://did:plc:other/space/x.y/z/{}/a.b.c/d", bob.did),
-        format!("at://{group}/space/NOT A TYPE/z/{}/a.b.c/d", bob.did),
+        format!("at:space/did:plc:other/x.y/z/{}/a.b.c/d", bob.did),
+        format!("at:space/{group}/NOT A TYPE/z/{}/a.b.c/d", bob.did),
+        format!("at://{group}/space/x.y/z/{}/a.b.c/d", bob.did),
     ] {
         let got = tool(
             &h,

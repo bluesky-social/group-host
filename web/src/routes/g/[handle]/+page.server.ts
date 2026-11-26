@@ -14,7 +14,7 @@ import { m } from '#lib/paraglide/messages.js';
 type Handle = `${string}.${string}`;
 
 /** Someone's inbox, where groups write their invites to them. */
-const inboxOf = (did: string) => `at://${did}/space/org.atgrp.inbox/self`;
+const inboxOf = (did: string) => `at:space/${did}/org.atgrp.inbox/self`;
 
 /** The group the page's address names, by its handle: its DID. */
 async function groupOf(event: { fetch: typeof fetch; params: { handle?: string } }) {

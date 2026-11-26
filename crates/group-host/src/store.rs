@@ -10,6 +10,24 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+/// Statements naming each space a `table.column` holds as the spaces alpha
+/// once did, `at://<did>/space/<rest>`, as it names it now,
+/// `at:space/<did>/<rest>`, as the reference PDS's own migration does
+/// (`rewrite-space-uris.ts`): a DID holds no `/`, so the first after
+/// `at://` ends it.
+macro_rules! respace {
+    ($($table:ident . $column:ident),* $(,)?) => {
+        concat!($(
+            "UPDATE ", stringify!($table), " SET ", stringify!($column),
+            " = 'at:space/' || substr(", stringify!($column), ", 6, instr(substr(",
+            stringify!($column), ", 6), '/') - 1) || '/' || substr(", stringify!($column),
+            ", instr(substr(", stringify!($column), ", 6), '/') + 12) WHERE substr(",
+            stringify!($column), ", 1, 5) = 'at://' AND substr(", stringify!($column),
+            ", instr(substr(", stringify!($column), ", 6), '/') + 5, 7) = '/space/';\n",
+        )*)
+    };
+}
+
 /// Each version of the schema, applied in order to a database below it.
 pub const MIGRATIONS: &[&str] = &[
     "
@@ -507,6 +525,36 @@ pub const MIGRATIONS: &[&str] = &[
     ALTER TABLE mod_event ADD COLUMN removed TEXT;
     CREATE INDEX mod_subject_created ON mod_subject (grp, created_at);
 ",
+    // Space URIs are `at:space/<did>/<type>/<skey>`, a record in one's
+    // after it, where they were `at://<did>/space/…`: each kept is named
+    // so, a record's value aside, as its CID covers it. The spaces' own
+    // URIs change under those that refer to them, so those are checked
+    // once all have.
+    concat!(
+        "PRAGMA defer_foreign_keys = ON;\n",
+        respace!(
+            space.uri,
+            deleted_space.uri,
+            space_repo.space,
+            space_record.space,
+            space_op.space,
+            space_record_blob.space,
+            revoked_credential.space,
+            space_grant.space,
+            space_writer.space,
+            outbox.space,
+            index_repo.space,
+            index_record.space,
+            issued_credential.space,
+            space_registration.space,
+            syncer_notice.space,
+            mod_subject.subject,
+            mod_event.subject,
+            mod_event.uri,
+            mod_event.rule,
+            mod_tag.subject,
+        ),
+    ),
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -650,7 +698,7 @@ const INVITES_TO: &str = "SELECT seq, grp, invitee, by, message, rkey, created_a
 const LAPSED_INVITES: &str = "SELECT seq, grp, invitee, by, message, rkey, created_at, expires_at FROM invite WHERE expires_at <= ?1 ORDER BY seq";
 const UNINVITE: &str = "DELETE FROM invite WHERE grp = ?1 AND invitee = ?2";
 const SPACES_OF: &str = "SELECT uri FROM space WHERE authority = ?1 ORDER BY uri";
-const OWN_SPACE_HOLDING: &str = "SELECT did FROM space_record WHERE path = ?2 AND space = 'at://' || did || '/space/' || ?1 || '/self' ORDER BY did";
+const OWN_SPACE_HOLDING: &str = "SELECT did FROM space_record WHERE path = ?2 AND space = 'at:space/' || did || '/' || ?1 || '/self' ORDER BY did";
 const DEACTIVATE: &str = "INSERT INTO deactivation (did, at, by, stewards) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (did) DO NOTHING";
 const DEACTIVATION: &str = "SELECT at, by, stewards FROM deactivation WHERE did = ?1";
 const ACTIVATE: &str = "DELETE FROM deactivation WHERE did = ?1";

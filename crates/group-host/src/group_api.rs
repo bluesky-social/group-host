@@ -17,6 +17,7 @@ use crate::scopes::covers;
 use crate::space_api::{service_caller, unauthorized};
 use crate::token_writes::missing;
 use crate::xrpc::XrpcError;
+use atproto::space::SpaceRef;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
@@ -383,7 +384,7 @@ pub async fn get_group(
         if kept.policy["unlisted"] == true && !readable && !own.contains(&uri) {
             continue;
         }
-        let kind = uri.split('/').nth(4).unwrap_or_default();
+        let kind = SpaceRef::parse(&uri).expect("a space the host keeps").kind;
         let mut space = json!({"uri": uri, "spaceType": kind});
         if readable {
             space["policy"] = kept.policy;

@@ -6,6 +6,7 @@
 
 mod common;
 
+use atproto::space::SpaceRef;
 use common::groups::*;
 use common::oauth::*;
 use common::spaces::*;
@@ -21,7 +22,7 @@ const POLICY: &str = "org.atgrp.policy";
 const PUBLISHED: &str = "com.atproto.space.policy";
 
 fn calendar(did: &str, skey: &str) -> String {
-    format!("at://{did}/space/{CALENDAR}/{skey}")
+    format!("at:space/{did}/{CALENDAR}/{skey}")
 }
 
 fn policy(grants: Json) -> Json {
@@ -71,7 +72,7 @@ fn may(h: &Running, space: &str, who: Option<&str>, access: Access) -> bool {
 
 /// The members in `space`'s writer set, the group's own repo aside.
 fn writers(h: &Running, space: &str) -> Vec<String> {
-    let group = space.split('/').nth(2).unwrap();
+    let group = SpaceRef::parse(space).unwrap().authority;
     let writers = h.host.store.writers(space, None, 100).unwrap();
     let members = writers.into_iter().filter(|w| w.did != group);
     members.map(|w| w.did).collect()
@@ -221,7 +222,7 @@ async fn an_admin_makes_a_space() {
         ),
         // The meta and members spaces come with the group.
         (
-            format!("at://{did}/space/{NS}.meta/other"),
+            format!("at:space/{did}/{NS}.meta/other"),
             json!({"spaceType": format!("{NS}.meta"), "skey": "other", "policy": policy(json!([]))}),
             (400, "InvalidRequest"),
         ),
@@ -305,7 +306,7 @@ async fn a_space_changes_under_its_policy() {
     assert_eq!(said.error(), (403, "NotAuthorized"));
 
     // Refusals, for Alice, who may change any space.
-    let elsewhere = format!("at://did:plc:elsewhere/space/{CALENDAR}/rides");
+    let elsewhere = format!("at:space/did:plc:elsewhere/{CALENDAR}/rides");
     let none = calendar(&did, "none");
     for (space, body, refused) in [
         (

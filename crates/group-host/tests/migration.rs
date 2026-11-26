@@ -274,7 +274,7 @@ async fn prepares_only_for_one_who_configures_and_exports_only_with_the_token() 
     for q in [
         format!("group={did}&token={token}&part=other&space={calendar}"),
         format!(
-            "group={did}&token={token}&part=repo&space=at://{}/space/x.y.z/k",
+            "group={did}&token={token}&part=repo&space=at:space/{}/x.y.z/k",
             bob.did
         ),
         format!("group={did}&token={token}&part=blob&cid=nonsense"),
@@ -352,7 +352,7 @@ async fn takes_in_only_for_one_who_configures_by_the_groups_own_records() {
         (
             with(
                 "snapshot",
-                json!({"handle": RIDERS, "spaces": [format!("at://{}/space/x.y.z/k", carol.did)]}),
+                json!({"handle": RIDERS, "spaces": [format!("at:space/{}/x.y.z/k", carol.did)]}),
             ),
             (400, "InvalidRequest"),
         ),
@@ -613,7 +613,7 @@ async fn from_fake(b: &Running, alice: &Authority, fake: Arc<Fake>, key: &Keypai
             jti: None,
         },
     );
-    let space = format!("at://{did}/space/com.example.calendar/rides");
+    let space = format!("at:space/{did}/com.example.calendar/rides");
     // Its space's meta archive and repo, as its commit says, unless a test
     // says otherwise.
     {

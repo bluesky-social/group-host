@@ -88,7 +88,7 @@ export default async ({ world, atgrp, ask, page, who, exists, picture }) => {
     'com.atproto.space.putRecord',
     JSON.stringify({
       repo: who.frank.did,
-      space: `at://${did}/space/com.example.board/swaps`,
+      space: `at:space/${did}/com.example.board/swaps`,
       collection: 'com.example.post',
       rkey: '3mzjdd6rnfise',
       record: {

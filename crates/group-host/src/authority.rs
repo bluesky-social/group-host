@@ -334,7 +334,7 @@ impl Host {
         skey: &str,
         policy: &Json,
     ) -> Result<String, XrpcError> {
-        let uri = format!("at://{authority}/space/{kind}/{skey}");
+        let uri = crate::group::space_uri(authority, kind, skey);
         SpaceRef::parse(&uri).map_err(|e| invalid(e.to_string()))?;
         let account = self.store.account(authority).map_err(XrpcError::internal)?;
         if !account.is_some_and(|a| a.did == authority) {

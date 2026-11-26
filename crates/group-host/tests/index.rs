@@ -339,9 +339,10 @@ async fn pages_filters_and_finds_one() {
     }
     // A space not the group's, or none, or a group not here or off.
     for query in [
-        format!("group={did}&space=at://did:plc:other/space/{NS}.board/notes"),
+        format!("group={did}&space=at:space/did:plc:other/{NS}.board/notes"),
         format!("group={did}&space=nope"),
-        format!("group={did}&space=at://{did}/space/{NS}.board/none"),
+        format!("group={did}&space=at:space/{did}/{NS}.board/none"),
+        format!("group={did}&space=at://{did}/space/{NS}.board/notes"),
         format!("group=did:plc:nobody&space={space}"),
     ] {
         let said = list(&h, Some(&alice), &query).await;
@@ -762,7 +763,7 @@ async fn takes_only_what_a_writers_host_vouches_for() {
     );
     // A space with no authority here is nothing to index.
     h.host
-        .sync_space("at://did:plc:other/space/x.y.z/self")
+        .sync_space("at:space/did:plc:other/x.y.z/self")
         .await
         .unwrap();
 }

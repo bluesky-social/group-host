@@ -1,0 +1,14 @@
+diff --git a/dist/schema/space.d.ts b/dist/schema/space.d.ts
+index bac12a7..3bb0302 100644
+--- a/dist/schema/space.d.ts
++++ b/dist/schema/space.d.ts
+@@ -80,5 +80,7 @@ export declare class Space<const TKey extends LexiconRecordKey = LexiconRecordKe
+  * const forum = l.space('any', 'com.atmoboards.forum', [thread, reply])
+  * ```
+  */
+-export declare function space<const TKey extends LexiconRecordKey, const TSpaceType extends NsidString, const TRecord extends RecordSchema = never>(key: TKey, spaceType: TSpaceType, collections: readonly (TRecord | TypedRefSchema<TRecord>)[]): Space<TKey, TSpaceType, TRecord>;
++/** The record schema a space's collection names, a typed ref unwrapped. */
++type CollectionRecord<C> = C extends TypedRefSchema<infer R> ? R extends RecordSchema ? R : never : C extends RecordSchema ? C : never;
++export declare function space<const TKey extends LexiconRecordKey, const TSpaceType extends NsidString, const TCollections extends readonly (RecordSchema | TypedRefSchema<RecordSchema>)[] = readonly []>(key: TKey, spaceType: TSpaceType, collections: TCollections): Space<TKey, TSpaceType, CollectionRecord<TCollections[number]>>;
+ //# sourceMappingURL=space.d.ts.map
+\ No newline at end of file

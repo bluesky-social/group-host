@@ -119,8 +119,9 @@ group's requests in it, while an MCP client acts in one group.
 
 ### mod
 
-A subject is an account's DID or a record's `at://` URI. Where a version
-is asked for, add `--cid`, the way a label on a record does.
+A subject is an account's DID or a record's URI: `at:space/…` in one of
+the group's spaces, `at://…` in a public repo. Where a version is asked
+for, add `--cid`, the way a label on a record does.
 
 | Command                                                                       | What it does                                                                                      |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |

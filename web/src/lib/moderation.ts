@@ -81,9 +81,12 @@ export function filesOf(value: unknown, field = ''): Held[] {
   return found.filter((f, i) => found.findIndex((g) => g.cid === f.cid) === i);
 }
 
-/** Where a moderator reviewing the record `uri` reads the file `cid` it holds, taken down or not. */
+/** How a space's URI starts, and a record's in one, before the space's authority. */
+export const SPACE = 'at:space/';
+
+/** Where a moderator reviewing the record `uri`, in a space, reads the file `cid` it holds, taken down or not. */
 export function reviewedFile(uri: string, cid: string): string {
-  const group = uri.slice('at://'.length).split('/')[0];
+  const group = uri.slice(SPACE.length).split('/')[0];
   const asked = new URLSearchParams({ group, subject: uri, cid });
   return `/xrpc/org.atgrp.internal.getModSubjectBlob?${asked}`;
 }
@@ -125,10 +128,9 @@ export const latestCid = (events: Event[]) => events.findLast((e) => e.cid)?.cid
  * the members space, where an account's labels go.
  */
 export function besideOf(group: string, key: string): string {
-  const [authority, space, kind, skey] = key.slice('at://'.length).split('/');
-  if (key.startsWith('at://') && space === 'space')
-    return `at://${authority}/space/${kind}/${skey}`;
-  return `at://${group}/space/org.atgrp.members/self`;
+  // A record in a space is `at:space/<authority>/<type>/<skey>/<repo>/…`.
+  if (key.startsWith(SPACE)) return key.split('/').slice(0, 4).join('/');
+  return `${SPACE}${group}/org.atgrp.members/self`;
 }
 
 /** A subject's reports, oldest first. */

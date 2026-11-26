@@ -18,10 +18,10 @@ writes in their own repo in it, on their own PDS, and the space's
 authority decides who may read and write. The group is the authority of
 both of its spaces, and [spaces](spaces.md) explains them.
 
-- `meta` (`at://<group>/space/org.atgrp.meta/self`) holds what the
+- `meta` (`at:space/<group>/org.atgrp.meta/self`) holds what the
   group says about itself (`org.atgrp.about`) and its settings
   (`org.atgrp.config`).
-- `members` (`at://<group>/space/org.atgrp.members/self`) holds
+- `members` (`at:space/<group>/org.atgrp.members/self`) holds
   roles, memberships, the rules, the labeler, and the index of the
   group's other spaces.
 

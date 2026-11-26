@@ -254,8 +254,7 @@ impl Host {
         if commit.repo != did {
             return Err(refused("NotSpaceOwner", "that repo isn't the account's"));
         }
-        let space = SpaceRef::parse(&commit.space);
-        let space = space.map_err(|e| refused("InvalidArchive", e.to_string()))?;
+        let space = SpaceRef::parse(&commit.space).expect("a space the archive's reader checked");
         let uri = commit.space;
         let governed = self.store.space(&uri).map_err(XrpcError::internal)?;
         if space.authority == did && governed.is_none() {

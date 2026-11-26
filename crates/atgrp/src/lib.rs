@@ -14,6 +14,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use atproto::jose;
 use atproto::keys::{Curve, Keypair};
+use atproto::space::{SPACE_URI_PREFIX, SpaceRef};
 use group_host_mcp::{Plan, Tool};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -115,7 +116,7 @@ account
                          with that code, finish moving it
 
   A group or person is a handle or a DID; a subject an account's DID or a
-  record's at:// URI. A flag is a field of what the command writes or asks,
+  record's URI. A flag is a field of what the command writes or asks,
   in kebab case; a list is comma-separated, and anything more than text or
   a number is JSON. Every command but group create, seed, move and
   delete, account import and admin is also the MCP tool <group>_<action>
@@ -348,9 +349,20 @@ impl Client {
     }
 }
 
+/// The URI of `authority`'s space of `kind` at `skey`.
+fn space_uri(authority: &str, kind: &str, skey: &str) -> String {
+    let (authority, kind, skey) = (authority.into(), kind.into(), skey.into());
+    SpaceRef {
+        authority,
+        kind,
+        skey,
+    }
+    .to_string()
+}
+
 /// `person`'s inbox, where a group writes an invite for them.
 fn inbox_of(person: &str) -> String {
-    format!("at://{person}/space/org.atgrp.inbox/self")
+    space_uri(person, "org.atgrp.inbox", "self")
 }
 
 /// Now, as atproto writes a datetime.
@@ -785,7 +797,7 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             rkey,
             record,
         } => {
-            let uri = format!("at://{group}/space/{space}/self");
+            let uri = space_uri(group, &space, "self");
             let session = GroupSession::start(me, host, group, &uri).await?;
             let mut body = json!({"repo": group, "space": uri, "collection": collection});
             if let Some(key) = &rkey {
@@ -835,7 +847,7 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             rkey,
             records,
         } => {
-            let uri = format!("at://{group}/space/{space}/self");
+            let uri = space_uri(group, &space, "self");
             let mut done = Vec::new();
             for (collection, fields) in records {
                 // The record as it is, as the space's records are listed.
@@ -878,7 +890,7 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
         Plan::Space { kind, skey, policy } => {
             // A key of its own, so that the token is for the space it makes.
             let skey = skey.unwrap_or_else(|| atproto::tid::TidClock::new(0).next());
-            let uri = format!("at://{group}/space/{kind}/{skey}");
+            let uri = space_uri(group, &kind, &skey);
             let session = GroupSession::start(me, host, group, &uri).await?;
             let body = json!({"spaceType": kind, "skey": skey, "policy": policy});
             session.call("com.atproto.space.createSpace", &body).await
@@ -1025,7 +1037,7 @@ fn shown(said: &Value, members: &Value) -> String {
 
 /// A group's members space.
 fn members_of(group: &str) -> String {
-    format!("at://{group}/space/{NS}.members/self")
+    space_uri(group, &format!("{NS}.members"), "self")
 }
 
 /// Deletes `group`, for good: what went.
@@ -1170,7 +1182,7 @@ async fn start_import(
     let bring = &internal("importAccountSpace");
     for space in &spaces {
         let at = [("space", space.as_str()), ("repo", did)];
-        let governs = space.starts_with(&format!("at://{did}/"));
+        let governs = space.starts_with(&format!("{SPACE_URI_PREFIX}{did}/"));
         if governs {
             let meta = theirs
                 .own_bytes("com.atproto.space.exportSpaceMeta", &at[..1])

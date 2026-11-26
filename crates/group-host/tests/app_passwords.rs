@@ -285,7 +285,7 @@ async fn signs_an_app_in_to_the_groups_repo() {
     )
     .await;
     assert_eq!(made.0, 200, "{}", made.1);
-    let space = format!("at://{did}/space/org.atgrp.members/self");
+    let space = format!("at:space/{did}/org.atgrp.members/self");
     let rule = json!({"repo": did, "space": space, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "x", "text": "x"}});
     let said = xrpc(
         &h,

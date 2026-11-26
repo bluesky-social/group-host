@@ -552,7 +552,7 @@ async fn shows_an_image_to_whoever_may_see_a_record_that_holds_it() {
     assert_eq!(image(&h, &did, "not-a-cid", None).await.0, 404);
 
     // In a space of another's, which this host does not govern: no one's.
-    let elsewhere = "at://did:plc:elsewhere/space/com.example.forum/main";
+    let elsewhere = "at:space/did:plc:elsewhere/com.example.forum/main";
     let away = uploaded(&h, &app, &token, b"away".to_vec(), "image/png").await;
     h.host
         .space_write(&did, elsewhere, &[holding("away", &away)])

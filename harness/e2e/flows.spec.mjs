@@ -655,6 +655,7 @@ test('creating an app password, and revoking what it signed in', async () => {
     page.locator('.activity li', { hasText: '@alice.test deleted a role' }).first()
   ).toBeVisible();
   await expect(page.locator('.activity')).not.toContainText('at://');
+  await expect(page.locator('.activity')).not.toContainText('at:space/');
   await expect(page.locator('.activity')).not.toContainText('did:');
   // Its sessions a page at a time: shown all, to find it.
   while (await page.getByRole('button', { name: 'Show more' }).count())

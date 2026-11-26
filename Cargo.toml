@@ -16,7 +16,7 @@ publish = false
 unsafe_code = "forbid"
 
 [workspace.dependencies]
-atproto = { version = "0.3.1", registry = "atproto" }
+atproto = { version = "0.4.0", registry = "atproto" }
 group-host = { path = "crates/group-host" }
 group-host-mcp = { path = "crates/group-host-mcp" }
 anyhow = "1"

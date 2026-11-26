@@ -14,6 +14,7 @@
 //! the member, in the one group they connected the MCP client to, which is why
 //! no tool asks which group.
 
+use atproto::space::{SpaceRecordUri, SpaceRef};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
@@ -659,8 +660,7 @@ impl Docs {
                 (Action::Invite, input, main["description"].as_str())
             }
             Made::Label => {
-                let said =
-                    "An account's DID, or a record's at:// URI in one of the group's spaces.";
+                let said = "An account's DID, or a record's URI in one of the group's spaces (at:space/…) or a public repo.";
                 let subject = json!({"type": "string", "description": said});
                 let said = "The record's version, its CID, if the label is about that one.";
                 let cid = json!({"type": "string", "format": "cid", "description": said});
@@ -930,18 +930,18 @@ pub const LABEL: &str = "com.atproto.label.record";
 /// an account's or a public record's the members space. None for a
 /// record in a space not the group's.
 pub fn label_space(group: &str, subject: &str) -> Option<String> {
-    let members = || format!("at://{group}/space/{MEMBERS}/self");
-    if subject.starts_with("did:") {
-        return Some(members());
+    if let Ok(record) = SpaceRecordUri::parse(subject) {
+        return (record.space.authority == group).then(|| record.space.to_string());
     }
-    let parts: Vec<&str> = subject.strip_prefix("at://")?.split('/').collect();
-    match parts[..] {
-        [_, _, _] => Some(members()),
-        [authority, "space", kind, skey, _, _, _] => {
-            (authority == group).then(|| format!("at://{authority}/space/{kind}/{skey}"))
-        }
-        _ => None,
-    }
+    let public = subject.strip_prefix("at://");
+    let public = public.is_some_and(|path| path.split('/').count() == 3);
+    let (authority, kind, skey) = (group.into(), MEMBERS.into(), "self".into());
+    let members = SpaceRef {
+        authority,
+        kind,
+        skey,
+    };
+    (subject.starts_with("did:") || public).then(|| members.to_string())
 }
 
 /// A label record on `subject`, at the version `cid` if named, of `val`,

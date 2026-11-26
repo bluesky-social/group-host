@@ -42,7 +42,7 @@ async fn fixture() -> Fixture {
         .public()
         .did_key();
     let authority = authority(&h, false, true).await;
-    let space = format!("at://{}/space/org.atgrp.content/self", authority.did);
+    let space = format!("at:space/{}/org.atgrp.content/self", authority.did);
     let syncer = syncer(&authority, &space);
     Fixture {
         h,
@@ -171,9 +171,9 @@ async fn a_write_stands_when_its_authority_does_not_hear_of_it() {
     let refusing = authority(&h, true, true).await;
     let pdsless = authority(&h, false, false).await;
     for space in [
-        format!("at://{}/space/org.atgrp.content/self", refusing.did),
-        format!("at://{}/space/org.atgrp.content/self", pdsless.did),
-        "at://did:plc:unpublished/space/org.atgrp.content/self".to_string(),
+        format!("at:space/{}/org.atgrp.content/self", refusing.did),
+        format!("at:space/{}/org.atgrp.content/self", pdsless.did),
+        "at:space/did:plc:unpublished/org.atgrp.content/self".to_string(),
     ] {
         let written = h
             .host
@@ -213,7 +213,7 @@ async fn a_write_waits_on_its_authority_no_longer_than_the_timeout() {
         .send()
         .await
         .unwrap();
-    let space = format!("at://{did}/space/org.atgrp.content/self");
+    let space = format!("at:space/{did}/org.atgrp.content/self");
     let started = std::time::Instant::now();
     h.host
         .space_write(&group, &space, &[create(RULE, "one", rule("Be kind"))])
@@ -741,7 +741,7 @@ async fn reads_only_with_a_credential_the_authority_issued() {
         signed(&s, &f.group, &f.kem, COMMIT_MAC).0
     };
     let other_key = Keypair::generate(Curve::P256);
-    let elsewhere = format!("at://{}/space/org.atgrp.content/other", f.authority.did);
+    let elsewhere = format!("at:space/{}/org.atgrp.content/other", f.authority.did);
     let stranger = Authority {
         did: f.authority.did.clone(),
         key: Keypair::generate(Curve::K256),
@@ -798,7 +798,7 @@ async fn reads_only_with_a_credential_the_authority_issued() {
             bearing(
                 &credential(
                     &f.authority,
-                    "at://did:plc:unknown/space/org.atgrp.content/self",
+                    "at:space/did:plc:unknown/org.atgrp.content/self",
                     &f.syncer.key,
                     "did:plc:unknown",
                 ),
@@ -1231,7 +1231,7 @@ async fn a_space_of_a_did_web_authority() {
         pds: String::new(),
         last: None,
     };
-    let space = format!("at://{}/space/org.atgrp.content/self", authority.did);
+    let space = format!("at:space/{}/org.atgrp.content/self", authority.did);
     let commit = h
         .host
         .space_write(&group, &space, &[create(RULE, "a", rule("A"))])
@@ -1250,4 +1250,69 @@ async fn a_space_of_a_did_web_authority() {
     let got = read(&h, "com.atproto.space.getLatestCommit", &query, &headers).await;
     assert_eq!(got.status, 200, "{}", String::from_utf8_lossy(&got.body));
     assert_eq!(mac.commit(&got).unwrap(), commit);
+}
+
+#[test]
+fn names_the_spaces_a_database_kept_the_old_way_as_they_are_named_now() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("host.sqlite");
+    let store = Store::open(&path).unwrap();
+    let account = Account {
+        did: "did:plc:g".into(),
+        handle: "g.groups.test".into(),
+        signing: Keypair::generate(Curve::K256),
+        kem: Keypair::generate(Curve::P256),
+    };
+    let tree = atproto::mst::Tree::build(&Default::default());
+    let commit =
+        atproto::Commit::sign(&account.did, tree.root(), "3l5mz5mkbn22b", &account.signing);
+    let head = Head {
+        cid: commit.cid(),
+        rev: commit.rev.clone(),
+        block: commit.to_bytes(),
+    };
+    store.create_account(&account, &head, 0, &[]).unwrap();
+    drop(store);
+    // As a database from before: its spaces, a grant in one, a record in
+    // one, and the queue's subjects, named the alpha's old way.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let old = "at://did:plc:g/space/com.example.forum/general";
+    let post = "at://did:plc:g/space/com.example.forum/general/did:plc:a/com.example.post/1";
+    let public = "at://did:plc:a/com.example.post/1";
+    let rows = [
+        "INSERT INTO space (uri, authority, public_read, created_at) VALUES (?1, 'did:plc:g', 0, 0)",
+        "INSERT INTO space_grant (space, did, read, write) VALUES (?1, 'did:plc:a', 1, 1)",
+    ];
+    for row in rows {
+        conn.execute(row, [old]).unwrap();
+    }
+    let row = "INSERT INTO space_record (did, space, path, cid, value, rev) VALUES ('did:plc:a', ?1, 'com.example.post/1', ?2, x'', 'r')";
+    conn.execute(row, [old, &head.cid.to_string()]).unwrap();
+    for subject in [post, public, "did:plc:a"] {
+        let row = "INSERT INTO mod_subject (grp, subject, status, created_at, updated_at) VALUES ('did:plc:g', ?1, 'open', 0, 0)";
+        conn.execute(row, [subject]).unwrap();
+    }
+    let respace = group_host::store::MIGRATIONS
+        .iter()
+        .position(|m| m.contains("'at:space/'"))
+        .unwrap();
+    common::rewind(&conn, respace);
+    drop(conn);
+    let store = Store::open(&path).unwrap();
+    let space = "at:space/did:plc:g/com.example.forum/general";
+    assert!(store.space(space).unwrap().is_some());
+    assert!(store.space(old).unwrap().is_none());
+    assert_eq!(store.space_paths("did:plc:a", space).unwrap().len(), 1);
+    drop(store);
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let one = |sql: &str| -> String { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+    assert_eq!(one("SELECT space FROM space_grant"), space);
+    let subjects =
+        "SELECT group_concat(subject, ' ') FROM (SELECT subject FROM mod_subject ORDER BY subject)";
+    assert_eq!(
+        one(subjects),
+        format!(
+            "{public} at:space/did:plc:g/com.example.forum/general/did:plc:a/com.example.post/1 did:plc:a"
+        )
+    );
 }

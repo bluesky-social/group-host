@@ -129,8 +129,9 @@ people with `mod.read` see it.
 
 A subject is either an account or a record, sent and answered as one
 `subject`: an account's DID, or a record's URI, with the `cid` of one
-version beside it, if it names one. The record is one in a space, or
-one in a public repo, `at://<did>/<collection>/<rkey>`, and it's a
+version beside it, if it names one. The record is one in a space,
+`at:space/<group>/<type>/<skey>/<did>/<collection>/<rkey>`, or one in a
+public repo, `at://<did>/<collection>/<rkey>`, and it's a
 subject of its own, separate from its author's account. The queue keeps
 a record as a whole, by its URI. The version a report or label names
 stays on that event. A subject is either `open` or `resolved`, and has

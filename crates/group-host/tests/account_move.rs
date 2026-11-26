@@ -72,10 +72,10 @@ impl Old {
         self.key.lock().unwrap().clone().unwrap()
     }
     fn forum(&self) -> String {
-        format!("at://{}/space/com.example.forum/general", self.did())
+        format!("at:space/{}/com.example.forum/general", self.did())
     }
     fn empty(&self) -> String {
-        format!("at://{}/space/com.example.diary/self", self.did())
+        format!("at:space/{}/com.example.diary/self", self.did())
     }
 }
 
@@ -312,7 +312,7 @@ async fn xrpc(
         // calendar of someone else's it writes in.
         "com.atproto.space.listSpaces" => Json(match q.get("cursor") {
             None => json!({"spaces": [{"space": old.forum()}, {"space": old.empty()}], "cursor": "p2"}),
-            Some(_) => json!({"spaces": [{"space": "at://did:plc:elsewhere/space/com.example.calendar/main"}]}),
+            Some(_) => json!({"spaces": [{"space": "at:space/did:plc:elsewhere/com.example.calendar/main"}]}),
         })
         .into_response(),
         "com.atproto.space.exportSpaceMeta" => {
@@ -586,7 +586,7 @@ async fn moves_an_account_signed_in_at_its_server_and_gives_its_tokens_back() {
             .public_read
     );
     assert!(host.store.space(&w.old.empty()).unwrap().is_some());
-    let calendar = "at://did:plc:elsewhere/space/com.example.calendar/main";
+    let calendar = "at:space/did:plc:elsewhere/com.example.calendar/main";
     assert_eq!(host.store.space_paths(&w.did, calendar).unwrap().len(), 1);
     assert_eq!(w.call("getAccountMove", None).await.1["started"], true);
 

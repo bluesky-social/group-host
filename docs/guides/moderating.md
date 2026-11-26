@@ -246,12 +246,12 @@ Each act here has a command in [the `atgrp` command](../reference/cli.md):
   or `--status resolved`, or the escalated ones with
   `--status open --tags escalated`.
 - Read one subject's history, with who did each thing:
-  `atgrp mod history gardens.groups.test <did or at:// uri>`.
+  `atgrp mod history gardens.groups.test <did or record uri>`.
 - Escalate: `atgrp mod update gardens.groups.test <subject> --add-tags escalated --note "…"`.
 - Resolve: `atgrp mod update gardens.groups.test <subject> --status resolved --note "…"`.
 - Label an account: `atgrp mod label gardens.groups.test <did> spam`.
   A takedown is the same with `!takedown`.
-- Label a post: `atgrp mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.
+- Label a post: `atgrp mod label gardens.groups.test <record uri> <label> --cid <cid>`.
 - Take a label back: the same command with `--undo`.
 - Define one of the group's labels: `atgrp label define gardens.groups.test off-topic --name Off-topic --description "Not about gardens."`,
   or stop defining it with `atgrp label delete gardens.groups.test off-topic`.

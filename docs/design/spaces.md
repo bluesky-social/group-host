@@ -9,8 +9,10 @@ all three.
 ## What a space is
 
 A space is a private record store from atproto's permissioned-data alpha
-(see https://atproto.com). It's named `at://<authority>/space/<type>/<skey>`,
-where the authority is a DID, the type an NSID and the skey a record key.
+(see https://atproto.com). It's named `at:space/<authority>/<type>/<skey>`,
+where the authority is a DID, the type an NSID and the skey a record key,
+and a record in it `at:space/<authority>/<type>/<skey>/<repo>/<collection>/<rkey>`,
+its repo the DID of the account that wrote it.
 Each account that writes in a space keeps its own repo there, on its own
 PDS. The authority says who may read and write, and gives readers
 credentials. This host is the repo host for its groups' repos in spaces,
@@ -19,9 +21,9 @@ and the authority for each group's own spaces.
 ## The spaces a group keeps
 
 Starting a group makes two spaces. Meta,
-`at://<group>/space/org.atgrp.meta/self`, holds what the group says
+`at:space/<group>/org.atgrp.meta/self`, holds what the group says
 about itself (`org.atgrp.about`) and its settings (`org.atgrp.config`).
-Members, `at://<group>/space/org.atgrp.members/self`, holds the roles,
+Members, `at:space/<group>/org.atgrp.members/self`, holds the roles,
 the memberships, the rules and the labeler. It also holds the index: a
 `org.atgrp.space` record, `{space, createdAt}`, for each of the
 group's other listed spaces, which apps read to find them. Meta and
@@ -53,7 +55,7 @@ repo, the space, the revision and that digest.
 
 The group also writes in spaces it isn't the authority for. An invite
 goes in the group's repo in the invitee's inbox,
-`at://<invitee>/space/org.atgrp.inbox/self`. The invitee's app
+`at:space/<invitee>/org.atgrp.inbox/self`. The invitee's app
 makes it a `com.atproto.memberspace.policy` space with `publicWrite` set
 and no members, so any group may write there and only its owner reads
 it. The host tells the invitee's PDS of each write

@@ -695,7 +695,7 @@ fn reads_a_space_scope() {
 
 #[test]
 fn unions_a_roles_writes() {
-    let space = SpaceRef::parse("at://did:plc:g/space/com.example.calendar/rides").unwrap();
+    let space = SpaceRef::parse("at:space/did:plc:g/com.example.calendar/rides").unwrap();
     let at = "space:com.example.calendar";
     let policy = json!({"grants": [
         {"role": "a", "permissions": [format!("{at}?collection=x&action=create"), format!("{at}?collection=y")]},

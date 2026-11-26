@@ -21,6 +21,7 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
+use crate::group::space_uri;
 use crate::group_api::{group_of, signed_in};
 use crate::oauth_resource::Acting;
 use crate::oauth_store::Grant;
@@ -819,7 +820,7 @@ impl Host {
                 rkey,
                 record,
             } => {
-                let uri = format!("at://{}/space/{space}/self", who.group);
+                let uri = space_uri(&who.group, &space, "self");
                 let written = self.record_as(who, &uri, collection, rkey, record);
                 written.await.map_err(said)
             }
@@ -841,7 +842,7 @@ impl Host {
                 rkey,
                 records,
             } => {
-                let uri = format!("at://{}/space/{space}/self", who.group);
+                let uri = space_uri(&who.group, &space, "self");
                 let mut done = Vec::new();
                 for (collection, fields) in records {
                     let kept = self.group_record(&who.group, &uri, &collection, &rkey);
@@ -889,7 +890,7 @@ impl Host {
         skey: &str,
         policy: Value,
     ) -> Result<Value, XrpcError> {
-        let uri = format!("at://{}/space/{kind}/{skey}", who.group);
+        let uri = space_uri(&who.group, kind, skey);
         let (acting, _) = self.session_for(who, &uri)?;
         let body = json!({"spaceType": kind, "skey": skey, "policy": policy});
         let made = self.create_space_as(&acting, &body).await?;

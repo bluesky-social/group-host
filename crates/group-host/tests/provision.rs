@@ -63,18 +63,10 @@ async fn makes_a_group_and_a_session_on_it_for_the_app() {
     .await;
     assert_eq!(said.status, 200, "{}", said.body);
     let did = said.body["did"].as_str().unwrap().to_string();
-    assert!(
-        said.body["meta"]
-            .as_str()
-            .unwrap()
-            .ends_with("/space/org.atgrp.meta/self")
-    );
-    assert!(
-        said.body["members"]
-            .as_str()
-            .unwrap()
-            .ends_with("/space/org.atgrp.members/self")
-    );
+    let meta = said.body["meta"].as_str().unwrap();
+    assert_eq!(meta, format!("at:space/{did}/org.atgrp.meta/self"));
+    let members = said.body["members"].as_str().unwrap();
+    assert_eq!(members, format!("at:space/{did}/org.atgrp.members/self"));
     let session = &said.body["session"];
     assert_eq!(session["token_type"], "DPoP");
     assert_eq!(session["sub"], did.as_str());

@@ -261,7 +261,7 @@ async fn takes_a_report_from_one_who_reads_it() {
         (
             &bob,
             record(&format!(
-                "at://{other}/space/{CALENDAR}/rides/{}/c.d.e/f",
+                "at:space/{other}/{CALENDAR}/rides/{}/c.d.e/f",
                 bob.did
             )),
             (400, "InvalidSubject"),
@@ -269,7 +269,16 @@ async fn takes_a_report_from_one_who_reads_it() {
         (
             &bob,
             record(&format!(
-                "at://{did}/space/{CALENDAR}/none/{}/c.d.e/f",
+                "at:space/{did}/{CALENDAR}/none/{}/c.d.e/f",
+                bob.did
+            )),
+            (400, "InvalidSubject"),
+        ),
+        // A record in the group's own space, named as the alpha once did.
+        (
+            &bob,
+            record(&format!(
+                "at://{did}/space/{CALENDAR}/rides/{}/c.d.e/f",
                 bob.did
             )),
             (400, "InvalidSubject"),
@@ -432,7 +441,7 @@ async fn takes_an_appeal_of_a_label_or_an_ejection_from_its_subject() {
     )
     .await;
     let carols = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", carol.did);
-    let elsewhere = format!("at://{other}/space/{CALENDAR}/rides/{}/c.d.e/f", bob.did);
+    let elsewhere = format!("at:space/{other}/{CALENDAR}/rides/{}/c.d.e/f", bob.did);
     for (who, subject) in [
         (&alice, &in_space),
         (&alice, &public),
@@ -1075,7 +1084,7 @@ async fn updates_a_subjects_status_tags_and_notes() {
     let long = "x".repeat(20_001);
     let never = format!("{uri}2");
     let elsewhere = format!(
-        "at://did:plc:other/space/{CALENDAR}/rides/{}/c.d.e/f",
+        "at:space/did:plc:other/{CALENDAR}/rides/{}/c.d.e/f",
         bob.did
     );
     let many: Vec<String> = (0..26).map(|i| "a".repeat(i + 1)).collect();
@@ -1259,8 +1268,12 @@ fn urlencode(text: &str) -> String {
 #[test]
 fn finds_the_space_a_record_is_in() {
     assert_eq!(
+        space_of("at:space/did:plc:a/x.y.z/k/did:plc:b/c.d.e/r"),
+        Some(("at:space/did:plc:a/x.y.z/k".into(), "did:plc:a".into()))
+    );
+    assert_eq!(
         space_of("at://did:plc:a/space/x.y.z/k/did:plc:b/c.d.e/r"),
-        Some(("at://did:plc:a/space/x.y.z/k".into(), "did:plc:a".into()))
+        None
     );
     assert_eq!(space_of("at://did:plc:a/c.d.e/r"), None);
     assert_eq!(space_of("https://x"), None);
@@ -1626,7 +1639,7 @@ async fn shows_a_moderator_what_was_taken_down_where_they_review_it() {
     // one in a space not hosted here carry no record, and serve no file.
     let gone = format!("{space}/{dan}/com.example.event/gone");
     let public = format!("at://{dan}/com.example.event/ride");
-    let nowhere = format!("at://{did}/space/{CALENDAR}/nowhere/{dan}/com.example.event/ride");
+    let nowhere = format!("at:space/{did}/{CALENDAR}/nowhere/{dan}/com.example.event/ride");
     for subject in [dan.as_str(), &gone, &public, &nowhere] {
         let (status, seen) = reviewed(&h, &alice, &did, subject).await;
         assert_eq!(status, 200, "{seen}");
@@ -1636,7 +1649,7 @@ async fn shows_a_moderator_what_was_taken_down_where_they_review_it() {
     }
     let bad = reviewed_file(&h, &alice, &did, &ride, "bafynotacid").await;
     assert_eq!(bad.error(), (400, "InvalidRequest".into()));
-    let elsewhere = "at://did:plc:x/space/a.b/c/did:plc:y/a.b/c";
+    let elsewhere = "at:space/did:plc:x/a.b/c/did:plc:y/a.b/c";
     let elsewhere = reviewed_file(&h, &alice, &did, elsewhere, map).await;
     assert_eq!(elsewhere.error(), (400, "InvalidSubject".into()));
 

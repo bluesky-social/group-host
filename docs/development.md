@@ -142,6 +142,22 @@ with every key `en.json` has, and add its `Intl` locale to `INTL` in
 `web/src/lib/locale.ts`. `web/src/app.css` lays pages out by left and
 right, so a right-to-left language needs that changed first.
 
+## The console's packages
+
+The console's `@atproto` packages are the spaces alpha the host's tests
+run on, each at its own `alpha` tag on npm. A package that needs a fix
+before upstream publishes one is patched as it installs:
+`web/patches/<package>+<version>.patch` is a git patch, and
+`web/patches/apply.sh` applies each once, after every `npm install` or
+`npm ci` (the `postinstall` script). A patch that no longer fits its
+package fails the install, so it goes when upstream's fix arrives. The
+image installs without them, and never type-checks.
+
+One patch so far: `@atproto/lex-schema`'s `l.space()` takes one record
+schema for all of a space's collections, so the meta and members
+spaces, which list records of different types and keys, fail
+svelte-check. Patched, it takes each and gives the space their union.
+
 ## The guides' pictures
 
 A guide (`docs/guides/`) shows the console with pictures. `just look`
