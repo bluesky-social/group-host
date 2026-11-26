@@ -7,11 +7,9 @@
 #
 #   Changeset: none
 #
-# for a change no one running or using them sees. The pull's body would
-# be the place, but a run cannot read it: it is kept in the private
-# repository's space. Run by check.yml in a pull's run, at its head merged
-# with its base; elsewhere it passes, since a push to main carries pulls
-# checked already.
+# for a change no one running or using them sees. Run by check.yml in a
+# pull's run, at its head merged with its base; elsewhere it passes, since
+# a push to main carries pulls checked already.
 
 set -eu
 

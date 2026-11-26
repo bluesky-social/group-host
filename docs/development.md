@@ -258,9 +258,8 @@ names the bump (`default: patch`, `minor` or `major`), and below it a
 heading and a line say what changed for them. The `check` check asks
 for one on any pull that changes `crates/*/src`, `web/src`,
 `web/messages` or `lexicons/org` (`harness/changes.sh`). A change no one
-sees says `Changeset: none` on a
-line of one of its commits' messages instead. The pull's body would be
-the place, but a run can't read it, since the repository is private.
+sees says `Changeset: none` on a line of one of its commits' messages
+instead.
 
 `just release` (`deploy/release.sh`) cuts a release from main's change
 files. It works out the version: a `minor` or `major` file bumps 0.x's

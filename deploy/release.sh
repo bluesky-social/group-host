@@ -19,10 +19,6 @@
 # holding main's change files, and still merging with main, is left as it
 # is, so its checks run again only when what it releases changes.
 #
-# It runs here rather than in a workflow: the repository is private, and
-# reading or writing it takes an OAuth login's space credential, which an
-# app password, all a run could sign in with, cannot get.
-#
 # With --dry-run it tags nothing, and makes the release commit and prints
 # the pull's body, pushing nothing.
 
