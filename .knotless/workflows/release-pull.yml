@@ -1,0 +1,45 @@
+# Keeps the `Release <version>` pull in step with main, as `just release`
+# does from the owner's machine: on each push to main, deploy/release.sh
+# tags the release that last landed `v<version>`, then cuts the next from
+# main's change files, force-pushed to release/next with its pull opened
+# or brought up to date, and leaves a pull that already releases them
+# alone. Merging that pull is the release, which release.yml publishes;
+# the push it makes runs this again, which tags it.
+#
+# It acts as the owner, with RELEASE_PASSWORD, the app password of theirs
+# release.yml takes, sealed to this runner for main alone. knope is the
+# version pinned here, its release's binary checked against its sum.
+image: node:24.22.1
+# The shared runner host, as every workflow here.
+runners: [runner.knotless.dev]
+on:
+  push: {refs: [refs/heads/main]}
+# One at a time, in the order main moved, so an older main's release never
+# overwrites a newer one's.
+superseded: finish
+cache: [/opt/knope]
+secrets: [RELEASE_PASSWORD]
+env:
+  REPO: knotless://chadtmiller.com/group-host
+  KNOTLESS_APPVIEW: https://knotless.dev
+  KNOPE_VERSION: 0.23.2
+  KNOPE_SHA256: c64f6281e012fc8e046ebd6f30be76c583e88b9ad55b00c7b1809b030db92eee
+steps:
+  - name: tools
+    run: |
+      curl -fsSL "$KNOTLESS_APPVIEW/install.sh" | KNOTLESS_INSTALL_DIR=/usr/local/bin sh
+      if [ "$(cat /opt/knope/.version 2>/dev/null)" != "$KNOPE_VERSION" ]; then
+        mkdir -p /opt/knope && cd /tmp
+        curl -fsSLo knope.tgz "https://github.com/knope-dev/knope/releases/download/knope%2Fv$KNOPE_VERSION/knope-x86_64-unknown-linux-musl.tgz"
+        echo "$KNOPE_SHA256  knope.tgz" | sha256sum -c -
+        tar -xzf knope.tgz --strip-components 1 -C /opt/knope knope-x86_64-unknown-linux-musl/knope
+        echo "$KNOPE_VERSION" > /opt/knope/.version
+      fi
+  - name: release
+    run: |
+      git config --global --add safe.directory '*'
+      git config --global user.name "Chad Miller"
+      git config --global user.email chadtmiller15@gmail.com
+      owner=${REPO#knotless://}
+      export KNOTLESS_IDENTIFIER=${owner%%/*} KNOTLESS_PASSWORD="$RELEASE_PASSWORD"
+      PATH=/opt/knope:$PATH deploy/release.sh

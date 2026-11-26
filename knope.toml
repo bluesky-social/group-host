@@ -2,8 +2,9 @@
 # a group, calling the host or using the command sees adds one, with
 # `knope document-change`, naming the bump and saying what changed for
 # them. `knope release` bumps the workspace's version, writes CHANGELOG.md
-# and removes the files it used; `just release` (deploy/release.sh) runs
-# it. No conventional commits: commit titles say what changed, for us.
+# and removes the files it used; deploy/release.sh runs it, from the
+# release-pull workflow or `just release`. No conventional commits:
+# commit titles say what changed, for us.
 
 [package]
 versioned_files = [

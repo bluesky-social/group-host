@@ -52,7 +52,8 @@ docs-deploy:
 
 # Tags the release that last landed, then cuts the next from main's
 # change files as the `Release <version>` pull (deploy/release.sh), as
-# the owner, signed in with `knotless login`; --dry-run pushes nothing.
+# the owner, signed in with `knotless login`, as the release-pull
+# workflow does on each push to main; --dry-run pushes nothing.
 release *args:
     deploy/release.sh {{args}}
 

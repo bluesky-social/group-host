@@ -6,9 +6,9 @@
 #
 # The host, the command and the console are built as the Dockerfile builds
 # them, and the image made from them with no container engine, which this
-# runner's jobs have none of (.knotless/image.sh). `just release` keeps a
-# pull open that raises the version; once it lands, this publishes it, and
-# the next `just release` tags it. A version CHANGELOG.md has no section
+# runner's jobs have none of (.knotless/image.sh). release-pull.yml keeps
+# a pull open that raises the version; once it lands, this publishes it,
+# and release-pull.yml tags it. A version CHANGELOG.md has no section
 # for is no release (knope writes one for each), so a pull that touches
 # Cargo.toml for another reason publishes nothing, and a version published
 # already is left alone.

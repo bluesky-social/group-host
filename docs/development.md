@@ -258,10 +258,12 @@ names the bump (`default: patch`, `minor` or `major`), and below it a
 heading and a line say what changed for them. The `check` check asks
 for one on any pull that changes `crates/*/src`, `web/src`,
 `web/messages` or `lexicons/org` (`harness/changes.sh`). A change no one
-sees says `Changeset: none` on a line of one of its commits' messages
-instead.
+sees says `Changeset: none` on a line of the pull's body instead. The
+check reads the body when it runs, so after editing the body, run it
+again with `knotless run rerun knotless://chadtmiller.com/group-host
+--pull <at-uri> --workflow check`.
 
-`just release` (`deploy/release.sh`) cuts a release from main's change
+`deploy/release.sh` cuts a release from main's change
 files. It works out the version: a `minor` or `major` file bumps 0.x's
 minor, where knope alone would bump the patch, and a `patch` file the
 patch; from 1.0 on, each bumps its own part. It runs `knope release
@@ -275,13 +277,18 @@ main's change files and still merges with main is left alone, so its
 checks don't run again for nothing.
 
 Merging that pull is the release: `release` publishes its image
-([below](#the-image)). The next `just release` tags its commit
-`v<version>` before it cuts anything, and `mirror` pushes the tag to
-GitHub. `just release --dry-run` tags nothing, makes the release commit,
-and prints the pull's body, pushing nothing.
+([below](#the-image)). The script tags its commit `v<version>` the next
+time it runs, before it cuts anything, and `mirror` pushes the tag to
+GitHub.
 
-The owner runs it, signed in with `knotless login`, with knope
-installed (`cargo install knope`).
+The `release-pull` workflow runs it on each push to `main`, as the
+owner, with `RELEASE_PASSWORD`, the app password `release` takes too,
+and knope 0.23.2's release binary. So the Release pull follows `main`
+by itself, and the push that lands it tags it. `just release` runs it
+from here instead, as the owner signed in with `knotless login`, with
+knope installed (`cargo install knope`). `just release --dry-run` tags
+nothing, makes the release commit, and prints the pull's body, pushing
+nothing.
 
 ## The image
 

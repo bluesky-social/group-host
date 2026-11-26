@@ -8,7 +8,10 @@
      a body with none of these headings is refused.
      Name a pull or issue of this repository by its at:// URI, bare,
      not in `code`: its page shows it as a link with its title, and an
-     issue named so lists this pull on its own page. -->
+     issue named so lists this pull on its own page.
+     A change to crates/*/src, web/src, web/messages or lexicons/org
+     that no one running or using the host sees adds no change file,
+     and says so in this body on a line of its own: Changeset: none -->
 
 ## What changes
 

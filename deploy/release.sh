@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Releases the workspace from main's change files, as the repository's
-# owner, signed in with `knotless login`:
+# owner: signed in with `knotless login`, or with an app password of
+# theirs, as release-pull.yml runs it on each push to main:
 #
 #   deploy/release.sh [--dry-run]
 #
@@ -11,7 +12,7 @@
 # worktree of its own: `knope release --override-version <version>`,
 # committed as `Release <version>`, force-pushed to release/next, and the
 # pull of that title opened, or the open one brought up to date. Landing
-# that pull is the release; run this again once it has, to tag it.
+# that pull is the release; the next run tags it.
 #
 # The version is worked out here, not by knope: a change file's `minor` or
 # `major` bumps 0.x's minor, where knope would bump the patch, and a
@@ -92,7 +93,7 @@ at=$(echo "$main" | cut -c1-12)
 notes=$(awk -v v="$version" '/^## / { on = ($2 == v); next } on' CHANGELOG.md)
 body=$(mktemp)
 cat > "$body" <<EOF
-Releases group-host $version, from the $count change files on main: its changelog is below. Merging this pull releases it; \`just release\` then tags it \`v$version\`, and brings this pull up to date as more change files land.
+Releases group-host $version, from the $count change files on main: its changelog is below. Merging this pull releases it; the \`release-pull\` workflow then tags it \`v$version\`, and brings this pull up to date as more change files land.
 
 <details>
 <summary>deploy/release.sh</summary>

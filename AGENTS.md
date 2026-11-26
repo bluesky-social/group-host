@@ -220,13 +220,15 @@ pulls into it or into a `feature/` branch:
 - `docs`: `just docs`, every link and anchor landing, and the docs site's
   build; on a push to `main`, the site deployed.
 
-Two more check nothing. `mirror`: each push to `main` or a tag pushes
+Three more check nothing. `mirror`: each push to `main` or a tag pushes
 the same commit to a copy on GitHub
 (github.com/bluesky-social/group-host), for those who read the code
 there. Nothing is pushed to that copy but from here. `release`: once a
 Release pull lands and its checks pass, the version's image is built,
 published as a knotless release, and copied as it is to
 ghcr.io/bluesky-social/group-host (`docs/development.md`, The image).
+`release-pull`: each push to `main` tags the release that landed and
+keeps the `Release <version>` pull up to date (`deploy/release.sh`).
 Every workflow names `runner.knotless.dev`.
 
 On a pull, `web`, `lexicons`, `e2e` and `docs` run only when it changes
@@ -238,14 +240,16 @@ A pull that changes what someone running a group, calling the host or
 using the command or the console sees adds a change file under
 `.changeset/`, as `knope document-change` writes one
 (https://knope.tech): `default: patch`, `minor` or `major` in its front
-matter, then a heading and a line for them. `just release`, run by the
-owner, turns them into the version and CHANGELOG.md with `knope
-release`, in the `Release <version>` pull; merging it releases, and the
-next `just release` tags it `v<version>`. Commit titles stay prose: no
-conventional commits. The `check` check fails a pull that changes
-`crates/*/src`, `web/src`, `web/messages` or `lexicons/org` and adds no
-change file, unless one of its commits says, on a line of its message,
-`Changeset: none`: for a change no one running or using the host sees.
+matter, then a heading and a line for them. The `release-pull`
+workflow turns them into the version and CHANGELOG.md with `knope
+release`, in the `Release <version>` pull, on each push to `main`;
+merging it releases, and the push that does tags it `v<version>`.
+Commit titles stay prose: no conventional commits. The `check` check
+fails a pull that changes `crates/*/src`, `web/src`, `web/messages` or
+`lexicons/org` and adds no change file, unless the pull's body says, on
+a line of its own, `Changeset: none`: for a change no one running or
+using the host sees. It reads the body as it runs, so after editing the
+body, run `check` again.
 
 ## Landing a change
 
