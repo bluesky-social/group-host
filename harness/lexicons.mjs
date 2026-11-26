@@ -59,65 +59,77 @@ const retracted = new Set([
     'defs#modSubjectView.actor',
     'defs#moderationEvent.creator',
     'getModSubjectHistory#main.output.record'
-  ].map((at) => `org.atgrp.${at}`)
+  ].map((at) => `org.atgrp.${at}`),
+  // The host's own views, which no one outside it reads: a group's website
+  // as the spec's about record names it, no banner, and a role's grant in
+  // the spec's words.
+  ...[
+    'defs#groupView.url',
+    'defs#groupView.banner',
+    'defs#groupViewDetailed.url',
+    'defs#groupViewDetailed.banner',
+    'defs#groupViewBasic.url',
+    'defs#roleBinding',
+    'provisionGroup#main.input.joinPolicy'
+  ].map((at) => `org.atgrp.internal.${at}`)
 ]);
 
-// Where the Atmosphere Groups proposal's shape, which the host takes, differs
-// from the style above: each finding, exactly as said. A space policy's
-// grant's scopes, and a role's scopes and assignable roles, are bare
-// strings, as OAuth scopes and record keys are. A membership's roles are
-// bare role keys, at most 100; a moderation subject's status is a closed
-// set; and a report's and an event's `id` is the proposal's name for it.
-// A rule's title is as long as the proposal's. A moderation subject is a
-// URI, an account's DID or a record's, beside its version, not a union;
-// and a report's reason, a labeler's reasons and its subject types, are
-// plain words, not atproto's moderation defs.
+// Where the Atmosphere Groups spec's shape, which the host takes as it is,
+// differs from the style above: each finding, exactly as said. A space
+// policy's grant's permissions, a role's permissions and the roles it may
+// assign, and a subject's moderator tags are bare strings, as permissions,
+// record keys and label values are. A moderation subject's status is a
+// closed set. A report's reasons are the spec's tokens. The methods that
+// answer nothing declare no output. The spec took a declaration's fields
+// out, and a role's and a rule's `createdAt`; it moved the rules and the
+// labeler from the meta space to the members space, and renamed the
+// profile `about` and the acceptance `confirmation`.
 const proposal = new Set([
-  ...['maxLength went from 1000 to 640', 'maxGraphemes went from 100 to 64'].map(
-    (m) => `org.atgrp.rule#main.record.title: ${m}: what was valid must stay so`
-  ),
-  'org.atgrp.policy#grant.scopes: an array holds objects, which can grow, not bare values',
-  ...['scopes', 'assignable'].map(
-    (f) =>
-      `org.atgrp.role#main.record.${f}: an array holds objects, which can grow, not bare values`
-  ),
-  'org.atgrp.membership#main.record.roles: maxLength went from none to 100: what was valid must stay so',
-  'org.atgrp.membership#main.record.roles[]: was {"type":"ref","ref":"org.atgrp.defs#roleId"}, now {"type":"string","format":"record-key"}: a field is never retyped',
-  ...['createReport', 'defs'].map(
-    (n) => `org.atgrp.${n}: field-name-syntax: name is a commonly reserved keyword: id`
-  ),
+  ...['cancelJoinRequest', 'denyJoinRequest', 'leaveGroup'].flatMap((n) => [
+    `org.atgrp.${n}: endpoint-output-undefined: missing output definition`,
+    `org.atgrp.${n}#main.output: removed`
+  ]),
+  ...[
+    'mod.defs#subjectView.status',
+    'mod.defs#statusEvent.status',
+    'mod.querySubjects#main.parameters.status',
+    'mod.updateSubject#main.input.status'
+  ].map((p) => `org.atgrp.${p}: knownValues, not enum: an enum can never grow`),
+  ...[
+    'mod.defs#subjectView.tags',
+    'mod.defs#tagEvent.add',
+    'mod.defs#tagEvent.remove',
+    'mod.updateSubject#main.input.addTags',
+    'mod.updateSubject#main.input.removeTags',
+    'policy#grant.permissions',
+    'role#main.record.permissions',
+    'role#main.record.canAssign'
+  ].map((p) => `org.atgrp.${p}: an array holds objects, which can grow, not bare values`),
+  ...[
+    'declaration#main.record.meta',
+    'declaration#main.record.createdAt',
+    'role#main.record.createdAt',
+    'rule#main.record.createdAt'
+  ].map((p) => `org.atgrp.${p}: a field is never removed or renamed`),
   ...[
     [
-      'createReport#main.input.subject',
-      '{"type":"union","refs":["org.atgrp.defs#accountSubject","org.atgrp.defs#recordSubject"]}',
-      '{"type":"string","format":"uri"}'
-    ],
-    ...[
-      'createReport#main.input.reasonType',
-      'defs#reportEvent.reasonType',
-      'labeler#main.record.reasonTypes[]'
-    ].map((p) => [
-      p,
-      '{"type":"ref","ref":"com.atproto.moderation.defs#reasonType"}',
-      '{"type":"string"}'
-    ]),
-    [
-      'labeler#main.record.subjectTypes[]',
-      '{"type":"ref","ref":"com.atproto.moderation.defs#subjectType"}',
-      '{"type":"string"}'
+      'labeler#main.record.reasonTypes[]',
+      '{"type":"string"}',
+      '{"type":"ref","ref":"org.atgrp.mod.defs#reasonType"}'
     ],
     [
-      'defs#statusEvent.status',
-      '{"type":"ref","ref":"org.atgrp.defs#subjectStatus"}',
-      '{"type":"string"}'
+      'requestJoin#main.output.membership',
+      '{"type":"ref","ref":"com.atproto.repo.strongRef"}',
+      '{"type":"ref","ref":"com.atproto.repo.strongRef#main"}'
     ]
   ].map(([p, was, now]) => `org.atgrp.${p}: was ${was}, now ${now}: a field is never retyped`),
+  'org.atgrp.listJoinRequests#main.parameters.limit: minimum went from none to 1: what was valid must stay so',
   ...[
-    'defs#modSubjectView.status',
-    'defs#statusEvent.status',
-    'listModSubjects#main.parameters.status',
-    'resolveModSubject#main.input.status'
-  ].map((p) => `org.atgrp.${p}: knownValues, not enum: an enum can never grow`)
+    ['members', 'acceptance'],
+    ['meta', 'profile'],
+    ['meta', 'rule'],
+    ['meta', 'labeler']
+  ].map(([s, c]) => `org.atgrp.${s}#main.collections: org.atgrp.${c} was taken out`)
 ]);
 
 const problems = [];
@@ -296,24 +308,24 @@ const loosened = (before, after, path) => {
 // change may remove, and a space type's collections may drop: what is
 // said of each is why.
 // - com.atproto.moderation.createReport: reports come to the group's own
-//   org.atgrp.createReport, as the Atmosphere Groups proposal has them.
+//   org.atgrp.mod.submitReport, as the Atmosphere Groups spec has them.
 // - com.atproto.managedspace.checkAccess: an inbox is a memberspace its
 //   owner's app makes, which asks no one.
 // - com.atproto.label.label: atproto names the label record
 //   com.atproto.label.record, as the Atmosphere Groups proposal does.
-// - com.atproto.moderation.defs: a report's reason and a labeler's are
-//   plain words, as the Atmosphere Groups proposal has them, and nothing
-//   else here refers to it.
+// - com.atproto.moderation.defs: a report's reasons are the spec's own
+//   tokens, in org.atgrp.mod.defs, and nothing else here refers to it.
 // - org.atgrp.permissions: each role record carries its own
-//   group-wide scopes and assignable roles, as the Atmosphere Groups
-//   proposal's do, so the members space keeps no record of them all.
+//   group-wide permissions and the roles it may assign, as the
+//   Atmosphere Groups spec's do, so the members space keeps no record of
+//   them all.
 // - org.atgrp.access: each space's policy (org.atgrp.policy),
 //   kept by the host and published as com.atproto.space.policy, took its
 //   place, as the Atmosphere Groups proposal has it.
 // - org.atgrp.configure, manageSpaces, manageMembers and moderate:
-//   tiered as authManageProfile, within authModerate, within
-//   authManageGroup, and participate named authParticipate, as the
-//   Atmosphere Groups proposal's permission sets are.
+//   tiered as the spec's authManageBasic, authManageMembers and
+//   authModerate, within authManageAdmin, and participate named
+//   authParticipate.
 // - community.lexicon.location.address, geo, fsq and hthree: a group's
 //   profile no longer says where it meets, so nothing here refers to them.
 const RETIRED = new Set([

@@ -10,7 +10,7 @@ its own, with no password and no one person behind it. The host is the
 group's PDS, the authority for its private spaces and its OAuth server,
 and its members' roles decide what anyone may do there. Members keep
 their own accounts on their own PDSes, anywhere on the network. It
-implements the [Atmosphere Groups proposal](https://tangled.org/opensocial.group/proposal).
+implements the [Atmosphere Groups spec](https://tangled.org/atmospheregroups.org/spec).
 
 It's one Rust server over SQLite, with a console (a SvelteKit app) where
 people start and run groups and approve apps, and a command,

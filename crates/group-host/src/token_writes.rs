@@ -4,10 +4,11 @@
 //! reaches, and blobs for them.
 //!
 //! In the group's own meta and members spaces, a token writes only what
-//! the host would keep it: in the meta space, the profile, its pictures
-//! and the rules, as `group_config` has them, and the labeler, kept at
-//! `self` and never deleted; in the members space, roles and memberships,
-//! as `member_writes.rs` keeps them, so that nobody gives themselves more
+//! the host would keep it: in the meta space, the about record, its
+//! picture, and the config, kept at `self` and never deleted; in the
+//! members space, the rules, as `group_config` has them, the labeler,
+//! kept at `self` and never deleted, and roles and memberships, as
+//! `member_writes.rs` keeps them, so that nobody gives themselves more
 //! than they hold. The group's declaration, in its public repo, follows
 //! who may read its meta space. A space's policy, published as
 //! `com.atproto.space.policy`, and the group's index of its spaces change
@@ -24,8 +25,8 @@ use crate::group_spaces::PUBLISHED;
 use crate::lexicons::{check_record, validation};
 use crate::member_writes::members_writes;
 use crate::oauth_resource::{Acting, Refusal};
-use crate::oauth_scope::{may_write, meta_writes};
-use crate::rbac::{self, LABEL, NS, actions_for, label_writes, repo_collections_for};
+use crate::oauth_scope::may_write;
+use crate::rbac::{self, LABEL, NS, label_writes, meta_writes, repo_collections_for};
 use crate::repo::{Asked, Write, record_cid};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
@@ -93,14 +94,14 @@ impl Host {
         let c = |name: &str| format!("{NS}.{name}");
         let label = LABEL.to_string();
         let allowed = if space == meta_space(group) {
-            Some([c("profile"), c("rule"), c("labeler"), label].to_vec())
+            Some([c("about"), c("config"), label].to_vec())
         } else if space == members_space(group) {
-            Some([c("role"), c("membership"), label].to_vec())
+            Some([c("rule"), c("labeler"), c("role"), c("membership"), label].to_vec())
         } else {
             None
         };
         for write in writes {
-            let (collection, rkey) = write.path();
+            let (collection, _) = write.path();
             let ours = allowed
                 .as_ref()
                 .is_none_or(|a| a.iter().any(|x| x == collection));
@@ -110,15 +111,7 @@ impl Host {
                     "{collection} changes through the host's methods, not as a record"
                 )));
             }
-            if collection == c("labeler") {
-                if rkey != "self" {
-                    return Err(invalid(format!("{collection} is kept at self")));
-                }
-                if matches!(write, Write::Delete { .. }) {
-                    return Err(invalid(format!("the group keeps its {collection}")));
-                }
-            }
-            if space == meta_space(group) {
+            if allowed.is_some() {
                 self.face(group, write)?;
             }
         }
@@ -459,13 +452,12 @@ impl Host {
     ) -> Result<(), XrpcError> {
         let group = &acting.grant.group;
         let (roles, grants) = self.standing(acting)?;
-        let held = actions_for(&grants, &roles);
         let policy = self.policy(uri).map_err(XrpcError::internal)?;
         let mut writable = policy.map(|p| p.writes(&roles)).unwrap_or_default();
         // The meta space's own records, as its policy and the group's roles
         // grant them.
         if uri == meta_space(group) {
-            writable.extend(meta_writes(&held));
+            writable.extend(meta_writes(&grants, &roles, group));
         }
         let labels = label_writes(&grants, &roles, group, space);
         for w in writes {
@@ -479,9 +471,11 @@ impl Host {
             }
             let still = match collection {
                 LABEL => labels.contains(action(w)) || may_write(&writable, LABEL, action(w)),
-                _ if uri == members_space(group) => {
-                    may_write(&members_writes(&grants, &roles), collection, action(w))
-                }
+                _ if uri == members_space(group) => may_write(
+                    &members_writes(&grants, &roles, group),
+                    collection,
+                    action(w),
+                ),
                 _ => may_write(&writable, collection, action(w)),
             };
             if !still {

@@ -4,8 +4,8 @@
   "defs": {
     "main": {
       "type": "record",
+      "description": "A group rule, written by the group in the members space. Reports can cite it by URI.",
       "key": "tid",
-      "description": "One group rule, with a stable URI a moderation action can cite.",
       "record": {
         "type": "object",
         "required": ["title", "text"],
@@ -23,11 +23,7 @@
           "order": {
             "type": "integer",
             "minimum": 0,
-            "description": "Where it comes in the list of rules, lowest first."
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "datetime"
+            "description": "Display order, ascending."
           }
         }
       }

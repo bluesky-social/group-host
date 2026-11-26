@@ -11,12 +11,12 @@
     displayName,
     description,
     joinPolicy,
-    url
+    website
   }: {
     displayName?: string;
     description?: string;
     joinPolicy?: string;
-    url?: string;
+    website?: string;
   } = $props();
   const saving = new Saving();
   const policy = $derived(joinPolicy ?? 'approval');
@@ -40,8 +40,8 @@
     </select>
   </label>
   <label class="field"
-    ><span>{m.profile_form_url()} <span class="optional">{m.common_optional()}</span></span>
-    <input name="url" type="url" value={url ?? ''} /></label
+    ><span>{m.profile_form_website()} <span class="optional">{m.common_optional()}</span></span>
+    <input name="website" type="url" value={website ?? ''} /></label
   >
   <SaveBar {saving} what={m.profile_form_saves()} />
 </form>

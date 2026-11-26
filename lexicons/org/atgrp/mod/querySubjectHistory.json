@@ -1,21 +1,18 @@
 {
   "lexicon": 1,
-  "id": "org.atgrp.getModSubjectHistory",
+  "id": "org.atgrp.mod.querySubjectHistory",
   "defs": {
     "main": {
       "type": "query",
-      "description": "Get a subject's moderation history, oldest first, and for a record in one of the group's spaces, the record itself, taken down or not. Requires mod.read: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call.",
+      "description": "Get a subject's moderation history. Requires auth as the group.",
       "parameters": {
         "type": "params",
-        "required": [
-          "group",
-          "subject"
-        ],
+        "required": ["subject"],
         "properties": {
           "group": {
             "type": "string",
             "format": "did",
-            "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            "description": "The group's DID. A group account session names its own; a member's service auth names it here."
           },
           "subject": {
             "type": "string",
@@ -26,6 +23,11 @@
             "type": "string",
             "format": "cid",
             "description": "If set, only this version of the record."
+          },
+          "sort": {
+            "type": "string",
+            "knownValues": ["newest", "oldest"],
+            "default": "newest"
           },
           "limit": {
             "type": "integer",
@@ -42,9 +44,7 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": [
-            "events"
-          ],
+          "required": ["events"],
           "properties": {
             "cursor": {
               "type": "string"
@@ -53,13 +53,13 @@
               "type": "array",
               "items": {
                 "type": "ref",
-                "ref": "org.atgrp.defs#moderationEvent"
+                "ref": "org.atgrp.mod.defs#eventView"
               }
             },
             "record": {
               "type": "ref",
               "ref": "org.atgrp.internal.defs#modRecordView",
-              "description": "The subject, a record in one of the group's spaces, as the host's index holds it: given when the index holds it and the space's policy lets the caller read it, whether or not the group has taken it down."
+              "description": "The subject, a record in one of the group's spaces, as the host's index holds it, taken down or not, when the caller may read its space."
             }
           }
         }
@@ -67,7 +67,7 @@
       "errors": [
         {
           "name": "InvalidSubject",
-          "description": "The subject isn't an account, a record in this group, or a record in a public repo."
+          "description": "The subject isn't in this group."
         },
         {
           "name": "InvalidCursor",

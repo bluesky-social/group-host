@@ -4,16 +4,17 @@
 //! is read later.
 //!
 //! No lexicon is resolved: the only permission sets a token keeps are
-//! this host's own for a group's session (`org.atgrp.authManageProfile`
-//! within `authModerate` within `authManageGroup`), read from their
-//! lexicons here, each an upper bound: the parts of it the roles grant
-//! are kept. A space scope naming no collection keeps every one, which
-//! narrowing allowed only to roles that may write every one there.
+//! this host's own for a group's session (`org.atgrp.authManageBasic`,
+//! `authManageMembers` and `authModerate`, and `authManageAdmin`, which
+//! holds all three), read from their lexicons here, each an upper bound:
+//! the parts of it the roles grant are kept. A space scope naming no
+//! collection keeps every one, which narrowing allowed only to roles that
+//! may write every one there.
 
 use crate::Host;
 use crate::group::{members_space, meta_space};
 use crate::lexicons::lexicons;
-use crate::rbac::{self, LABEL, NS, actions_for, label_writes, repo_collections_for};
+use crate::rbac::{self, LABEL, NS, actions_for, label_writes, meta_writes, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
 use serde_json::Value;
@@ -21,9 +22,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use crate::rbac::WRITES;
 
-/// This host's permission sets for a group's session, by name, each
-/// within the next.
-pub const TIERS: [&str; 3] = ["authManageProfile", "authModerate", "authManageGroup"];
+/// This host's permission sets for a group's session, by name: the last
+/// holds the other three.
+pub const TIERS: [&str; 4] = [
+    "authManageBasic",
+    "authManageMembers",
+    "authModerate",
+    "authManageAdmin",
+];
 
 /// The action each of the host's methods a permission set lists asks of
 /// the member who signed the app in.
@@ -31,10 +37,10 @@ const ASKS: [(&str, &str); 7] = [
     ("org.atgrp.listJoinRequests", "admit"),
     ("org.atgrp.denyJoinRequest", "admit"),
     ("org.atgrp.internal.listInvites", "invite"),
-    ("org.atgrp.listModSubjects", "mod.read"),
-    ("org.atgrp.getModSubjectHistory", "mod.read"),
+    ("org.atgrp.mod.querySubjects", "mod.read"),
+    ("org.atgrp.mod.querySubjectHistory", "mod.read"),
     ("org.atgrp.internal.getModSubjectBlob", "mod.read"),
-    ("org.atgrp.resolveModSubject", "mod.resolve"),
+    ("org.atgrp.mod.updateSubject", "mod.resolve"),
 ];
 
 /// The permission set of this host's that `scope` includes, from its
@@ -194,7 +200,7 @@ impl Host {
             // The meta and members spaces' own records, as the group's
             // roles grant them.
             if uri == meta_space(group) {
-                writable.extend(meta_writes(actions));
+                writable.extend(meta_writes(grants, roles, group));
             }
             if uri == members_space(group) {
                 writable.extend(self.members_writes_of(group, roles)?);
@@ -270,7 +276,7 @@ impl Host {
     /// - `space:T?…`, where some space of the group's of type `T` lets the
     ///   roles write each collection asked for, as asked, as the group; or
     ///   read it, if reading is all it asks;
-    /// - `space:org.atgrp.invites?…`, people's inboxes, for roles that
+    /// - `space:org.atgrp.inbox?…`, people's inboxes, for roles that
     ///   may invite, as far as it asks for invites;
     /// - `space:*?…`, made into one scope for each of the group's spaces
     ///   the roles read, writing there what they may of what it asks;
@@ -346,22 +352,12 @@ impl Host {
     }
 }
 
-/// What a holder of `actions` may write as the group in its meta space,
-/// by collection, beyond what its policy grants: every record of it, if
-/// they run the group.
-pub fn meta_writes(actions: &BTreeSet<&'static str>) -> BTreeMap<String, BTreeSet<String>> {
-    let all: BTreeSet<String> = WRITES.map(String::from).into();
-    let records = ["profile", "rule", "labeler"].map(|r| (format!("{NS}.{r}"), all.clone()));
-    match actions.contains("group.configure") {
-        true => records.into(),
-        false => BTreeMap::new(),
-    }
-}
-
 /// Of `set`, one of [`TIERS`], what holders of `actions`, with `rooms`,
 /// grant: each of its methods whose action they hold; of its space
 /// permissions, what they may write of each collection it names, and do
-/// to the space itself. All they grant of a tier is that tier.
+/// to the space itself. All they grant of a set is that set, and all they
+/// grant of another set within it, as a moderator's of the admin set, is
+/// that other set.
 fn parts(set: &Value, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> Vec<String> {
     let mut out = Vec::new();
     for scope in scopes_of(set) {
@@ -376,7 +372,7 @@ fn parts(set: &Value, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> Vec<S
         let want = SpaceScope::parse(&scope).expect("a set's permissions are rpc or space");
         let whole = if !want.manage.is_empty() {
             manages(&want, actions, rooms)
-        } else if want.kind == format!("{NS}.invites") {
+        } else if want.kind == format!("{NS}.inbox") {
             actions.contains("invite")
         } else {
             let room = rooms.iter().find(|r| r.kind == want.kind);
@@ -387,9 +383,10 @@ fn parts(set: &Value, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> Vec<S
             out.push(scope);
         }
     }
+    let granted: BTreeSet<&String> = out.iter().collect();
     let tier = TIERS.iter().map(|t| format!("include:{NS}.{t}")).find(|t| {
         let set = set_of(t).expect("each tier has its lexicon");
-        scopes_of(set) == out
+        scopes_of(set).iter().collect::<BTreeSet<_>>() == granted
     });
     match tier {
         Some(tier) => vec![tier],
@@ -429,7 +426,7 @@ fn written(want: &SpaceScope, room: &Room) -> Vec<String> {
 /// `scope`, if it is for people's inboxes, where a group writes its
 /// invites: any inbox, or one person's.
 fn inbox_scope(scope: &str) -> Option<SpaceScope> {
-    SpaceScope::parse(scope).filter(|w| w.kind == format!("{NS}.invites"))
+    SpaceScope::parse(scope).filter(|w| w.kind == format!("{NS}.inbox"))
 }
 
 /// Whether `room` lets the roles have the space scope `want`.

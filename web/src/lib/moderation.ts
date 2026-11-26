@@ -2,6 +2,7 @@
 // is, what happened to it, and the labels it wears now.
 
 import { day, when } from '#lib/dates.ts';
+import { intl } from '#lib/locale.ts';
 import { reason } from '#lib/reasons.ts';
 import { m } from '#lib/paraglide/messages.js';
 
@@ -15,8 +16,17 @@ export type Said = {
   note?: string;
   val?: string;
   deleted?: boolean;
+  add?: string[];
+  remove?: string[];
 };
-export type Event = { id: string; createdAt: string; creator?: Actor; cid?: string; event: Said };
+export type Event = {
+  eventId: string;
+  createdAt: string;
+  subject: string;
+  creator?: Actor;
+  cid?: string;
+  event: Said;
+};
 /**
  * A record subject as the host's index holds it, which a moderator sees
  * though the group took it down (`takenDown`).
@@ -28,15 +38,22 @@ export type Reviewed = {
   createdAt: string;
   takenDown: boolean;
 };
-/** A subject: `status` none for one the queue has never had; `record`, a record subject itself. */
+/**
+ * A subject: `status` none for one the queue has never had; `tags`, its
+ * moderators' tags; `record`, a record subject itself.
+ */
 export type Subject = {
   key: string;
   actor: Actor;
   status?: string;
   reportCount: number;
+  tags: string[];
   events: Event[];
   record?: Reviewed;
 };
+
+/** The tag a moderator puts on a subject to hand it to another, which the queue lists on its own. */
+export const ESCALATED = 'escalated';
 
 /** The labels that hide what was posted, which the dialog offers as a takedown. */
 export const TAKEDOWN = ['!takedown', '!hide'];
@@ -71,7 +88,10 @@ export function reviewedFile(uri: string, cid: string): string {
   return `/xrpc/org.atgrp.internal.getModSubjectBlob?${asked}`;
 }
 
-/** What an event is: `reportEvent`, `statusEvent`, `labelEvent`, `ejectEvent`. */
+/**
+ * What an event is, by its `$type` in org.atgrp.mod.defs: `reportEvent`,
+ * `appealEvent`, `statusEvent`, `tagEvent`, `labelEvent`, `ejectEvent`.
+ */
 export const kindOf = (e: Event) => (e.event.$type ?? '').split('#')[1] ?? '';
 
 /** The labels a subject wears now: each applied and not since taken back, in the order applied. */
@@ -142,23 +162,92 @@ export const reasons = (s: Subject) => [
   ...new Set(reports(s).map((e) => reason(e.event.reasonType ?? '')))
 ];
 
-/** What an event was, in a word or two. */
-export function title(e: Event): string {
-  const kind = kindOf(e);
-  if (kind === 'reportEvent') return m.moderation_title_reported();
-  if (kind === 'statusEvent')
-    return e.event.status === 'escalated'
-      ? m.moderation_title_escalated()
-      : m.moderation_title_resolved();
-  if (kind === 'labelEvent')
-    return e.event.deleted ? m.moderation_title_label_removed() : m.moderation_title_labelled();
-  return m.moderation_title_removed();
+/** A moderator's tag, as the queue shows it: the console's own by its name, any other as it is. */
+export const tagName = (tag: string) => (tag === ESCALATED ? m.moderation_tag_escalated() : tag);
+
+/** What a tag event did, when it only put the console's own tag on, or only took it off. */
+function escalation(said: Said): string | undefined {
+  const [add, remove] = [said.add ?? [], said.remove ?? []];
+  const only = (list: string[], other: string[]) =>
+    list.length === 1 && list[0] === ESCALATED && !other.length;
+  if (only(add, remove)) return m.moderation_title_escalated();
+  if (only(remove, add)) return m.moderation_title_unescalated();
+  return undefined;
 }
 
 /**
+ * The status `e` leaves a subject at, from `status` before it: a report
+ * or an appeal opens it, a status event sets its own, and any other
+ * event keeps it as it was, or opens it if it is the first.
+ */
+function next(status: string | undefined, e: Event): string | undefined {
+  const kind = kindOf(e);
+  if (kind === 'statusEvent') return e.event.status;
+  return kind === 'reportEvent' || kind === 'appealEvent' ? 'open' : (status ?? 'open');
+}
+
+/** The status a subject's events, oldest first, leave it at; none for one with none. */
+export const statusOf = (events: Event[]) => events.reduce<string | undefined>(next, undefined);
+
+/** The tags a subject's events, oldest first, leave on it, in the order put on. */
+export function tagsOf(events: Event[]): string[] {
+  let now: string[] = [];
+  for (const e of events) {
+    if (kindOf(e) !== 'tagEvent') continue;
+    const gone = e.event.remove ?? [];
+    now = [...new Set([...now, ...(e.event.add ?? [])])].filter((t) => !gone.includes(t));
+  }
+  return now;
+}
+
+/**
+ * What each of `events`, oldest first, was, in a word or two. A note on
+ * its own and a status change are both a status event, told apart by the
+ * status before it.
+ */
+export function titles(events: Event[]): string[] {
+  let status: string | undefined;
+  return events.map((e) => {
+    const said = e.event;
+    const before = status;
+    status = next(status, e);
+    switch (kindOf(e)) {
+      case 'reportEvent':
+        return m.moderation_title_reported();
+      case 'appealEvent':
+        return m.moderation_title_appealed();
+      case 'statusEvent':
+        if (status === before) return m.moderation_title_noted();
+        return status === 'resolved'
+          ? m.moderation_title_resolved()
+          : m.moderation_title_reopened();
+      case 'tagEvent':
+        return (
+          escalation(said) ??
+          (said.remove?.length
+            ? said.add?.length
+              ? m.moderation_title_tags_changed()
+              : m.moderation_title_untagged()
+            : m.moderation_title_tagged())
+        );
+      case 'labelEvent':
+        return said.deleted ? m.moderation_title_label_removed() : m.moderation_title_labelled();
+      case 'ejectEvent':
+        return m.moderation_title_removed();
+      default:
+        return m.moderation_title_other();
+    }
+  });
+}
+
+const listed = (tags: string[]) =>
+  new Intl.ListFormat(intl(), { type: 'conjunction' }).format(tags.map(tagName));
+
+/**
  * What was said with an event, if anything: a report's reason, the rule
- * it cites by its title in `rules` (by record key), and its words; a
- * label's value; a note.
+ * it cites by its title in `rules` (by record key), and its words; the
+ * tags put on or taken off, but the console's own, which its title says;
+ * a label's value; a note.
  */
 export function detail(e: Event, rules: Record<string, string>): string {
   const said = e.event;
@@ -170,8 +259,13 @@ export function detail(e: Event, rules: Record<string, string>): string {
   const parts =
     kind === 'reportEvent'
       ? [reason(said.reasonType ?? ''), said.rule ? cited(said.rule) : '', said.reason ?? '']
-      : kind === 'labelEvent'
-        ? [said.val ?? '']
-        : [said.note ?? ''];
+      : kind === 'tagEvent' && !escalation(said)
+        ? [
+            said.add?.length ? m.moderation_tags_added({ tags: listed(said.add) }) : '',
+            said.remove?.length ? m.moderation_tags_removed({ tags: listed(said.remove) }) : ''
+          ]
+        : kind === 'labelEvent'
+          ? [said.val ?? '']
+          : [said.note ?? ''];
   return parts.filter(Boolean).join(m.moderation_detail_separator());
 }

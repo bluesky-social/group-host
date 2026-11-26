@@ -48,10 +48,21 @@ async fn an_open_group_admits_at_once() {
     assert_eq!(said["membership"]["cid"].as_str().map(str::len), Some(59));
     assert_eq!(said.as_object().unwrap().len(), 2);
     assert_eq!(h.host.roles(&did, &bob.did).unwrap(), ["member"]);
-    assert_eq!(
-        error(&call(&h, &bob, "requestJoin", json!({"group": did})).await),
-        (400, "AlreadyMember")
+    // Asking again, a member is answered with the membership they have.
+    let again = call(&h, &bob, "requestJoin", json!({"group": did})).await;
+    assert_eq!(again, (200, said.clone()));
+    // As is one let in another way, whose membership the host did not
+    // write when they asked.
+    let [_, _, carol] = people(&h).await;
+    keep(&h, &did, "membership", &carol.did, membership(&["member"])).await;
+    let (status, theirs) = call(&h, &carol, "requestJoin", json!({"group": did})).await;
+    assert_eq!((status, &theirs["status"]), (200, &json!("admitted")));
+    let uri = format!(
+        "{}/{did}/{NS}.membership/{}",
+        members_space(&did),
+        carol.did
     );
+    assert_eq!(theirs["membership"]["uri"], uri);
     // A request made before the group opened is gone once they are in.
     let eve = authority(&h, false, true).await;
     h.host.store.ask(&did, &eve.did, None, 0).unwrap();
@@ -93,6 +104,15 @@ async fn an_invite_only_group_needs_an_invite() {
     for body in [json!({}), json!({"group": "did:plc:nobody"})] {
         assert_eq!(call(&h, &bob, "requestJoin", body).await.0, 400);
     }
+    // A request made before it closed still waits, and is the answer.
+    let [_, _, carol] = people(&h).await;
+    h.host
+        .store
+        .ask(&did, &carol.did, Some("Earlier"), 0)
+        .unwrap();
+    let (status, said) = call(&h, &carol, "requestJoin", json!({"group": did})).await;
+    assert_eq!((status, &said["status"]), (200, &json!("pending")));
+    assert_eq!(said["request"]["message"], "Earlier");
     h.host.deactivate_account(&did, &alice.did, &[]).unwrap();
     assert_eq!(
         error(&call(&h, &bob, "requestJoin", json!({"group": did})).await),
@@ -118,14 +138,16 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     assert_eq!(asked.1["request"]["message"], "I ride too.");
     assert!(asked.1["request"]["createdAt"].is_string());
     assert_eq!(asked.1.get("membership"), None);
-    // Asked twice, still one.
-    call(
+    // Asked twice, still one: the request waiting is the answer, its
+    // words as first asked.
+    let again = call(
         &h,
         &bob,
         "requestJoin",
         json!({"group": did, "message": "Again"}),
     )
     .await;
+    assert_eq!(again, asked);
     call(&h, &carol, "requestJoin", json!({"group": did})).await;
 
     // Each sees their own.
@@ -314,6 +336,8 @@ async fn a_group_that_approves_its_members_keeps_requests() {
     for (who, method, body) in [
         (&alice, "denyJoinRequest", json!({"group": did})),
         (&dave, "cancelJoinRequest", json!({})),
+        // A member signed in elsewhere names the group.
+        (&alice, "denyJoinRequest", json!({"member": dave.did})),
     ] {
         assert_eq!(
             error(&call(&h, who, method, body).await),
@@ -321,6 +345,9 @@ async fn a_group_that_approves_its_members_keeps_requests() {
             "{method}"
         );
     }
+    let said = ask(&h, &alice, "listJoinRequests", "").await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+    assert_eq!(said.1["message"], "group is required");
     // A member's getGroup has no request of theirs.
     let (_, members) = get(&h, &lxm, &format!("group={did}"), &[auth(&h, &bob, &lxm)]).await;
     assert_eq!(members["group"]["viewer"].get("request"), None);

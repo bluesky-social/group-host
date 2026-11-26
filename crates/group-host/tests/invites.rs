@@ -190,7 +190,7 @@ async fn an_invite_is_written_in_the_invitees_inbox() {
     );
 
     for (who, invitee, fields, refused) in [
-        (&alice, bob.did.as_str(), json!({}), (400, "AlreadyMember")),
+        (&alice, bob.did.as_str(), json!({}), (400, "InvalidRequest")),
         (&alice, "bob", json!({}), (400, "InvalidRequest")),
         (
             &alice,
@@ -244,7 +244,7 @@ async fn a_token_writes_invites_only_as_far_as_it_and_its_member_may() {
     assert_eq!(
         given.body["scope"],
         format!(
-            "atproto space:{NS}.invites?authority={}&skey=self&collection={NS}.invite&action=create&action=update&action=delete",
+            "atproto space:{NS}.inbox?authority={}&skey=self&collection={NS}.invite&action=create&action=update&action=delete",
             bob.did
         )
     );
@@ -302,7 +302,7 @@ async fn a_token_writes_invites_only_as_far_as_it_and_its_member_may() {
     assert_eq!(listed["invites"][0]["message"], "Come along");
 
     // An inbox is at self.
-    let odd = format!("at://{}/space/{NS}.invites/other", bob.did);
+    let odd = format!("at://{}/space/{NS}.inbox/other", bob.did);
     let said = inbox_write(&h, &alice, &did, &odd, CREATE, invite(json!({}))).await;
     assert_eq!(said.error(), (400, "InvalidRequest"));
 
@@ -339,7 +339,15 @@ async fn invites_are_taken_back_turned_down_or_lapse() {
     // none may have: the invitee's list shows the face alone.
     let picture = h.host.upload_blob(&did, b"face", "image/png").unwrap();
     h.host
-        .space_write(&did, &meta_space(&did), &[Write::Update { collection: format!("{NS}.profile"), rkey: "self".into(), value: json!({"$type": format!("{NS}.profile"), "joinPolicy": "invite", "avatar": picture}) }])
+        .space_write(
+            &did,
+            &meta_space(&did),
+            &[Write::Update {
+                collection: format!("{NS}.about"),
+                rkey: "self".into(),
+                value: json!({"$type": format!("{NS}.about"), "avatar": picture}),
+            }],
+        )
         .await
         .unwrap();
     let made = send(&h, &alice, &did, &bob.did, json!({})).await;

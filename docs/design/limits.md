@@ -71,7 +71,7 @@ group's and its person's limits.
 | writes as a group, `com.atproto.repo.*` and `com.atproto.space.*` | 5000, and 35000 | an hour, and a day | group |
 | `com.atproto.repo.uploadBlob` | 1000 | a day | group |
 | `updateGroupHandle` | 10, and 50 | 5 minutes, and a day | group |
-| `createReport` | 10, and 100 | 5 minutes, and a day | person |
+| `mod.submitReport`, `mod.submitAppeal`, together | 10, and 100 | 5 minutes, and a day | person |
 | `requestJoin` | 10, and 100 | 5 minutes, and a day | person |
 
 A request to a method with a limit of its own spends from the
@@ -90,7 +90,8 @@ Details:
 
 - The limits are in `crates/group-host/src/limits.rs`.
 - A handle change counts only when the handle differs from the group's
-  current one, and a report only once the host takes it into the queue.
+  current one, and a report or an appeal only once the host takes it
+  into the queue.
 - An upload counts before the host reads its body, so a refused upload
   costs the host nothing to read.
 - Behind a CDN, the proxy has to trust the CDN's addresses

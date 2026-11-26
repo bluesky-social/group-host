@@ -1,5 +1,6 @@
 //! A group's moderation: reports from those who can read what they
-//! report, labels written beside what they label, and the queue between.
+//! report, labels written beside what they label, the queue between, and
+//! appeals from those the group labelled or put out.
 
 mod common;
 
@@ -7,15 +8,22 @@ use common::groups::*;
 use common::oauth::{App, group_token};
 use common::spaces::*;
 use common::{Running, start};
-use group_host::group::{members_space, meta_space};
+use group_host::group::{REASONS, members_space, meta_space};
 use group_host::moderation::{Event, space_of};
 use group_host::repo::Write;
-use group_host::store::Store;
 use serde_json::{Value as Json, json};
+use std::time::Duration;
 
 const CALENDAR: &str = "com.example.calendar";
 const LABEL: &str = "com.atproto.label.record";
 const CID: &str = "bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm";
+/// Where the moderation views and events are defined.
+const DEFS: &str = "org.atgrp.mod.defs";
+
+/// The report reason `name`, as its token: `Spam`, `Rude`, …
+fn reason(name: &str) -> String {
+    format!("{DEFS}#reason{name}")
+}
 
 async fn membership(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let collection = format!("{NS}.membership");
@@ -64,16 +72,14 @@ fn about(mut body: Json, subject: &Json) -> Json {
 }
 
 async fn report(h: &Running, who: &Authority, group: &str, subject: Json) -> (u16, Json) {
-    let body = json!({"group": group, "reasonType": "spam", "reason": "ads"});
-    call(h, who, "createReport", about(body, &subject)).await
+    let body = json!({"group": group, "reasonType": reason("Spam"), "reason": "ads"});
+    call(h, who, "mod.submitReport", about(body, &subject)).await
 }
 
-const APPEAL: &str = "appeal";
-
-/// `who` appeals what the group did to `subject`, as a report of it.
-async fn appeal(h: &Running, who: &Authority, group: &str, subject: Json) -> (u16, Json) {
-    let body = json!({"group": group, "reasonType": APPEAL, "reason": "it was a joke"});
-    call(h, who, "createReport", about(body, &subject)).await
+/// `who` appeals what the group did to `subject`, saying `note`.
+async fn appeal(h: &Running, who: &Authority, group: &str, subject: &str) -> (u16, Json) {
+    let body = json!({"group": group, "subject": subject, "note": "it was a joke"});
+    call(h, who, "mod.submitAppeal", body).await
 }
 
 fn error(said: &(u16, Json)) -> (u16, &str) {
@@ -95,16 +101,76 @@ fn account(did: &str) -> Json {
     json!({"subject": did})
 }
 
-/// Each event's kind, as the history answers it: `reportEvent`, …
+/// Each event's kind, as a history answers it: `reportEvent`, …
 fn kinds(history: &Json) -> Vec<String> {
     let events = history["events"].as_array().unwrap();
     let kind = |e: &Json| {
-        e["event"]["$type"]
-            .as_str()
-            .unwrap()
-            .replace("org.atgrp.defs#", "")
+        let kind = e["event"]["$type"].as_str().unwrap();
+        kind.replace(&format!("{DEFS}#"), "")
     };
     events.iter().map(kind).collect()
+}
+
+/// The subjects a queue lists, in order.
+fn listed(queue: &Json) -> Vec<String> {
+    let subjects = queue["subjects"].as_array().unwrap();
+    let subject = |s: &Json| s["subject"].as_str().unwrap().to_string();
+    subjects.iter().map(subject).collect()
+}
+
+/// Riders' queue, as `who` reads it, with `more` asked.
+async fn queue(h: &Running, who: &Authority, did: &str, more: &str) -> (u16, Json) {
+    query(h, who, "mod.querySubjects", &format!("group={did}{more}")).await
+}
+
+/// `subject`'s history in Riders' queue, as `who` reviews it, with `more`
+/// asked.
+async fn history(
+    h: &Running,
+    who: &Authority,
+    did: &str,
+    subject: &str,
+    more: &str,
+) -> (u16, Json) {
+    let q = format!("group={did}&subject={}{more}", urlencode(subject));
+    query(h, who, "mod.querySubjectHistory", &q).await
+}
+
+/// What `who` reads of what Riders did to them, with `more` asked.
+async fn own_history(h: &Running, who: &Authority, did: &str, more: &str) -> (u16, Json) {
+    let q = format!("group={did}{more}");
+    query(h, who, "mod.querySelfHistory", &q).await
+}
+
+/// `who` changes `subject` in Riders' queue as `change` asks.
+async fn update(
+    h: &Running,
+    who: &Authority,
+    did: &str,
+    subject: &str,
+    mut change: Json,
+) -> (u16, Json) {
+    change["group"] = json!(did);
+    change["subject"] = json!(subject);
+    call(h, who, "mod.updateSubject", change).await
+}
+
+/// Alice puts `member` out of Riders, deleting their membership as the
+/// group.
+async fn eject(h: &Running, alice: &Authority, did: &str, member: &str) {
+    let app = App::new("console");
+    let members = members_space(did);
+    let token = app.token_for(h, alice, did, &members).await;
+    let body = json!({"repo": did, "space": members, "collection": format!("{NS}.membership"), "rkey": member});
+    let said = app
+        .call(h, "com.atproto.space.deleteRecord", &token, Some(&body))
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+}
+
+/// A moment, so that what comes next is later by the clock.
+async fn tick() {
+    tokio::time::sleep(Duration::from_millis(3)).await;
 }
 
 /// Riders, Alice's, with a calendar its members read, Bob a member and
@@ -128,46 +194,51 @@ async fn group(h: &Running) -> (String, String, Json, [Authority; 3]) {
 async fn takes_a_report_from_one_who_reads_it() {
     let h = start(&[], false).await;
     let (did, space, post, [alice, bob, carol]) = group(&h).await;
+    // A new group's labeler, in its members space, takes every reason.
+    let members = members_space(&did);
+    let labeler = h
+        .host
+        .group_record(&did, &members, &format!("{NS}.labeler"), "self")
+        .unwrap()
+        .unwrap();
+    assert_eq!(labeler["reasonTypes"], json!(REASONS));
     let uri = post["uri"].as_str().unwrap();
     let subject = version(uri, CID);
     let (status, said) = report(&h, &bob, &did, subject.clone()).await;
     assert_eq!(status, 200, "{said}");
     assert!(said["createdAt"].is_string());
-    // Each report its own id, however close together they come.
+    // Each report its own event, however close together they come.
     let (_, again) = report(&h, &bob, &did, subject.clone()).await;
-    assert_ne!(said["id"], again["id"]);
-    assert!(said["id"].is_string());
-    let (_, queue) = query(&h, &alice, "listModSubjects", &format!("group={did}")).await;
+    assert!(said["eventId"].is_string());
+    assert_ne!(said["eventId"], again["eventId"]);
+    let (_, open) = queue(&h, &alice, &did, "").await;
     // A subject as its URI, or an account's DID, as it was sent.
-    assert_eq!(queue["subjects"][0]["subject"], uri);
-    assert_eq!(queue["subjects"][0]["status"], "open");
-    assert_eq!(queue["subjects"][0]["reportCount"], 2);
+    assert_eq!(open["subjects"][0]["subject"], uri);
+    assert_eq!(open["subjects"][0]["status"], "open");
+    assert_eq!(open["subjects"][0]["reportCount"], 2);
+    assert_eq!(open["subjects"][0]["tags"], json!([]));
     // Whose record it is, as a view names them.
-    assert_eq!(queue["subjects"][0]["actor"]["did"], bob.did.as_str());
+    assert_eq!(open["subjects"][0]["actor"]["did"], bob.did.as_str());
 
-    // A rule the group's, cited.
-    let rule = format!("{}/{did}/{NS}.rule/3mzjdd6rnfise", meta_space(&did));
-    let body = json!({"group": did, "subject": alice.did, "reasonType": "rude", "rule": rule});
-    let (status, said) = call(&h, &bob, "createReport", body).await;
+    // A rule the group's, in its members space, cited.
+    let rule = format!("{members}/{did}/{NS}.rule/3mzjdd6rnfise");
+    let body =
+        json!({"group": did, "subject": alice.did, "reasonType": reason("Rude"), "rule": rule});
+    let (status, said) = call(&h, &bob, "mod.submitReport", body).await;
     assert_eq!(status, 200, "{said}");
-    let (_, history) = query(
-        &h,
-        &alice,
-        "getModSubjectHistory",
-        &format!("group={did}&subject={}", alice.did),
-    )
-    .await;
-    let event = &history["events"][0];
-    assert_eq!(event["id"], said["id"]);
+    let (_, seen) = history(&h, &alice, &did, &alice.did, "").await;
+    let event = &seen["events"][0];
+    assert_eq!(event["eventId"], said["eventId"]);
+    assert_eq!(event["subject"], alice.did.as_str());
     assert_eq!(event["createdBy"], bob.did.as_str());
     assert_eq!(event["creator"]["did"], bob.did.as_str());
-    assert_eq!(event["event"]["$type"], "org.atgrp.defs#reportEvent");
-    assert_eq!(event["event"]["reasonType"], "rude");
+    assert_eq!(event["event"]["$type"], format!("{DEFS}#reportEvent"));
+    assert_eq!(event["event"]["reasonType"], reason("Rude"));
     assert_eq!(event["event"]["rule"], rule);
-    // The account in the queue, by its DID.
-    let (_, queue) = query(&h, &alice, "listModSubjects", &format!("group={did}")).await;
-    assert_eq!(queue["subjects"][0]["subject"], alice.did.as_str());
-    assert_eq!(queue["subjects"][0]["actor"]["did"], alice.did.as_str());
+    // The account in the queue, by its DID, the newest first when asked.
+    let (_, newest) = queue(&h, &alice, &did, "&sort=newest").await;
+    assert_eq!(newest["subjects"][0]["subject"], alice.did.as_str());
+    assert_eq!(newest["subjects"][0]["actor"]["did"], alice.did.as_str());
 
     let other = start_group(
         &h,
@@ -234,34 +305,40 @@ async fn takes_a_report_from_one_who_reads_it() {
         error(&report(&h, &bob, "did:plc:nothing", subject.clone()).await),
         (400, "GroupNotFound")
     );
+    let spam = reason("Spam");
     for body in [
         about(json!({"group": did}), &subject),
+        // A reason no labeler of the group's takes: plain words, as
+        // reasons were before they were tokens.
+        about(json!({"group": did, "reasonType": "spam"}), &subject),
         about(
-            json!({"group": did, "reasonType": "x".repeat(257)}),
+            json!({"group": did, "reasonType": spam, "reason": "x".repeat(20_001)}),
+            &subject,
+        ),
+        // A rule is in the members space, not another space or a repo.
+        about(
+            json!({"group": did, "reasonType": spam, "rule": format!("{space}/{did}/{NS}.rule/x")}),
             &subject,
         ),
         about(
-            json!({"group": did, "reasonType": "spam", "reason": "x".repeat(20_001)}),
+            json!({"group": did, "reasonType": spam, "rule": format!("{}/{did}/{NS}.rule/x", meta_space(&did))}),
             &subject,
         ),
         about(
-            json!({"group": did, "reasonType": "spam", "rule": format!("{space}/{did}/{NS}.rule/x")}),
-            &subject,
-        ),
-        about(
-            json!({"group": did, "reasonType": "spam", "rule": format!("at://{did}/{NS}.rule/x")}),
+            json!({"group": did, "reasonType": spam, "rule": format!("at://{did}/{NS}.rule/x")}),
             &subject,
         ),
     ] {
-        let said = call(&h, &bob, "createReport", body.clone()).await;
+        let said = call(&h, &bob, "mod.submitReport", body.clone()).await;
         assert_eq!(error(&said), (400, "InvalidRequest"), "{body} {}", said.1);
     }
-    let lxm = format!("{NS}.createReport");
-    let body = about(json!({"group": did, "reasonType": "spam"}), &subject);
+    let lxm = format!("{NS}.mod.submitReport");
+    let body = about(json!({"group": did, "reasonType": spam}), &subject);
     assert_eq!(common::groups::post(&h, &lxm, &body, &[]).await.0, 401);
 }
 
-/// Puts `labeler` as the group's, as it would write it.
+/// Puts `labeler` as the group's, in its members space, as it would write
+/// it.
 async fn put_labeler(h: &Running, did: &str, labeler: Json) {
     let write = Write::Update {
         collection: format!("{NS}.labeler"),
@@ -269,7 +346,7 @@ async fn put_labeler(h: &Running, did: &str, labeler: Json) {
         value: labeler,
     };
     h.host
-        .space_write(did, &meta_space(did), &[write])
+        .space_write(did, &members_space(did), &[write])
         .await
         .unwrap();
 }
@@ -283,15 +360,18 @@ async fn takes_only_the_reports_its_labeler_does() {
     let labeler = json!({
         "$type": format!("{NS}.labeler"),
         "policies": {"labelValues": ["!hide"]},
-        "reasonTypes": ["spam"],
+        "reasonTypes": [reason("Spam")],
         "subjectTypes": ["record"],
         "subjectCollections": ["com.example.event"],
     });
     put_labeler(&h, &did, labeler).await;
     assert_eq!(report(&h, &bob, &did, record(uri)).await.0, 200);
-    let rude = about(json!({"group": did, "reasonType": "rude"}), &record(uri));
+    let rude = about(
+        json!({"group": did, "reasonType": reason("Rude")}),
+        &record(uri),
+    );
     assert_eq!(
-        error(&call(&h, &bob, "createReport", rude).await),
+        error(&call(&h, &bob, "mod.submitReport", rude).await),
         (400, "InvalidRequest")
     );
     for subject in [account(&alice.did), note] {
@@ -301,108 +381,199 @@ async fn takes_only_the_reports_its_labeler_does() {
             "{subject}"
         );
     }
-    // An appeal is a reason like any other, and this labeler takes none.
-    assert_eq!(
-        error(&appeal(&h, &bob, &did, record(uri)).await),
-        (400, "InvalidRequest")
-    );
 }
 
 #[tokio::test]
-async fn takes_an_appeal_only_from_its_subject() {
+async fn takes_an_appeal_of_a_label_or_an_ejection_from_its_subject() {
     let h = start(&[], false).await;
-    let (did, _, post, [alice, bob, carol]) = group(&h).await;
-    // A new group's labeler takes every reason, appeals among them, as
-    // plain words.
-    let labeler = h
-        .host
-        .group_record(&did, &meta_space(&did), &format!("{NS}.labeler"), "self")
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        labeler["reasonTypes"],
-        json!([
-            "spam",
-            "violation",
-            "misleading",
-            "nsfw",
-            "rude",
-            "other",
-            APPEAL
-        ])
-    );
-    assert!(labeler.get("createdAt").is_none(), "{labeler}");
-
-    // Bob appeals his post in the calendar, and his public one: each a
-    // report in the queue, its reason an appeal.
+    let (did, space, post, [alice, bob, carol]) = group(&h).await;
+    let members = members_space(&did);
     let in_space = post["uri"].as_str().unwrap().to_string();
     let public = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", bob.did);
-    for uri in [&in_space, &public] {
-        let (status, said) = appeal(&h, &bob, &did, record(uri)).await;
-        assert_eq!(status, 200, "{said}");
-        let q = format!("group={did}&subject={uri}");
-        let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
-        assert_eq!(kinds(&history), ["reportEvent"]);
-        assert_eq!(history["events"][0]["event"]["reasonType"], APPEAL);
-        assert_eq!(history["events"][0]["createdBy"], bob.did.as_str());
-        // Alice reads it, but it is not hers to appeal.
-        let said = appeal(&h, &alice, &did, record(uri)).await;
-        assert_eq!(error(&said), (400, "InvalidRequest"), "{uri}");
-        let message = said.1["message"].as_str().unwrap();
-        assert!(message.contains("only its subject may appeal"), "{message}");
+
+    // Nothing to appeal: a report alone, or nothing at all.
+    report(&h, &alice, &did, record(&in_space)).await;
+    for subject in [&in_space, &public, &bob.did] {
+        let said = appeal(&h, &bob, &did, subject).await;
+        assert_eq!(error(&said), (400, "NotAppealable"), "{subject}");
     }
-    let resolve = json!({"group": did, "subject": public, "status": "resolved"});
-    assert_eq!(call(&h, &alice, "resolveModSubject", resolve).await.0, 200);
 
-    // Bob appeals for his own account; no one else may for him.
-    let (status, said) = appeal(&h, &bob, &did, account(&bob.did)).await;
-    assert_eq!(status, 200, "{said}");
-    let said = appeal(&h, &alice, &did, account(&bob.did)).await;
-    assert_eq!(error(&said), (400, "InvalidRequest"));
-    // Carol was never in the group, and the queue has nothing of hers.
-    let said = appeal(&h, &carol, &did, account(&carol.did)).await;
-    assert_eq!(error(&said), (400, "InvalidSubject"));
-
-    // Put out, Bob still appeals what the queue has of his.
-    let app = App::new("console");
-    let members = members_space(&did);
-    let token = app.token_for(&h, &alice, &did, &members).await;
-    let body = json!({"repo": did, "space": members, "collection": format!("{NS}.membership"), "rkey": bob.did});
-    let said = app
-        .call(&h, "com.atproto.space.deleteRecord", &token, Some(&body))
-        .await;
-    assert_eq!(said.status, 200, "{}", said.body);
-    for subject in [account(&bob.did), record(&in_space), record(&public)] {
-        let (status, said) = appeal(&h, &bob, &did, subject.clone()).await;
+    // Labelled, Bob appeals his post in the calendar, his public one,
+    // and his account: each an appeal in the queue, by him.
+    labelled(&h, &alice, &did, &space, label(&in_space, "spam")).await;
+    labelled(&h, &alice, &did, &members, label(&public, "spam")).await;
+    labelled(&h, &alice, &did, &members, label(&bob.did, "troll")).await;
+    let (_, view) = update(&h, &alice, &did, &public, json!({"status": "resolved"})).await;
+    assert_eq!(view["status"], "resolved");
+    for subject in [&in_space, &public, &bob.did] {
+        let (status, said) = appeal(&h, &bob, &did, subject).await;
         assert_eq!(status, 200, "{subject} {said}");
+        assert!(said["createdAt"].is_string());
+        let (_, seen) = history(&h, &alice, &did, subject, "").await;
+        let event = &seen["events"][0];
+        assert_eq!(event["eventId"], said["eventId"]);
+        assert_eq!(event["subject"], subject.as_str());
+        assert_eq!(event["createdBy"], bob.did.as_str());
+        assert_eq!(
+            event["event"],
+            json!({"$type": format!("{DEFS}#appealEvent"), "note": "it was a joke"})
+        );
     }
-    let q = format!("group={did}&subject={}", bob.did);
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
-    assert_eq!(
-        kinds(&history),
-        ["reportEvent", "ejectEvent", "reportEvent"]
-    );
     // The appeal reopened what was resolved.
-    let (_, queue) = query(&h, &alice, "listModSubjects", &format!("group={did}")).await;
-    let open = queue["subjects"].as_array().unwrap();
-    assert!(open.iter().any(|s| s["subject"] == public), "{queue}");
-    // But not a post of his the queue never had, nor in a group where it
-    // has nothing of his.
+    let (_, open) = queue(&h, &alice, &did, "&status=open").await;
+    assert!(listed(&open).contains(&public), "{open}");
+
+    // Not theirs to appeal: another's account or record, nor a record in
+    // another group's space.
     let other = start_group(
         &h,
         &alice,
         json!({"handle": "hikers.groups.test", "displayName": "Hikers"}),
     )
     .await;
-    let unseen = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfisf", bob.did);
-    for (group, subject) in [
-        (&did, record(&unseen)),
-        (&other, account(&bob.did)),
-        (&other, record(&public)),
+    let carols = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", carol.did);
+    let elsewhere = format!("at://{other}/space/{CALENDAR}/rides/{}/c.d.e/f", bob.did);
+    for (who, subject) in [
+        (&alice, &in_space),
+        (&alice, &public),
+        (&alice, &bob.did),
+        (&bob, &alice.did),
+        (&bob, &carols),
+        (&bob, &elsewhere),
+        (&bob, &"https://example.com/x".to_string()),
     ] {
-        let said = appeal(&h, &bob, group, subject.clone()).await;
-        assert_eq!(error(&said), (400, "InvalidSubject"), "{group} {subject}");
+        let said = appeal(&h, who, &did, subject).await;
+        assert_eq!(error(&said), (400, "InvalidSubject"), "{subject}");
     }
+
+    // A label taken back leaves nothing to appeal.
+    let ride = format!("{space}/{}/com.example.event/other", bob.did);
+    let (_, made) = labelled(&h, &alice, &did, &space, label(&ride, "spam")).await;
+    let rkey = made["uri"].as_str().unwrap().rsplit('/').next().unwrap();
+    let nsid = "com.atproto.space.deleteRecord";
+    as_group(&h, &alice, &did, &space, nsid, json!({"rkey": rkey})).await;
+    let said = appeal(&h, &bob, &did, &ride).await;
+    assert_eq!(error(&said), (400, "NotAppealable"));
+
+    // Put out, Carol, who was never labelled, appeals her ejection.
+    membership(&h, &did, &carol.did, &["member"]).await;
+    eject(&h, &alice, &did, &carol.did).await;
+    let (status, said) = appeal(&h, &carol, &did, &carol.did).await;
+    assert_eq!(status, 200, "{said}");
+    let (_, seen) = history(&h, &alice, &did, &carol.did, "").await;
+    assert_eq!(kinds(&seen), ["appealEvent", "ejectEvent"]);
+    // Bob, put out too, still appeals his own.
+    eject(&h, &alice, &did, &bob.did).await;
+    let (status, said) = appeal(&h, &bob, &did, &in_space).await;
+    assert_eq!(status, 200, "{said}");
+
+    // A group not here, and a caller who does not say who they are.
+    let said = appeal(&h, &bob, "did:plc:nothing", &bob.did).await;
+    assert_eq!(error(&said), (400, "GroupNotFound"));
+    let lxm = format!("{NS}.mod.submitAppeal");
+    let body = json!({"group": did, "subject": bob.did});
+    assert_eq!(common::groups::post(&h, &lxm, &body, &[]).await.0, 401);
+    let body = json!({"group": did});
+    let said = call(&h, &bob, "mod.submitAppeal", body).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+}
+
+#[tokio::test]
+async fn shows_its_subject_what_the_group_did_and_nothing_of_who() {
+    let h = start(&[], false).await;
+    let (did, space, post, [alice, bob, carol]) = group(&h).await;
+    let members = members_space(&did);
+    let ride = post["uri"].as_str().unwrap().to_string();
+    // Reported, labelled, tagged and resolved with a note; his post
+    // labelled; and Alice's account, which is not his.
+    report(&h, &alice, &did, account(&bob.did)).await;
+    labelled(&h, &alice, &did, &members, label(&bob.did, "troll")).await;
+    let change = json!({"addTags": ["urgent"], "status": "resolved", "note": "warned"});
+    update(&h, &alice, &did, &bob.did, change).await;
+    labelled(&h, &alice, &did, &space, label(&ride, "spam")).await;
+    labelled(&h, &alice, &did, &members, label(&alice.did, "x")).await;
+    appeal(&h, &bob, &did, &ride).await;
+
+    let (status, mine) = own_history(&h, &bob, &did, "").await;
+    assert_eq!(status, 200, "{mine}");
+    // The newest first; no report, nor tag.
+    assert_eq!(
+        kinds(&mine),
+        ["appealEvent", "labelEvent", "statusEvent", "labelEvent"]
+    );
+    let events = mine["events"].as_array().unwrap();
+    let subjects: Vec<&str> = events
+        .iter()
+        .map(|e| e["subject"].as_str().unwrap())
+        .collect();
+    assert_eq!(subjects, [&ride, &ride, &bob.did, &bob.did]);
+    // Neither who acted, nor any note.
+    for event in events {
+        assert!(event.get("createdBy").is_none(), "{event}");
+        assert!(event.get("creator").is_none(), "{event}");
+        assert!(event["event"].get("note").is_none(), "{event}");
+        assert!(event["eventId"].is_string());
+    }
+    assert_eq!(
+        events[2]["event"],
+        json!({"$type": format!("{DEFS}#statusEvent"), "status": "resolved"})
+    );
+    assert_eq!(events[1]["event"]["val"], "spam");
+    assert!(mine.get("cursor").is_none());
+
+    // The oldest first, when asked; a page at a time, either way.
+    let (_, oldest) = own_history(&h, &bob, &did, "&sort=oldest").await;
+    let mut reversed = kinds(&mine);
+    reversed.reverse();
+    assert_eq!(kinds(&oldest), reversed);
+    for sort in ["newest", "oldest"] {
+        let mut seen = Vec::new();
+        let mut cursor = String::new();
+        loop {
+            let more = format!("&sort={sort}&limit=1{cursor}");
+            let (_, page) = own_history(&h, &bob, &did, &more).await;
+            seen.extend(kinds(&page));
+            match page["cursor"].as_str() {
+                Some(c) => cursor = format!("&cursor={c}"),
+                None => break,
+            }
+        }
+        let all = own_history(&h, &bob, &did, &format!("&sort={sort}")).await;
+        assert_eq!(seen, kinds(&all.1), "{sort}");
+    }
+
+    // One of his subjects, when asked; another's, never.
+    let (_, one) = own_history(&h, &bob, &did, &format!("&subject={}", urlencode(&ride))).await;
+    assert_eq!(kinds(&one), ["appealEvent", "labelEvent"]);
+    let carols = format!("at://{}/app.bsky.feed.post/3mzjdd6rnfise", carol.did);
+    for subject in [alice.did.as_str(), carols.as_str()] {
+        let more = format!("&subject={}", urlencode(subject));
+        let said = own_history(&h, &bob, &did, &more).await;
+        assert_eq!(error(&said), (400, "InvalidSubject"), "{subject}");
+    }
+    // Nothing for one the group did nothing to.
+    let (status, none) = own_history(&h, &carol, &did, "").await;
+    assert_eq!((status, none["events"].clone()), (200, json!([])));
+
+    // Put out, Bob still reads it, his ejection with it.
+    eject(&h, &alice, &did, &bob.did).await;
+    let (status, mine) = own_history(&h, &bob, &did, "").await;
+    assert_eq!(status, 200, "{mine}");
+    assert_eq!(kinds(&mine)[0], "ejectEvent");
+
+    for (more, refused) in [
+        ("&cursor=soon", (400, "InvalidCursor")),
+        ("&sort=sideways", (400, "InvalidRequest")),
+    ] {
+        let said = own_history(&h, &bob, &did, more).await;
+        assert_eq!(error(&said), refused, "{more}");
+    }
+    let said = own_history(&h, &bob, "did:plc:nothing", "").await;
+    assert_eq!(error(&said), (400, "GroupNotFound"));
+    let lxm = format!("{NS}.mod.querySelfHistory");
+    assert_eq!(get(&h, &lxm, &format!("group={did}"), &[]).await.0, 401);
+    let said = query(&h, &bob, "mod.querySelfHistory", "").await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
 }
 
 /// A label on `subject` of `val`, as the group writes it.
@@ -458,9 +629,9 @@ async fn writes_a_label_beside_what_it_labels() {
     let kept = h.host.group_record(&did, &space, LABEL, &rkey).unwrap();
     assert_eq!(kept, Some(spam));
     // A label opens a subject, though nobody reported it.
-    let (_, queue) = query(&h, &alice, "listModSubjects", &format!("group={did}")).await;
-    assert_eq!(queue["subjects"][0]["subject"], uri);
-    assert_eq!(queue["subjects"][0]["reportCount"], 0);
+    let (_, open) = queue(&h, &alice, &did, "").await;
+    assert_eq!(open["subjects"][0]["subject"], uri);
+    assert_eq!(open["subjects"][0]["reportCount"], 0);
 
     // Taken back by deleting it.
     let nsid = "com.atproto.space.deleteRecord";
@@ -475,9 +646,15 @@ async fn writes_a_label_beside_what_it_labels() {
     assert_eq!(as_group(&h, &alice, &did, &space, nsid, none).await.0, 200);
     // Each a label event, the deletion the label taken back.
     let q = format!("group={did}&subject={uri}");
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
-    assert_eq!(kinds(&history), ["labelEvent", "labelEvent"]);
-    let events = &history["events"];
+    let (_, seen) = query(
+        &h,
+        &alice,
+        "mod.querySubjectHistory",
+        &format!("{q}&sort=oldest"),
+    )
+    .await;
+    assert_eq!(kinds(&seen), ["labelEvent", "labelEvent"]);
+    let events = &seen["events"];
     assert_eq!(events[0]["event"]["uri"], made["uri"]);
     assert_eq!(events[0]["event"]["val"], "spam");
     assert_eq!(events[0]["event"]["deleted"], false);
@@ -486,18 +663,30 @@ async fn writes_a_label_beside_what_it_labels() {
     assert_eq!(events[1]["createdBy"], alice.did.as_str());
     // About the version it named.
     let q = format!("group={did}&subject={uri}&cid={CID}");
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
-    assert_eq!(kinds(&history), ["labelEvent", "labelEvent"]);
+    let (_, seen) = query(
+        &h,
+        &alice,
+        "mod.querySubjectHistory",
+        &format!("{q}&sort=oldest"),
+    )
+    .await;
+    assert_eq!(kinds(&seen), ["labelEvent", "labelEvent"]);
 
     // An account's label goes in the members space, whoever they are.
     let members = members_space(&did);
     let (status, made) = labelled(&h, &alice, &did, &members, label(&carol.did, "troll")).await;
     assert_eq!(status, 200, "{made}");
     let q = format!("group={did}&subject={}", carol.did);
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
-    assert_eq!(history["events"][0]["event"]["val"], "troll");
-    assert_eq!(history["events"][0]["event"]["uri"], made["uri"]);
-    assert_eq!(history["events"][0]["createdBy"], alice.did.as_str());
+    let (_, seen) = query(
+        &h,
+        &alice,
+        "mod.querySubjectHistory",
+        &format!("{q}&sort=oldest"),
+    )
+    .await;
+    assert_eq!(seen["events"][0]["event"]["val"], "troll");
+    assert_eq!(seen["events"][0]["event"]["uri"], made["uri"]);
+    assert_eq!(seen["events"][0]["createdBy"], alice.did.as_str());
 
     // Beside its subject, and a label as its lexicon has it.
     let elsewhere = format!("{members}/{}/com.example.note/n", bob.did);
@@ -575,8 +764,8 @@ async fn labels_only_in_the_spaces_the_roles_scopes_reach() {
     membership(&h, &did, &bob.did, &["member", "moderator"]).await;
     // The moderation set labels in the meta and members spaces, as its
     // permissions say.
-    let rule = format!("{meta}/{did}/{NS}.rule/r");
-    let (status, said) = labelled(&h, &bob, &did, &meta, label(&rule, "x")).await;
+    let profile = format!("{meta}/{did}/{NS}.about/self");
+    let (status, said) = labelled(&h, &bob, &did, &meta, label(&profile, "x")).await;
     assert_eq!(status, 200, "{said}");
     let (status, said) = labelled(&h, &bob, &did, &members, label(&alice.did, "x")).await;
     assert_eq!(status, 200, "{said}");
@@ -615,7 +804,7 @@ async fn labels_only_in_the_spaces_the_roles_scopes_reach() {
     // there.
     let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true},
-        {"role": "moderator", "read": true, "scopes": [every]},
+        {"role": "moderator", "read": true, "permissions": [every]},
     ]});
     let board = "com.example.board";
     let board = common::oauth::make_space(&h, &alice, &did, board, "swaps", policy).await;
@@ -652,21 +841,33 @@ async fn moderates_a_members_public_post_as_its_own_subject() {
     let subject = version(&uri, CID);
     let (status, said) = report(&h, &alice, &did, subject.clone()).await;
     assert_eq!(status, 200, "{said}");
-    let (_, queue) = query(&h, &alice, "listModSubjects", &format!("group={did}")).await;
-    assert_eq!(queue["subjects"].as_array().unwrap().len(), 1);
-    assert_eq!(queue["subjects"][0]["subject"], uri);
-    assert_eq!(queue["subjects"][0]["reportCount"], 1);
-    assert_eq!(queue["subjects"][0]["actor"]["did"], bob.did.as_str());
+    let (_, open) = queue(&h, &alice, &did, "").await;
+    assert_eq!(open["subjects"].as_array().unwrap().len(), 1);
+    assert_eq!(open["subjects"][0]["subject"], uri);
+    assert_eq!(open["subjects"][0]["reportCount"], 1);
+    assert_eq!(open["subjects"][0]["actor"]["did"], bob.did.as_str());
     // Its own subject, not its author's.
     let q = format!("group={did}&subject={}", bob.did);
-    let (_, theirs) = query(&h, &alice, "getModSubjectHistory", &q).await;
+    let (_, theirs) = query(
+        &h,
+        &alice,
+        "mod.querySubjectHistory",
+        &format!("{q}&sort=oldest"),
+    )
+    .await;
     assert_eq!(theirs["events"], json!([]));
     let q = format!("group={did}&subject={uri}&cid={CID}");
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
-    assert_eq!(kinds(&history), ["reportEvent"]);
-    assert_eq!(history["events"][0]["cid"], CID);
+    let (_, seen) = query(
+        &h,
+        &alice,
+        "mod.querySubjectHistory",
+        &format!("{q}&sort=oldest"),
+    )
+    .await;
+    assert_eq!(kinds(&seen), ["reportEvent"]);
+    assert_eq!(seen["events"][0]["cid"], CID);
     let resolve = json!({"group": did, "subject": uri, "status": "resolved"});
-    let (status, view) = call(&h, &alice, "resolveModSubject", resolve).await;
+    let (status, view) = call(&h, &alice, "mod.updateSubject", resolve).await;
     assert_eq!(status, 200, "{view}");
     assert_eq!(view["status"], "resolved");
     assert_eq!(view["actor"]["did"], bob.did.as_str());
@@ -716,9 +917,15 @@ async fn moderates_a_members_public_post_as_its_own_subject() {
     let (status, said) = as_group(&h, &alice, &did, &members, nsid, json!({"rkey": rkey})).await;
     assert_eq!(status, 200, "{said}");
     let q = format!("group={did}&subject={uri}");
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
+    let (_, seen) = query(
+        &h,
+        &alice,
+        "mod.querySubjectHistory",
+        &format!("{q}&sort=oldest"),
+    )
+    .await;
     assert_eq!(
-        kinds(&history),
+        kinds(&seen),
         [
             "reportEvent",
             "statusEvent",
@@ -727,7 +934,7 @@ async fn moderates_a_members_public_post_as_its_own_subject() {
             "labelEvent"
         ]
     );
-    let events = &history["events"];
+    let events = &seen["events"];
     assert_eq!(events[3]["event"]["uri"], made["uri"]);
     assert_eq!(events[3]["event"]["val"], "spam");
     assert_eq!(events[3]["event"]["deleted"], false);
@@ -747,55 +954,51 @@ async fn moderates_a_members_public_post_as_its_own_subject() {
 }
 
 #[tokio::test]
-async fn resolves_and_escalates_with_a_note() {
+async fn updates_a_subjects_status_tags_and_notes() {
     let h = start(&[], false).await;
     let (did, space, post, [alice, bob, _]) = group(&h).await;
     let uri = post["uri"].as_str().unwrap();
     report(&h, &bob, &did, record(uri)).await;
-    let resolve = |status: &str, note: Option<&str>| {
-        let mut body = json!({"group": did, "subject": uri, "status": status});
-        if let Some(n) = note {
-            body["note"] = json!(n);
-        }
-        body
-    };
-    let (status, view) = call(&h, &alice, "resolveModSubject", resolve("escalated", None)).await;
+    let (status, view) = update(&h, &alice, &did, uri, json!({"status": "resolved"})).await;
     assert_eq!(status, 200, "{view}");
-    assert_eq!(view["status"], "escalated");
+    assert_eq!(view["status"], "resolved");
     assert_eq!(view["subject"], uri);
     assert_eq!(view["reportCount"], 1);
+    assert_eq!(view["tags"], json!([]));
     assert!(view["actor"]["did"].is_string());
-    // Setting the status it has keeps a note.
-    let (_, view) = call(
-        &h,
-        &alice,
-        "resolveModSubject",
-        resolve("escalated", Some("Asked them")),
-    )
-    .await;
-    assert_eq!(view["status"], "escalated");
-    let (_, view) = call(&h, &alice, "resolveModSubject", resolve("resolved", None)).await;
+    // A note alone keeps the status it has.
+    let (_, view) = update(&h, &alice, &did, uri, json!({"note": "Asked them"})).await;
     assert_eq!(view["status"], "resolved");
+    // Reopened; then tagged, the tags in order whatever order they came.
+    let (_, view) = update(&h, &alice, &did, uri, json!({"status": "open"})).await;
+    assert_eq!(view["status"], "open");
+    let tag = json!({"addTags": ["urgent", "spam"]});
+    let (_, view) = update(&h, &alice, &did, uri, tag).await;
+    assert_eq!(view["tags"], json!(["spam", "urgent"]));
+    assert_eq!(view["status"], "open");
+    // A status and tags at once, each its own event; nothing asked,
+    // nothing changes.
+    let both = json!({"status": "resolved", "removeTags": ["spam"]});
+    let (_, view) = update(&h, &alice, &did, uri, both).await;
+    assert_eq!(view["tags"], json!(["urgent"]));
+    assert_eq!(view["status"], "resolved");
+    let (status, same) = update(&h, &alice, &did, uri, json!({})).await;
+    assert_eq!((status, &same), (200, &view));
+
     // A label leaves it resolved; a new report opens it again.
     let mut spam = label(uri, "spam");
     spam["cid"] = json!(CID);
     labelled(&h, &alice, &did, &space, spam).await;
-    let listed = async |status: &str| {
-        let q = format!("group={did}&status={status}");
-        query(&h, &alice, "listModSubjects", &q).await.1["subjects"]
-            .as_array()
-            .unwrap()
-            .len()
+    let count = async |status: &str| {
+        let (_, q) = queue(&h, &alice, &did, &format!("&status={status}")).await;
+        listed(&q).len()
     };
-    assert_eq!(listed("resolved").await, 1);
+    assert_eq!(count("resolved").await, 1);
     report(&h, &bob, &did, version(uri, CID)).await;
-    assert_eq!(listed("open").await, 1);
+    assert_eq!(count("open").await, 1);
 
-    let history = async |q: &str| {
-        let q = format!("group={did}&subject={uri}{q}");
-        query(&h, &alice, "getModSubjectHistory", &q).await
-    };
-    let (_, all) = history("").await;
+    // The newest first unless asked.
+    let (_, all) = history(&h, &alice, &did, uri, "&sort=oldest").await;
     assert_eq!(
         kinds(&all),
         [
@@ -803,141 +1006,246 @@ async fn resolves_and_escalates_with_a_note() {
             "statusEvent",
             "statusEvent",
             "statusEvent",
+            "tagEvent",
+            "statusEvent",
+            "tagEvent",
             "labelEvent",
             "reportEvent"
         ]
     );
-    assert_eq!(all["events"][0]["event"]["reasonType"], "spam");
-    assert_eq!(all["events"][0]["event"]["reason"], "ads");
-    assert_eq!(all["events"][2]["event"]["status"], "escalated");
-    assert_eq!(all["events"][2]["event"]["note"], "Asked them");
-    assert!(all["events"][1]["event"].get("note").is_none());
+    let (_, newest) = history(&h, &alice, &did, uri, "").await;
+    let mut reversed = kinds(&all);
+    reversed.reverse();
+    assert_eq!(kinds(&newest), reversed);
+    let events = &all["events"];
+    assert_eq!(events[0]["event"]["reasonType"], reason("Spam"));
+    assert_eq!(events[0]["event"]["reason"], "ads");
+    assert_eq!(events[0]["subject"], uri);
+    assert!(events[1]["event"].get("note").is_none());
+    assert_eq!(
+        events[2]["event"],
+        json!({"$type": format!("{DEFS}#statusEvent"), "status": "resolved", "note": "Asked them"})
+    );
+    assert_eq!(events[3]["event"]["status"], "open");
+    assert_eq!(
+        events[4]["event"],
+        json!({"$type": format!("{DEFS}#tagEvent"), "add": ["urgent", "spam"]})
+    );
+    assert_eq!(
+        events[6]["event"],
+        json!({"$type": format!("{DEFS}#tagEvent"), "remove": ["spam"]})
+    );
+    assert_eq!(events[4]["createdBy"], alice.did.as_str());
     assert!(all.get("cursor").is_none());
     // Narrowed to one version of the record: what was said of it.
-    let (_, version) = history(&format!("&cid={CID}")).await;
+    let (_, version) = history(&h, &alice, &did, uri, &format!("&cid={CID}&sort=oldest")).await;
     assert_eq!(kinds(&version), ["labelEvent", "reportEvent"]);
     // Each names the version it is about, for a moderator to act on it.
     assert_eq!(version["events"][0]["cid"], CID);
-    assert!(all["events"][2].get("cid").is_none());
-    // A page at a time, oldest first.
-    let mut seen = Vec::new();
-    let mut cursor = String::new();
-    loop {
-        let (_, page) = history(&format!("&limit=4{cursor}")).await;
-        seen.extend(kinds(&page));
-        match page["cursor"].as_str() {
-            Some(c) => cursor = format!("&cursor={c}"),
-            None => break,
+    assert!(events[2].get("cid").is_none());
+    // A page at a time, in either order.
+    for sort in ["newest", "oldest"] {
+        let mut seen = Vec::new();
+        let mut cursor = String::new();
+        loop {
+            let more = format!("&sort={sort}&limit=4{cursor}");
+            let (_, page) = history(&h, &alice, &did, uri, &more).await;
+            seen.extend(kinds(&page));
+            match page["cursor"].as_str() {
+                Some(c) => cursor = format!("&cursor={c}"),
+                None => break,
+            }
         }
+        let (_, whole) = history(&h, &alice, &did, uri, &format!("&sort={sort}")).await;
+        assert_eq!(seen, kinds(&whole), "{sort}");
     }
-    assert_eq!(seen, kinds(&all));
-    assert_eq!(
-        error(&history("&cursor=soon").await),
-        (400, "InvalidCursor")
-    );
+    for (more, refused) in [
+        ("&cursor=soon", "InvalidCursor"),
+        ("&sort=sideways", "InvalidRequest"),
+    ] {
+        let said = history(&h, &alice, &did, uri, more).await;
+        assert_eq!(error(&said), (400, refused), "{more}");
+    }
     // An account nobody has said anything of has no history.
-    let q = format!("group={did}&subject={}", bob.did);
-    let (status, none) = query(&h, &alice, "getModSubjectHistory", &q).await;
+    let (status, none) = history(&h, &alice, &did, &bob.did, "").await;
     assert_eq!((status, none["events"].clone()), (200, json!([])));
-    let q = format!("group={did}&subject=at://nothing");
-    let said = query(&h, &alice, "getModSubjectHistory", &q).await;
+    let said = history(&h, &alice, &did, "at://nothing", "").await;
     assert_eq!(error(&said), (400, "InvalidSubject"));
 
-    let long = "x".repeat(2001);
+    let long = "x".repeat(20_001);
     let never = format!("{uri}2");
-    for (who, body, refused) in [
-        (&alice, resolve("open", None), (400, "InvalidRequest")),
+    let elsewhere = format!(
+        "at://did:plc:other/space/{CALENDAR}/rides/{}/c.d.e/f",
+        bob.did
+    );
+    let many: Vec<String> = (0..26).map(|i| "a".repeat(i + 1)).collect();
+    for (who, subject, change, refused) in [
         (
             &alice,
-            resolve("resolved", Some(&long)),
+            uri,
+            json!({"status": "closed"}),
+            (400, "InvalidRequest"),
+        ),
+        (&alice, uri, json!({"note": long}), (400, "InvalidRequest")),
+        (
+            &alice,
+            uri,
+            json!({"addTags": ["Urgent"]}),
             (400, "InvalidRequest"),
         ),
         (
             &alice,
-            json!({"group": did, "subject": never, "status": "resolved"}),
+            uri,
+            json!({"addTags": ["two words"]}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            uri,
+            json!({"removeTags": ["x_y"]}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            uri,
+            json!({"addTags": many}),
+            (400, "InvalidRequest"),
+        ),
+        (
+            &alice,
+            never.as_str(),
+            json!({"status": "resolved"}),
             (400, "SubjectNotFound"),
         ),
         (
             &alice,
-            json!({"group": did, "subject": format!("at://did:plc:other/space/{CALENDAR}/rides/{}/c.d.e/f", bob.did), "status": "resolved"}),
+            elsewhere.as_str(),
+            json!({"status": "resolved"}),
             (400, "InvalidSubject"),
         ),
         (
             &alice,
-            json!({"group": did, "subject": "not a uri", "status": "resolved"}),
+            "not a uri",
+            json!({"status": "resolved"}),
             (400, "InvalidRequest"),
         ),
-        (
-            &alice,
-            json!({"group": did, "status": "resolved"}),
-            (400, "InvalidRequest"),
-        ),
-        (
-            &alice,
-            json!({"subject": uri, "status": "resolved"}),
-            (400, "InvalidRequest"),
-        ),
-        (&bob, resolve("resolved", None), (403, "Forbidden")),
+        (&bob, uri, json!({"status": "resolved"}), (403, "Forbidden")),
     ] {
-        assert_eq!(
-            error(&call(&h, who, "resolveModSubject", body.clone()).await),
-            refused,
-            "{body}"
-        );
+        let said = update(&h, who, &did, subject, change.clone()).await;
+        assert_eq!(error(&said), refused, "{subject} {change}");
     }
+    let body = json!({"group": did, "status": "resolved"});
+    let said = call(&h, &alice, "mod.updateSubject", body).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
 }
 
 #[tokio::test]
-async fn lists_the_queue_by_status_a_page_at_a_time() {
+async fn lists_the_queue_by_status_tags_and_order_a_page_at_a_time() {
     let h = start(&[], false).await;
     let (did, space, _, [alice, bob, _]) = group(&h).await;
     let subjects: Vec<String> = (0..3)
         .map(|i| format!("{space}/{}/com.example.event/r{i}", bob.did))
         .collect();
+    let (r0, r1, r2) = (&*subjects[0], &*subjects[1], &*subjects[2]);
     for s in &subjects {
         report(&h, &bob, &did, record(s)).await;
+        tick().await;
     }
-    let body = json!({"group": did, "subject": subjects[0], "status": "resolved"});
-    call(&h, &alice, "resolveModSubject", body).await;
-    let listed = async |q: String| {
-        query(&h, &alice, "listModSubjects", &format!("group={did}{q}"))
-            .await
-            .1
+    // Changed in an order of their own: r1 tagged, r0 resolved, r2 tagged.
+    update(&h, &alice, &did, r1, json!({"addTags": ["urgent"]})).await;
+    tick().await;
+    update(&h, &alice, &did, r0, json!({"status": "resolved"})).await;
+    tick().await;
+    update(&h, &alice, &did, r2, json!({"addTags": ["spam"]})).await;
+    let listing = async |more: &str| {
+        let (status, q) = queue(&h, &alice, &did, more).await;
+        assert_eq!(status, 200, "{q}");
+        listed(&q)
     };
-    // Open, unless asked.
-    let open = listed(String::new()).await;
-    assert_eq!(open["subjects"].as_array().unwrap().len(), 2);
-    let resolved = listed("&status=resolved".into()).await;
-    assert_eq!(resolved["subjects"][0]["subject"], subjects[0]);
+    // Every status unless asked, the oldest first.
+    assert_eq!(listing("").await, [r0, r1, r2]);
+    assert_eq!(listing("&sort=oldest").await, [r0, r1, r2]);
+    assert_eq!(listing("&sort=newest").await, [r2, r1, r0]);
+    assert_eq!(listing("&sort=updated").await, [r2, r0, r1]);
+    assert_eq!(listing("&status=open").await, [r1, r2]);
+    assert_eq!(listing("&status=resolved").await, [r0]);
+    // Any of the tags asked.
+    assert_eq!(listing("&tags=urgent").await, [r1]);
+    assert_eq!(listing("&tags=urgent&tags=spam").await, [r1, r2]);
+    assert_eq!(
+        listing("&tags=spam&status=resolved").await,
+        Vec::<String>::new()
+    );
+    assert_eq!(listing("&tags=none").await, Vec::<String>::new());
+    let (_, q) = queue(&h, &alice, &did, "&tags=urgent").await;
+    assert_eq!(q["subjects"][0]["tags"], json!(["urgent"]));
 
-    let mut seen = Vec::new();
-    let mut cursor = String::new();
-    loop {
-        let page = listed(format!("&limit=1{cursor}")).await;
-        let got = page["subjects"].as_array().unwrap();
-        seen.extend(
-            got.iter()
-                .map(|s| s["subject"].as_str().unwrap().to_string()),
-        );
-        match page["cursor"].as_str() {
-            Some(c) => cursor = format!("&cursor={}", urlencode(c)),
-            None => break,
+    // A page at a time, in each order.
+    for sort in ["oldest", "newest", "updated"] {
+        let mut seen = Vec::new();
+        let mut cursor = String::new();
+        loop {
+            let (_, page) = queue(&h, &alice, &did, &format!("&sort={sort}&limit=1{cursor}")).await;
+            seen.extend(listed(&page));
+            match page["cursor"].as_str() {
+                Some(c) => cursor = format!("&cursor={}", urlencode(c)),
+                None => break,
+            }
         }
+        assert_eq!(seen, listing(&format!("&sort={sort}")).await, "{sort}");
     }
-    seen.sort();
-    assert_eq!(seen, subjects[1..]);
 
-    for (q, refused) in [
+    for (more, refused) in [
         ("&cursor=soon", "InvalidCursor"),
         ("&status=closed", "InvalidRequest"),
+        ("&sort=sideways", "InvalidRequest"),
     ] {
-        let said = query(&h, &alice, "listModSubjects", &format!("group={did}{q}")).await;
-        assert_eq!(error(&said), (400, refused), "{q}");
+        let said = queue(&h, &alice, &did, more).await;
+        assert_eq!(error(&said), (400, refused), "{more}");
     }
-    assert_eq!(
-        error(&query(&h, &bob, "listModSubjects", &format!("group={did}")).await),
-        (403, "Forbidden")
-    );
+    assert_eq!(error(&queue(&h, &bob, &did, "").await), (403, "Forbidden"));
+    // A member's service auth names the group.
+    let said = query(&h, &alice, "mod.querySubjects", "").await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+}
+
+#[tokio::test]
+async fn moderates_as_the_group_a_session_is_for() {
+    let h = start(&[], false).await;
+    let (did, _, post, [alice, bob, _]) = group(&h).await;
+    let uri = post["uri"].as_str().unwrap();
+    report(&h, &bob, &did, record(uri)).await;
+    let methods = ["querySubjects", "querySubjectHistory", "updateSubject"];
+    let rpc: Vec<String> = methods
+        .iter()
+        .map(|m| format!("rpc:{NS}.mod.{m}?aud=*"))
+        .collect();
+    let app = App::loopback(&format!("atproto {}", rpc.join(" ")));
+    let tokens = app.sign_in(&h, &alice, &did).await;
+    let access = tokens["access_token"].as_str().unwrap();
+    let get = async |q: String| app.call(&h, &format!("{NS}.mod.{q}"), access, None).await;
+    // No group named: the session's.
+    let said = get("querySubjects".into()).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(listed(&said.body), [uri]);
+    let said = get(format!("querySubjects?group={did}")).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let said = get(format!("querySubjectHistory?subject={}", urlencode(uri))).await;
+    assert_eq!(kinds(&said.body), ["reportEvent"]);
+    let change = json!({"subject": uri, "addTags": ["urgent"]});
+    let nsid = format!("{NS}.mod.updateSubject");
+    let said = app.call(&h, &nsid, access, Some(&change)).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(said.body["tags"], json!(["urgent"]));
+    // Another group named is another session's.
+    let said = get("querySubjects?group=did:plc:elsewhere".into()).await;
+    assert_eq!(said.error(), (403, "Forbidden"));
+    // Without a session, a member's service auth names the group.
+    let said = call(&h, &alice, "mod.updateSubject", change).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
+    let q = format!("subject={}", urlencode(uri));
+    let said = query(&h, &alice, "mod.querySubjectHistory", &q).await;
+    assert_eq!(error(&said), (400, "InvalidRequest"));
 }
 
 fn urlencode(text: &str) -> String {
@@ -965,74 +1273,16 @@ async fn answers_an_ejection_as_one() {
     let event = Event {
         kind: "eject".into(),
         actor: Some(alice.did.clone()),
-        reason: Some("spam".into()),
         created_at: 1,
         ..Event::default()
     };
     h.host.store.moderate(&did, &carol.did, &event).unwrap();
-    let q = format!("group={did}&subject={}", carol.did);
-    let (_, history) = query(&h, &alice, "getModSubjectHistory", &q).await;
+    let (_, seen) = history(&h, &alice, &did, &carol.did, "").await;
+    assert_eq!(seen["events"][0]["subject"], carol.did.as_str());
     assert_eq!(
-        history["events"][0]["event"],
-        json!({"$type": "org.atgrp.defs#ejectEvent"})
+        seen["events"][0]["event"],
+        json!({"$type": format!("{DEFS}#ejectEvent")})
     );
-}
-
-#[test]
-fn keeps_what_was_resolved_escalated_and_noted_as_a_status_set() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("host.sqlite");
-    drop(Store::open(&path).unwrap());
-    // As a database from before: its schema back to just before the
-    // migration that made events statuses, then events of each kind.
-    let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.pragma_update(None, "foreign_keys", false).unwrap();
-    let added = group_host::store::MIGRATIONS
-        .iter()
-        .position(|m| m.contains("ALTER TABLE mod_event ADD COLUMN cid"))
-        .unwrap();
-    common::rewind(&conn, added);
-    for (subject, kind, note) in [
-        ("did:plc:b", "report", None),
-        ("did:plc:b", "escalate", None),
-        ("did:plc:b", "note", Some("asked")),
-        ("did:plc:b", "resolve", None),
-        ("did:plc:b", "note", Some("done")),
-        ("did:plc:c", "note", Some("first")),
-    ] {
-        conn.execute(
-            "INSERT INTO mod_event (grp, subject, kind, note, created_at) VALUES ('did:plc:a', ?1, ?2, ?3, 0)",
-            rusqlite::params![subject, kind, note],
-        )
-        .unwrap();
-    }
-    drop(conn);
-    let store = Store::open(&path).unwrap();
-    let said = |subject: &str| {
-        let events = store.events("did:plc:a", subject, None, 0, 10).unwrap();
-        let said = events
-            .iter()
-            .map(|e| (e.kind.clone(), e.status.clone(), e.note.clone()));
-        said.collect::<Vec<_>>()
-    };
-    let status = |s: &str, n: Option<&str>| {
-        (
-            "status".to_string(),
-            Some(s.to_string()),
-            n.map(String::from),
-        )
-    };
-    assert_eq!(
-        said("did:plc:b"),
-        [
-            ("report".to_string(), None, None),
-            status("escalated", None),
-            status("escalated", Some("asked")),
-            status("resolved", None),
-            status("resolved", Some("done")),
-        ]
-    );
-    assert_eq!(said("did:plc:c"), [status("open", Some("first"))]);
 }
 
 #[tokio::test]
@@ -1085,10 +1335,10 @@ async fn defines_the_groups_own_labels_for_one_who_configures_it() {
             fr,
         ])
     );
-    let meta = meta_space(&did);
+    let members = members_space(&did);
     let labeler = h
         .host
-        .group_record(&did, &meta, "org.atgrp.labeler", "self");
+        .group_record(&did, &members, "org.atgrp.labeler", "self");
     let labeler = labeler.unwrap().unwrap();
     assert_eq!(
         labeler["policies"]["labelValues"],
@@ -1136,7 +1386,7 @@ async fn defines_the_groups_own_labels_for_one_who_configures_it() {
     assert_eq!(labels().await, json!([]));
     let labeler = h
         .host
-        .group_record(&did, &meta, "org.atgrp.labeler", "self");
+        .group_record(&did, &members, "org.atgrp.labeler", "self");
     assert_eq!(
         labeler.unwrap().unwrap()["policies"]["labelValues"],
         json!(["!hide", "!takedown"])
@@ -1288,8 +1538,7 @@ async fn picture(h: &Running, who: &Authority, did: &str, cid: &str) -> u16 {
 
 /// A subject's history, as `who` reviews it in Riders' queue.
 async fn reviewed(h: &Running, who: &Authority, did: &str, subject: &str) -> (u16, Json) {
-    let q = format!("group={did}&subject={}", urlencode(subject));
-    query(h, who, "getModSubjectHistory", &q).await
+    history(h, who, did, subject, "").await
 }
 
 /// The file `cid` of the record `subject`, as `who` reviews it.
@@ -1398,7 +1647,7 @@ async fn shows_a_moderator_what_was_taken_down_where_they_review_it() {
 
     // A moderator the space does not let read sees the history, and
     // neither the record nor its files.
-    let role = json!({"$type": format!("{NS}.role"), "displayName": "Moderator", "scopes": [format!("rpc:{NS}.listModSubjects?aud=*")], "createdAt": "2026-11-03T00:00:00Z"});
+    let role = json!({"$type": format!("{NS}.role"), "displayName": "Moderator", "permissions": [format!("rpc:{NS}.mod.querySubjects?aud=*")]});
     let write = Write::Create {
         collection: format!("{NS}.role"),
         rkey: "moderator".into(),

@@ -2,7 +2,7 @@
 
 A group is an atproto account that no one person owns. It has no password
 and nobody signs in as it. But someone still has to start it, change its
-profile and rules, give it a name, and one day end it. On this host the
+about record and rules, give it a name, and one day end it. On this host the
 roles its members hold decide each of those. What a group shows also
 depends on who asks, so a stranger, a member and an admin each see a
 different amount. The inputs and errors of every method named here are in
@@ -18,10 +18,12 @@ writes in their own repo in it, on their own PDS, and the space's
 authority decides who may read and write. The group is the authority of
 both of its spaces, and [spaces](spaces.md) explains them.
 
-- `meta` (`at://<group>/space/org.atgrp.meta/self`) holds the
-  profile, the rules and the labeler.
+- `meta` (`at://<group>/space/org.atgrp.meta/self`) holds what the
+  group says about itself (`org.atgrp.about`) and its settings
+  (`org.atgrp.config`).
 - `members` (`at://<group>/space/org.atgrp.members/self`) holds
-  roles, permissions, memberships, and the index of the group's spaces.
+  roles, memberships, the rules, the labeler, and the index of the
+  group's other spaces.
 
 Everything a group is lives in records the group writes in its own repos
 in those spaces, and the host reads them to answer for it. Something is a
@@ -39,16 +41,18 @@ empty, the host starts them for anyone
 ([configuration](../reference/config.md)).
 
 Starting a group makes its `meta` and `members` spaces, each under a
-policy, and writes its profile (display name, description, join policy)
-and labeler in `meta`. In `members` it writes the roles `admin` and
-`member` with what each may do. The host publishes each space's policy
-there and lists both spaces in the index in `members`. It also
-writes a membership with both roles for the founder and for each
-steward. Stewards are the people named at the start to run the group
-beside the founder. If anyone may read `meta`, the host writes a
-declaration in the public repo. If setup fails partway, the host deletes
-the account and ends its DID, so the handle is free again. Joining and
-roles are in [membership](membership.md).
+policy. In `meta` it writes the `about` record (display name and
+description) and the `config` record (join policy). In `members` it
+writes the roles `admin` and `member` with what each may do, and the
+labeler, which takes reports for the six report reasons. It also writes
+a membership with both roles for the founder and for each steward.
+Stewards are the people named at the start to run the group beside the
+founder. The host publishes each space's policy there. Neither space is
+in the index in `members`, which lists only the group's other spaces. If
+anyone may read `meta`, the host writes the declaration in the public
+repo, an empty `org.atgrp.declaration` record at `self`. If setup fails
+partway, the host deletes the account and ends its DID, so the handle is
+free again. Joining and roles are in [membership](membership.md).
 
 Details:
 
@@ -92,17 +96,17 @@ A member's roles are the `roles` list of their membership in `members`. A
 space's policy, `org.atgrp.policy`, gives each role a grant there,
 one entry a role. A role granted `read` reads the space, and one granted
 `write` writes there in its members' own names. A role granted a space
-scope naming collections writes those as the group there. The policy
+permission naming collections writes those as the group there. The policy
 may also set `publicRead`, so anyone at all may read the space, signed
 in or not ([spaces](spaces.md#deciding-who-reads-and-writes)).
 
-Each role's record in `members` grants it OAuth scopes across the group
-and names the roles it may assign, `*` for every role. One scope answers
-each of the host's eleven actions, such as `invite`, `eject`,
-`space.create` or `group.configure`. Roles compose by union. A person
-may do anything any of their roles grants, and there's no deny,
-precedence or hierarchy. The same scopes bound an app or MCP client a
-member signs in ([signing in](signing-in.md)).
+Each role's record in `members` grants it permissions across the group
+and names the roles it may assign (`canAssign`), `*` for every role. One
+permission answers each of the host's eleven actions, such as `invite`,
+`eject`, `space.create` or `group.configure`. Roles compose by union. A
+person may do anything any of their roles grants, and there's no deny,
+precedence or hierarchy. The same permissions bound an app or MCP client
+a member signs in ([signing in](signing-in.md)).
 
 When a group is made, `admin` holds every action, may write any
 public-repo collection as the group, and may assign every role, those
@@ -119,15 +123,14 @@ that's switched off.
 Details:
 
 - When a group is made, anyone may read `meta` unless `createGroup` sets
-  `metaPublicRead: false`. Its policy grants `member` `read`, and `admin`
-  `read` and
-  `space:org.atgrp.meta?collection=org.atgrp.profile&collection=org.atgrp.rule`,
-  so admins write the profile and rules as the group. The policy of
-  `members` grants `member` `read` and `write`, so members' own records
-  there sync.
-- The host reads a grant's scopes the way it reads a token's. A scope
-  naming another type, key or authority grants nothing in the space. One
-  naming no collection writes nothing as the group.
+  `metaPublicRead: false`. Its policy grants `member` and `admin`
+  `read`. Admins write the `about` and `config` records through their
+  role's `include:org.atgrp.authManageAdmin`. The policy of `members`
+  grants `member` `read` and `write`, so members' own records there
+  sync.
+- The host reads a grant's permissions the way it reads a token's. A
+  permission naming another type, key or authority grants nothing in the
+  space. One naming no collection writes nothing as the group.
 - The host refuses a missing action with `403 Forbidden`, "missing
   <action>".
 
@@ -139,7 +142,9 @@ tells you that and nothing more, even when anyone may read `meta`.
 
 `getGroup` gives more to callers allowed more. Everyone signed in gets
 the group's DID, handle, address, and the URIs of its two spaces. A
-caller who may read `meta` also gets the profile and the rules, in order.
+caller who may read `meta` also gets the `about` record and the join
+policy. One who may read `members` gets the rules, in order, and the
+group's labels.
 A signed-in caller gets `viewer`. It says whether they're a member, their
 roles and actions, and for a member whether their own repo in `members`
 holds anything yet. A caller who may read `members` gets how many
@@ -153,12 +158,12 @@ To a signed-in caller it also shows `viewer.steward`, which says whether
 they may switch it back on, since the host reads nothing else of their
 standing.
 
-A group that wants to be found says so with its declaration. That's a
-`org.atgrp.declaration` record in its public repo pointing at
-`meta`. The host writes it while the policy of `meta` sets `publicRead`
-and removes it when it doesn't. The host keeps no list of its groups for
-people to browse. How groups are found across the network is still to
-be decided, and the declaration is what such a list would read.
+A group that wants to be found says so with its declaration. That's an
+empty `org.atgrp.declaration` record at `self` in its public repo. The
+host writes it while the policy of `meta` sets `publicRead` and removes
+it when it doesn't. The host keeps no list of its groups for people to
+browse. How groups are found across the network is still to be decided,
+and the declaration is what such a list would read.
 
 `getActorGroups` lists the switched-on groups a person is in that the
 caller is in too. It gives each group's member count, and its display
@@ -166,29 +171,35 @@ name and avatar when the caller may read `meta`. `getActor` describes a
 member of a group here, or someone asking to join one, to a signed-in
 caller.
 
-## Changing its profile, rules and pictures
+## Changing its about record, rules and pictures
 
-A group's profile (`org.atgrp.profile`, at `self`) and its rules
-(`org.atgrp.rule`) are records in `meta`. An app changes them by
-writing them as the group, with a token for the group
-([signing in](signing-in.md)). It uses `com.atproto.space.putRecord`,
-`createRecord`, `deleteRecord` and `applyWrites`. The token's scope must
-cover the write, and the member who approved it must hold
-`group.configure` when it's made. Nothing is written as a switched-off
-group.
+A group's `about` and `config` records (`org.atgrp.about` and
+`org.atgrp.config`, each at `self`) are in `meta`. Its rules
+(`org.atgrp.rule`) and labeler (`org.atgrp.labeler`, at `self`) are in
+`members`. An app changes them by writing them as the group, with a
+token for the group ([signing in](signing-in.md)). It uses
+`com.atproto.space.putRecord`, `createRecord`, `deleteRecord` and
+`applyWrites`. The token's scope must cover the write, and the member
+who approved it must hold permissions that write it when it's made: the
+`authManageBasic` set writes the `about` record and the rules, and
+`authManageAdmin` writes those, the `config` record and the labeler
+([membership](membership.md#roles-and-what-they-grant)). A grant in the
+space's policy may let them write there too. Nothing is written as a
+switched-off group.
 
 A put replaces the record whole, so anything it leaves out goes. Beyond
-what the lexicon checks, the host keeps a profile only if it has a
-display name that's more than spaces and a join policy of `open`,
-`approval` or `invite`. Its website, `url`, must be on `http` or `https`.
-The profile stays at `self` and is never deleted.
+what the lexicon checks, the host keeps an `about` record only if it has
+a display name that's more than spaces, and its `website` must be on
+`http` or `https`. It keeps a `config` record only with a join policy of
+`open`, `approval` or `invite`. The `about`, `config` and labeler records
+stay at `self` and are never deleted.
 
 A picture must be a blob in the group's own repo, because a blob in
-another account's repo wouldn't resolve for the group's profile. So the
-app uploads it as the group (`com.atproto.repo.uploadBlob`, which a
-token for `meta` may do for images) and names the blob it gets back in
-the profile. An upload no record takes within a day is swept away, and
-a blob goes when its last reference does.
+another account's repo wouldn't resolve for the group. So the app
+uploads it as the group (`com.atproto.repo.uploadBlob`, which a token for
+`meta` may do for images) and names the blob it gets back in the `about`
+record. An upload no record takes within a day is swept away, and a blob
+goes when its last reference does.
 
 The host serves images at `/img/{did}/{cid}` to anyone who may see a
 record holding them. For the public repo that's anyone. Otherwise it's
@@ -205,9 +216,8 @@ rule keeps its URI, which doesn't resolve
 ([moderation](moderation.md)).
 
 The declaration follows who may read `meta`. When it's written as the
-group in its public repo, the host keeps it only at `self`, naming the
-group's own `meta`, and only while anyone may read it. Deleting it is
-always allowed.
+group in its public repo, the host keeps it only at `self`, and only
+while anyone may read `meta`. Deleting it is always allowed.
 
 Details:
 
@@ -217,10 +227,11 @@ Details:
   group's.
 - A rule's title is 64 characters at most and must be more than spaces.
   Its text is required and is 2,000 characters at most.
-- The console's settings write the profile, pictures and rules this way,
-  with a token `getGroupAuth` gives for `meta`. They set visibility by
-  changing `publicRead` in the policy of `meta` through
-  `com.atproto.space.updateSpace`, and members read it either way.
+- The console's settings write the `about` record, picture and join
+  policy with a token `getGroupAuth` gives for `meta`, and the rules
+  with one for `members`. They set visibility by changing `publicRead`
+  in the policy of `meta` through `com.atproto.space.updateSpace`, and
+  members read it either way.
 - An MCP client changes them with the `profile_set`, `rule_set` and
   `rule_delete` tools, and you can with the `atgrp` commands of the
   same names. Both make the same writes as their member

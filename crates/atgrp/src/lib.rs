@@ -42,8 +42,10 @@ group
                          its address again
   group delete <group>   delete a group, its spaces and its identity, for good
 profile
-  profile set <group> [--display-name <name>] [--join-policy <policy>] [--description <words>] …
-                         change the group's profile in what is given; \"\" takes a field away
+  profile set <group> [--display-name <name>] [--description <words>] [--website <url>]
+          [--avatar <blob json>] [--join-policy open|approval|invite]
+                         change the group's about record in what is given, \"\" taking a
+                         field away; --join-policy changes its config
 rule
   rule set <group> --title <title> --text <words> [--order <n>] [--rule <key>]
                          write a rule: the one --rule names, or a new one
@@ -55,13 +57,13 @@ label
   label delete <group> <label>
                          stop defining one of the group's own labels
 role
-  role set <group> <role> --display-name <name> [--description <words>] [--default] [--bot]
-          [--scopes <scope,…>] [--assignable <role,…>]
+  role set <group> <role> [--display-name <name>] [--description <words>] [--default] [--bot]
+          [--permissions <permission,…>] [--can-assign <role,…>]
                          write a role, with what it may do across the group and the
                          roles its holders may give (* for every role)
   role delete <group> <role>
                          delete a role nobody holds
-  role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]
+  role grant <group> <role> [--permissions <permission,…>] [--can-assign <role,…>] [--undo]
                          add to what a role may do, or with --undo take it away
 member
   member list <group> [--q <text>] [--limit <n>] [--cursor <cursor>]
@@ -86,12 +88,15 @@ space
   space records <group> <space> [--collection <nsid>] [--field <path> --equals <value>] …
                          the records in one of the group's spaces
 mod
-  mod list <group> [--status open|escalated|resolved] [--limit <n>] [--cursor <cursor>]
-                         the moderation queue
-  mod history <group> <subject> [--cid <cid>] [--limit <n>] [--cursor <cursor>]
-                         what was done about a subject
-  mod resolve <group> <subject> --status resolved|escalated [--note <words>] [--cid <cid>]
-                         resolve or escalate a subject
+  mod list <group> [--status open|resolved] [--tags <tag,…>] [--sort oldest|newest|updated]
+          [--limit <n>] [--cursor <cursor>]
+                         the moderation queue: every subject, or those of a status or
+                         with any of the tags, oldest first by default
+  mod history <group> <subject> [--cid <cid>] [--sort newest|oldest] [--limit <n>] [--cursor <cursor>]
+                         what was done about a subject, newest first by default
+  mod update <group> <subject> [--status open|resolved] [--note <words>] [--add-tags <tag,…>]
+          [--remove-tags <tag,…>] [--cid <cid>]
+                         resolve or reopen a subject, tag it, or add a note
   mod label <group> <subject> <val> [--cid <cid>] [--undo]
                          label a subject, or with --undo take the label back
 admin
@@ -345,7 +350,7 @@ impl Client {
 
 /// `person`'s inbox, where a group writes an invite for them.
 fn inbox_of(person: &str) -> String {
-    format!("at://{person}/space/org.atgrp.invites/self")
+    format!("at://{person}/space/org.atgrp.inbox/self")
 }
 
 /// Now, as atproto writes a datetime.
@@ -736,12 +741,21 @@ async fn command(
     })
 }
 
-/// A query's parameters from JSON, each value as text: none of the
-/// queries a command asks takes a list.
+/// A query's parameters from JSON, each value as text, a list's each
+/// item a parameter of its own.
 fn query_of(input: &Value) -> Vec<(String, String)> {
-    let fields = input.as_object().into_iter().flatten();
-    let text = |v: &Value| v.as_str().map_or_else(|| v.to_string(), String::from);
-    fields.map(|(k, v)| (k.clone(), text(v))).collect()
+    let mut out = Vec::new();
+    for (k, v) in input.as_object().into_iter().flatten() {
+        let items = match v {
+            Value::Array(items) => items.iter().collect(),
+            one => vec![one],
+        };
+        for item in items {
+            let text = item.as_str().map_or_else(|| item.to_string(), String::from);
+            out.push((k.clone(), text));
+        }
+    }
+    out
 }
 
 /// Carries out `plan` as `me`, in `group`: a method asked with a service
@@ -818,20 +832,24 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
         }
         Plan::Edit {
             space,
-            collection,
             rkey,
-            fields,
+            records,
         } => {
-            // The record as it is, as the space's records are listed.
             let uri = format!("at://{group}/space/{space}/self");
-            let record = format!("{uri}/{group}/{collection}/{rkey}");
-            let asked = [("group", group), ("space", &uri), ("uri", &record)];
-            let listed = me
-                .query(host, &internal("listSpaceRecords"), &asked)
-                .await?;
-            let kept = listed["records"][0]["value"].clone();
-            let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
-            Box::pin(carry_out(me, host, group, write)).await
+            let mut done = Vec::new();
+            for (collection, fields) in records {
+                // The record as it is, as the space's records are listed.
+                let record = format!("{uri}/{group}/{collection}/{rkey}");
+                let asked = [("group", group), ("space", &uri), ("uri", &record)];
+                let listed = me
+                    .query(host, &internal("listSpaceRecords"), &asked)
+                    .await?;
+                let kept = listed["records"][0]["value"].clone();
+                let write =
+                    group_host_mcp::edited(&kept, space.clone(), collection, rkey.clone(), fields);
+                done.push(Box::pin(carry_out(me, host, group, write)).await?);
+            }
+            Ok(json!({ "written": done }))
         }
         Plan::Label {
             subject,
@@ -841,8 +859,8 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
         } => label(me, host, group, &subject, cid.as_deref(), &val, undo).await,
         Plan::Grant {
             role,
-            scopes,
-            assignable,
+            permissions,
+            can_assign,
             undo,
         } => {
             // The role's record as it is, as the space's records are listed.
@@ -853,7 +871,7 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
                 .query(host, &internal("listSpaceRecords"), &asked)
                 .await?;
             let kept = &listed["records"][0]["value"];
-            let write = group_host_mcp::regrant(kept, &role, &scopes, &assignable, undo);
+            let write = group_host_mcp::regrant(kept, &role, &permissions, &can_assign, undo);
             let write = write.map_err(anyhow::Error::msg)?;
             Box::pin(carry_out(me, host, group, write)).await
         }
@@ -1227,8 +1245,8 @@ const RULES: [(&str, &str); 2] = [
 ];
 
 /// What a seeded group's moderator may do: moderate it, as the group's
-/// moderation permission set has it (members, invites, join requests,
-/// the moderation queue), and label in any of its spaces.
+/// moderation permission set has it (labels, ejections, the moderation
+/// queue), and label in any of its spaces.
 const MODERATES: [&str; 2] = [
     "include:org.atgrp.authModerate",
     "space:*?collection=com.atproto.label.record",
@@ -1241,8 +1259,7 @@ async fn moderator(me: &Client, host: &Host, group: &str) -> Result<()> {
         "$type": m("role"),
         "displayName": "Moderator",
         "description": "Keeps the group to its rules.",
-        "scopes": MODERATES,
-        "createdAt": now_iso(),
+        "permissions": MODERATES,
     });
     let members = members_of(group);
     let session = GroupSession::start(me, host, group, &members).await?;
@@ -1263,12 +1280,13 @@ async fn seed(me: &Client, host: &Host, handle: &str, invite: &[String]) -> Resu
     let made = me.call(host, &internal("createGroup"), &body).await?;
     let group = text(&made["did"]).to_string();
     let mut out = format!("group      {handle} {group}\n");
-    // Its rules are its own records, in its meta space, written as it.
-    let meta = text(&made["meta"]).to_string();
-    let session = GroupSession::start(me, host, &group, &meta).await?;
+    // Its rules are its own records, in its members space, written as it.
+    let members = text(&made["members"]).to_string();
+    let session = GroupSession::start(me, host, &group, &members).await?;
     for (title, words) in RULES {
         let rule = json!({"$type": m("rule"), "title": title, "text": words});
-        let body = json!({"repo": group, "space": meta, "collection": m("rule"), "record": rule});
+        let body =
+            json!({"repo": group, "space": members, "collection": m("rule"), "record": rule});
         let written = session.call("com.atproto.space.createRecord", &body);
         written.await?;
         out += &format!("rule       {title}\n");

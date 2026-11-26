@@ -238,9 +238,9 @@ async fn a_group_deleted_is_gone() {
             &did,
             &meta_space(&did),
             &[Write::Update {
-                collection: format!("{NS}.profile"),
+                collection: format!("{NS}.about"),
                 rkey: "self".into(),
-                value: json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "open", "avatar": picture}),
+                value: json!({"$type": format!("{NS}.about"), "displayName": "Riders", "avatar": picture}),
             }],
         )
         .await

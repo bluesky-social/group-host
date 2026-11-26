@@ -8,7 +8,7 @@
   const mine = $derived(
     (data.bindings ?? [])
       .filter((b) => g.viewer?.roles.some((r) => r.role === b.role))
-      .flatMap((b) => b.assignable.map((a) => a.role))
+      .flatMap((b) => b.canAssign.map((a) => a.role))
   );
   // The scopes they hold enough of to give a role, as the host says.
   const grantable = $derived((g.viewer?.grantable ?? []).map((s) => s.scope));

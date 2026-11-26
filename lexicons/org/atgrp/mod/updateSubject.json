@@ -1,24 +1,20 @@
 {
   "lexicon": 1,
-  "id": "org.atgrp.resolveModSubject",
+  "id": "org.atgrp.mod.updateSubject",
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Resolve or escalate a subject, optionally with a note. Repeating the current status adds the note. Requires mod.resolve: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call.",
+      "description": "Change a subject's status or tags, or add a note. Omitted fields are left as they are. Requires auth as the group.",
       "input": {
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": [
-            "group",
-            "subject",
-            "status"
-          ],
+          "required": ["subject"],
           "properties": {
             "group": {
               "type": "string",
               "format": "did",
-              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+              "description": "The group's DID. A group account session names its own; a member's service auth names it here."
             },
             "subject": {
               "type": "string",
@@ -32,15 +28,31 @@
             },
             "status": {
               "type": "string",
-              "enum": [
-                "resolved",
-                "escalated"
-              ]
+              "enum": ["open", "resolved"]
             },
             "note": {
               "type": "string",
               "maxGraphemes": 2000,
               "maxLength": 20000
+            },
+            "addTags": {
+              "type": "array",
+              "maxLength": 25,
+              "description": "Tags follow label value syntax ([a-z-]+).",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "removeTags": {
+              "type": "array",
+              "maxLength": 25,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
             }
           }
         }
@@ -49,13 +61,13 @@
         "encoding": "application/json",
         "schema": {
           "type": "ref",
-          "ref": "org.atgrp.defs#modSubjectView"
+          "ref": "org.atgrp.mod.defs#subjectView"
         }
       },
       "errors": [
         {
           "name": "InvalidSubject",
-          "description": "The subject isn't an account, a record in this group, or a record in a public repo."
+          "description": "The subject isn't in this group."
         },
         {
           "name": "SubjectNotFound",

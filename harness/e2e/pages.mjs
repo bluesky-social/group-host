@@ -267,7 +267,7 @@ export const makeInbox = async (account) => {
       authorization: `Bearer ${await pdsSession(account)}`
     },
     body: JSON.stringify({
-      spaceType: 'org.atgrp.invites',
+      spaceType: 'org.atgrp.inbox',
       skey: 'self',
       policy: { $type: 'com.atproto.memberspace.policy', publicWrite: true }
     })

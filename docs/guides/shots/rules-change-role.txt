@@ -1,15 +1,19 @@
 - dialog "Change this role":
   - heading "Change this role" [level=2]
   - button "Close": ×
-  - paragraph: People with Ride leader get the changes as soon as you save. To remove something that comes with Moderation or The whole group, untick that first.
-  - text: Its name
-  - textbox "Its name": Ride leader
+  - paragraph: People with Ride leader get the changes as soon as you save. To remove something that comes with Members, Moderation or The whole group, untick that first.
+  - text: Its name (optional)
+  - textbox "Its name (optional)":
+    - /placeholder: ride-leader
+    - text: Ride leader
   - group "Running the group":
     - text: Running the group
     - checkbox "Profile and rules Change the group's profile and rules."
     - text: Profile and rules Change the group's profile and rules.
-    - checkbox "Moderation Approve, invite, label and remove members, change their roles, and review reports." [checked]
-    - text: Moderation Approve, invite, label and remove members, change their roles, and review reports.
+    - checkbox "Members Approve, invite and remove members, and change their roles."
+    - text: Members Approve, invite and remove members, and change their roles.
+    - checkbox "Moderation Label posts and members, remove members, and review reports." [checked]
+    - text: Moderation Label posts and members, remove members, and review reports.
     - checkbox "The whole group Everything above, and the group's settings and roles."
     - text: The whole group Everything above, and the group's settings and roles.
   - group "It may":
@@ -20,14 +24,14 @@
     - text: mod.resolve Comes with moderation
     - checkbox "label"
     - text: label
-    - checkbox "invite Comes with moderation" [checked] [disabled]
-    - text: invite Comes with moderation
-    - checkbox "admit Comes with moderation" [checked] [disabled]
-    - text: admit Comes with moderation
+    - checkbox "invite" [checked]
+    - text: invite
+    - checkbox "admit" [checked]
+    - text: admit
     - checkbox "eject Comes with moderation" [checked] [disabled]
     - text: eject Comes with moderation
-    - checkbox "role.assign Comes with moderation" [checked] [disabled]
-    - text: role.assign Comes with moderation
+    - checkbox "role.assign"
+    - text: role.assign
     - checkbox "space.create"
     - text: space.create
     - checkbox "space.configure"

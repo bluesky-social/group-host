@@ -62,7 +62,9 @@ can still appeal anything of theirs that's already on this page.
 The tabs sort subjects by where they are:
 
 - **Open**: reported and not yet dealt with.
-- **Escalated**: passed on, for someone else in the group to decide.
+- **Escalated**: the open subjects a moderator passed on, for someone
+  else in the group to decide. They stay on **Open** too, tagged
+  **Escalated**.
 - **Resolved**: dealt with. A new report on a resolved subject puts it
   back in **Open**.
 
@@ -77,14 +79,14 @@ When a report isn't yours to decide, escalate it.
    everything you can do about the post and its history.
 2. Under **Decision**, in **Note**, type why, such as
    "Third time this month; over to the admins."
-3. Press **Escalate**. The dialog closes, and the subject leaves the
-   **Open** tab.
+3. Press **Escalate**. The subject stays on the **Open** tab, tagged
+   **Escalated**.
 
-   <!-- look /g/gardens.groups.test/moderation --as frank --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --type ':popover-open [name=note]=Third time this month; over to the admins.' --click ':popover-open button[value=escalated]' --element main -->
-   ![The Open tab after escalating, Subjects 1: only the account reported for spam is left](shots/moderating-escalate-sent.png)
+   <!-- look /g/gardens.groups.test/moderation --as frank --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --type ':popover-open [name=note]=Third time this month; over to the admins.' --click ':popover-open button[name=escalate][value=add]' --element main -->
+   ![The Open tab after escalating, Subjects 2: frank.test's post now tagged Escalated, beside the account reported for spam](shots/moderating-escalate-sent.png)
 
-The post now waits on the **Escalated** tab, with your note in its
-history.
+The post now shows on the **Escalated** tab too, with your note in its
+history. Its Review offers Remove escalation to take the tag off.
 
 ## How do I give the group labels of its own?
 
@@ -174,7 +176,7 @@ report or an appeal about it.
    you to be sure. The post stays under **What was posted**, marked
    **Taken down**.
 
-   <!-- look /g/gardens.groups.test/moderation?status=escalated --as dan --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --click ':popover-open button[popovertarget$=takedown]' --click '[id$=-takedown]:popover-open button[type=submit]' --element ':popover-open .review-part:has(.reviewed)' -->
+   <!-- look '/g/gardens.groups.test/moderation?status=open&tags=escalated' --as dan --click 'li.subject:has(> .row-main .who:text-is("frank.test")) > .row-actions button' --click ':popover-open button[popovertarget$=takedown]' --click '[id$=-takedown]:popover-open button[type=submit]' --element ':popover-open .review-part:has(.reviewed)' -->
    ![What was posted, in the post's Review: Taken down, then the post's words, its picture and The record as posted](shots/moderating-post-takedown.png)
 
 To put the post back, press the × beside `!takedown` under **Labels**.
@@ -233,18 +235,20 @@ them, so they can ask to join again.
 3. Press **Resolve**. The subject moves to the **Resolved** tab, with
    all that was done and your note in its history.
 
-From **Resolved**, the row's **Review** can still escalate a subject.
+From **Resolved**, the row's **Review** can reopen a subject with
+Reopen.
 
 ## From a terminal
 
 Each act here has a command in [the `atgrp` command](../reference/cli.md):
 
 - Read the queue: `atgrp mod list gardens.groups.test --status open`,
-  or `escalated` or `resolved`.
+  or `--status resolved`, or the escalated ones with
+  `--status open --tags escalated`.
 - Read one subject's history, with who did each thing:
   `atgrp mod history gardens.groups.test <did or at:// uri>`.
-- Escalate or resolve: `atgrp mod resolve gardens.groups.test <subject> --status escalated --note "…"`,
-  or `--status resolved`.
+- Escalate: `atgrp mod update gardens.groups.test <subject> --add-tags escalated --note "…"`.
+- Resolve: `atgrp mod update gardens.groups.test <subject> --status resolved --note "…"`.
 - Label an account: `atgrp mod label gardens.groups.test <did> spam`.
   A takedown is the same with `!takedown`.
 - Label a post: `atgrp mod label gardens.groups.test <at:// uri> <label> --cid <cid>`.

@@ -82,7 +82,7 @@ impl Host {
     }
 
     /// A group as the approval page shows it to `member`: what of its
-    /// profile they may read, their roles, and what the app would get.
+    /// about record they may read, their roles, and what the app would get.
     pub(crate) fn offered(&self, group: &str, member: &str, requested: &[String]) -> Answer {
         let handle = group_of(self, group)?;
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
@@ -104,7 +104,7 @@ impl Host {
         });
         let meta = meta_space(group);
         if self.reads_space(&meta, &roles)? {
-            let profile = self.group_record(group, &meta, &format!("{NS}.profile"), "self");
+            let profile = self.group_record(group, &meta, &format!("{NS}.about"), "self");
             let profile = profile.map_err(XrpcError::internal)?.unwrap_or_default();
             if let Some(name) = profile.get("displayName") {
                 view["displayName"] = name.clone();

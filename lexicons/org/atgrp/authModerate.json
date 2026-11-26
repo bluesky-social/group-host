@@ -4,9 +4,9 @@
   "defs": {
     "main": {
       "type": "permission-set",
-      "description": "For group-DID sessions. Limited to what the authorizing user's roles grant.",
+      "description": "For group account sessions. Limited to what the authorizing user's roles grant.",
       "title": "Group moderation",
-      "detail": "Approve, invite, label, and remove members, change their roles, and review reports.",
+      "detail": "Label content, remove members, and review reports.",
       "permissions": [
         {
           "type": "permission",
@@ -14,15 +14,8 @@
           "spaceType": "org.atgrp.meta",
           "authority": "self",
           "skey": "self",
-          "collection": [
-            "com.atproto.label.record"
-          ],
-          "action": [
-            "read",
-            "create",
-            "update",
-            "delete"
-          ]
+          "collection": ["com.atproto.label.record"],
+          "action": ["read", "create", "update", "delete"]
         },
         {
           "type": "permission",
@@ -30,45 +23,27 @@
           "spaceType": "org.atgrp.members",
           "authority": "self",
           "skey": "self",
-          "collection": [
-            "org.atgrp.membership",
-            "com.atproto.label.record"
-          ],
-          "action": [
-            "read",
-            "create",
-            "update",
-            "delete"
-          ]
+          "collection": ["com.atproto.label.record"],
+          "action": ["read", "create", "update", "delete"]
         },
         {
           "type": "permission",
           "resource": "space",
-          "spaceType": "org.atgrp.invites",
-          "authority": "*",
+          "spaceType": "org.atgrp.members",
+          "authority": "self",
           "skey": "self",
-          "collection": [
-            "org.atgrp.invite"
-          ],
-          "action": [
-            "read_self",
-            "create",
-            "update",
-            "delete"
-          ]
+          "collection": ["org.atgrp.membership"],
+          "action": ["read", "delete"]
         },
         {
           "type": "permission",
           "resource": "rpc",
           "aud": "*",
           "lxm": [
-            "org.atgrp.listJoinRequests",
-            "org.atgrp.denyJoinRequest",
-            "org.atgrp.internal.listInvites",
-            "org.atgrp.listModSubjects",
-            "org.atgrp.getModSubjectHistory",
+            "org.atgrp.mod.querySubjects",
+            "org.atgrp.mod.querySubjectHistory",
             "org.atgrp.internal.getModSubjectBlob",
-            "org.atgrp.resolveModSubject"
+            "org.atgrp.mod.updateSubject"
           ]
         }
       ]

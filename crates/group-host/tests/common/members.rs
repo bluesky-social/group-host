@@ -13,7 +13,7 @@ use serde_json::{Value as Json, json};
 
 /// What an app asks for to run a group's members: its roles and what
 /// each may do, and who holds them.
-pub const RUNS: &str = "atproto include:org.atgrp.authManageGroup";
+pub const RUNS: &str = "atproto include:org.atgrp.authManageAdmin";
 
 /// The collection `name` of ours.
 pub fn c(name: &str) -> String {
@@ -22,7 +22,7 @@ pub fn c(name: &str) -> String {
 
 /// A role record, named `name`.
 pub fn role(name: &str) -> Json {
-    json!({"$type": c("role"), "displayName": name, "createdAt": "2026-11-03T00:00:00Z"})
+    json!({"$type": c("role"), "displayName": name})
 }
 
 /// A membership record holding `roles`, kept at its member's DID.
@@ -42,12 +42,12 @@ pub fn granting(
     h: &Running,
     group: &str,
     name: &str,
-    scopes: &[&str],
-    assignable: &[&str],
+    permissions: &[&str],
+    can_assign: &[&str],
 ) -> Json {
     let mut r = record(h, group, "role", name).unwrap_or_else(|| role(name));
-    r["scopes"] = json!(scopes);
-    r["assignable"] = json!(assignable);
+    r["permissions"] = json!(permissions);
+    r["canAssign"] = json!(can_assign);
     r
 }
 

@@ -352,7 +352,7 @@ impl App {
 }
 
 /// Gives `group` a PNG of `bytes` for its avatar, as `who` does from the
-/// console, its profile named `name`: the blob.
+/// console, its about record naming it `name`: the blob.
 pub async fn give_avatar(
     h: &Running,
     who: &Authority,
@@ -366,11 +366,9 @@ pub async fn give_avatar(
     let said = app.upload(h, &token, bytes.to_vec(), "image/png").await;
     assert_eq!(said.status, 200, "{}", said.body);
     let blob = said.body["blob"].clone();
-    let profile = json!({"$type": format!("{NS}.profile"), "displayName": name, "joinPolicy": "approval", "avatar": blob});
-    let collection = format!("{NS}.profile");
-    let said = app
-        .put(h, &token, &meta, &collection, "self", profile)
-        .await;
+    let about = json!({"$type": format!("{NS}.about"), "displayName": name, "avatar": blob});
+    let collection = format!("{NS}.about");
+    let said = app.put(h, &token, &meta, &collection, "self", about).await;
     assert_eq!(said.status, 200, "{}", said.body);
     blob
 }

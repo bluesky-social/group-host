@@ -1,22 +1,33 @@
 // Why something was reported, in the words a moderator reads, rather than
-// as a report names it (`spam`, `nsfw`).
+// as a report names it (`org.atgrp.mod.defs#reasonSpam`).
 
 import { m } from '#lib/paraglide/messages.js';
 
+const DEFS = 'org.atgrp.mod.defs';
+
+/** The reason types the spec names, each by its token, in the order a report offers them. */
+export const REASONS = [
+  `${DEFS}#reasonSpam`,
+  `${DEFS}#reasonMisleading`,
+  `${DEFS}#reasonRude`,
+  `${DEFS}#reasonNsfw`,
+  `${DEFS}#reasonViolation`,
+  `${DEFS}#reasonOther`
+];
+
 const NAMED: Record<string, () => string> = {
-  spam: m.reasons_spam,
-  violation: m.reasons_violation,
-  misleading: m.reasons_misleading,
-  nsfw: m.reasons_sexual,
-  rude: m.reasons_rude,
-  other: m.reasons_other,
-  appeal: m.reasons_appeal
+  [`${DEFS}#reasonSpam`]: m.reasons_spam,
+  [`${DEFS}#reasonViolation`]: m.reasons_violation,
+  [`${DEFS}#reasonMisleading`]: m.reasons_misleading,
+  [`${DEFS}#reasonNsfw`]: m.reasons_sexual,
+  [`${DEFS}#reasonRude`]: m.reasons_rude,
+  [`${DEFS}#reasonOther`]: m.reasons_other
 };
 
 /**
  * A reason type, named: one of the known ones by its name here, any other
- * by its last word, split apart, as "Ban evasion" for `banEvasion` or
- * `#reasonBanEvasion`.
+ * by its last word, split apart, as "Ban evasion" for
+ * `com.example.defs#reasonBanEvasion`.
  */
 export function reason(type: string): string {
   if (NAMED[type]) return NAMED[type]();

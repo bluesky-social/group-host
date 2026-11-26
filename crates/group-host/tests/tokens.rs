@@ -57,8 +57,8 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
     )
     .await;
     let policy = json!({"$type": "org.atgrp.policy", "grants": [
-        {"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
-        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        {"role": "member", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
+        {"role": "admin", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?collection=*")]},
     ]});
     let made = make_space(h, &alice, &did, CALENDAR, "rides", policy).await;
     membership(h, &did, &bob.did, &["member"]).await;
@@ -458,7 +458,7 @@ async fn writes_only_what_its_member_still_may() {
     let (did, calendar, [_, bob, _]) = group(&h).await;
     membership(&h, &did, &bob.did, &["member", "admin"]).await;
     let scope = format!(
-        "atproto repo:{POST} include:org.atgrp.authManageGroup space:{CALENDAR}?collection=*"
+        "atproto repo:{POST} include:org.atgrp.authManageAdmin space:{CALENDAR}?collection=*"
     );
     let app = App::loopback(&scope);
     let access = token(&h, &app, &bob, &did).await;
@@ -472,7 +472,7 @@ async fn writes_only_what_its_member_still_may() {
         .await
     };
     let rule = async || {
-        app.call(&h, "com.atproto.space.createRecord", &access, Some(&json!({"repo": did, "space": meta_space(&did), "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "text": "Be kind.", "createdAt": "2026-11-03T00:00:00Z"}}))).await
+        app.call(&h, "com.atproto.space.createRecord", &access, Some(&json!({"repo": did, "space": members_space(&did), "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "text": "Be kind.", "createdAt": "2026-11-03T00:00:00Z"}}))).await
     };
     let event = async || {
         app.call(&h, "com.atproto.space.createRecord", &access, Some(&json!({"repo": did, "space": calendar, "collection": "com.example.note", "record": record("com.example.note", "x")}))).await
@@ -699,7 +699,7 @@ async fn reads_a_space_with_a_delegation_while_its_member_may() {
 async fn configures_the_group_as_its_methods_would() {
     let h = start(&[], false).await;
     let (did, _, [alice, ..]) = group(&h).await;
-    let app = App::loopback("atproto include:org.atgrp.authManageGroup");
+    let app = App::loopback("atproto include:org.atgrp.authManageAdmin");
     let access = token(&h, &app, &alice, &did).await;
     let (meta, members) = (meta_space(&did), members_space(&did));
     let c = |n: &str| format!("{NS}.{n}");
@@ -717,26 +717,29 @@ async fn configures_the_group_as_its_methods_would() {
     };
     let mut labeler = h
         .host
-        .group_record(&did, &meta, &c("labeler"), "self")
+        .group_record(&did, &members, &c("labeler"), "self")
         .unwrap()
         .unwrap();
     labeler["subjectTypes"] = json!(["account"]);
-    let profile = |extra: Json| {
-        let mut p = json!({"$type": c("profile"), "displayName": "Riders United", "joinPolicy": "open", "createdAt": "2026-11-03T00:00:00Z"});
+    let about = |extra: Json| {
+        let mut p = json!({"$type": c("about"), "displayName": "Riders United", "website": "https://riders.example"});
         p.as_object_mut()
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
         p
     };
-    let said = put(&meta, &c("profile"), "self", profile(json!({}))).await;
+    let config = |join: &str| json!({"$type": c("config"), "joinPolicy": join});
+    let said = put(&meta, &c("about"), "self", about(json!({}))).await;
     assert_eq!(said.status, 200, "{}", said.body);
     let named = h
         .host
-        .group_record(&did, &meta, &c("profile"), "self")
+        .group_record(&did, &meta, &c("about"), "self")
         .unwrap()
         .unwrap();
     assert_eq!(named["displayName"], "Riders United");
-    let role = json!({"$type": c("role"), "displayName": "Ride leader", "createdAt": "2026-11-03T00:00:00Z"});
+    let said = put(&meta, &c("config"), "self", config("approval")).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    let role = json!({"$type": c("role"), "displayName": "Ride leader"});
     assert_eq!(put(&members, &c("role"), "leader", role).await.status, 200);
     assert_eq!(delete(&members, &c("role"), "leader").await.status, 200);
 
@@ -744,9 +747,9 @@ async fn configures_the_group_as_its_methods_would() {
         (
             put(
                 &meta,
-                &c("profile"),
+                &c("about"),
                 "self",
-                profile(json!({"displayName": " "})),
+                about(json!({"displayName": " "})),
             )
             .await,
             (400, "InvalidRequest"),
@@ -754,21 +757,25 @@ async fn configures_the_group_as_its_methods_would() {
         (
             put(
                 &meta,
-                &c("profile"),
+                &c("about"),
                 "self",
-                profile(json!({"joinPolicy": "lottery"})),
+                about(json!({"website": "ftp://riders.example"})),
             )
             .await,
             (400, "InvalidRequest"),
         ),
         (
-            put(&meta, &c("profile"), "other", profile(json!({}))).await,
+            put(&meta, &c("config"), "self", config("lottery")).await,
+            (400, "InvalidRequest"),
+        ),
+        (
+            put(&meta, &c("about"), "other", about(json!({}))).await,
             (400, "InvalidRequest"),
         ),
         // A record of ours that is not what its lexicon describes.
         (
             put(
-                &meta,
+                &members,
                 &c("rule"),
                 "3m2abcdefghij",
                 json!({"$type": c("rule"), "title": "x"}),
@@ -776,19 +783,24 @@ async fn configures_the_group_as_its_methods_would() {
             .await,
             (400, "InvalidRequest"),
         ),
+        // The group keeps its about and its config at self.
         (
-            delete(&meta, &c("profile"), "self").await,
+            delete(&meta, &c("about"), "self").await,
             (400, "InvalidRequest"),
         ),
-        // The labeler, likewise, is kept at self, and never taken away,
-        // though it may change there.
         (
-            put(&meta, &c("labeler"), "self", labeler.clone()).await,
+            delete(&meta, &c("config"), "self").await,
+            (400, "InvalidRequest"),
+        ),
+        // The labeler, likewise, is kept at self in the members space, and
+        // never taken away, though it may change there.
+        (
+            put(&members, &c("labeler"), "self", labeler.clone()).await,
             (200, ""),
         ),
         (
             put(
-                &meta,
+                &members,
                 &c("labeler"),
                 "other",
                 json!({"$type": c("labeler")}),
@@ -797,20 +809,36 @@ async fn configures_the_group_as_its_methods_would() {
             (400, "InvalidRequest"),
         ),
         (
-            delete(&meta, &c("labeler"), "self").await,
+            delete(&members, &c("labeler"), "self").await,
             (400, "InvalidRequest"),
+        ),
+        // Nor is a labeler, or a rule, written in meta: no set names them
+        // there.
+        (
+            put(&meta, &c("labeler"), "self", labeler.clone()).await,
+            (403, "ScopeMissing"),
+        ),
+        (
+            put(
+                &meta,
+                &c("rule"),
+                "3m2abcdefghij",
+                json!({"$type": c("rule"), "title": "Be kind", "createdAt": "2026-11-03T00:00:00Z"}),
+            )
+            .await,
+            (403, "ScopeMissing"),
         ),
         (
             delete(&members, &c("role"), "admin").await,
             (400, "RoleInUse"),
         ),
-        // What the set doesn't name: a member's own acceptance.
+        // What the set doesn't name: a member's own confirmation.
         (
             put(
                 &members,
-                &c("acceptance"),
+                &c("confirmation"),
                 "x",
-                json!({"$type": c("acceptance")}),
+                json!({"$type": c("confirmation")}),
             )
             .await,
             (403, "ScopeMissing"),
@@ -970,9 +998,9 @@ async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
     let methods = [
         "listJoinRequests",
         "denyJoinRequest",
-        "listModSubjects",
-        "getModSubjectHistory",
-        "resolveModSubject",
+        "mod.querySubjects",
+        "mod.querySubjectHistory",
+        "mod.updateSubject",
     ];
     let rpc = |m: &str| format!("rpc:{NS}.{m}?aud=*");
     let mut asked: Vec<String> = methods.iter().map(|m| rpc(m)).collect();
@@ -996,15 +1024,23 @@ async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
     let said = get(format!("{NS}.listJoinRequests?group={did}")).await;
     assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(said.body["requests"], json!([]));
+    // A session's group is its own: it need not name it.
+    let said = get(format!("{NS}.listJoinRequests")).await;
+    assert_eq!(said.status, 200, "{}", said.body);
     let deny = json!({"group": did, "member": carol.did});
     let said = app
         .call(&h, &format!("{NS}.denyJoinRequest"), access, Some(&deny))
         .await;
     assert_eq!(said.error(), (400, "JoinRequestNotFound"));
-    let said = get(format!("{NS}.listModSubjects?group={did}")).await;
+    let deny = json!({"member": carol.did});
+    let said = app
+        .call(&h, &format!("{NS}.denyJoinRequest"), access, Some(&deny))
+        .await;
+    assert_eq!(said.error(), (400, "JoinRequestNotFound"));
+    let said = get(format!("{NS}.mod.querySubjects?group={did}")).await;
     assert_eq!(said.status, 200, "{}", said.body);
     let history = format!(
-        "{NS}.getModSubjectHistory?group={did}&subject={}",
+        "{NS}.mod.querySubjectHistory?group={did}&subject={}",
         carol.did
     );
     assert_eq!(get(history.clone()).await.status, 200);
@@ -1012,7 +1048,7 @@ async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
     let said = app
         .call(
             &h,
-            &format!("{NS}.resolveModSubject"),
+            &format!("{NS}.mod.updateSubject"),
             access,
             Some(&resolve),
         )
@@ -1021,11 +1057,11 @@ async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
 
     // Or for this host by name, or through one of its permission sets.
     let ours = &h.host.config.service_did;
-    let named = format!("atproto rpc:{NS}.listModSubjects?aud={ours}");
+    let named = format!("atproto rpc:{NS}.mod.querySubjects?aud={ours}");
     for scope in [named.as_str(), "atproto include:org.atgrp.authModerate"] {
         let app = App::loopback(scope);
         let access = token(&h, &app, &alice, &did).await;
-        let nsid = format!("{NS}.listModSubjects?group={did}");
+        let nsid = format!("{NS}.mod.querySubjects?group={did}");
         let said = app.call(&h, &nsid, &access, None).await;
         assert_eq!(said.status, 200, "{scope}: {}", said.body);
     }
@@ -1036,13 +1072,19 @@ async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
     let said = other
         .call(
             &h,
-            &format!("{NS}.listModSubjects?group={did}"),
+            &format!("{NS}.mod.querySubjects?group={did}"),
             &without,
             None,
         )
         .await;
     assert_eq!(said.error(), (403, "ScopeMissing"));
     let said = get(format!("{NS}.listJoinRequests?group=did:plc:elsewhere")).await;
+    assert_eq!(said.error(), (403, "Forbidden"));
+    assert_eq!(said.body["message"], "a session for another group");
+    let deny = json!({"group": "did:plc:elsewhere", "member": carol.did});
+    let said = app
+        .call(&h, &format!("{NS}.denyJoinRequest"), access, Some(&deny))
+        .await;
     assert_eq!(said.error(), (403, "Forbidden"));
 
     // Asked again at each call: once Alice admits nobody, nor does it.
@@ -1154,14 +1196,14 @@ async fn what_a_grant_bought_ends_once_its_member_reads_no_more() {
     let (did, calendar, [alice, bob, _]) = group(&h).await;
     // The calendar is for its ride leaders; Bob leads rides.
     let leaders = json!({"$type": format!("{NS}.policy"), "grants": [
-        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        {"role": "admin", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?collection=*")]},
         {"role": "leader", "read": true},
     ]});
     h.host.store.set_policy(&calendar, &leaders).unwrap();
     let role = Write::Create {
         collection: format!("{NS}.role"),
         rkey: "leader".into(),
-        value: json!({"$type": format!("{NS}.role"), "displayName": "Ride leader", "createdAt": "2026-11-03T00:00:00Z"}),
+        value: json!({"$type": format!("{NS}.role"), "displayName": "Ride leader"}),
     };
     h.host
         .space_write(&did, &members_space(&did), &[role])
@@ -1181,7 +1223,7 @@ async fn what_a_grant_bought_ends_once_its_member_reads_no_more() {
     heard.told(1).await;
 
     // Alice, in her console, makes Bob a member alone.
-    let admin = App::loopback("atproto include:org.atgrp.authManageGroup");
+    let admin = App::loopback("atproto include:org.atgrp.authManageAdmin");
     let theirs = token(&h, &admin, &alice, &did).await;
     let membership = json!({"repo": did, "space": members_space(&did), "collection": format!("{NS}.membership"), "rkey": bob.did,
         "record": {"$type": format!("{NS}.membership"), "roles": ["member"], "createdAt": "2026-11-03T00:00:00Z"}});

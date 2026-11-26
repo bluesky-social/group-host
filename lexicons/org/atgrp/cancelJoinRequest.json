@@ -4,34 +4,28 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Withdraw a pending join request.",
+      "description": "Withdraw the caller's pending join request. Requires service auth.",
       "input": {
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": [
-            "group"
-          ],
+          "required": ["group"],
           "properties": {
             "group": {
               "type": "string",
-              "format": "did",
-              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+              "format": "did"
             }
           }
         }
       },
-      "output": {
-        "encoding": "application/json",
-        "schema": {
-          "type": "object",
-          "properties": {}
-        }
-      },
       "errors": [
         {
+          "name": "GroupNotFound",
+          "description": "The group isn't hosted here."
+        },
+        {
           "name": "JoinRequestNotFound",
-          "description": "No request from that account is waiting."
+          "description": "No request from the caller is waiting."
         }
       ]
     }

@@ -1,11 +1,11 @@
 {
   "lexicon": 1,
-  "id": "org.atgrp.acceptance",
+  "id": "org.atgrp.confirmation",
   "defs": {
     "main": {
       "type": "record",
+      "description": "A member's confirmation of their group membership. Written by the member in the group's members space.",
       "key": "literal:self",
-      "description": "The member's side of membership, written by the member into the members space. Gates appearing in the roster, not access.",
       "record": {
         "type": "object",
         "required": ["createdAt"],

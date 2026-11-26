@@ -3,7 +3,7 @@
 // members read and write, a post of frank's there with a picture,
 // maximilianaquinces reporting that post, and frank reporting
 // maximilianaquinces's account, as members report, by
-// org.atgrp.createReport, which no command or page of the console
+// org.atgrp.mod.submitReport, which no command or page of the console
 // sends.
 
 import { serviceAuth } from '../../world.mjs';
@@ -32,7 +32,7 @@ export default async ({ world, atgrp, ask, page, who, exists, picture }) => {
   await p.goto(`${world.base}/g/${g}/settings/roles`, { waitUntil: 'networkidle' });
   await p.getByRole('button', { name: 'Create a role' }).click();
   const dialog = p.getByRole('dialog', { name: 'Create a role' });
-  await dialog.getByRole('textbox', { name: 'Its key' }).fill('moderator');
+  await dialog.getByRole('textbox', { name: 'Its ID' }).fill('moderator');
   await dialog.getByRole('textbox', { name: 'Its name' }).fill('Moderator');
   for (const action of ['mod.read', 'mod.resolve', 'label'])
     await dialog.getByRole('checkbox', { name: action, exact: true }).check();
@@ -101,7 +101,7 @@ export default async ({ world, atgrp, ask, page, who, exists, picture }) => {
   );
   const post = { subject: written.uri, cid: written.cid };
   const report = async (name, subject, reasonType, reason) => {
-    const lxm = 'org.atgrp.createReport';
+    const lxm = 'org.atgrp.mod.submitReport';
     const token = await serviceAuth(world.pds, who[name], world.did, lxm);
     const res = await fetch(`${world.host}/xrpc/${lxm}`, {
       method: 'POST',
@@ -110,11 +110,16 @@ export default async ({ world, atgrp, ask, page, who, exists, picture }) => {
     });
     if (!res.ok) throw new Error(`${name} reporting: ${await res.text()}`);
   };
-  await report('maximilianaquinces', post, 'rude', 'Calls people names under every swap.');
+  await report(
+    'maximilianaquinces',
+    post,
+    'org.atgrp.mod.defs#reasonRude',
+    'Calls people names under every swap.'
+  );
   await report(
     'frank',
     { subject: who.maximilianaquinces.did },
-    'spam',
+    'org.atgrp.mod.defs#reasonSpam',
     'Posts the same seed shop link in every thread.'
   );
 };

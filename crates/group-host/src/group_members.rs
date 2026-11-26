@@ -75,6 +75,21 @@ impl<'a> Members<'a> {
         Ok(record.map(|m| roles_of(&m)))
     }
 
+    /// `did`'s membership, as a strong reference names it (its `uri` and
+    /// `cid`), if they are a member.
+    pub(crate) fn membership_ref(&self, did: &str) -> Result<Option<Value>, XrpcError> {
+        let (collection, key) = (format!("{NS}.membership"), did_rkey(did));
+        let kept = self
+            .host
+            .store
+            .space_record(&self.group, &self.space, &collection, &key)
+            .map_err(XrpcError::internal)?;
+        Ok(kept.map(|r| {
+            let uri = format!("{}/{}/{collection}/{key}", self.space, self.group);
+            json!({"uri": uri, "cid": r.cid.to_string()})
+        }))
+    }
+
     pub(crate) fn can(&self, roles: &[String], action: &str) -> bool {
         actions_for(&self.grants, roles).contains(action)
     }
@@ -130,7 +145,7 @@ impl<'a> Members<'a> {
         let configuring: BTreeSet<String> = self
             .grants
             .iter()
-            .filter(|g| actions_of(&g.scopes).contains("group.configure"))
+            .filter(|g| actions_of(&g.permissions).contains("group.configure"))
             .map(|g| g.role.clone())
             .collect();
         let others = self.records("membership")?.into_iter().any(|(k, m)| {

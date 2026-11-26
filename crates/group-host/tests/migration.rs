@@ -16,7 +16,7 @@ use common::groups::*;
 use common::oauth::{App, give_avatar, make_space};
 use common::spaces::*;
 use common::{Running, serve, start_reachable};
-use group_host::group::meta_space;
+use group_host::group::{members_space, meta_space};
 use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
@@ -54,9 +54,9 @@ async fn two_hosts_with(
     .await;
     give_avatar(&a, &alice, &did, "Riders", b"face").await;
     let console = App::new("console");
-    let meta = meta_space(&did);
-    let token = console.token_for(&a, &alice, &did, &meta).await;
-    let rule = json!({"repo": did, "space": meta, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "text": ""}});
+    let members = members_space(&did);
+    let token = console.token_for(&a, &alice, &did, &members).await;
+    let rule = json!({"repo": did, "space": members, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "Be kind", "text": "To each other."}});
     let said = console
         .call(&a, "com.atproto.space.createRecord", &token, Some(&rule))
         .await;
@@ -112,15 +112,15 @@ async fn moves_a_group_whole_to_another_host() {
     let account = b.host.store.account(&did).unwrap().unwrap();
     assert_eq!(account.handle, "riders.groups.b.test");
     assert!(b.host.deactivation(&did).unwrap().is_some());
-    let profile = b
+    let about = b
         .host
-        .group_record(&did, &meta_space(&did), &format!("{NS}.profile"), "self")
+        .group_record(&did, &meta_space(&did), &format!("{NS}.about"), "self")
         .unwrap()
         .unwrap();
-    assert_eq!(profile["displayName"], "Riders");
+    assert_eq!(about["displayName"], "Riders");
     let rules = b
         .host
-        .group_records(&did, &meta_space(&did), &format!("{NS}.rule"))
+        .group_records(&did, &members_space(&did), &format!("{NS}.rule"))
         .unwrap();
     assert_eq!(rules[0].1["title"], "Be kind");
     assert!(
@@ -130,7 +130,7 @@ async fn moves_a_group_whole_to_another_host() {
             .unwrap()
             .is_some()
     );
-    let face = Cid::parse(profile["avatar"]["ref"]["$link"].as_str().unwrap()).unwrap();
+    let face = Cid::parse(about["avatar"]["ref"]["$link"].as_str().unwrap()).unwrap();
     assert_eq!(b.host.read_blob(&did, &face).unwrap().unwrap().1, b"face");
     let writers = b.host.store.writers(&calendar, None, 100).unwrap();
     assert!(

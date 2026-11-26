@@ -23,15 +23,11 @@
     displayName={g.displayName}
     description={g.description}
     joinPolicy={g.joinPolicy}
-    url={g.url}
+    website={g.website}
   />
 </Section>
-<Section title={m.route_group_settings_pictures()}>
-  <ProfilePictures
-    name={g.displayName ?? g.handle}
-    avatar={image(g.did, g.avatar)}
-    banner={image(g.did, g.banner)}
-  />
+<Section title={m.route_group_settings_picture()}>
+  <ProfilePictures name={g.displayName ?? g.handle} avatar={image(g.did, g.avatar)} />
 </Section>
 <Section title={m.route_group_settings_who_sees()}>
   <Visibility listed={data.listed} />

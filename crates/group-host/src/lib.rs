@@ -346,24 +346,32 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(moderation::delete_label_definition),
         )
         .route(
-            "/xrpc/org.atgrp.listModSubjects",
-            get(moderation::list_mod_subjects),
+            "/xrpc/org.atgrp.mod.querySubjects",
+            get(moderation::query_subjects),
         )
         .route(
-            "/xrpc/org.atgrp.getModSubjectHistory",
-            get(moderation::get_mod_subject_history),
+            "/xrpc/org.atgrp.mod.querySubjectHistory",
+            get(moderation::query_subject_history),
         )
         .route(
             "/xrpc/org.atgrp.internal.getModSubjectBlob",
             get(moderation::get_mod_subject_blob),
         )
         .route(
-            "/xrpc/org.atgrp.resolveModSubject",
-            post(moderation::resolve_mod_subject),
+            "/xrpc/org.atgrp.mod.updateSubject",
+            post(moderation::update_subject),
         )
         .route(
-            "/xrpc/org.atgrp.createReport",
-            post(moderation::create_report),
+            "/xrpc/org.atgrp.mod.submitReport",
+            post(moderation::submit_report),
+        )
+        .route(
+            "/xrpc/org.atgrp.mod.submitAppeal",
+            post(moderation::submit_appeal),
+        )
+        .route(
+            "/xrpc/org.atgrp.mod.querySelfHistory",
+            get(moderation::query_self_history),
         )
         .route(
             "/xrpc/org.atgrp.internal.listRecoveryKeys",

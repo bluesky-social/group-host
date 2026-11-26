@@ -6,7 +6,7 @@
 export default async ({ atgrp, ask, who }) => {
   const g = 'nightshift.groups.test';
   const role = 'poster';
-  atgrp('bob', 'role', 'set', g, role, '--display-name', 'Poster', '--scopes', 'repo:*');
+  atgrp('bob', 'role', 'set', g, role, '--display-name', 'Poster', '--permissions', 'repo:*');
   await ask('carol', g);
   atgrp('bob', 'member', 'assign', g, who.carol.handle, `member,${role}`);
 };

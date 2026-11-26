@@ -5,7 +5,7 @@
 //! and the method: their own PDS signs it for them.
 
 use crate::Host;
-use crate::api::{Params, page, param};
+use crate::api::{Params, invalid, page, param};
 use crate::group::{Made, NewGroup, members_space, meta_space, rkey_did};
 use crate::member_writes::{expanded, held};
 use crate::oauth_resource::Refusal;
@@ -67,39 +67,43 @@ pub(crate) async fn signed_in(
 }
 
 /// Who calls `lxm`, one of the host's own methods, sent with HTTP `verb`,
-/// to do `action` in `group`: a member holding it, by their service auth
-/// or the console's cookie; or an app signed in as the group (a DPoP
-/// token), whose scope holds `rpc:lxm` and whose member holds `action` at
-/// this call, as a session's writes are checked. The answer is the member.
+/// to do `action` in a group: a member holding it, by their service auth
+/// or the console's cookie, in `group`, which they must name; or an app
+/// signed in as the group (a DPoP token), whose scope holds `rpc:lxm` and
+/// whose member holds `action` at this call, as a session's writes are
+/// checked, in the session's group, which `group`, if named, must be.
+/// The answer is the group and the member.
 pub(crate) async fn doing(
     host: &Host,
     headers: &HeaderMap,
     verb: &str,
     lxm: &str,
-    group: &str,
+    group: Option<&str>,
     action: &str,
-) -> Result<String, Refusal> {
+) -> Result<(String, String), Refusal> {
     let scheme = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|a| a.split_once(' '));
-    let me = if scheme.is_some_and(|(s, _)| s.eq_ignore_ascii_case("DPoP")) {
+    let (group, me) = if scheme.is_some_and(|(s, _)| s.eq_ignore_ascii_case("DPoP")) {
         let acting = host.acting(headers, verb, &format!("/xrpc/{lxm}"))?;
-        if acting.grant.group != group {
+        if group.is_some_and(|g| g != acting.grant.group) {
             return Err(forbidden("a session for another group").into());
         }
         if !acting.permissions.calls(lxm, |aud| for_host(host, aud)) {
             return Err(missing(format!("rpc:{lxm}")).into());
         }
-        acting.grant.member
+        (acting.grant.group, acting.grant.member)
     } else {
-        signed_in(host, headers, lxm).await?
+        let me = signed_in(host, headers, lxm).await?;
+        let group = group.ok_or_else(|| invalid("group is required"))?;
+        (group.to_string(), me)
     };
-    group_of(host, group)?;
-    if !host.may_do(group, &me, action)? {
+    group_of(host, &group)?;
+    if !host.may_do(&group, &me, action)? {
         return Err(forbidden(format!("missing {action}")).into());
     }
-    Ok(me)
+    Ok((group, me))
 }
 
 fn forbidden(message: impl Into<String>) -> XrpcError {
@@ -159,25 +163,23 @@ fn cid_of(blob: &Value) -> Option<&str> {
     blob["ref"]["$link"].as_str()
 }
 
-/// Puts in `view` what a group's profile shows of it.
-fn show_profile(view: &mut Value, profile: &Value) {
-    for key in ["displayName", "description", "joinPolicy", "url"] {
-        if let Some(v) = profile.get(key) {
+/// Puts in `view` what a group's about record shows of it.
+fn show_about(view: &mut Value, about: &Value) {
+    for key in ["displayName", "description", "website"] {
+        if let Some(v) = about.get(key) {
             view[key] = v.clone();
         }
     }
-    for key in ["avatar", "banner"] {
-        if let Some(cid) = cid_of(&profile[key]) {
-            view[key] = json!(cid);
-        }
+    if let Some(cid) = cid_of(&about["avatar"]) {
+        view["avatar"] = json!(cid);
     }
 }
 
-/// The group's rules in the order they are presented: by `order`, then as
-/// written, then by key.
+/// The group's rules, in its members space, in the order they are
+/// presented: by `order`, then as written, then by key.
 fn rules(host: &Host, group: &str) -> Result<Vec<Value>, XrpcError> {
     let mut rules = host
-        .group_records(group, &meta_space(group), &format!("{NS}.rule"))
+        .group_records(group, &members_space(group), &format!("{NS}.rule"))
         .map_err(XrpcError::internal)?;
     rules.sort_by(|(ak, a), (bk, b)| {
         let order = |r: &Value| r["order"].as_i64().unwrap_or(i64::MAX);
@@ -221,12 +223,14 @@ fn objects(field: &str, items: impl IntoIterator<Item = impl Into<String>>) -> V
         .collect()
 }
 
-/// The scopes a role's editor offers that holders of `roles` hold enough
-/// of to give, as a role write asks: each action's, then the group's
-/// permission sets but `authManageGroup`, which is `group.configure`'s.
+/// The permissions a role's editor offers that holders of `roles` hold
+/// enough of to give, as a role write asks: each action's, then the
+/// group's permission sets but `authManageAdmin`, which is
+/// `group.configure`'s.
 fn grantable(grants: &[Grant], roles: &[String], group: &str) -> Vec<Value> {
     let held = held(grants, roles);
-    let sets = ["authManageProfile", "authModerate"].map(|s| format!("include:{NS}.{s}"));
+    let sets = ["authManageBasic", "authManageMembers", "authModerate"]
+        .map(|s| format!("include:{NS}.{s}"));
     let offered = ACTIONS.iter().filter_map(|a| scope_of(a)).chain(sets);
     offered
         .filter(|s| expanded(s).iter().all(|x| covers(&held, x, group)))
@@ -241,9 +245,10 @@ fn signed_out(did: &str, handle: String) -> Value {
 }
 
 /// One group in full, as the caller may see it: what its meta space
-/// holds for whoever may read it, the caller's own standing, and for a
-/// member, how many are in it, its roles and spaces. To no one signed in,
-/// only its DID and handle, whatever its meta space's policy says.
+/// holds for whoever may read it, its rules and labels for whoever may
+/// read its members space, the caller's own standing, and for a member,
+/// how many are in it, its roles and spaces. To no one signed in, only its
+/// DID and handle, whatever its meta space's policy says.
 pub async fn get_group(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
@@ -280,11 +285,17 @@ pub async fn get_group(
 
     let mut view = base(&host, group, &handle)?;
     if reads_meta {
-        if let Some(profile) = record(&meta, "profile", "self")? {
-            show_profile(&mut view, &profile);
+        if let Some(about) = record(&meta, "about", "self")? {
+            show_about(&mut view, &about);
         }
+        let config = record(&meta, "config", "self")?.unwrap_or_default();
+        if let Some(join) = config.get("joinPolicy") {
+            view["joinPolicy"] = join.clone();
+        }
+    }
+    if reads_members {
         view["rules"] = json!(rules(&host, group)?);
-        let labeler = record(&meta, "labeler", "self")?.unwrap_or_default();
+        let labeler = record(&members, "labeler", "self")?.unwrap_or_default();
         let labels = &labeler["policies"]["labelValueDefinitions"];
         view["labels"] = if labels.is_array() {
             labels.clone()
@@ -342,9 +353,9 @@ pub async fn get_group(
             json!({
                 "role": g.role,
                 "actions": actions_for(&granted, one),
-                "assignable": objects("role", g.assignable.clone()),
+                "canAssign": objects("role", g.can_assign.clone()),
                 "repoCollections": objects("collection", repo_collections_for(&granted, one)),
-                "scopes": g.scopes.iter().map(|s| json!({
+                "permissions": g.permissions.iter().map(|s| json!({
                     "scope": s,
                     "actions": actions_of(std::slice::from_ref(s)),
                 })).collect::<Vec<_>>(),
@@ -352,19 +363,24 @@ pub async fn get_group(
         })
         .collect();
     let mut spaces = Vec::new();
-    // Those in its index, in its order, then those left out of it to
-    // whoever reads them; each with its policy, to whoever reads the space.
-    let mut uris: Vec<String> = records("space")?
-        .into_iter()
-        .filter_map(|(_, e)| e["space"].as_str().map(String::from))
-        .collect();
-    let unlisted = host.store.spaces_of(group).map_err(XrpcError::internal)?;
-    let unlisted: Vec<String> = unlisted.into_iter().filter(|u| !uris.contains(u)).collect();
-    uris.extend(unlisted);
+    // The meta and members spaces, then those in its index, in its order,
+    // then those left out of it to whoever reads them; each with its
+    // policy, to whoever reads the space. `unlisted` means nothing in the
+    // meta and members spaces' policies.
+    let own = [meta.clone(), members.clone()];
+    let mut uris = own.to_vec();
+    let indexed = records("space")?.into_iter();
+    let indexed = indexed.filter_map(|(_, e)| e["space"].as_str().map(String::from));
+    let rest = host.store.spaces_of(group).map_err(XrpcError::internal)?;
+    for uri in indexed.chain(rest) {
+        if !uris.contains(&uri) {
+            uris.push(uri);
+        }
+    }
     for uri in uris {
         let kept = host.hosted_space(&uri)?;
         let readable = reads(&uri)?;
-        if kept.policy["unlisted"] == true && !readable {
+        if kept.policy["unlisted"] == true && !readable && !own.contains(&uri) {
             continue;
         }
         let kind = uri.split('/').nth(4).unwrap_or_default();
@@ -455,7 +471,7 @@ pub async fn list_members(
     Ok(Json(out))
 }
 
-/// Whether `did` has written their own acceptance in the members space:
+/// Whether `did` has written their own confirmation in the members space:
 /// their repo there holds anything.
 fn accepted(host: &Host, members: &str, did: &str) -> anyhow::Result<bool> {
     let empty = atproto::space::LtHash::default().digest();

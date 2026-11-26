@@ -7,9 +7,9 @@ description: Build or change the console's pages (web/) so they look right, not 
 
 The e2e flows say a page works; they do not say it looks right, and
 they only ever see the states their flow passes through. A page nobody
-looked at shows it: a group with no banner gets a great empty block, an
-empty list is two loose sentences, the button that leaves the group is
-the heaviest thing on the card. So look, at every state, before pushing.
+looked at shows it: an empty list is two loose sentences, the button
+that leaves the group is the heaviest thing on the card. So look, at
+every state, before pushing.
 
 AGENTS.md has the mechanics (tokens, component layers, inline text).
 This is how the pages should read, and how to check they do.
@@ -38,11 +38,11 @@ just look /g/lanterns.groups.test --as alice --out target/look/before --name gro
 
 Each world starts with alice, bob, carol, dan, erin, frank, harbor and
 maximilianaquinces (the longest handle the PDS takes), and Riders
-(riders.groups.test), alice's, with nothing else in it: no banner, no
+(riders.groups.test), alice's, with nothing else in it: no website, no
 picture, no words, no one else. That is the bare state. A seed puts in
 the rest, once per kept world:
 
-- `full`: Lantern Hikers (lanterns.groups.test), alice's, with a banner,
+- `full`: Lantern Hikers (lanterns.groups.test), alice's, with
   a picture, words, two rules and a moderator role; bob, carol
   (moderator), dan, erin and frank in it, past a page of members; harbor
   asking to join; an invite waiting for maximilianaquinces.
@@ -53,7 +53,7 @@ the rest, once per kept world:
   "Phone", having posted as it, and taken a post down.
 - `reports`, after `full`: Lantern Hikers' moderation queue, with dan
   reported twice (once citing a rule), a post of frank's reported, erin
-  escalated and bob resolved with a note.
+  tagged `escalated` with a note, and bob resolved with a note.
 
 A state none of them makes is a seed of your own: a module that writes
 it, `--seed path/to/it.mjs` (the top of `harness/look/look.mjs` says
@@ -117,7 +117,7 @@ For every list, page or component you touch, each that applies:
   is asking, maximilianaquinces is invited).
 - **Empty** (Riders), **one**, **many** (Lantern Hikers, past a page),
   and **long text** (`--seed long`).
-- **No picture**: a group with no banner or avatar, as Riders is.
+- **No picture**: a group with no avatar, as Riders is.
 - **Phone** and **dark**: the defaults draw desktop light and phone dark.
 - **Open**: every dialog and menu it has (`--click`), on a phone as well.
 - **After**: what a form says once sent, and once refused.
@@ -307,8 +307,7 @@ As it should read:
 
 **Pictures.** `Avatar` is given the name of whom it draws: with no
 picture, it draws their initial on a hue their name gives them, never a
-blank disc. A group with no banner shows no banner block: its picture,
-name and nav sit at the top of its card.
+blank disc.
 
 **People.** A person is their avatar and handle, by `MemberRow` (a row), `Person` (in a line of text) or the
 header's menu, never a bare DID where a handle is known.

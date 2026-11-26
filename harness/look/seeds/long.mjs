@@ -13,7 +13,18 @@ export default async ({ atgrp, ask, who, exists }) => {
     'We walk the long ridge every Thursday evening from the first warm week of April until the clocks go back, lanterns lit, at a pace anyone can keep. Bring water, a warm layer, and a lantern if you have one; we lend them to whoever does not. Dogs are welcome on a lead.';
   const site =
     'https://a-very-long-domain-name-for-a-walking-group.example/routes/the-north-ridge/in-the-evening';
-  atgrp('dan', 'profile', 'set', g, '--display-name', name, '--description', about, '--url', site);
+  atgrp(
+    'dan',
+    'profile',
+    'set',
+    g,
+    '--display-name',
+    name,
+    '--description',
+    about,
+    '--website',
+    site
+  );
   const rule = 'Wait for the last walker at every gate, stile and fork';
   atgrp(
     'dan',

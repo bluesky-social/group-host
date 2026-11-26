@@ -5,12 +5,17 @@
     - link "Open":
     - link "Escalated":
     - link "Resolved":
-  - heading "Subjects1" [level=2]
+  - heading "Subjects2" [level=2]
   - search:
     - text: Find an account
     - combobox "Find an account"
     - button "Review"
   - list:
+    - listitem:
+      - text: frank.test Post · Reported on <date> Escalated Rude
+      - button "Review frank.test": Review
+      - paragraph: Calls people names under every swap.
+      - group: History
     - listitem:
       - text: maximilianaquinces.test Account · Reported on <date> Spam
       - button "Review maximilianaquinces.test": Review

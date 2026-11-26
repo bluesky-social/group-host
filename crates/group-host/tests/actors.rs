@@ -133,7 +133,7 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
     assert_eq!(dids(&bobs), both);
     let (_, seen) = groups_of(&h, &bob, &format!("actor={}", alice.did)).await;
     assert_eq!(dids(&seen), both);
-    // Whose profile Bob may not read shows him no name.
+    // Whose about record Bob may not read shows him no name.
     let at_quiet = seen["groups"]
         .as_array()
         .unwrap()
@@ -143,8 +143,8 @@ async fn lists_the_groups_someone_is_in_that_the_caller_is_in_too() {
     assert_eq!(at_quiet.get("displayName"), None);
     let (_, none) = groups_of(&h, &carol, &format!("actor={}", alice.did)).await;
     assert_eq!(none["groups"], json!([]));
-    // One whose profile is gone shows no name.
-    drop_profile(&h, &hikers).await;
+    // One whose about record is gone shows no name.
+    drop_about(&h, &hikers).await;
     let (_, mine) = groups_of(&h, &alice, &format!("actor={}", alice.did)).await;
     let at_hikers = mine["groups"]
         .as_array()

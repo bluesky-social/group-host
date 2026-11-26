@@ -13,14 +13,14 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
-use crate::group::members_space;
+use crate::group::{members_space, meta_space};
 use crate::group_api::{group_of, signed_in};
 use crate::group_invites::{inviting_scope, is_inbox};
 use crate::member_writes::own_scopes;
 use crate::oauth_resource::Refusal;
 use crate::oauth_scope::{may_write, with_labels};
 use crate::oauth_store::{Grant, Tokens};
-use crate::rbac::{INTERNAL, LABEL, NS, Policy, label_writes};
+use crate::rbac::{INTERNAL, LABEL, NS, Policy, label_writes, meta_writes};
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
@@ -133,10 +133,10 @@ type Writable = BTreeMap<String, BTreeSet<String>>;
 impl Host {
     /// What `member`'s roles in `group` may write as it in `space`, at
     /// `uri`: each kind of record with its writes, as the space's policy
-    /// grants them and, in the members space, as the group grants them
-    /// its own records there; and the scope of a token for them, and for
-    /// what they may do to the space itself (making it, if it is not yet
-    /// made, changing and ending it).
+    /// grants them and, in the meta and members spaces, as the group
+    /// grants them its own records there; and the scope of a token for
+    /// them, and for what they may do to the space itself (making it, if
+    /// it is not yet made, changing and ending it).
     pub(crate) fn group_scope(
         &self,
         group: &str,
@@ -145,18 +145,21 @@ impl Host {
         space: &SpaceRef,
     ) -> Result<(Writable, Writable, String), XrpcError> {
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
+        let grants = self.role_grants(group).map_err(XrpcError::internal)?;
         let policy = self.policy(uri).map_err(XrpcError::internal)?;
         let writes = policy
             .as_ref()
             .map(|p| p.writes(&roles))
             .unwrap_or_default();
-        let mut own = match uri == members_space(group) {
-            true => self.members_writes_of(group, &roles)?,
-            false => BTreeMap::new(),
+        let mut own = if uri == members_space(group) {
+            self.members_writes_of(group, &roles)?
+        } else if uri == meta_space(group) {
+            meta_writes(&grants, &roles, group)
+        } else {
+            BTreeMap::new()
         };
         // Labels, as far as what the space grants does not hold them.
         if policy.is_some() {
-            let grants = self.role_grants(group).map_err(XrpcError::internal)?;
             let labels = label_writes(&grants, &roles, group, space);
             if !labels.iter().all(|w| may_write(&writes, LABEL, w)) {
                 with_labels(&mut own, labels);

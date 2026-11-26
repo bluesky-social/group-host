@@ -82,6 +82,13 @@ async fn makes_a_group_and_a_session_on_it_for_the_app() {
     // Alice founded it.
     let roles = h.host.roles(&did, &alice.did).unwrap();
     assert!(roles.contains(&"admin".to_string()), "{roles:?}");
+    // Its join policy is the group's config.
+    let meta = group_host::group::meta_space(&did);
+    let config = h.host.group_record(&did, &meta, "org.atgrp.config", "self");
+    assert_eq!(
+        config.unwrap().unwrap(),
+        json!({"$type": "org.atgrp.config", "joinPolicy": "invite"})
+    );
 
     // The session writes as the group, refreshes, and is listed as Alice's.
     let token = session["access_token"].as_str().unwrap();
@@ -101,6 +108,25 @@ async fn makes_a_group_and_a_session_on_it_for_the_app() {
     assert_eq!(sessions[0]["source"], "provisionGroup");
     assert_eq!(sessions[0]["member"], alice.did.as_str());
     assert_eq!(sessions[0]["clientId"], app.id.as_str());
+}
+
+#[tokio::test]
+async fn keeps_each_join_policy_asked_in_the_groups_config() {
+    let h = start(&[("PROVISIONING_CLIENTS", "*")], false).await;
+    let [alice, ..] = people(&h).await;
+    let app = App::loopback(SCOPE);
+    for policy in ["open", "approval", "invite"] {
+        let handle = format!("{policy}.groups.test");
+        let body = asking(&app, json!({"handle": handle, "joinPolicy": policy}));
+        let said = provision(&h, &app, Some(&alice), &body).await;
+        assert_eq!(said.status, 200, "{policy}: {}", said.body);
+        let did = said.body["did"].as_str().unwrap();
+        let meta = group_host::group::meta_space(did);
+        let config = h.host.group_record(did, &meta, "org.atgrp.config", "self");
+        assert_eq!(config.unwrap().unwrap()["joinPolicy"], policy);
+        let about = h.host.group_record(did, &meta, "org.atgrp.about", "self");
+        assert_eq!(about.unwrap().unwrap().get("joinPolicy"), None);
+    }
 }
 
 #[tokio::test]
@@ -153,7 +179,7 @@ async fn refuses_before_it_makes_anything() {
 async fn gives_the_app_what_it_declares_and_the_founder_may() {
     let h = start(&[("PROVISIONING_CLIENTS", "*")], false).await;
     let [alice, bob, _] = people(&h).await;
-    let app = App::loopback(&format!("{SCOPE} rpc:org.atgrp.listModSubjects?aud=*"));
+    let app = App::loopback(&format!("{SCOPE} rpc:org.atgrp.mod.querySubjects?aud=*"));
     for (scope, refused) in [
         ("repo:app.bsky.feed.post", "the scope must include atproto"),
         (
@@ -173,7 +199,7 @@ async fn gives_the_app_what_it_declares_and_the_founder_may() {
     }
     // A method of this host's a group session calls is kept, as the
     // founder, an admin, holds mod.read; asked again at each call.
-    let scope = format!("{SCOPE} rpc:org.atgrp.listModSubjects?aud=*");
+    let scope = format!("{SCOPE} rpc:org.atgrp.mod.querySubjects?aud=*");
     let said = provision(
         &h,
         &app,

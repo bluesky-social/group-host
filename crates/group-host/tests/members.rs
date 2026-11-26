@@ -75,9 +75,9 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
     let kept = record(&h, &did, "role", "moderator").unwrap();
     assert_eq!(kept["displayName"], "moderator");
     let g = grant_of(&h, &did, "moderator").unwrap();
-    assert_eq!(g.assignable, ["member"]);
-    assert!(g.scopes.contains(&"repo:org.atgrp.post".to_string()));
-    assert_eq!(grant_of(&h, &did, "admin").unwrap().assignable, ["*"]);
+    assert_eq!(g.can_assign, ["member"]);
+    assert!(g.permissions.contains(&"repo:org.atgrp.post".to_string()));
+    assert_eq!(grant_of(&h, &did, "admin").unwrap().can_assign, ["*"]);
     // Given on joining, and its people bots, as the record says.
     let mut flagged = granting(&h, &did, "moderator", &[&eject[1]], &["member"]);
     flagged["default"] = json!(true);
@@ -88,9 +88,10 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
         (kept["default"].clone(), kept["bot"].clone()),
         (json!(true), json!(true))
     );
-    // A scope given is one the giver's roles hold, as written or within
-    // one they hold: a permission set of theirs is the scopes it lists.
-    let rule = "space:org.atgrp.meta?skey=self&collection=org.atgrp.rule&action=create";
+    // A permission given is one the giver's roles hold, as written or
+    // within one they hold: a permission set of theirs is the permissions
+    // it lists.
+    let rule = "space:org.atgrp.members?skey=self&collection=org.atgrp.rule&action=create";
     let more = granting(
         &h,
         &did,
@@ -105,8 +106,8 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
     let said = runs.put(&h, "role", "moderator", more).await;
     assert_eq!(said.status, 200, "{}", said.body);
 
-    let with = |role: &str, scopes: &[&str], assignable: &[&str]| {
-        granting(&h, &did, role, scopes, assignable)
+    let with = |role: &str, permissions: &[&str], can_assign: &[&str]| {
+        granting(&h, &did, role, permissions, can_assign)
     };
     let every = scopes(&group_host::rbac::ACTIONS);
     let every: Vec<&str> = every.iter().map(String::as_str).collect();
@@ -124,14 +125,10 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
         ),
         // A record that is not what its lexicon says.
         (
-            runs.put(&h, "role", "x", json!({"$type": c("role")})).await,
-            (400, "InvalidRequest"),
-        ),
-        (
             runs.put(
                 &h,
                 "role",
-                "x",
+                "spare",
                 json!({"$type": c("role"), "displayName": "x".repeat(65)}),
             )
             .await,
@@ -141,7 +138,7 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
             runs.put(
                 &h,
                 "role",
-                "x",
+                "spare",
                 json!({"$type": c("role"), "displayName": "X", "description": "x".repeat(2001)}),
             )
             .await,
@@ -151,18 +148,20 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
             runs.put(
                 &h,
                 "role",
-                "x",
+                "spare",
                 json!({"$type": c("role"), "displayName": "X", "bot": "yes"}),
             )
             .await,
             (400, "InvalidRequest"),
         ),
         (
-            runs.put(&h, "role", "x", with("x", &many, &[])).await,
+            runs.put(&h, "role", "spare", with("spare", &many, &[]))
+                .await,
             (400, "InvalidRequest"),
         ),
         (
-            runs.put(&h, "role", "x", with("x", &[""], &[])).await,
+            runs.put(&h, "role", "spare", with("spare", &[""], &[]))
+                .await,
             (400, "InvalidRequest"),
         ),
         // A role let give one the group does not define.
@@ -205,9 +204,41 @@ async fn an_admin_defines_roles_and_what_they_may_do() {
     // Nor anything at all, for a member whose roles may not.
     let bobs = Session::runs(&h, &bob, &did).await;
     refused(
-        &bobs.put(&h, "role", "x", role("X")).await,
+        &bobs.put(&h, "role", "spare", role("X")).await,
         (403, "ScopeMissing"),
     );
+}
+
+#[tokio::test]
+async fn a_role_is_keyed_by_an_id_as_a_label_value_is_written() {
+    let h = start(&[], false).await;
+    let (did, [alice, _, _]) = group(&h).await;
+    let runs = Session::runs(&h, &alice, &did).await;
+    // Lowercase letters and `-`, at least 3 of them and at most 64: apps
+    // may show it. A role needs no name of its own; it is shown by its ID.
+    let unnamed = json!({ "$type": c("role") });
+    let longest = "x".repeat(64);
+    for id in ["helpers", "leader", "ghost", "ride-lead", "abc", &longest] {
+        let said = runs.put(&h, "role", id, unnamed.clone()).await;
+        assert_eq!(said.status, 200, "{id}: {}", said.body);
+        assert_eq!(record(&h, &did, "role", id).unwrap(), unnamed);
+    }
+    for id in ["ab", "x", "Helpers", "ride_lead", "ride.lead", "helper2"] {
+        let said = runs.put(&h, "role", id, role("Odd")).await;
+        refused(&said, (400, "InvalidRequest"));
+        assert_eq!(
+            said.body["message"],
+            format!("a role ID is 3 to 64 lowercase letters and -, not {id}"),
+            "{id}"
+        );
+        assert_eq!(record(&h, &did, "role", id), None);
+    }
+    // One kept under another key, as a group moved here may have it, may
+    // still be taken away.
+    keep(&h, &did, "role", "Old", role("Old")).await;
+    let said = runs.delete(&h, "role", "Old").await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    assert_eq!(record(&h, &did, "role", "Old"), None);
 }
 
 #[tokio::test]
@@ -226,7 +257,7 @@ async fn every_role_is_given_by_one_who_may_give_every_role() {
     let deputy = granting(&h, &did, "deputy", &[], &["*"]);
     let said = runs.create(&h, "role", "deputy", deputy).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    assert_eq!(grant_of(&h, &did, "deputy").unwrap().assignable, ["*"]);
+    assert_eq!(grant_of(&h, &did, "deputy").unwrap().can_assign, ["*"]);
     // Without it, she gives only the roles listed, and never `*` again.
     let configure = scope_of("group.configure").unwrap();
     let assign = scope_of("role.assign").unwrap();
@@ -268,9 +299,9 @@ async fn a_writer_changes_only_the_grants_of_roles_they_may_give() {
     let steward = granting(&h, &did, "steward", &[&configure], &["member", "steward"]);
     keep(&h, &did, "role", "steward", steward).await;
     join(&h, &did, &bob.did, &["member", "steward"]).await;
-    let bobs = Session::of(&h, &bob, &did, "atproto include:org.atgrp.authManageGroup").await;
-    let with = |role: &str, scopes: &[&str], assignable: &[&str]| {
-        granting(&h, &did, role, scopes, assignable)
+    let bobs = Session::of(&h, &bob, &did, "atproto include:org.atgrp.authManageAdmin").await;
+    let with = |role: &str, permissions: &[&str], can_assign: &[&str]| {
+        granting(&h, &did, role, permissions, can_assign)
     };
     // Not admin's grant; nor his own, to give admin or every role, or
     // what he lacks; nor a new role's, beyond what he holds and gives.
@@ -329,7 +360,7 @@ async fn a_writer_changes_only_the_grants_of_roles_they_may_give() {
     let helper = with("helper", &[&configure], &["member"]);
     let said = bobs.create(&h, "role", "helper", helper).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    assert_eq!(grant_of(&h, &did, "helper").unwrap().assignable, ["member"]);
+    assert_eq!(grant_of(&h, &did, "helper").unwrap().can_assign, ["member"]);
     let cases = [
         (
             bobs.put(
@@ -364,10 +395,10 @@ async fn a_writer_changes_only_the_grants_of_roles_they_may_give() {
     let alices = Session::runs(&h, &alice, &did).await;
     join(&h, &did, &bob.did, &["member"]).await;
     refused(
-        &bobs.put(&h, "role", "x", role("X")).await,
+        &bobs.put(&h, "role", "spare", role("X")).await,
         (403, "Forbidden"),
     );
-    assert_eq!(alices.put(&h, "role", "x", role("X")).await.status, 200);
+    assert_eq!(alices.put(&h, "role", "spare", role("X")).await.status, 200);
 }
 
 #[test]
@@ -627,7 +658,11 @@ async fn one_put_out_reads_no_more() {
     assert_eq!(said.status, 200, "{}", said.body);
     assert_eq!(record(&h, &did, "membership", &bob.did), None);
     // The ejection stays in the group's queue, on him, by Dave.
-    let events = h.host.store.events(&did, &bob.did, None, 0, 100).unwrap();
+    let events = h
+        .host
+        .store
+        .events(&did, &bob.did, None, false, None, 100)
+        .unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].kind, "eject");
     assert_eq!(events[0].actor.as_deref(), Some(dave.did.as_str()));
@@ -666,7 +701,7 @@ async fn one_put_out_reads_no_more() {
     assert_eq!(
         h.host
             .store
-            .events(&did, &bob.did, None, 0, 100)
+            .events(&did, &bob.did, None, false, None, 100)
             .unwrap()
             .len(),
         1
@@ -781,7 +816,7 @@ async fn a_role_nobody_holds_keeps_nobody_running_it() {
         &runs.put(&h, "role", "admin", gives_up.clone()).await,
         (400, "LastConfigurer"),
     );
-    assert!(grant_of(&h, &did, "admin").unwrap().scopes.len() > 1);
+    assert!(grant_of(&h, &did, "admin").unwrap().permissions.len() > 1);
     // Once someone holds owner, it may.
     join(&h, &did, &carol.did, &["member", "owner"]).await;
     let said = runs.put(&h, "role", "admin", gives_up).await;
@@ -801,7 +836,7 @@ async fn one_whose_credentials_cannot_be_revoked_stays_in() {
     assert!(
         h.host
             .store
-            .events(&did, &bob.did, None, 0, 100)
+            .events(&did, &bob.did, None, false, None, 100)
             .unwrap()
             .is_empty()
     );

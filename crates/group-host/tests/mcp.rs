@@ -378,7 +378,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
         &h,
         access,
         "role_grant",
-        json!({"role": "leader", "scopes": [label], "assignable": ["member"]}),
+        json!({"role": "leader", "permissions": [label], "can_assign": ["member"]}),
     )
     .await;
     assert!(got.get("isError").is_none(), "{got}");
@@ -386,8 +386,8 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     assert_eq!(
         (
             &leader["displayName"],
-            &leader["scopes"],
-            &leader["assignable"]
+            &leader["permissions"],
+            &leader["canAssign"]
         ),
         (&json!("Ride leader"), &json!([label]), &json!(["member"]))
     );
@@ -396,7 +396,7 @@ async fn acts_as_the_member_in_the_group_they_chose() {
     assert!(got.get("isError").is_none(), "{got}");
     let leader = kept("role", "leader").unwrap();
     assert_eq!(
-        (leader.get("scopes"), leader.get("assignable")),
+        (leader.get("permissions"), leader.get("canAssign")),
         (None, None)
     );
     // A role the group does not have is granted nothing.
@@ -449,30 +449,49 @@ async fn writes_the_groups_profile_and_rules_as_the_group() {
     let (client, tokens) = connect(&h, &alice, &group).await;
     let access = tokens["access_token"].as_str().unwrap();
     let meta = group_host::group::meta_space(&group);
-    let kept = |collection: &str, rkey: &str| {
+    let members = group_host::group::members_space(&group);
+    let kept_in = |space: &str, collection: &str, rkey: &str| {
         let c = format!("{NS}.{collection}");
-        h.host.group_record(&group, &meta, &c, rkey).unwrap()
+        h.host.group_record(&group, space, &c, rkey).unwrap()
     };
+    let kept = |collection: &str, rkey: &str| kept_in(&meta, collection, rkey);
 
-    // The profile, at its one key, changed in what is given.
-    let before = kept("profile", "self").unwrap();
+    // The about record, at its one key, changed in what is given; the
+    // config left as it was.
+    let before = kept("about", "self").unwrap();
+    let config = kept("config", "self").unwrap();
     let profile = json!({"display_name": "Riders United", "description": "Bikes"});
     let got = tool(&h, access, "profile_set", profile).await;
     assert!(got.get("isError").is_none(), "{got}");
-    let uri = format!("{meta}/{group}/{NS}.profile/self");
-    assert_eq!(got["structuredContent"]["uri"], uri);
-    assert!(got["structuredContent"]["cid"].is_string());
+    let written = &got["structuredContent"]["written"];
+    let uri = format!("{meta}/{group}/{NS}.about/self");
+    assert_eq!(written[0]["uri"], uri, "{got}");
+    assert!(written[0]["cid"].is_string());
+    assert_eq!(written.as_array().unwrap().len(), 1, "{got}");
     let mut want = before.clone();
     want["displayName"] = json!("Riders United");
     want["description"] = json!("Bikes");
-    assert_eq!(kept("profile", "self").unwrap(), want);
+    assert_eq!(kept("about", "self").unwrap(), want);
+    assert_eq!(kept("config", "self").unwrap(), config);
     // Given empty, a field is taken away; the rest stay.
     let got = tool(&h, access, "profile_set", json!({"description": ""})).await;
     assert!(got.get("isError").is_none(), "{got}");
     want.as_object_mut().unwrap().remove("description");
-    assert_eq!(kept("profile", "self").unwrap(), want);
+    assert_eq!(kept("about", "self").unwrap(), want);
+    // The join policy, in the config; the about record as it was.
+    let got = tool(&h, access, "profile_set", json!({"join_policy": "invite"})).await;
+    let written = &got["structuredContent"]["written"];
+    assert_eq!(
+        written[0]["uri"],
+        format!("{meta}/{group}/{NS}.config/self"),
+        "{got}"
+    );
+    assert_eq!(kept("config", "self").unwrap()["joinPolicy"], "invite");
+    assert_eq!(kept("about", "self").unwrap(), want);
 
-    // A new rule, keyed by the clock; changed at its key; taken away.
+    // A new rule, in the members space, keyed by the clock; changed at its
+    // key; taken away.
+    let kept = |collection: &str, rkey: &str| kept_in(&members, collection, rkey);
     let got = tool(
         &h,
         access,

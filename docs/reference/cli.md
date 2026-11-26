@@ -64,7 +64,7 @@ group's requests in it, while an MCP client acts in one group.
 
 | Command                                                                                         | What it does                                                                                                                         |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `profile set <group> [--display-name <name>] [--join-policy <policy>] [--description] [--url]` | changes the fields given in the group's profile, as the group, and keeps the rest and its pictures. A field given `""` is removed |
+| `profile set <group> [--display-name <name>] [--description <words>] [--website <url>] [--avatar <blob json>] [--join-policy open\|approval\|invite]` | changes the fields given in the group's about record (`org.atgrp.about`, at `self` in its meta space), as the group, and keeps the rest. `--join-policy` changes its config record (`org.atgrp.config`, beside it), which is written only when it's given. A field given `""` is removed. It answers `{"written": [...]}`, one write for each record changed |
 
 ### rule
 
@@ -84,9 +84,9 @@ group's requests in it, while an MCP client acts in one group.
 
 | Command | What it does |
 | --- | --- |
-| `role set <group> <role> --display-name <name> [--description] [--default] [--bot] [--scopes <scope,…>] [--assignable <role,…>]` | writes a role as the group, at its id, with the scopes it carries across the group and the roles its holders may assign (`*` for every role) |
+| `role set <group> <role> [--display-name <name>] [--description] [--default] [--bot] [--permissions <permission,…>] [--can-assign <role,…>]` | writes a role in the members space as the group, at its id (lowercase letters and hyphens, three or more), with the permissions it carries across the group and the roles its holders may assign (`*` for every role) |
 | `role delete <group> <role>` | deletes a role nobody holds |
-| `role grant <group> <role> [--scopes <scope,…>] [--assignable <role,…>] [--undo]` | adds the scopes given, and the roles its holders may assign, to those in the role's record. With `--undo`, it takes them away, or takes all of both if none are given. The rest of the record stays as it was |
+| `role grant <group> <role> [--permissions <permission,…>] [--can-assign <role,…>] [--undo]` | adds the permissions given, and the roles its holders may assign, to those in the role's record. With `--undo`, it takes them away, or takes all of both if none are given. The rest of the record stays as it was |
 
 ### member
 
@@ -124,9 +124,9 @@ is asked for, add `--cid`, the way a label on a record does.
 
 | Command                                                                       | What it does                                                                                      |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `mod list <group> [--status open\|escalated\|resolved] [--limit] [--cursor]`  | shows the moderation queue                                                                        |
-| `mod history <group> <subject> [--cid] [--limit] [--cursor]`                  | shows what was done about a subject                                                               |
-| `mod resolve <group> <subject> --status resolved\|escalated [--note] [--cid]` | resolves or escalates a subject                                                                   |
+| `mod list <group> [--status open\|resolved] [--tags <tag,…>] [--sort oldest\|newest\|updated] [--limit] [--cursor]` | shows the moderation queue: every subject, or those of a status or with any of the tags, oldest first unless `--sort` says otherwise (`org.atgrp.mod.querySubjects`) |
+| `mod history <group> <subject> [--cid] [--sort newest\|oldest] [--limit] [--cursor]` | shows what was done about a subject, newest first unless `--sort` says otherwise (`org.atgrp.mod.querySubjectHistory`) |
+| `mod update <group> <subject> [--status open\|resolved] [--note <words>] [--add-tags <tag,…>] [--remove-tags <tag,…>] [--cid]` | resolves or reopens a subject, adds or removes its tags (lowercase letters and hyphens), or adds a note. What isn't given stays as it was (`org.atgrp.mod.updateSubject`) |
 | `mod label <group> <subject> <val> [--cid] [--undo]`                          | labels a subject as the group, with a label record beside it, where the member's roles write labels. With `--undo`, it deletes the label |
 
 ### account

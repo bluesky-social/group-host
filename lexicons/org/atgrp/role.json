@@ -4,18 +4,16 @@
   "defs": {
     "main": {
       "type": "record",
+      "description": "A group role and its group-wide grants, keyed by role ID. Role IDs follow label value syntax ([a-z-]+) and are at least 3 characters. Written by the group in the members space. Grants within a space live in that space's policy.",
       "key": "any",
-      "description": "A group role and its group-wide grants, in the members space, keyed by role ID, of 64 characters at most. Grants within a space live in that space's policy. A role is deleted only once no member holds it.",
       "record": {
         "type": "object",
-        "required": [
-          "displayName"
-        ],
         "properties": {
           "displayName": {
             "type": "string",
             "maxGraphemes": 64,
-            "maxLength": 640
+            "maxLength": 640,
+            "description": "Defaults to the role ID."
           },
           "description": {
             "type": "string",
@@ -24,23 +22,20 @@
           },
           "default": {
             "type": "boolean",
-            "description": "Granted to members who join through requestJoin. With no role marked so, a newcomer gets member."
+            "default": false,
+            "description": "If true, granted to members admitted through requestJoin."
           },
-          "bot": {
-            "type": "boolean",
-            "description": "People with this role are bots: accounts that act on their own, not a person. A member is a bot if any of their roles says so."
-          },
-          "scopes": {
+          "permissions": {
             "type": "array",
             "maxLength": 100,
-            "description": "Group-wide OAuth scopes, one per item. For scopes not tied to one space, such as manage=create, rpc: scopes, and space:* grants.",
+            "description": "Group-wide permissions, one per item. For permissions not tied to one space, such as manage=create, rpc: permissions, and space:* grants.",
             "items": {
               "type": "string",
               "minLength": 1,
               "maxLength": 2000
             }
           },
-          "assignable": {
+          "canAssign": {
             "type": "array",
             "maxLength": 100,
             "description": "Keys of roles this role may assign, or * for every role.",
@@ -50,9 +45,9 @@
               "maxLength": 512
             }
           },
-          "createdAt": {
-            "type": "string",
-            "format": "datetime"
+          "bot": {
+            "type": "boolean",
+            "description": "People with this role are bots: accounts that act on their own, not a person. A member is a bot if any of their roles says so."
           }
         }
       }

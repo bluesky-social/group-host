@@ -1,8 +1,10 @@
-//! Joining a group: at once for one whose profile says `open`, or for one
+//! Joining a group: at once for one whose config says `open`, or for one
 //! holding its invite; by a request someone holding `admit` decides on
 //! for one that says `approval`; not without an invite for one that says
 //! `invite`. A request is granted by writing the asker's membership as
 //! the group (`member_writes.rs`), and turned down by `denyJoinRequest`.
+//! Asking again, a member is answered with their membership, and one
+//! whose request waits with that request.
 //!
 //! A request waits in the host, not in the group's records: who asks is
 //! no member, and the members space is for members. Decided, it goes: a
@@ -59,7 +61,9 @@ async fn admitted(members: &Members<'_>, did: &str) -> Answer {
 
 /// Asks to join: admitted at once to a group open to all, queued for one
 /// that approves its members, refused without an invite for one that
-/// invites them. An invite admits them whatever the policy.
+/// invites them. An invite admits them whatever the policy. A member is
+/// answered with their membership; one whose request waits, in a group
+/// that is not open, with that request.
 pub async fn request_join(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
@@ -71,8 +75,10 @@ pub async fn request_join(
     group_of(&host, group)?;
     host.active(group)?;
     let members = Members::of(&host, group)?;
-    if members.membership(&me)?.is_some() {
-        return Err(bad("AlreadyMember", "you are a member already"));
+    if let Some(membership) = members.membership_ref(&me)? {
+        return Ok(Json(
+            json!({"status": "admitted", "membership": membership}),
+        ));
     }
     let waiting = host.waiting_invite(group, &me).await?;
     if let Some(named) = body["invite"].as_str()
@@ -91,23 +97,30 @@ pub async fn request_join(
         host.take_back(&invite).await?;
         return Ok(answer);
     }
-    let profile = host
-        .group_record(group, &meta_space(group), &format!("{NS}.profile"), "self")
+    let config = host
+        .group_record(group, &meta_space(group), &format!("{NS}.config"), "self")
         .map_err(XrpcError::internal)?
         .unwrap_or_default();
-    match profile["joinPolicy"].as_str() {
-        Some("open") => admitted(&members, &me).await,
-        Some("invite") => Err(bad("JoinClosed", "this group joins by invite")),
-        _ => {
-            let message = body["message"].as_str();
-            host.store
-                .ask(group, &me, message, now_millis())
-                .map_err(XrpcError::internal)?;
-            let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
-            let request = request_view(&asked.expect("the request just made"));
-            Ok(Json(json!({"status": "pending", "request": request})))
-        }
+    if config["joinPolicy"] == "open" {
+        return admitted(&members, &me).await;
     }
+    let pending = |asked: Option<JoinRequest>| {
+        let request = request_view(&asked.expect("a request waiting"));
+        Json(json!({"status": "pending", "request": request}))
+    };
+    let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
+    if asked.is_some() {
+        return Ok(pending(asked));
+    }
+    if config["joinPolicy"] == "invite" {
+        return Err(bad("JoinClosed", "this group joins by invite"));
+    }
+    let message = body["message"].as_str();
+    host.store
+        .ask(group, &me, message, now_millis())
+        .map_err(XrpcError::internal)?;
+    let asked = host.store.asked(group, &me).map_err(XrpcError::internal)?;
+    Ok(pending(asked))
 }
 
 /// The caller's own request to join, while it waits.
@@ -133,9 +146,9 @@ pub async fn list_join_requests(
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Refusal> {
-    let group = param(&p, "group")?;
     let lxm = format!("{NS}.listJoinRequests");
-    doing(&host, &headers, "GET", &lxm, group, "admit").await?;
+    let asked = p.get("group").map(String::as_str);
+    let (group, _) = doing(&host, &headers, "GET", &lxm, asked, "admit").await?;
     let limit = page(&p, 50, 100)?;
     let before = match p.get("cursor") {
         None => None,
@@ -143,7 +156,7 @@ pub async fn list_join_requests(
     };
     let waiting = host
         .store
-        .asking(group, before, limit)
+        .asking(&group, before, limit)
         .map_err(XrpcError::internal)?;
     let cursor = waiting
         .last()
@@ -160,11 +173,11 @@ pub async fn deny_join_request(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, Refusal> {
-    let group = body["group"].as_str().expect("its lexicon requires it");
     let lxm = format!("{NS}.denyJoinRequest");
-    doing(&host, &headers, "POST", &lxm, group, "admit").await?;
+    let asked = body["group"].as_str();
+    let (group, _) = doing(&host, &headers, "POST", &lxm, asked, "admit").await?;
     let did = body["member"].as_str().expect("its lexicon requires it");
-    let decided = host.store.decide(group, did);
+    let decided = host.store.decide(&group, did);
     if !decided.map_err(XrpcError::internal)? {
         return Err(no_request().into());
     }

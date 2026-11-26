@@ -10,7 +10,7 @@ export default async ({ atgrp, who }) => {
   const members = (write) =>
     `space:org.atgrp.members?skey=self&collection=org.atgrp.membership&action=${write}`;
   const invite =
-    'space:org.atgrp.invites?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete';
+    'space:org.atgrp.inbox?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete';
   atgrp(
     'alice',
     'role',
@@ -19,9 +19,9 @@ export default async ({ atgrp, who }) => {
     'greeter',
     '--display-name',
     'Greeter',
-    '--scopes',
+    '--permissions',
     [invite, members('create')].join(','),
-    '--assignable',
+    '--can-assign',
     'member'
   );
   atgrp(
@@ -32,9 +32,9 @@ export default async ({ atgrp, who }) => {
     'steward',
     '--display-name',
     'Steward',
-    '--scopes',
-    'include:org.atgrp.authManageGroup',
-    '--assignable',
+    '--permissions',
+    'include:org.atgrp.authManageAdmin',
+    '--can-assign',
     'member,greeter,moderator,steward'
   );
   atgrp('alice', 'member', 'assign', g, who.dan.handle, 'member,steward');

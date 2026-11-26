@@ -75,8 +75,10 @@ const SAID: Record<string, (op: string) => Say | undefined> = {
       update: m.activity_role_update,
       delete: m.activity_role_delete
     })[op],
-  'org.atgrp.profile': (op) =>
-    op === 'delete' ? m.activity_profile_delete : m.activity_profile_change,
+  'org.atgrp.about': (op) => (op === 'delete' ? m.activity_about_delete : m.activity_about_change),
+  'org.atgrp.config': () => m.activity_config_change,
+  'org.atgrp.confirmation': (op) =>
+    op === 'delete' ? m.activity_confirmation_delete : m.activity_confirmation_create,
   'com.atproto.label.record': (op) =>
     op === 'delete' ? m.activity_label_delete : m.activity_label_create,
   'app.bsky.feed.post': (op) =>

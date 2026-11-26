@@ -3,8 +3,8 @@
 use atproto::space::SpaceRef;
 use group_host::group::{did_rkey, join_policy, rkey_did};
 use group_host::rbac::{
-    ACTIONS, Grant, Policy, actions_for, actions_of, assigns, grants, listed, repo_collections_for,
-    scope_of,
+    ACTIONS, Grant, Policy, actions_for, actions_of, assigns, grants, listed,
+    members_records_writes, meta_writes, repo_collections_for, scope_of,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -41,7 +41,7 @@ fn reads_writes_and_manages_by_the_policy() {
     assert_eq!(members.grant("mod").map(|g| g.write), Some(true));
     assert_eq!(members.grant("admin"), None);
 
-    // Scopes act as the group, and count only here: a scope for another
+    // Permissions act as the group, and count only here: one for another
     // type, skey or authority manages nothing here.
     for elsewhere in [
         "space:xyz.app.forum?manage=update",
@@ -49,7 +49,7 @@ fn reads_writes_and_manages_by_the_policy() {
         "space:xyz.app.calendar?authority=did:plc:other&manage=update",
         "repo:xyz.event",
     ] {
-        let p = policy(json!({"grants": [{"role": "member", "scopes": [elsewhere]}]}));
+        let p = policy(json!({"grants": [{"role": "member", "permissions": [elsewhere]}]}));
         assert!(!p.manages(&roles(&["member"]), "update"), "{elsewhere}");
     }
     for here in [
@@ -57,16 +57,16 @@ fn reads_writes_and_manages_by_the_policy() {
         "space:xyz.app.calendar?skey=rides&manage=update&manage=delete",
         "space:xyz.app.calendar?authority=did:plc:g&manage=update",
     ] {
-        let p = policy(json!({"grants": [{"role": "member", "scopes": [here]}]}));
+        let p = policy(json!({"grants": [{"role": "member", "permissions": [here]}]}));
         assert!(p.manages(&roles(&["member"]), "update"), "{here}");
         assert!(!p.manages(&roles(&["guest"]), "update"), "{here}");
     }
 
-    // What a role writes as the group: each collection a scope names, as
-    // its actions say, every write when it names none.
+    // What a role writes as the group: each collection a permission names,
+    // as its actions say, every write when it names none.
     let writers = policy(json!({"grants": [
-        {"role": "admin", "scopes": ["space:xyz.app.calendar?collection=xyz.event&collection=xyz.rsvp", "space:xyz.app.forum?collection=xyz.post"]},
-        {"role": "member", "read": true, "scopes": ["space:xyz.app.calendar?collection=xyz.rsvp&action=create"]},
+        {"role": "admin", "permissions": ["space:xyz.app.calendar?collection=xyz.event&collection=xyz.rsvp", "space:xyz.app.forum?collection=xyz.post"]},
+        {"role": "member", "read": true, "permissions": ["space:xyz.app.calendar?collection=xyz.rsvp&action=create"]},
     ]}));
     let writes = writers.writes(&roles(&["admin", "member"]));
     let as_lists: Vec<(&str, Vec<&str>)> = writes
@@ -82,7 +82,7 @@ fn reads_writes_and_manages_by_the_policy() {
     );
     let member = writers.writes(&roles(&["member"]));
     assert_eq!(member["xyz.rsvp"].len(), 1);
-    assert_eq!(writers.scopes(&roles(&["member"])).len(), 1);
+    assert_eq!(writers.permissions(&roles(&["member"])).len(), 1);
     assert_eq!(
         listed(&json!({"x": [{"role": 1}, {"role": "a"}]}), "x", "role"),
         ["a"]
@@ -106,7 +106,7 @@ fn answers_each_action_by_its_scope() {
         "repo:*",
         "blob:*/*",
         // An inbox scope for anything but invites.
-        "space:org.atgrp.invites?collection=org.atgrp.rule",
+        "space:org.atgrp.inbox?collection=org.atgrp.rule",
     ] {
         assert_eq!(
             actions_of(&[nothing.into()])
@@ -150,25 +150,34 @@ fn answers_each_action_by_its_scope() {
         none
     );
     assert_eq!(of("space:org.atgrp.members?manage=create"), none);
-    // The tiered sets: moderating gives memberships, invites and the
-    // moderation methods, and labels in the meta and members spaces alone,
-    // not `label`, which is labels in every space; administering, those
-    // and configuring; the profile, nothing, as the meta space's policy
-    // says who writes it.
-    let moderates = [
-        "admit",
-        "eject",
-        "invite",
-        "mod.read",
-        "mod.resolve",
-        "role.assign",
-    ];
-    assert_eq!(of("include:org.atgrp.authModerate"), moderates);
+    // The group's permission sets, as their lexicons list them: running
+    // members admits, gives roles, puts out and invites; moderating puts
+    // out and works the moderation methods, its labels the meta and
+    // members spaces' alone, not `label`, which is labels in every space;
+    // administering, all of those and configuring; the basics, nothing a
+    // method asks about.
     assert_eq!(
-        of("include:org.atgrp.authManageGroup"),
-        [&["admit", "eject", "group.configure"][..], &moderates[2..]].concat()
+        of("include:org.atgrp.authManageMembers"),
+        ["admit", "eject", "invite", "role.assign"]
     );
-    assert_eq!(of("include:org.atgrp.authManageProfile"), none);
+    assert_eq!(
+        of("include:org.atgrp.authModerate"),
+        ["eject", "mod.read", "mod.resolve"]
+    );
+    assert_eq!(
+        of("include:org.atgrp.authManageAdmin"),
+        [
+            "admit",
+            "eject",
+            "group.configure",
+            "invite",
+            "mod.read",
+            "mod.resolve",
+            "role.assign"
+        ]
+    );
+    assert_eq!(of("include:org.atgrp.authManageBasic"), none);
+    assert_eq!(of("include:org.atgrp.authParticipate"), none);
     let manage = actions_of(&["space:*?manage=create&manage=delete".into()]);
     assert_eq!(
         manage.into_iter().collect::<Vec<_>>(),
@@ -185,8 +194,7 @@ fn of_scope(scope: &str) -> Vec<&'static str> {
 #[test]
 fn roles_compose_by_union() {
     let admin = Grant::with("admin", &["invite", "admit"], &["member"], &["*"]);
-    let record =
-        |g: &Grant| json!({"displayName": g.role, "scopes": g.scopes, "assignable": g.assignable});
+    let record = |g: &Grant| json!({"displayName": g.role, "permissions": g.permissions, "canAssign": g.can_assign});
     let records: Vec<(String, Value)> = vec![
         ("admin".into(), record(&admin)),
         (
@@ -203,7 +211,7 @@ fn roles_compose_by_union() {
     let granted = grants(&records);
     assert_eq!(granted.len(), 3);
     assert_eq!(granted[0], admin);
-    assert_eq!(granted[2].scopes, Vec::<String>::new());
+    assert_eq!(granted[2].permissions, Vec::<String>::new());
     let both = roles(&["admin", "mod"]);
     assert_eq!(
         actions_for(&granted, &both).into_iter().collect::<Vec<_>>(),
@@ -250,13 +258,53 @@ fn keys_a_membership_by_its_member_s_did() {
 #[test]
 fn grants_the_queue_by_the_moderation_methods() {
     let rpc = |m: &str| format!("rpc:org.atgrp.{m}?aud=*");
-    assert_eq!(scope_of("mod.read").unwrap(), rpc("listModSubjects"));
-    assert_eq!(scope_of("mod.resolve").unwrap(), rpc("resolveModSubject"));
-    let scopes = [rpc("listModSubjects"), rpc("resolveModSubject")];
+    assert_eq!(scope_of("mod.read").unwrap(), rpc("mod.querySubjects"));
+    assert_eq!(scope_of("mod.resolve").unwrap(), rpc("mod.updateSubject"));
+    let history = [rpc("mod.querySubjectHistory")];
+    assert_eq!(
+        actions_of(&history).into_iter().collect::<Vec<_>>(),
+        ["mod.read"]
+    );
+    let scopes = [rpc("mod.querySubjects"), rpc("mod.updateSubject")];
     assert_eq!(
         actions_of(&scopes).into_iter().collect::<Vec<_>>(),
         ["mod.read", "mod.resolve"]
     );
+}
+
+#[test]
+fn writes_the_group_s_own_records_by_its_permission_sets() {
+    let group = "did:plc:g";
+    let set = |name: &str| format!("include:org.atgrp.{name}");
+    let role =
+        |key: &str, permissions: &[String]| Grant::of(key, &json!({ "permissions": permissions }));
+    let granted = [
+        role("basic", &[set("authManageBasic")]),
+        role("admin", &[set("authManageAdmin")]),
+        role("moderator", &[set("authModerate")]),
+        role("everything", &["space:*?collection=*".into()]),
+    ];
+    let kinds = |writes: std::collections::BTreeMap<String, BTreeSet<String>>| {
+        writes.into_keys().collect::<Vec<_>>()
+    };
+    let meta = |r: &str| kinds(meta_writes(&granted, &roles(&[r]), group));
+    let members = |r: &str| kinds(members_records_writes(&granted, &roles(&[r]), group));
+    // The basics write the about record and the rules; administering, the
+    // config, labeler and roles too; moderating, none of them.
+    assert_eq!(meta("basic"), ["org.atgrp.about"]);
+    assert_eq!(members("basic"), ["org.atgrp.rule"]);
+    assert_eq!(meta("admin"), ["org.atgrp.about", "org.atgrp.config"]);
+    assert_eq!(
+        members("admin"),
+        ["org.atgrp.labeler", "org.atgrp.role", "org.atgrp.rule"]
+    );
+    assert!(meta("moderator").is_empty());
+    assert!(members("moderator").is_empty());
+    assert_eq!(meta("everything").len(), 2);
+    assert_eq!(members("everything").len(), 3);
+    let all = meta_writes(&granted, &roles(&["basic"]), group);
+    let about: Vec<&String> = all["org.atgrp.about"].iter().collect();
+    assert_eq!(about, ["create", "delete", "update"]);
 }
 
 #[test]
@@ -265,7 +313,7 @@ fn reads_a_join_policy_as_the_lexicon_words_it() {
     assert_eq!(join_policy(Some("approval")).unwrap(), "approval");
     assert_eq!(join_policy(Some("open")).unwrap(), "open");
     assert_eq!(join_policy(Some("invite")).unwrap(), "invite");
-    for other in ["sometimes", "org.atgrp.profile#open", "request"] {
+    for other in ["sometimes", "org.atgrp.config#open", "request"] {
         assert_eq!(
             join_policy(Some(other)).unwrap_err().message,
             format!("joinPolicy is open, approval or invite, not {other}")

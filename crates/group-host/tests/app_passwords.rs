@@ -52,8 +52,7 @@ async fn group(h: &Running) -> (String, [Authority; 3]) {
         json!({"handle": RIDERS, "displayName": "Riders"}),
     )
     .await;
-    let publisher =
-        json!({"$type": format!("{NS}.role"), "displayName": "Publisher", "scopes": ["repo:*"]});
+    let publisher = json!({"$type": format!("{NS}.role"), "displayName": "Publisher", "permissions": ["repo:*"]});
     let write = Write::Create {
         collection: format!("{NS}.role"),
         rkey: "publisher".into(),
@@ -286,7 +285,7 @@ async fn signs_an_app_in_to_the_groups_repo() {
     )
     .await;
     assert_eq!(made.0, 200, "{}", made.1);
-    let space = format!("at://{did}/space/org.atgrp.meta/self");
+    let space = format!("at://{did}/space/org.atgrp.members/self");
     let rule = json!({"repo": did, "space": space, "collection": format!("{NS}.rule"), "record": {"$type": format!("{NS}.rule"), "title": "x", "text": "x"}});
     let said = xrpc(
         &h,

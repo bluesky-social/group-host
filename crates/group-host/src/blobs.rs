@@ -7,7 +7,7 @@
 //! An image of an account's is also served for a page to draw, at
 //! `/img/{did}/{cid}`, to whoever may see a record that holds it: anyone,
 //! for a record in its public repo; for one in a space, whoever signed in
-//! to the console that space lets read, a group's listed profile being for
+//! to the console that space lets read, a group's listed about record being for
 //! anyone signed in; but none a takedown of the group's takes out of the
 //! space (`takedown.rs`), to anyone. Served as an image and nothing more,
 //! and kept for good, as a CID names its bytes.
@@ -154,7 +154,7 @@ pub(crate) const IMAGES: [&str; 5] = [
     "image/avif",
 ];
 
-/// The kinds of image a group's avatar and banner may be.
+/// The kinds of image a group's avatar may be.
 pub(crate) const PROFILE_IMAGES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
 
 impl Store {

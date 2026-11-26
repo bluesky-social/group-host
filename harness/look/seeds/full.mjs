@@ -1,8 +1,8 @@
 // A group in full: Lantern Hikers (lanterns.groups.test), alice's, with a
-// banner and a picture, words, two rules
-// and a moderator role; bob, carol (its moderator), dan, erin and frank in
-// it, more than a page of members; harbor asking to join with a note; and an invite waiting
-// for maximilianaquinces.
+// picture, words, two rules and a moderator role; bob, carol (its
+// moderator), dan, erin and frank in it, more than a page of members;
+// harbor asking to join with a note; and an invite waiting for
+// maximilianaquinces.
 
 export default async ({ world, atgrp, ask, page, picture, who, exists }) => {
   const g = 'lanterns.groups.test';
@@ -31,25 +31,18 @@ export default async ({ world, atgrp, ask, page, picture, who, exists }) => {
     '--message',
     'Come walk with us.'
   );
-  // Its pictures, through its settings, as only the console uploads them.
+  // Its picture, through its settings, as only the console uploads it.
   const p = await page('alice');
-  for (const [slot, png] of [
-    ['Avatar', picture(256, 256)],
-    ['Banner', picture(1500, 500, [47, 122, 75], [246, 241, 234])]
-  ]) {
-    await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' });
-    await p
-      .getByRole('button', { name: new RegExp(`^(Add|Change) the ${slot.toLowerCase()}$`) })
-      .click();
-    await p
-      .getByLabel(slot, { exact: true })
-      .setInputFiles({ name: 'picture.png', mimeType: 'image/png', buffer: png });
-    await p
-      .getByRole('dialog')
-      .filter({ visible: true })
-      .getByRole('button', { name: new RegExp(`the ${slot.toLowerCase()}$`) })
-      .click();
-    await p.waitForLoadState('networkidle');
-  }
+  await p.goto(`${world.base}/g/${g}/settings`, { waitUntil: 'networkidle' });
+  await p.getByRole('button', { name: /^(Add|Change) the avatar$/ }).click();
+  await p
+    .getByLabel('Avatar', { exact: true })
+    .setInputFiles({ name: 'picture.png', mimeType: 'image/png', buffer: picture(256, 256) });
+  await p
+    .getByRole('dialog')
+    .filter({ visible: true })
+    .getByRole('button', { name: /the avatar$/ })
+    .click();
+  await p.waitForLoadState('networkidle');
   await p.context().close();
 };

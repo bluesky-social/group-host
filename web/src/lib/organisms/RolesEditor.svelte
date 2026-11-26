@@ -9,17 +9,19 @@
    * A group's roles: each, what it may do, and for one who may give it,
    * a "⋯" menu to change it or delete it (asked to be sure of); and the
    * dialog creating a new one, opened by a button whose `popovertarget`
-   * is `define-role`. What a role may be given is what the one editing
-   * holds enough of to give (`grantable`, scopes), and the roles its
-   * holders may give those they may give themselves (`mine`, `*` for
-   * every role), as the host refuses any more.
+   * is `define-role`, its ID as the host takes one (lowercase letters and
+   * hyphens, at least three) and its name if it has one other than its
+   * ID. What a role may be given is what the one editing holds enough of
+   * to give (`grantable`, scopes), and the roles its holders may give
+   * those they may give themselves (`mine`, `*` for every role), as the
+   * host refuses any more.
    */
   type Role = { key: string; name?: string; default?: boolean };
   type Binding = {
     role: string;
     actions: string[];
-    assignable: { role: string }[];
-    scopes?: { scope: string; actions?: string[] }[];
+    canAssign: { role: string }[];
+    permissions?: { scope: string; actions?: string[] }[];
   };
   let {
     roles = [],
@@ -30,6 +32,14 @@
   const of = (key: string) => bindings.find((b) => b.role === key);
   const may = (key: string) => of(key)?.actions ?? [];
   const yours = (key: string) => mine.includes('*') || mine.includes(key);
+  const ROLE_ID = /^[a-z-]{3,64}$/;
+  // An ID the host would refuse said so as it is typed, in the form's words.
+  function checkId(e: Event & { currentTarget: HTMLInputElement }) {
+    const typed = e.currentTarget.value;
+    e.currentTarget.setCustomValidity(
+      typed && !ROLE_ID.test(typed) ? m.roles_editor_key_invalid() : ''
+    );
+  }
 </script>
 
 <ul class="roles">
@@ -62,12 +72,13 @@
           {#snippet intro()}{m.roles_editor_change_intro({ role: r.name ?? r.key })}{/snippet}
           <input type="hidden" name="role" value={r.key} />
           <label class="field"
-            >{m.roles_editor_name()}
-            <input name="name" required maxlength="64" value={r.name ?? r.key} /></label
+            ><span>{m.roles_editor_name()} <span class="optional">{m.common_optional()}</span></span
+            >
+            <input name="name" maxlength="64" value={r.name ?? ''} placeholder={r.key} /></label
           >
           <RoleFields
-            scopes={of(r.key)?.scopes}
-            assignable={of(r.key)?.assignable.map((a) => a.role)}
+            permissions={of(r.key)?.permissions}
+            canAssign={of(r.key)?.canAssign.map((a) => a.role)}
             isDefault={r.default}
             {roles}
             {grantable}
@@ -103,20 +114,18 @@
       <input
         name="role"
         required
-        pattern="[a-z0-9-]+"
+        pattern="[a-z\-]+"
+        minlength="3"
         maxlength="64"
         placeholder="moderator"
+        oninput={checkId}
       /></label
     >
     <label class="field"
-      >{m.roles_editor_name()}
-      <input
-        name="name"
-        required
-        maxlength="64"
-        placeholder={m.roles_editor_name_placeholder()}
-      /></label
+      ><span>{m.roles_editor_name()} <span class="optional">{m.common_optional()}</span></span>
+      <input name="name" maxlength="64" placeholder={m.roles_editor_name_placeholder()} /></label
     >
   </div>
+  <p class="mute">{m.roles_editor_key_hint()}</p>
   <RoleFields {roles} {grantable} {mine} />
 </FormDialog>

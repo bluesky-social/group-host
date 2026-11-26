@@ -5,7 +5,7 @@ import { xrpc } from '#lib/data.ts';
 import { listed, profileActions } from '#lib/server/settings.ts';
 
 /**
- * Its profile, its pictures, who sees it, its handle and whether it is
+ * Its profile, its picture, who sees it, its handle and whether it is
  * served at a domain of its own, to one who configures it, with whether
  * a handle on a domain of its own names it still; one who may only make
  * app passwords goes to those.

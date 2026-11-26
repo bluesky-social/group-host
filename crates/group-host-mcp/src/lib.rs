@@ -35,6 +35,12 @@ macro_rules! lexicon {
             include_str!(concat!("../../../lexicons/org/atgrp/", $name, ".json")),
         )
     };
+    (mod $name:literal) => {
+        (
+            concat!("org.atgrp.mod.", $name),
+            include_str!(concat!("../../../lexicons/org/atgrp/mod/", $name, ".json")),
+        )
+    };
     (internal $name:literal) => {
         (
             concat!("org.atgrp.internal.", $name),
@@ -61,12 +67,14 @@ const LEXICONS: &[(&str, &str)] = &[
     lexicon!("denyJoinRequest"),
     lexicon!(internal "listInvites"),
     lexicon!(internal "listSpaceRecords"),
-    lexicon!("listModSubjects"),
-    lexicon!("getModSubjectHistory"),
+    lexicon!(mod "querySubjects"),
+    lexicon!(mod "querySubjectHistory"),
     lexicon!(internal "putLabelDefinition"),
     lexicon!(internal "deleteLabelDefinition"),
-    lexicon!("resolveModSubject"),
-    lexicon!("profile"),
+    lexicon!(mod "updateSubject"),
+    lexicon!(mod "defs"),
+    lexicon!("about"),
+    lexicon!("config"),
     lexicon!("rule"),
     lexicon!("role"),
     lexicon!("membership"),
@@ -117,10 +125,11 @@ pub enum Action {
         key: Key,
         stamp: bool,
     },
-    /// Changes the fields given of the record of the kind `collection` at
-    /// `rkey` in the group's space of the type `space`, keeping the rest.
+    /// Changes the fields given of the records at `rkey` in the group's
+    /// space of the type `space`, keeping the rest: each record, by its
+    /// collection, with the fields it has; only those with a field given.
     Edit {
-        collection: String,
+        records: Vec<(String, Vec<String>)>,
         space: String,
         rkey: String,
     },
@@ -133,7 +142,7 @@ pub enum Action {
     /// Writes an invite as the group in the invitee's inbox; with `undo`,
     /// takes back the one waiting.
     Invite,
-    /// Adds to a role's scopes and the roles it may assign, in its record;
+    /// Adds to a role's permissions and the roles it may assign, in its record;
     /// with `undo`, takes away from them.
     Grant,
     /// Writes a label as the group beside its subject; with `undo`,
@@ -289,8 +298,9 @@ enum Made {
     Method(&'static str, Option<&'static str>),
     /// A record of ours put, or deleted, in the group's space of a type.
     Put(&'static str, &'static str, At),
-    /// A record of ours at its one key, changed in the fields given.
-    Edit(&'static str, &'static str, &'static str),
+    /// Records of ours at their one key, in one space, each changed in
+    /// the fields given of its own.
+    Edit(&'static [&'static str], &'static str, &'static str),
     Delete(&'static str, &'static str, At),
     Invite,
     Grant,
@@ -338,21 +348,22 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "profile_set",
         &[],
-        "Changes the group's profile as the group. Changes only the fields given, keeping the \
-         rest; a field given empty, or null, is taken away.",
-        Made::Edit("profile", META, "self"),
+        "Changes the group's profile as the group: its about record (org.atgrp.about), and its \
+         config (org.atgrp.config) only when join_policy is given. Changes only the fields \
+         given, keeping the rest; a field given empty, or null, is taken away.",
+        Made::Edit(&["about", "config"], META, "self"),
     ),
     (
         "rule_set",
         &[],
         "Writes a rule as the group: the one `rule` names, replaced whole, or a new one.",
-        Made::Put("rule", META, At::New("rule")),
+        Made::Put("rule", MEMBERS, At::New("rule")),
     ),
     (
         "rule_delete",
         &["rule"],
         "Deletes a rule as the group.",
-        Made::Delete("rule", META, At::Named("rule")),
+        Made::Delete("rule", MEMBERS, At::Named("rule")),
     ),
     (
         "label_define",
@@ -382,8 +393,8 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "role_grant",
         &["role"],
-        "Adds to what a role may do across the group, as the group: the scopes given, and the \
-         roles given that its holders may assign (* for every role), to those its record has; \
+        "Adds to what a role may do across the group, as the group: the permissions given, and \
+         the roles given that its holders may assign (* for every role), to those its record has; \
          with undo, takes them away, or with none given takes away all of both.",
         Made::Grant,
     ),
@@ -422,7 +433,7 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
         "invite_send",
         &["person"],
         "Invites someone not yet a member, as the group: an invite written in their own inbox \
-         (org.atgrp.invites); one already waiting for them is the one answered. With undo, \
+         (org.atgrp.inbox); one already waiting for them is the one answered. With undo, \
          takes back the invite waiting for them.",
         Made::Invite,
     ),
@@ -448,20 +459,21 @@ const TOOLS: &[(&str, &[&str], &str, Made)] = &[
     (
         "mod_list",
         &[],
-        "The moderation queue.",
-        Made::Method("listModSubjects", None),
+        "The moderation queue: every subject, or those of a status, or with any of the tags \
+         given; oldest first, newest first, or the latest updated first.",
+        Made::Method("mod.querySubjects", None),
     ),
     (
         "mod_history",
         &["subject"],
-        "What was done about a subject.",
-        Made::Method("getModSubjectHistory", None),
+        "What was done about a subject, newest first or oldest first.",
+        Made::Method("mod.querySubjectHistory", None),
     ),
     (
-        "mod_resolve",
+        "mod_update",
         &["subject"],
-        "Resolves or escalates a subject.",
-        Made::Method("resolveModSubject", None),
+        "Resolves or reopens a subject, adds or removes its tags, or adds a note.",
+        Made::Method("mod.updateSubject", None),
     ),
     (
         "mod_label",
@@ -614,18 +626,27 @@ impl Docs {
                 };
                 (action, input, main["description"].as_str())
             }
-            Made::Edit(kind, space, rkey) => {
-                let collection = format!("{NS}.{kind}");
-                let main = self.main(&collection);
-                let mut input = self.object(&collection, &main["record"], DEPTH);
-                drop(&mut input, "createdAt");
-                input["required"] = json!([]);
+            Made::Edit(kinds, space, rkey) => {
+                let mut input = json!({"type": "object", "properties": {}, "required": []});
+                let mut records = Vec::new();
+                for kind in kinds.iter() {
+                    let collection = format!("{NS}.{kind}");
+                    let main = self.main(&collection);
+                    let mut whole = self.object(&collection, &main["record"], DEPTH);
+                    drop(&mut whole, "createdAt");
+                    let fields = whole["properties"].as_object().cloned().unwrap_or_default();
+                    let names: Vec<String> = fields.keys().cloned().collect();
+                    for (name, property) in fields {
+                        add(&mut input, &name, property, false);
+                    }
+                    records.push((collection, names));
+                }
                 let action = Action::Edit {
-                    collection,
+                    records,
                     space: space.to_string(),
                     rkey: rkey.to_string(),
                 };
-                (action, input, main["description"].as_str())
+                (action, input, None)
             }
             Made::Invite => {
                 let nsid = format!("{NS}.invite");
@@ -679,7 +700,7 @@ impl Docs {
                     rkey("Which role: its record's key.".into()),
                     true,
                 );
-                for field in ["scopes", "assignable"] {
+                for field in ["permissions", "canAssign"] {
                     add(&mut input, field, whole["properties"][field].clone(), false);
                 }
                 (Action::Grant, input, main["description"].as_str())
@@ -741,14 +762,13 @@ pub enum Plan {
         person: String,
         record: Option<Value>,
     },
-    /// Change the record of the kind `collection` at `rkey` in the
-    /// group's space of the type `space` in the `fields` given, keeping
-    /// the rest. `edited` makes the write, from the record as it is.
+    /// Change each record at `rkey` in the group's space of the type
+    /// `space`, by its collection, in the fields given, keeping the rest.
+    /// `edited` makes each write, from the record as it is.
     Edit {
         space: String,
-        collection: String,
         rkey: String,
-        fields: Map<String, Value>,
+        records: Vec<(String, Map<String, Value>)>,
     },
     /// Label `subject` (an account's DID, or a record's URI, at the
     /// version `cid` if named) with `val`, as the group, beside it; with
@@ -759,13 +779,13 @@ pub enum Plan {
         val: String,
         undo: bool,
     },
-    /// Add `scopes` and `assignable` to those of the role `role`; with
+    /// Add `permissions` and `can_assign` to those of the role `role`; with
     /// `undo`, take them away, or with none take away all of both.
     /// `regrant` makes the write, from the role's record as it is.
     Grant {
         role: String,
-        scopes: Vec<String>,
-        assignable: Vec<String>,
+        permissions: Vec<String>,
+        can_assign: Vec<String>,
         undo: bool,
     },
     /// Make a space of the type `kind`, at `skey` (a new key if none),
@@ -843,15 +863,28 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             }
         }
         Action::Edit {
-            collection,
+            records,
             space,
             rkey,
-        } => Plan::Edit {
-            space: space.clone(),
-            collection: collection.clone(),
-            rkey: rkey.clone(),
-            fields: input,
-        },
+        } => {
+            let records: Vec<(String, Map<String, Value>)> = records
+                .iter()
+                .map(|(collection, names)| {
+                    let fields = input.iter().filter(|(k, _)| names.contains(k));
+                    let fields = fields.map(|(k, v)| (k.clone(), v.clone())).collect();
+                    (collection.clone(), fields)
+                })
+                .filter(|(_, fields): &(String, Map<String, Value>)| !fields.is_empty())
+                .collect();
+            if records.is_empty() {
+                return Err("nothing to change: give a field".into());
+            }
+            Plan::Edit {
+                space: space.clone(),
+                rkey: rkey.clone(),
+                records,
+            }
+        }
         Action::Invite => {
             let person = given(&mut input, "person")?;
             let record = (!undo).then(|| stamped(input, &format!("{NS}.invite")));
@@ -882,8 +915,8 @@ pub fn plan(tool: &Tool, args: &Value, now: &str) -> Result<Plan, String> {
             };
             Plan::Grant {
                 role,
-                scopes: list("scopes"),
-                assignable: list("assignable"),
+                permissions: list("permissions"),
+                can_assign: list("canAssign"),
                 undo,
             }
         }
@@ -926,23 +959,23 @@ pub fn labels(record: &Value, subject: &str, val: &str) -> bool {
     record["uri"] == subject && record["val"] == val
 }
 
-/// The write that adds `scopes` and `assignable` to those of the role
+/// The write that adds `permissions` and `can_assign` to those of the role
 /// `role`, in `kept`, its record as it is, or with `undo` takes them away,
 /// or with none named takes away all of both: the rest of the record as
 /// it was. Refused for a role the group does not have.
 pub fn regrant(
     kept: &Value,
     role: &str,
-    scopes: &[String],
-    assignable: &[String],
+    permissions: &[String],
+    can_assign: &[String],
     undo: bool,
 ) -> Result<Plan, String> {
     let Value::Object(record) = kept else {
         return Err(format!("no such role: {role}"));
     };
     let mut record = record.clone();
-    let named = !scopes.is_empty() || !assignable.is_empty();
-    for (field, given) in [("scopes", scopes), ("assignable", assignable)] {
+    let named = !permissions.is_empty() || !can_assign.is_empty();
+    for (field, given) in [("permissions", permissions), ("canAssign", can_assign)] {
         let had = record.get(field).and_then(Value::as_array).into_iter();
         let mut list: Vec<String> = Vec::new();
         for item in had.flatten().filter_map(Value::as_str).map(String::from) {

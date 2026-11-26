@@ -83,18 +83,18 @@
         "description": {
           "type": "string"
         },
-        "url": {
+        "website": {
           "type": "string",
           "format": "uri",
-          "description": "The group's website, from its profile, if it gives one."
+          "description": "The group's website, from its about record, if it gives one."
         },
         "joinPolicy": {
           "type": "string",
-          "description": "How new members get in, as the profile states it."
+          "description": "How new members get in, as its config record states it."
         },
         "avatar": {
           "type": "string",
-          "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
+          "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may read the meta space."
         },
         "rules": {
           "type": "array",
@@ -107,10 +107,6 @@
           "type": "boolean",
           "description": "Set while a steward has the group switched off. Its spaces cannot be read until one of the stewards who could switch it off switches it back on."
         },
-        "banner": {
-          "type": "string",
-          "description": "CID of the banner blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
-        },
         "createdAt": {
           "type": "string",
           "format": "datetime",
@@ -120,7 +116,7 @@
     },
     "groupViewDetailed": {
       "type": "object",
-      "description": "A group in full, as the viewer may see it. Profile fields and rules are present only when the viewer may read the meta space.",
+      "description": "A group in full, as the viewer may see it. Its about and config fields are present only when the viewer may read the meta space; its rules and labels only when the viewer may read the members space.",
       "required": [
         "did",
         "handle"
@@ -156,30 +152,26 @@
         "description": {
           "type": "string"
         },
-        "url": {
+        "website": {
           "type": "string",
           "format": "uri",
-          "description": "The group's website, from its profile, if it gives one."
+          "description": "The group's website, from its about record, if it gives one."
         },
         "joinPolicy": {
           "type": "string",
-          "description": "How new members get in, as the profile states it."
+          "description": "How new members get in, as its config record states it."
         },
         "avatar": {
           "type": "string",
-          "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
+          "description": "CID of the avatar blob; the host serves it at /img/{did}/{cid}, to whoever may read the meta space."
         },
         "deactivated": {
           "type": "boolean",
           "description": "Set while a steward has the group switched off. Its spaces cannot be read until one of the stewards who could switch it off switches it back on."
         },
-        "banner": {
-          "type": "string",
-          "description": "CID of the banner blob; the host serves it at /img/{did}/{cid}, to whoever may see the profile."
-        },
         "rules": {
           "type": "array",
-          "description": "In the order they are presented. Absent when the meta space is closed to the viewer.",
+          "description": "In the order they are presented. Absent when the members space is closed to the viewer.",
           "items": {
             "type": "ref",
             "ref": "#groupRule"
@@ -187,7 +179,7 @@
         },
         "labels": {
           "type": "array",
-          "description": "The labels it defines, each with what it means and how apps should show it. Absent when the meta space is closed to the viewer.",
+          "description": "The labels it defines, each with what it means and how apps should show it. Absent when the members space is closed to the viewer.",
           "items": {
             "type": "ref",
             "ref": "com.atproto.label.defs#labelValueDefinition"
@@ -254,7 +246,7 @@
         },
         "grantable": {
           "type": "array",
-          "description": "For a member: of each action's scope and the group's authManageProfile and authModerate permission sets, those the viewer's roles hold enough of to add to a role. Adding any other is refused with ScopeNotHeld.",
+          "description": "For a member: of each action's permission and the group's authManageBasic, authManageMembers and authModerate permission sets, those the viewer's roles hold enough of to add to a role. Adding any other is refused with ScopeNotHeld.",
           "items": {
             "type": "ref",
             "ref": "#scopeRef"
@@ -406,10 +398,10 @@
           "type": "string",
           "description": "CID of the group's picture."
         },
-        "url": {
+        "website": {
           "type": "string",
           "format": "uri",
-          "description": "The group's website, from its profile, if it gives one."
+          "description": "The group's website, from its about record, if it gives one."
         },
         "memberCount": {
           "type": "integer",
@@ -451,7 +443,7 @@
       "required": [
         "role",
         "actions",
-        "assignable"
+        "canAssign"
       ],
       "properties": {
         "role": {
@@ -465,7 +457,7 @@
             "ref": "#action"
           }
         },
-        "assignable": {
+        "canAssign": {
           "type": "array",
           "items": {
             "type": "ref",
@@ -480,9 +472,9 @@
             "ref": "#collectionRef"
           }
         },
-        "scopes": {
+        "permissions": {
           "type": "array",
-          "description": "The role's scopes, as its role record has them.",
+          "description": "The role's permissions, as its role record has them.",
           "items": {
             "type": "ref",
             "ref": "#scopeRef"

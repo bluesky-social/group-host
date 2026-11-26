@@ -22,12 +22,12 @@
   const name = $derived(g.displayName ?? g.handle);
   // The roles the person looking may give: those their roles' grants say,
   // or every role, where one says `*`.
-  const assignable = $derived.by(() => {
+  const canAssign = $derived.by(() => {
     if (!may.includes('role.assign')) return [];
     const given = new Set(
       (data.bindings ?? [])
         .filter((b) => g.viewer?.roles.some((r) => r.role === b.role))
-        .flatMap((b) => b.assignable.map((a) => a.role))
+        .flatMap((b) => b.canAssign.map((a) => a.role))
     );
     return given.has('*') ? (data.roles ?? []).map((r) => r.key) : [...given];
   });
@@ -53,7 +53,6 @@
         name={g.displayName}
         description={g.description}
         avatar={image(g.did, g.avatar)}
-        banner={image(g.did, g.banner)}
         rules={g.rules}
       >
         {#snippet nav()}
@@ -108,7 +107,7 @@
             shown={data.shown}
             more={data.more}
             me={data.viewer?.did}
-            {assignable}
+            {canAssign}
             canEject={may.includes('eject')}
           />
         </Section>

@@ -428,7 +428,7 @@ async fn copies_its_repo_and_files_switched_off_and_says_what_the_directory_shou
     assert_eq!(host.read_blob(&w.did, &avatar).unwrap().unwrap().1, AVATAR);
     // No group yet.
     assert!(
-        host.group_record(&w.did, &meta_space(&w.did), "org.atgrp.profile", "self")
+        host.group_record(&w.did, &meta_space(&w.did), "org.atgrp.about", "self")
             .unwrap()
             .is_none()
     );
@@ -720,12 +720,12 @@ async fn sends_the_operation_switches_it_on_and_makes_a_group_its_mover_runs() {
     assert_eq!(done["address"], "harbor.groups.test");
     assert_eq!(done["meta"], meta_space(&w.did).as_str());
     assert_eq!(done["members"], members_space(&w.did).as_str());
-    let profile = host
-        .group_record(&w.did, &meta_space(&w.did), "org.atgrp.profile", "self")
+    let about = host
+        .group_record(&w.did, &meta_space(&w.did), "org.atgrp.about", "self")
         .unwrap()
         .unwrap();
-    assert_eq!(profile["displayName"], "Harbor Cycling Club");
-    assert_eq!(profile["description"], "Rides from the harbor, Saturdays.");
+    assert_eq!(about["displayName"], "Harbor Cycling Club");
+    assert_eq!(about["description"], "Rides from the harbor, Saturdays.");
     assert!(
         host.roles(&w.did, &dana.did)
             .unwrap()

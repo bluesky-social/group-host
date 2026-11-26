@@ -12,11 +12,11 @@ use serde_json::{Value as Json, json};
 
 const RIDERS: &str = "riders.groups.test";
 
-fn profile(rkey: &str, avatar: &Json) -> Write {
+fn about(rkey: &str, avatar: &Json) -> Write {
     Write::Create {
-        collection: "org.atgrp.profile".into(),
+        collection: "org.atgrp.about".into(),
         rkey: rkey.into(),
-        value: json!({"$type": "org.atgrp.profile", "displayName": "Riders", "avatar": avatar}),
+        value: json!({"$type": "org.atgrp.about", "displayName": "Riders", "avatar": avatar}),
     }
 }
 
@@ -56,7 +56,7 @@ async fn serves_a_blob_once_a_record_references_it() {
         "BlobNotFound"
     );
 
-    h.host.write(&did, &[profile("self", &r)]).unwrap();
+    h.host.write(&did, &[about("self", &r)]).unwrap();
     let (status, headers, body) = blob(&h, &did, &cid).await;
     assert_eq!(status, 200);
     assert_eq!(body, picture);
@@ -90,13 +90,13 @@ async fn keeps_a_blob_while_any_record_references_it() {
     let r = h.host.upload_blob(&did, b"shared", "image/png").unwrap();
     let cid = link(&r);
     h.host
-        .write(&did, &[profile("a", &r), profile("b", &r)])
+        .write(&did, &[about("a", &r), about("b", &r)])
         .unwrap();
     h.host
         .write(
             &did,
             &[Write::Delete {
-                collection: "org.atgrp.profile".into(),
+                collection: "org.atgrp.about".into(),
                 rkey: "a".into(),
             }],
         )
@@ -106,7 +106,7 @@ async fn keeps_a_blob_while_any_record_references_it() {
         .write(
             &did,
             &[Write::Delete {
-                collection: "org.atgrp.profile".into(),
+                collection: "org.atgrp.about".into(),
                 rkey: "b".into(),
             }],
         )
@@ -127,9 +127,9 @@ async fn lists_blobs_a_page_at_a_time_and_since_a_rev() {
     let did = h.host.create_account(RIDERS).await.unwrap();
     let a = h.host.upload_blob(&did, b"one", "").unwrap();
     assert_eq!(a["mimeType"], "application/octet-stream");
-    let first = h.host.write(&did, &[profile("a", &a)]).unwrap();
+    let first = h.host.write(&did, &[about("a", &a)]).unwrap();
     let b = h.host.upload_blob(&did, b"two", "image/png").unwrap();
-    h.host.write(&did, &[profile("b", &b)]).unwrap();
+    h.host.write(&did, &[about("b", &b)]).unwrap();
     let mut both = [link(&a), link(&b)];
     both.sort();
 
@@ -188,10 +188,7 @@ async fn refuses_what_it_cannot_keep_or_find() {
         "RepoNotFound"
     );
     let stranger = json!({"$type": "blob", "ref": {"$link": Cid::of_raw(b"elsewhere").to_string()}, "mimeType": "image/png", "size": 9});
-    let refused = h
-        .host
-        .write(&did, &[profile("self", &stranger)])
-        .unwrap_err();
+    let refused = h.host.write(&did, &[about("self", &stranger)]).unwrap_err();
     assert!(
         refused.message.contains("was not uploaded to"),
         "{}",
@@ -225,7 +222,7 @@ async fn sweeps_uploads_no_record_took() {
     let h = start(&[], false).await;
     let did = h.host.create_account(RIDERS).await.unwrap();
     let kept = h.host.upload_blob(&did, b"kept", "image/png").unwrap();
-    h.host.write(&did, &[profile("self", &kept)]).unwrap();
+    h.host.write(&did, &[about("self", &kept)]).unwrap();
     let left = h.host.upload_blob(&did, b"left", "image/png").unwrap();
     assert_eq!(h.host.sweep_blobs(now_millis()).unwrap(), 0);
     assert_eq!(

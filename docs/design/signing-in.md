@@ -211,14 +211,15 @@ are at that moment.
 ### Narrowing at approval
 
 - `atproto` is always kept.
-- The host's permission sets for a group's session are three tiers, each
-  holding the one before it:
+- The host's permission sets for a group's session are four. The last
+  holds the other three:
 
-  | Set                                        | Title                | Covers                                                                                                                       |
-  | ------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-  | `include:org.atgrp.authManageProfile` | Group profile        | the profile and rules in the meta space                                                                                      |
-  | `include:org.atgrp.authModerate`      | Group moderation     | memberships and labels in the members space, labels in the meta space, invites in people's inboxes, join requests, the queue |
-  | `include:org.atgrp.authManageGroup`   | Group administration | all of that, the labeler, roles, and changing the meta and members spaces (`manage=update`)                                  |
+  | Set                                    | Title                | Covers                                                                                                                         |
+  | -------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+  | `include:org.atgrp.authManageBasic`    | Group profile        | the `about` record in the meta space, the rules in the members space                                                           |
+  | `include:org.atgrp.authManageMembers`  | Group members        | memberships in the members space, invites in people's inboxes, join requests, `listInvites`                                    |
+  | `include:org.atgrp.authModerate`       | Group moderation     | labels in the meta and members spaces, reading and deleting memberships, the moderation queue                                  |
+  | `include:org.atgrp.authManageAdmin`    | Group administration | all of that, the `config` record, the labeler, roles, and changing the meta and members spaces (`manage=update`)               |
 
   A set is an upper bound: of one asked for, the token keeps the parts
   the roles grant. Of each space permission, it keeps the collections
@@ -227,13 +228,12 @@ are at that moment.
   may change that space, the invites where they hold `invite`, and each
   method where they hold the action that method asks: `admit` for
   `listJoinRequests` and `denyJoinRequest`, `invite` for `listInvites`,
-  `mod.read` for `listModSubjects`, `getModSubjectHistory` and
-  `getModSubjectBlob`, `mod.resolve` for `resolveModSubject`. When
-  what's kept is the whole of a tier, it's kept as that set. So a
-  moderator asked for
-  `authManageGroup` gives `authModerate`, and a member whose role writes
-  the profile and rules by the meta space's policy gives
-  `authManageProfile`. Otherwise the parts are kept as scopes.
+  `mod.read` for `mod.querySubjects`, `mod.querySubjectHistory` and
+  `getModSubjectBlob`, `mod.resolve` for `mod.updateSubject`. When
+  what's kept is the whole of one of the four sets, it's kept as that
+  set. So a moderator asked for `authManageAdmin` gives `authModerate`,
+  and a member whose role holds `authManageBasic` gives that.
+  Otherwise the parts are kept as scopes.
 
   `include:org.atgrp.authParticipate` is for a person's own
   session, at their PDS, and it's never kept for a group's.
@@ -241,17 +241,21 @@ are at that moment.
 - `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
 - `rpc:M` for a method of another service is kept only if the roles
   hold `repo:*` and `M` isn't `*`. For one of the host's own methods
-  the Atmosphere Groups proposal has a group session call
-  (`listJoinRequests`, `denyJoinRequest`, `listModSubjects`,
-  `getModSubjectHistory`, `resolveModSubject`), with `aud` this host or
-  `*`, it's kept if the roles hold the action the method asks, as for
-  the sets above. Never one of the `internal` methods.
+  the spec has a group session call (`listJoinRequests`,
+  `denyJoinRequest`, `mod.querySubjects`, `mod.querySubjectHistory`,
+  `mod.updateSubject`), with `aud` this host or `*`, it's kept if the
+  roles hold the action the method asks, as for the sets above. Never
+  one of the `internal` methods.
 - `space:T?…` is kept if some space of type `T` lets the roles write
   what's asked there. For a scope that only reads, reading it there is
-  enough. In the members space, the roles write its roles if they hold
-  `group.configure`. They write memberships as they hold `admit`
-  (create), `role.assign` (update) and `eject` (delete).
-- `space:org.atgrp.invites?…` (people's inboxes) is kept if the
+  enough. In the members space, the roles write its roles and labeler
+  if they hold `authManageAdmin`, and its rules if they hold
+  `authManageBasic` or `authManageAdmin`. They write memberships as
+  they hold `admit` (create), `role.assign` (update) and `eject`
+  (delete). In the meta space, they write the `about` record with
+  either of those two sets, and the `config` record with
+  `authManageAdmin`.
+- `space:org.atgrp.inbox?…` (people's inboxes) is kept if the
   roles hold `invite` and it asks for invites alone, in anyone's inbox or
   one person's.
 - `space:*?…` becomes one scope per space the roles may read, naming the
@@ -281,14 +285,18 @@ the group's DID.
 
 A token calls the host's own methods its `rpc:` scopes name, a set's
 included, as its member: those methods take a member's service auth or
-the console's cookie, and a group session's DPoP token too. At each
-call, its member's roles must hold the method's action at that moment,
-or it fails `Forbidden`, and a scope without the method fails
-`ScopeMissing`. Of the sets, a token makes their writes in the meta and
-members spaces and in people's inboxes. Their `rpc:` and `manage=`
-scopes say what an app was given, as the Atmosphere Groups proposal
-lists them. A grant keeps this scope through every refresh. Refreshing
-doesn't ask the roles again, because each write and call does.
+the console's cookie, and a group session's DPoP token too. With a
+group session, the group is the session's, so the call needn't name it;
+one that names another group fails `Forbidden`. With service auth or
+the cookie, the call must name the group (`group`), or it fails
+`InvalidRequest`. At each call, its member's roles must hold the
+method's action at that moment, or it fails `Forbidden`, and a scope
+without the method fails `ScopeMissing`. Of the sets, a token makes
+their writes in the meta and members spaces and in people's inboxes.
+Their `rpc:` and `manage=` scopes say what an app was given, as the
+spec lists them. A grant keeps this scope through every refresh.
+Refreshing doesn't ask the roles again, because each write and call
+does.
 
 ### Checking each write
 
@@ -318,9 +326,11 @@ roles need depends on where the write goes:
 
 - For a repo write, a repo grant for the collection, or the right to
   write it as the group in one of its open spaces.
-- In the meta space, what its policy grants the roles, and every record
-  for `group.configure`. Roles in the members space need
-  `group.configure`.
+- In the meta space, what its policy grants the roles, and beyond that
+  the `about` record for `authManageBasic` and both it and the `config`
+  record for `authManageAdmin`. In the members space likewise the rules
+  for `authManageBasic`, and the rules, the labeler and roles for
+  `authManageAdmin`.
 - For memberships in the members space, `admit`, `role.assign` or
   `eject`, as the write creates, changes or deletes one, and then what
   the records' rules ask ([membership](membership.md)).
@@ -350,14 +360,17 @@ Details:
 
 - `applyWrites` takes at most 200 writes. Repo writes honour
   `swapCommit` and `swapRecord`.
-- The meta space takes only a profile, rules and the labeler, and the
-  members space only roles and memberships. An inbox takes invites, one
-  write at a time.
-- The host keeps a write of the profile, a rule or the declaration only
-  as the group would keep it. A profile needs a name, a known join
-  policy and pictures that are the group's own images, at `self`, and
-  it's never deleted. A rule needs a title, at a TID. A declaration must
-  name `meta`, and only while anyone may read it ([groups](groups.md#changing-its-profile-rules-and-pictures)).
+- The meta space takes only the `about` and `config` records and
+  labels. The members space takes only rules, the labeler, roles,
+  memberships and labels. An inbox takes invites, one write at a time.
+- The host keeps a write of the `about` or `config` record, the
+  labeler, a rule or the declaration only as the group would keep it.
+  An `about` record needs a name, a website on the web and pictures
+  that are the group's own images, and a `config` record a known join
+  policy. Those and the labeler are kept at `self` and never deleted. A
+  rule needs a title, at a TID. A declaration is kept at `self`, and
+  only while anyone may read `meta`
+  ([groups](groups.md#changing-its-about-record-rules-and-pictures)).
   This is the only way to change them, since no method of the host's
   does.
 - Each use marks the grant used, at most once a minute.
@@ -404,7 +417,8 @@ yet, if their roles hold `space.create`. If they may do nothing there,
 the request fails 403.
 
 For the members space, the token also writes the records there that the
-member's grants allow (roles, and memberships as above). In any space,
+member's grants allow (roles, the labeler, rules, and memberships as
+above). In any space,
 it writes labels where the member's roles' scopes write them, as at
 approval. Each gets a
 space scope and no repo scope. That's how the
@@ -415,13 +429,14 @@ invites someone and cancels an invite.
 
 The token lasts 15 minutes. It's an ordinary grant with source
 `getGroupAuth`, checked at each write as above. The console's settings
-take one for `meta` to write the group's profile, pictures and rules.
+take one for `meta` to write the group's `about` record, picture and
+join policy, and one for `members` to write its rules.
 The console ends each token at `/oauth/revoke` once its writes are
 made, so none is left among the group's sessions.
 
-An MCP client writes the profile and rules the same way, inside the
+An MCP client writes the `about` record and rules the same way, inside the
 host. Each such tool call runs as a grant for its member, with the scope
-`getGroupAuth` would give them for `meta` at that moment, and the host
+`getGroupAuth` would give them for that space at that moment, and the host
 checks it as it checks any write ([MCP](../reference/mcp.md)).
 
 ## Listing and revoking

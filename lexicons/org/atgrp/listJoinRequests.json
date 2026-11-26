@@ -4,20 +4,20 @@
   "defs": {
     "main": {
       "type": "query",
-      "description": "The pending-requests queue. Requires admit: a member's service auth, or a group-DID session with this method's rpc: scope, whose member holds it at each call.",
+      "description": "List pending join requests, which the host stores privately. Approve one by writing the requester's membership record. Deny requests with 'denyJoinRequest'. Requires auth as the group.",
       "parameters": {
         "type": "params",
-        "required": ["group"],
         "properties": {
           "group": {
             "type": "string",
             "format": "did",
-            "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+            "description": "The group's DID. A group account session names its own; a member's service auth names it here."
           },
           "limit": {
             "type": "integer",
-            "default": 50,
-            "maximum": 100
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
           },
           "cursor": {
             "type": "string"

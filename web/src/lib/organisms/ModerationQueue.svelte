@@ -13,16 +13,18 @@
     reasons as reasonsOf,
     reported,
     reports,
+    tagName,
     what
   } from '#lib/moderation.ts';
   import { localized, type LabelLocale } from '#lib/labels.ts';
   import { m } from '#lib/paraglide/messages.js';
   /**
-   * A group's moderation queue of one status: each subject by whose it is,
-   * what it is, when and why it was reported, the labels it wears and what
-   * the latest report said; what happened to it, folded under it; and, for
-   * one whose roles let them act on it (`can`: labelling it, asked of each
-   * subject, and resolving), a Review of it. `found`,
+   * A group's moderation queue as one of its tabs lists it (`shown`: open,
+   * escalated or resolved): each subject by whose it is, what it is, when
+   * and why it was reported, its moderators' tags, the labels it wears and
+   * what the latest report said; what happened to it, folded under it;
+   * and, for one whose roles let them act on it (`can`: labelling it,
+   * asked of each subject, and deciding on it), a Review of it. `found`,
    * someone looked up who is not in this list, and `reviewing`, the
    * subject whose Review opens as the page is drawn. `rules`, the group's
    * rules' titles by record key; `ruleList`, each rule's URI and title;
@@ -31,7 +33,7 @@
    */
   let {
     subjects,
-    status,
+    shown,
     can,
     rules = {},
     ruleList = [],
@@ -41,7 +43,7 @@
     defined = []
   }: {
     subjects: Subject[];
-    status: string;
+    shown: 'open' | 'escalated' | 'resolved';
     can: { label: (key: string) => boolean; resolve: boolean };
     rules?: Record<string, string>;
     ruleList?: { uri: string; title: string }[];
@@ -50,8 +52,8 @@
     reviewing?: string | null;
     defined?: { identifier: string; locales: LabelLocale[] }[];
   } = $props();
-  // What fills each status's list, said where it is empty.
-  const EMPTY: Record<string, { title: () => string; body: () => string }> = {
+  // What fills each tab's list, said where it is empty.
+  const EMPTY = {
     open: { title: m.moderation_queue_empty_open_title, body: m.moderation_queue_empty_open },
     escalated: {
       title: m.moderation_queue_empty_escalated_title,
@@ -108,9 +110,13 @@
         <span class="row-main">
           <span class="who mono">{s.actor.handle ?? s.actor.did}</span>
           <span class="what">{what(s.key)} · {reported(s)}</span>
-          {#if reasonsOf(s).length || wearing.length}<span class="tags"
-              >{#each reasonsOf(s) as r (r)}<Tag text={r} />{/each}{#if wearing.length}<span
-                  class="what labelled">{m.moderation_queue_labelled()}</span
+          {#if s.tags.length || reasonsOf(s).length || wearing.length}<span class="tags"
+              >{#each s.tags as t (t)}<Tag
+                  text={tagName(t)}
+                />{/each}{#each reasonsOf(s) as r (r)}<Tag
+                  text={r}
+                />{/each}{#if wearing.length}<span class="what labelled"
+                  >{m.moderation_queue_labelled()}</span
                 >{/if}{#each wearing as val (val)}<span class="tag worn">{val}</span>{/each}</span
             >{/if}
         </span>
@@ -132,8 +138,6 @@
     {/each}
   </ul>
 {:else}
-  <Empty title={EMPTY[status]?.title() ?? m.moderation_queue_empty_title({ status })}
-    >{EMPTY[status]?.body() ?? m.moderation_queue_empty()}</Empty
-  >
+  <Empty title={EMPTY[shown].title()}>{EMPTY[shown].body()}</Empty>
 {/if}
 {#if found && acts(found.key)}{@render review(found, 'review-found')}{/if}

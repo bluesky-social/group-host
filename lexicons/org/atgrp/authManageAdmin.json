@@ -1,10 +1,10 @@
 {
   "lexicon": 1,
-  "id": "org.atgrp.authManageGroup",
+  "id": "org.atgrp.authManageAdmin",
   "defs": {
     "main": {
       "type": "permission-set",
-      "description": "For group-DID sessions. Limited to what the authorizing user's roles grant.",
+      "description": "For group account sessions. Limited to what the authorizing user's roles grant.",
       "title": "Group administration",
       "detail": "Manage everything in the group's info and member list, including its roles and what each role can do.",
       "permissions": [
@@ -15,20 +15,12 @@
           "authority": "self",
           "skey": "self",
           "collection": [
-            "org.atgrp.profile",
-            "org.atgrp.rule",
-            "org.atgrp.labeler",
+            "org.atgrp.about",
+            "org.atgrp.config",
             "com.atproto.label.record"
           ],
-          "action": [
-            "read",
-            "create",
-            "update",
-            "delete"
-          ],
-          "manage": [
-            "update"
-          ]
+          "action": ["read", "create", "update", "delete"],
+          "manage": ["update"]
         },
         {
           "type": "permission",
@@ -37,35 +29,23 @@
           "authority": "self",
           "skey": "self",
           "collection": [
+            "org.atgrp.rule",
+            "org.atgrp.labeler",
             "org.atgrp.role",
             "org.atgrp.membership",
             "com.atproto.label.record"
           ],
-          "action": [
-            "read",
-            "create",
-            "update",
-            "delete"
-          ],
-          "manage": [
-            "update"
-          ]
+          "action": ["read", "create", "update", "delete"],
+          "manage": ["update"]
         },
         {
           "type": "permission",
           "resource": "space",
-          "spaceType": "org.atgrp.invites",
+          "spaceType": "org.atgrp.inbox",
           "authority": "*",
           "skey": "self",
-          "collection": [
-            "org.atgrp.invite"
-          ],
-          "action": [
-            "read_self",
-            "create",
-            "update",
-            "delete"
-          ]
+          "collection": ["org.atgrp.invite"],
+          "action": ["read_self", "create", "update", "delete"]
         },
         {
           "type": "permission",
@@ -75,10 +55,10 @@
             "org.atgrp.listJoinRequests",
             "org.atgrp.denyJoinRequest",
             "org.atgrp.internal.listInvites",
-            "org.atgrp.listModSubjects",
-            "org.atgrp.getModSubjectHistory",
+            "org.atgrp.mod.querySubjects",
+            "org.atgrp.mod.querySubjectHistory",
             "org.atgrp.internal.getModSubjectBlob",
-            "org.atgrp.resolveModSubject"
+            "org.atgrp.mod.updateSubject"
           ]
         }
       ]

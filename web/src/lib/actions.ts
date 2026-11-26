@@ -34,26 +34,27 @@ const members = (write: string) =>
 
 /**
  * The scope that grants each action, as a role's record holds it among
- * its scopes: what the host reads it as.
+ * its permissions: what the host reads it as.
  */
 export const SCOPES: Record<(typeof KNOWN)[number], string> = {
-  'mod.read': rpc('listModSubjects'),
-  'mod.resolve': rpc('resolveModSubject'),
+  'mod.read': rpc('mod.querySubjects'),
+  'mod.resolve': rpc('mod.updateSubject'),
   label: 'space:*?collection=com.atproto.label.record',
   invite:
-    'space:org.atgrp.invites?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete',
+    'space:org.atgrp.inbox?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete',
   admit: members('create'),
   eject: members('delete'),
   'role.assign': members('update'),
   'space.create': 'space:*?manage=create',
   'space.configure': 'space:*?manage=update',
   'space.delete': 'space:*?manage=delete',
-  'group.configure': 'include:org.atgrp.authManageGroup'
+  'group.configure': 'include:org.atgrp.authManageAdmin'
 };
 
 const set = (name: string) => `include:org.atgrp.${name}`;
+const MANAGES_MEMBERS = ['invite', 'admit', 'eject', 'role.assign'];
 // Not `label`, labels in every space: the sets label only in the meta and members spaces.
-const MODERATES = ['mod.read', 'mod.resolve', 'invite', 'admit', 'eject', 'role.assign'];
+const MODERATES = ['mod.read', 'mod.resolve', 'eject'];
 
 /**
  * The group's permission sets a role may carry, smallest first: each its
@@ -62,17 +63,18 @@ const MODERATES = ['mod.read', 'mod.resolve', 'invite', 'admit', 'eject', 'role.
  * that action is chosen here, not on its own.
  */
 export const SETS: { key: SetKey; scope: string; actions: string[]; within: SetKey[] }[] = [
-  { key: 'profile', scope: set('authManageProfile'), actions: [], within: [] },
+  { key: 'basic', scope: set('authManageBasic'), actions: [], within: [] },
+  { key: 'members', scope: set('authManageMembers'), actions: MANAGES_MEMBERS, within: [] },
   { key: 'moderate', scope: set('authModerate'), actions: MODERATES, within: [] },
   {
-    key: 'group',
+    key: 'admin',
     scope: SCOPES['group.configure'],
-    actions: [...MODERATES, 'group.configure'],
-    within: ['profile', 'moderate']
+    actions: [...new Set([...MANAGES_MEMBERS, ...MODERATES]), 'group.configure'],
+    within: ['basic', 'members', 'moderate']
   }
 ];
 
-export type SetKey = 'profile' | 'moderate' | 'group';
+export type SetKey = 'basic' | 'members' | 'moderate' | 'admin';
 
 /** The actions a role's editor offers one by one: all but the one only a set gives. */
 export const SINGLE = ACTIONS.filter((a) => a !== 'group.configure');

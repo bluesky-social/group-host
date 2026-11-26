@@ -40,8 +40,8 @@ async fn group(h: &Running) -> (String, String, [Authority; 3]) {
     )
     .await;
     let policy = json!({"$type": "org.atgrp.policy", "grants": [
-        {"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
-        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        {"role": "member", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
+        {"role": "admin", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?collection=*")]},
     ]});
     // Made by the host directly, so that no token of Alice's shows below.
     let made = h
@@ -143,9 +143,9 @@ async fn gives_a_member_a_token_for_the_members_space_as_the_group_grants_them()
     let app = App::new("console");
     let said = group_auth(&h, &app, &alice, &json!({"group": did, "space": members})).await;
     assert_eq!(said.status, 200, "{}", said.body);
-    // Labels, roles and memberships, kept there alone.
+    // Labels, the labeler, roles, memberships and rules, kept there alone.
     let c = |n: &str| format!("{NS}.{n}");
-    let mut names: Vec<Json> = ["membership", "role"]
+    let mut names: Vec<Json> = ["labeler", "membership", "role", "rule"]
         .iter()
         .map(|n| json!({"collection": c(n)}))
         .collect();
@@ -359,7 +359,7 @@ async fn publishes_only_as_the_role_may_write_in_the_space() {
     let policy_of = |scope: String| {
         json!({
             "$type": format!("{NS}.policy"),
-            "grants": [{"role": "member", "read": true, "scopes": [scope]}],
+            "grants": [{"role": "member", "read": true, "permissions": [scope]}],
         })
     };
     let set = async |policy: Json| {
@@ -412,7 +412,7 @@ async fn gives_a_token_to_change_a_space_to_one_its_policy_lets() {
     assert_eq!(said.status, 200, "{}", said.body);
     assert!(!said.body["scope"].as_str().unwrap().contains("manage="));
     let policy = json!({"$type": format!("{NS}.policy"), "grants": [
-        {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=update")]},
+        {"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?manage=update")]},
     ]});
     h.host.store.set_policy(&calendar, &policy).unwrap();
     let said = group_auth(&h, &app, &bob, &body).await;

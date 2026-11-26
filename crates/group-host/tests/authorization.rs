@@ -10,7 +10,7 @@ use common::spaces::*;
 use common::{Running, start};
 use serde_json::{Value as Json, json};
 
-const SCOPE: &str = "atproto repo:app.bsky.feed.post include:org.atgrp.authManageGroup include:org.atgrp.authModerate";
+const SCOPE: &str = "atproto repo:app.bsky.feed.post include:org.atgrp.authManageAdmin include:org.atgrp.authModerate";
 
 async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
     let membership = json!({"$type": format!("{NS}.membership"), "roles": roles, "createdAt": "2026-11-03T00:00:00Z"});
@@ -24,7 +24,7 @@ async fn join(h: &Running, did: &str, who: &str, roles: &[&str]) {
 }
 
 /// Riders and Hikers, both Alice's; Bob a member of Riders, Carol of
-/// neither. Hikers' profile is for its members alone.
+/// neither. Hikers' about record is for its members alone.
 async fn groups(h: &Running) -> (String, String, [Authority; 3]) {
     let [alice, bob, carol] = people(h).await;
     let riders = start_group(
@@ -89,8 +89,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     let (riders, hikers, [alice, bob, carol]) = groups(&h).await;
     let app = App::loopback(SCOPE);
     let request_uri = app.push(&h, &[]).await;
-    // Hikers' profile gone, so it has no name to show.
-    drop_profile(&h, &hikers).await;
+    // Hikers' about record gone, so it has no name to show.
+    drop_about(&h, &hikers).await;
 
     let (status, offered) = offer(&h, &alice, &request_uri).await;
     assert_eq!(status, 200, "{offered}");
@@ -103,8 +103,8 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
     assert_eq!(
         offered["labels"],
         json!([
-            {"scope": "include:org.atgrp.authManageGroup", "title": "Group administration", "text": "Manage everything in the group's info and member list, including its roles and what each role can do."},
-            {"scope": "include:org.atgrp.authModerate", "title": "Group moderation", "text": "Approve, invite, label, and remove members, change their roles, and review reports."},
+            {"scope": "include:org.atgrp.authManageAdmin", "title": "Group administration", "text": "Manage everything in the group's info and member list, including its roles and what each role can do."},
+            {"scope": "include:org.atgrp.authModerate", "title": "Group moderation", "text": "Label content, remove members, and review reports."},
         ])
     );
     let mut theirs = dids(&offered);
@@ -146,7 +146,7 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
         scopes(&at_riders["withheld"]),
         [
             "repo:app.bsky.feed.post",
-            "include:org.atgrp.authManageGroup",
+            "include:org.atgrp.authManageAdmin",
             "include:org.atgrp.authModerate"
         ]
     );
@@ -162,10 +162,10 @@ async fn offers_the_groups_where_the_caller_holds_a_role_with_what_the_app_would
 }
 
 #[tokio::test]
-async fn offers_the_tier_a_moderator_holds_of_the_one_asked() {
+async fn offers_the_set_a_moderator_holds_of_the_one_asked() {
     let h = start(&[], false).await;
     let (riders, _, [_, bob, _]) = groups(&h).await;
-    let role = json!({"$type": format!("{NS}.role"), "displayName": "Moderator", "scopes": [format!("include:{NS}.authModerate")], "createdAt": "2026-11-03T00:00:00Z"});
+    let role = json!({"$type": format!("{NS}.role"), "displayName": "Moderator", "permissions": [format!("include:{NS}.authModerate")]});
     let write = group_host::repo::Write::Create {
         collection: format!("{NS}.role"),
         rkey: "moderator".into(),
@@ -179,24 +179,25 @@ async fn offers_the_tier_a_moderator_holds_of_the_one_asked() {
         value: json!({"$type": format!("{NS}.membership"), "roles": ["member", "moderator"], "createdAt": "2026-11-03T00:00:00Z"}),
     };
     h.host.space_write(&riders, &space, &[write]).await.unwrap();
-    let app = App::loopback("atproto include:org.atgrp.authManageGroup");
+    let app = App::loopback("atproto include:org.atgrp.authManageAdmin");
     let request_uri = app.push(&h, &[]).await;
     let (status, offered) = offer(&h, &bob, &request_uri).await;
     assert_eq!(status, 200, "{offered}");
     let at_riders = &offered["groups"][0];
+    // Of administration, the moderation set it holds, whole.
     assert_eq!(
         scopes(&at_riders["granted"]),
         ["atproto", "include:org.atgrp.authModerate"]
     );
     assert_eq!(
         scopes(&at_riders["withheld"]),
-        ["include:org.atgrp.authManageGroup"]
+        ["include:org.atgrp.authManageAdmin"]
     );
     // Both named, for the page to say what each is.
     assert_eq!(
         scopes(&offered["labels"]),
         [
-            "include:org.atgrp.authManageGroup",
+            "include:org.atgrp.authManageAdmin",
             "include:org.atgrp.authModerate"
         ]
     );
@@ -222,7 +223,7 @@ async fn offers_only_the_group_the_app_named_even_to_one_without_a_role() {
         assert_eq!(offered["groups"][0]["granted"], json!([]));
         assert_eq!(offered["groups"][0]["displayName"], "Riders");
     }
-    // Its profile only for whoever may read it.
+    // Its about record only for whoever may read it.
     let request_uri = app.push(&h, &[("login_hint", "hikers.groups.test")]).await;
     let (_, offered) = offer(&h, &carol, &request_uri).await;
     assert_eq!(dids(&offered), [hikers.as_str()]);
@@ -375,12 +376,12 @@ async fn gives_each_permission_set_as_the_scopes_it_lists() {
     assert!(!scope.contains("include:"), "{scope}");
     assert!(
         scope.contains(&format!(
-            "space:org.atgrp.meta?authority={riders}&skey=self&collection=org.atgrp.profile"
+            "space:org.atgrp.meta?authority={riders}&skey=self&collection=org.atgrp.about"
         )),
         "{scope}"
     );
     assert!(
-        scope.contains("rpc:org.atgrp.listModSubjects?aud=*"),
+        scope.contains("rpc:org.atgrp.mod.querySubjects?aud=*"),
         "{scope}"
     );
 }

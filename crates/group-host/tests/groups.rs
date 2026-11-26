@@ -39,11 +39,19 @@ async fn starts_a_group_with_its_spaces() {
             .unwrap()
     };
     let (meta, members) = (meta_space(did), members_space(did));
-    let profile = record(&meta, "profile", "self");
-    assert_eq!(profile["displayName"], "Riders");
-    assert_eq!(profile["joinPolicy"], "approval");
-    // Meta is public, its profile and rules written by admins; members
-    // read the members space and write there. Each policy is published.
+    // Its about record names it, and its config says how people join,
+    // both in the meta space.
+    assert_eq!(
+        record(&meta, "about", "self"),
+        json!({"$type": format!("{NS}.about"), "displayName": "Riders", "description": "We ride."})
+    );
+    assert_eq!(
+        record(&meta, "config", "self"),
+        json!({"$type": format!("{NS}.config"), "joinPolicy": "approval"})
+    );
+    // Meta is public, and its members and admins read it; admins write
+    // its records by their role's permissions. Members read the members
+    // space and write there. Each policy is published.
     let published = |space: &str| {
         h.host
             .group_record(did, space, "com.atproto.space.policy", "self")
@@ -58,14 +66,29 @@ async fn starts_a_group_with_its_spaces() {
             "publicRead": true,
             "grants": [
                 {"role": "member", "read": true},
-                {"role": "admin", "read": true, "scopes": [format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule")]},
+                {"role": "admin", "read": true},
             ],
         })
     );
+    // Its labeler is in the members space, taking reports about accounts
+    // and records, of each reason the proposal names.
+    let labeler = record(&members, "labeler", "self");
+    assert_eq!(labeler["subjectTypes"], json!(["account", "record"]));
     assert_eq!(
-        record(&meta, "labeler", "self")["subjectTypes"],
-        json!(["account", "record"])
+        labeler["reasonTypes"],
+        json!([
+            "org.atgrp.mod.defs#reasonSpam",
+            "org.atgrp.mod.defs#reasonViolation",
+            "org.atgrp.mod.defs#reasonMisleading",
+            "org.atgrp.mod.defs#reasonNsfw",
+            "org.atgrp.mod.defs#reasonRude",
+            "org.atgrp.mod.defs#reasonOther",
+        ])
     );
+    let in_meta = h
+        .host
+        .group_record(did, &meta, &format!("{NS}.labeler"), "self");
+    assert_eq!(in_meta.unwrap(), None);
     assert_eq!(
         published(&members)["grants"],
         json!([{"role": "member", "read": true, "write": true}])
@@ -80,16 +103,13 @@ async fn starts_a_group_with_its_spaces() {
             who.did
         );
     }
+    // Neither of its own spaces is in its index.
     let indexed = h
         .host
         .group_records(did, &members, &format!("{NS}.space"))
         .unwrap();
-    let spaces: Vec<&str> = indexed
-        .iter()
-        .map(|(_, s)| s["space"].as_str().unwrap())
-        .collect();
-    assert_eq!(spaces, [meta.as_str(), members.as_str()]);
-    // Listed, for a meta anyone may read.
+    assert!(indexed.is_empty(), "{indexed:?}");
+    // Listed, for a meta anyone may read, by an empty declaration.
     let (_, declared) = get(
         &h,
         "com.atproto.repo.getRecord",
@@ -97,7 +117,10 @@ async fn starts_a_group_with_its_spaces() {
         &[],
     )
     .await;
-    assert_eq!(declared["value"]["meta"], meta);
+    assert_eq!(
+        declared["value"],
+        json!({"$type": format!("{NS}.declaration")})
+    );
     // Both spaces are its, as their authority.
     assert!(h.host.store.space(&meta).unwrap().is_some());
     assert!(h.host.store.space(&members).unwrap().is_some());
@@ -113,7 +136,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         json!({"handle": RIDERS, "displayName": "Riders", "stewards": [{"did": bob.did}]}),
     )
     .await;
-    let meta = meta_space(&did);
+    let (meta, members) = (meta_space(&did), members_space(&did));
     let picture = h.host.upload_blob(&did, b"face", "image/png").unwrap();
     h.host
         .space_write(
@@ -121,17 +144,25 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
             &meta,
             &[
                 Write::Update {
-                    collection: format!("{NS}.profile"),
+                    collection: format!("{NS}.about"),
                     rkey: "self".into(),
-                    value: json!({"$type": format!("{NS}.profile"), "displayName": "Riders", "joinPolicy": "open", "avatar": picture, "url": "https://riders.example"}),
+                    value: json!({"$type": format!("{NS}.about"), "displayName": "Riders", "avatar": picture, "website": "https://riders.example"}),
                 },
-                rule_at("b", "Second", None, "2026-11-02T00:00:00Z"),
-                rule_at("a", "Third", None, "2026-11-03T00:00:00Z"),
-                rule_at("c", "First", Some(1), "2026-11-04T00:00:00Z"),
+                Write::Update {
+                    collection: format!("{NS}.config"),
+                    rkey: "self".into(),
+                    value: json!({"$type": format!("{NS}.config"), "joinPolicy": "open"}),
+                },
             ],
         )
         .await
         .unwrap();
+    let rules = [
+        rule_at("b", "Second", None, "2026-11-02T00:00:00Z"),
+        rule_at("a", "Third", None, "2026-11-03T00:00:00Z"),
+        rule_at("c", "First", Some(1), "2026-11-04T00:00:00Z"),
+    ];
+    h.host.space_write(&did, &members, &rules).await.unwrap();
 
     // The founder: everything, and every action.
     let mine = view(&h, &did, Some(&alice)).await;
@@ -141,7 +172,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     assert_eq!(group["displayName"], "Riders");
     assert_eq!(group["joinPolicy"], "open");
     assert_eq!(group["avatar"], picture["ref"]["$link"]);
-    assert_eq!(group["url"], "https://riders.example");
+    assert_eq!(group["website"], "https://riders.example");
     let titles: Vec<&str> = group["rules"]
         .as_array()
         .unwrap()
@@ -172,31 +203,32 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     let admin = &mine["bindings"][0];
     assert_eq!(admin["role"], "admin");
     assert_eq!(admin["actions"], json!(every));
-    assert_eq!(admin["assignable"], json!([{"role": "*"}]));
+    assert_eq!(admin["canAssign"], json!([{"role": "*"}]));
     assert_eq!(admin["repoCollections"], json!([{"collection": "*"}]));
-    // Each of its scopes with the actions the host reads it as granting.
-    let moderates = [
+    // Each of its permissions with the actions the host reads it as
+    // granting.
+    let configures = [
         "admit",
         "eject",
+        "group.configure",
         "invite",
         "mod.read",
         "mod.resolve",
         "role.assign",
     ];
-    let mut configures = moderates.to_vec();
-    configures.insert(2, "group.configure");
     assert_eq!(
-        admin["scopes"][0],
-        json!({"scope": format!("include:{NS}.authManageGroup"), "actions": configures})
+        admin["permissions"][0],
+        json!({"scope": format!("include:{NS}.authManageAdmin"), "actions": configures})
     );
     assert_eq!(
-        admin["scopes"][5],
+        admin["permissions"][5],
         json!({"scope": "repo:*", "actions": []})
     );
     // She holds enough to give a role each action, and each of the
-    // group's permission sets.
+    // group's permission sets but the admin's.
     let sets = [
-        format!("include:{NS}.authManageProfile"),
+        format!("include:{NS}.authManageBasic"),
+        format!("include:{NS}.authManageMembers"),
         format!("include:{NS}.authModerate"),
     ];
     let mut offered: Vec<String> = ACTIONS.iter().map(|a| scope_of(a).unwrap()).collect();
@@ -214,15 +246,14 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     // group, label, make, change and end spaces, write any record as the
     // group in its repo and its spaces, and give every role; and the
     // members' role, the default, nothing more.
-    let members = members_space(&did);
     let role = |key: &str| {
         let found = h
             .host
             .group_record(&did, &members, &format!("{NS}.role"), key);
         found.unwrap().unwrap()
     };
-    let scopes = json!([
-        format!("include:{NS}.authManageGroup"),
+    let permissions = json!([
+        format!("include:{NS}.authManageAdmin"),
         "space:*?collection=com.atproto.label.record",
         "space:*?manage=update",
         "space:*?manage=create&manage=delete",
@@ -231,13 +262,13 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     ]);
     let founders = role("admin");
     assert_eq!(
-        (&founders["scopes"], &founders["assignable"]),
-        (&scopes, &json!(["*"]))
+        (&founders["permissions"], &founders["canAssign"]),
+        (&permissions, &json!(["*"]))
     );
     let everyone = role("member");
     assert_eq!(everyone["default"], true);
     assert_eq!(
-        (everyone.get("scopes"), everyone.get("assignable")),
+        (everyone.get("permissions"), everyone.get("canAssign")),
         (None, None)
     );
     let held = h
@@ -304,8 +335,9 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     assert!(shown(&view(&h, &did, Some(&alice)).await));
 
     // A moderator may give what moderating holds, and no more: not the
-    // labels in every space, nor the profile, nor running the group.
-    let moderator = json!({"$type": format!("{NS}.role"), "scopes": [&sets[1]], "createdAt": "2026-11-03T00:00:00Z"});
+    // labels in every space, nor admitting, inviting or giving roles, nor
+    // the about record, nor running the group.
+    let moderator = json!({"$type": format!("{NS}.role"), "permissions": [&sets[2]]});
     let theirs = json!({"$type": format!("{NS}.membership"), "roles": ["member", "moderator"], "createdAt": "2026-11-03T00:00:00Z"});
     h.host
         .space_write(
@@ -327,18 +359,11 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         .await
         .unwrap();
     let hers = view(&h, &did, Some(&carol)).await;
-    let gives: Vec<String> = [
-        "mod.read",
-        "mod.resolve",
-        "invite",
-        "admit",
-        "eject",
-        "role.assign",
-    ]
-    .iter()
-    .map(|a| scope_of(a).unwrap())
-    .chain([sets[1].clone()])
-    .collect();
+    let gives: Vec<String> = ["mod.read", "mod.resolve", "eject"]
+        .iter()
+        .map(|a| scope_of(a).unwrap())
+        .chain([sets[2].clone()])
+        .collect();
     assert_eq!(
         hers["group"]["viewer"]["grantable"],
         json!(
@@ -349,7 +374,7 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         )
     );
 
-    // Once they write their acceptance, they have accepted.
+    // Once they write their confirmation, they have accepted.
     h.host
         .store
         .record_writer(
@@ -365,10 +390,14 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
         true
     );
 
-    // Someone else signed in: the public face, and no standing.
+    // Someone else signed in: the public face, and no standing; nor the
+    // rules or labels, which are the members space's.
     let dave = authority(&h, false, true).await;
     let theirs = view(&h, &did, Some(&dave)).await;
     assert_eq!(theirs["group"]["displayName"], "Riders");
+    assert_eq!(theirs["group"]["joinPolicy"], "open");
+    assert_eq!(theirs["group"].get("rules"), None);
+    assert_eq!(theirs["group"].get("labels"), None);
     assert_eq!(
         theirs["group"]["viewer"],
         json!({"member": false, "roles": [], "actions": []})
@@ -377,13 +406,14 @@ async fn shows_a_group_as_each_viewer_may_see_it() {
     // Nobody signed in: what anyone can learn of it already, and no more.
     let anyone = view(&h, &did, None).await;
     assert_eq!(anyone, json!({"group": {"did": did, "handle": RIDERS}}));
-    // Its profile gone: no name or face, and the rest as before.
-    drop_profile(&h, &did).await;
-    let theirs = view(&h, &did, Some(&dave)).await;
+    // Its about record gone: no name or face, and the rest as before.
+    drop_about(&h, &did).await;
+    let theirs = view(&h, &did, Some(&carol)).await;
     let group = &theirs["group"];
     assert_eq!(group["handle"], RIDERS);
     assert_eq!(group.get("displayName"), None);
     assert_eq!(group.get("avatar"), None);
+    assert_eq!(group["joinPolicy"], "open");
     assert_eq!(group["rules"].as_array().unwrap().len(), 3);
 }
 

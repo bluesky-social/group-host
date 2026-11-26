@@ -15,13 +15,14 @@ there, and no one outside the group can. The group writes two kinds of
 record:
 
 - `org.atgrp.membership`, one per member, keyed by their DID. It
-  holds the `roles` they have, each by its id (`["member", "admin"]`),
+  holds the `roles` they have, each by its ID (`["member", "admin"]`),
   at most 100. The key alone says whose it is.
-- `org.atgrp.role`, one per role, keyed by its id. It holds the
-  role's name, description, and whether it's a `default` or `bot` role.
-  It also holds the role's grant across the group: the `scopes` it
-  carries and the roles it may assign (`assignable`), each a list of at
-  most 100 strings.
+- `org.atgrp.role`, one per role, keyed by its ID. It holds the
+  role's optional display name (apps show the ID without one),
+  description, and whether it's a `default` or `bot` role. It also
+  holds the role's grant across the group: the `permissions` it carries
+  and the roles it may assign (`canAssign`), each a list of at most 100
+  strings.
 
 Anyone who may read the members space can see who's in it with
 `listMembers`. It answers each member and their roles, named by the
@@ -41,7 +42,7 @@ Apps change these records the way they change any of the group's, by
 writing them as the group with `com.atproto.space.*` (see the next
 sections). The host has no method of its own for roles or memberships.
 
-A member may also write an `org.atgrp.acceptance` record in their
+A member may also write an `org.atgrp.confirmation` record in their
 own repo there. It's their side of membership, for apps that show only
 people who have taken up their place. It doesn't change anything they
 may do. `getGroup` reports it to them as `viewer.accepted`.
@@ -50,11 +51,11 @@ may do. `getGroup` reports it to them as `viewer.accepted`.
 
 The host's methods ask about eleven actions, such as `invite`, `admit`,
 `eject`, `role.assign` and `group.configure`. Each is answered by exactly
-one scope, in atproto's permission syntax (`space:*?manage=create`,
-`include:org.atgrp.authManageGroup` for `group.configure`). A
+one permission, in atproto's permission syntax (`space:*?manage=create`,
+`include:org.atgrp.authManageAdmin` for `group.configure`). A
 member may do what any of their roles grants. Roles add up, with no
 deny, precedence or hierarchy, so every "may they?" is a lookup. A role
-may also carry `repo:<collection>` scopes, the collections of the
+may also carry `repo:<collection>` permissions, the collections of the
 group's public repo its holders may write as the group.
 
 The console takes what each person may change from `getGroup`. Its
@@ -63,7 +64,7 @@ may make app passwords (a role with `repo:*`). It shows those members only
 the parts that are theirs. Anyone else sees no way to the settings, and
 an address under them says there's nothing there for them to change.
 
-Power over other members needs its own limit. A role's `assignable`
+Power over other members needs its own limit. A role's `canAssign`
 lists the roles its holders may give or take, and whose holders they may
 eject. `*` there is every role, including roles made later. It counts
 only through the role that carries the action. A member's roles granting
@@ -72,26 +73,35 @@ whom they may eject, and their roles granting `admit` say what roles they
 may admit someone with.
 
 The actions over members are writes of memberships in the members space,
-and their scopes say so. `admit` is
+and their permissions say so. `admit` is
 `space:org.atgrp.members?skey=self&collection=org.atgrp.membership&action=create`,
 `role.assign` the same with `action=update`, and `eject` with
-`action=delete`. A scope naming every write of memberships, or of every
+`action=delete`. A permission naming every write of memberships, or of every
 collection in every space, carries all three.
 
-The group's permission sets carry actions too, as their permissions do.
-`org.atgrp.authModerate` carries `admit`, `eject`, `role.assign`,
-`invite`, `mod.read` and `mod.resolve`. It labels too, but only in the
-meta and members spaces, which its permissions name, so it doesn't carry
-`label`, which is labels in every space. Labelling in the group's other
-spaces takes `space:*?collection=com.atproto.label.record`, or a scope a
-space's policy grants there ([moderation](moderation.md#labels)).
-`org.atgrp.authManageGroup` carries all of those and
-`group.configure`. `org.atgrp.authManageProfile` carries none. Who
-writes the profile and rules is for the meta space's policy to say
-([spaces](spaces.md)).
+The group's permission sets carry actions too, as their permissions do:
+
+- `org.atgrp.authManageBasic` writes the `about` record in the meta
+  space and the rules in the members space. That's no action the host's
+  methods ask about, so it carries none.
+- `org.atgrp.authManageMembers` writes memberships and invites, and
+  calls `listJoinRequests`, `denyJoinRequest` and `listInvites`. It
+  carries `invite`, `admit`, `role.assign` and `eject`.
+- `org.atgrp.authModerate` labels in the meta and members spaces, reads
+  and deletes memberships (ejecting, but not admitting or changing
+  roles), and works the moderation queue. It carries `eject`,
+  `mod.read` and `mod.resolve`. Its labels are only the meta and
+  members spaces', so it doesn't carry `label`, which is labels in
+  every space. Labelling in the group's other spaces takes
+  `space:*?collection=com.atproto.label.record`, or a permission a
+  space's policy grants there ([moderation](moderation.md#labels)).
+- `org.atgrp.authManageAdmin` carries all of those and
+  `group.configure`. It also writes the `config` record in the meta
+  space, the labeler and roles in the members space, and changes both
+  spaces' policies.
 
 A new group has two roles. `admin` carries
-`include:org.atgrp.authManageGroup`,
+`include:org.atgrp.authManageAdmin`,
 `space:*?collection=com.atproto.label.record` (labels in every space),
 `space:*?manage=update` and `space:*?manage=create&manage=delete`
 (changing, making and ending spaces), `repo:*` and `space:*?collection=*`
@@ -123,42 +133,46 @@ against the records as the earlier writes left them. It's checked
 against the member's roles as they were before any of the writes. The
 writes all happen together or not at all.
 
-A role (`org.atgrp.role`) is keyed by its id, 64 characters at
-most. It can only go once no member holds it (`RoleInUse`), its grant
-with it. Its name is 64 characters at most, and its description 2,000.
+A role (`org.atgrp.role`) is keyed by its ID, which is written as a
+label value is: lowercase letters and `-`, 3 to 64 of them. The host
+refuses a role under any other key (`InvalidRequest`). A role can only
+go once no member holds it (`RoleInUse`), its grant with it. Its display
+name is 64 characters at most, and its description 2,000.
 
 In a role's grant a member changes only:
 
 - the grant of a role their own roles may assign, or of one the same
   write makes (`NotAssignable`). A role's name, description and flags
   aren't its grant.
-- scopes their own roles hold, as written or within one they hold. A
-  permission set of ours counts as the scopes it lists (`ScopeNotHeld`).
-- `assignable` lists, adding only roles they may assign themselves, each
+- permissions their own roles hold, as written or within one they hold.
+  A permission set of ours counts as the permissions it lists
+  (`ScopeNotHeld`).
+- `canAssign` lists, adding only roles they may assign themselves, each
   defined, and `*` only if they may assign every role (`NotAssignable`).
 
 So nobody gives a role more than they hold. A member who may assign
 every role can make a role and give it at once. One who can't may make a
 role and grant it what they hold, but nobody can give it until someone
-who may assign it adds it to a role's `assignable`.
+who may assign it adds it to a role's `canAssign`.
 
 `getGroup` says beforehand what a member may give. In each role's
-binding, each scope comes with the actions the host reads it as
-granting. The viewer's `grantable` lists, of each action's scope and the
-`authManageProfile` and `authModerate` sets, those their roles hold
-enough of to add, by the same check. `authManageGroup` is
-`group.configure`'s scope, so it's among the actions'.
+binding, each permission comes with the actions the host reads it as
+granting. The viewer's `grantable` lists, of each action's permission
+and the `authManageBasic`, `authManageMembers` and `authModerate` sets,
+those their roles hold enough of to add, by the same check.
+`authManageAdmin` is `group.configure`'s permission, so it's among the
+actions'.
 
 The console's role editor shows those and no more, beside what the role
-has already, which it may take away. It offers the three permission sets
-as parts in running the group (profile and rules, moderation, the whole
-group), each its own choice. An action a ticked set gives shows ticked
-and can't be unticked while the set is, saying which set it comes with.
-Taking it away means choosing a smaller set, or none, and ticking the
-actions to keep one by one. The editor saves what it shows: the sets
-and actions ticked, and any other scope of the role as it was, whose
-actions it shows as coming with those. It changes only roles the
-editing member may assign, and lists among the roles a role may give
+has already, which it may take away. It offers the four permission sets
+as parts in running the group (profile and rules, members, moderation,
+the whole group), each its own choice. An action a ticked set gives
+shows ticked and can't be unticked while the set is, saying which set it
+comes with. Taking it away means choosing a smaller set, or none, and
+ticking the actions to keep one by one. The editor saves what it shows:
+the sets and actions ticked, and any other permission of the role as it
+was, whose actions it shows as coming with those. It changes only roles
+the editing member may assign, and lists among the roles a role may give
 only those they may assign, beside those it lists already.
 
 A membership (`org.atgrp.membership`) is kept at its member's DID,
@@ -185,19 +199,24 @@ who connected it: `role_set`, `role_delete`, `role_grant`,
 
 ## Joining
 
-The profile's `joinPolicy` decides how people get in: `open`, `approval`
-(the default) or `invite`. Someone asks with `requestJoin`. With `open`
-they're in at once. With `invite` the host refuses them (`JoinClosed`)
-unless they're invited. With `approval` their request waits, with an
-optional message, until someone holding `admit` writes their membership
-as the group or turns them down with `denyJoinRequest`. A live invite
-admits them under any policy, since the group has already said yes. The
-asker may name it (`invite`, its at-uri). If the named invite isn't
-their live invite from this group, the host refuses it (`InvalidInvite`).
-If they don't name one, a live invite admits them all the same.
+The group's `org.atgrp.config` record, in its meta space, decides how
+people get in with its `joinPolicy`: `open`, `approval` (the default) or
+`invite`. Someone asks with `requestJoin`. With `open` they're in at
+once. With `invite` the host refuses them (`JoinClosed`) unless they're
+invited. With `approval` their request waits, with an optional message,
+until someone holding `admit` writes their membership as the group or
+turns them down with `denyJoinRequest`. A live invite admits them under
+any policy, since the group has already said yes. The asker may name it
+(`invite`, its at-uri). If the named invite isn't their live invite from
+this group, the host refuses it (`InvalidInvite`). If they don't name
+one, a live invite admits them all the same.
 
 `requestJoin` answers `status`. That's `admitted` with the `membership`
 it wrote (its `uri` and `cid`), or `pending` with the `request` waiting.
+A member asking again is answered `admitted` with the membership they
+have. Someone whose request already waits is answered `pending` with
+that request, under `approval` or `invite`. Under `open` a request left
+waiting from before is let in.
 
 Someone let in by `requestJoin`, or by an invite, gets the default
 roles. Those are the roles marked `default` (or `member` if none is),
@@ -222,7 +241,7 @@ Details:
 
 An invite must reach someone outside the group, so the group writes it
 where they already look. That's their inbox,
-`at://<invitee>/space/org.atgrp.invites/self`, a space of their own
+`at://<invitee>/space/org.atgrp.inbox/self`, a space of their own
 at their PDS. The invite is an `org.atgrp.invite` record in the
 group's repo there, with a `createdAt` and an optional `message` and
 `expiresAt`. The invitee's own app makes the inbox, with atproto's
@@ -233,7 +252,7 @@ among the inbox's writers.
 
 An app makes it with `com.atproto.space.createSpace` at the person's PDS,
 asking them for
-`space:org.atgrp.invites?action=read_self&manage=create`: to make
+`space:org.atgrp.inbox?action=read_self&manage=create`: to make
 their own inbox, and to see the policy of one already there, which it
 leaves as it is. The
 console doesn't make one: someone whose app never made their inbox
@@ -244,14 +263,14 @@ An app invites someone by writing that record as the group, through
 `com.atproto.space.createRecord` (or `putRecord`, or `applyWrites` with
 one write) with a session for the group. It takes the invite back by
 deleting it (`deleteRecord`). A session gets there through the
-`authModerate` or `authManageGroup` permission set, a `space:org.atgrp.invites` scope,
+`authManageMembers` or `authManageAdmin` permission set, a `space:org.atgrp.inbox` permission,
 or a group token for the inbox from `getGroupAuth`, which the console
 uses ([signing in](signing-in.md)). In every case, the member who signed
 the app in must hold `invite` at the time of each write. The host checks
 each write the same way it would check its own:
 
 - An inbox holds invites and nothing else, at `self`.
-- The invitee may not be a member already (`AlreadyMember`).
+- The invitee may not be a member already (`InvalidRequest`).
 - A group has one invite to each person at a time. Writing one while one
   waits answers the waiting one, unchanged, unless it's written at that
   one's key, which replaces it.

@@ -43,7 +43,7 @@ fn bad(error: &'static str, message: impl Into<String>) -> XrpcError {
 
 /// Someone's inbox: where groups' invites to them arrive.
 pub fn inbox_of(did: &str) -> String {
-    format!("at://{did}/space/{NS}.invites/self")
+    format!("at://{did}/space/{NS}.inbox/self")
 }
 
 /// Where `invite` is: the group's record in the invitee's inbox.
@@ -194,14 +194,14 @@ impl Host {
 
 /// Whether `space` is someone's inbox, where groups write invites to them.
 pub fn is_inbox(space: &SpaceRef) -> bool {
-    space.kind == format!("{NS}.invites")
+    space.kind == format!("{NS}.inbox")
 }
 
 /// The scope a group's session takes to write invites in `inbox`, and
 /// only there.
 pub(crate) fn inviting_scope(inbox: &SpaceRef) -> String {
     format!(
-        "atproto space:{NS}.invites?authority={}&skey={}&collection={NS}.invite&action=create&action=update&action=delete",
+        "atproto space:{NS}.inbox?authority={}&skey={}&collection={NS}.invite&action=create&action=update&action=delete",
         inbox.authority, inbox.skey
     )
 }
@@ -263,7 +263,7 @@ impl Host {
         };
         check_record(collection, value)?;
         if Members::of(self, group)?.membership(invitee)?.is_some() {
-            return Err(bad("AlreadyMember", "they are a member already"));
+            return Err(invalid("they are a member already"));
         }
         let expires_at = match value["expiresAt"].as_str() {
             Some(at) => Some(millis_of(at).ok_or_else(|| invalid("expiresAt is a datetime"))?),
@@ -440,7 +440,7 @@ pub async fn get_actor_invites(
             .group_record(
                 &invite.group,
                 &meta_space(&invite.group),
-                &format!("{NS}.profile"),
+                &format!("{NS}.about"),
                 "self",
             )
             .map_err(XrpcError::internal)?

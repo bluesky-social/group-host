@@ -1,7 +1,7 @@
 // Lantern Hikers' moderation queue, after --seed full: dan reported twice,
 // once citing a rule; a post of frank's in its talk space reported; erin
-// reported and escalated; bob reported and resolved, with a note; and two
-// labels of the group's own defined.
+// reported and escalated (tagged `escalated`, with a note); bob reported
+// and resolved, with a note; and two labels of the group's own defined.
 
 import { serviceAuth } from '../../world.mjs';
 
@@ -58,21 +58,21 @@ export default async ({ world, who, atgrp }) => {
     );
   // What a report is about: its subject, and the version of a record.
   const report = (name, about, reasonType, words, cites) =>
-    call(name, 'org.atgrp.createReport', {
+    call(name, 'org.atgrp.mod.submitReport', {
       group: did,
       ...about,
-      reasonType,
+      reasonType: `org.atgrp.mod.defs#${reasonType}`,
       ...(words ? { reason: words } : {}),
       ...(cites ? { rule: cites } : {})
     });
   const account = (name) => ({ subject: who[name].did });
-  await report('bob', account('dan'), 'spam', 'Posts the same shop link in every thread.');
+  await report('bob', account('dan'), 'reasonSpam', 'Posts the same shop link in every thread.');
   await report(
     'erin',
     account('dan'),
-    'rude',
+    'reasonRude',
     'Told a new member to stay home if they cannot keep up.',
-    rule ? `at://${did}/space/org.atgrp.meta/self/${did}/org.atgrp.rule/${rule.rkey}` : null
+    rule ? `at://${did}/space/org.atgrp.members/self/${did}/org.atgrp.rule/${rule.rkey}` : null
   );
   await report(
     'carol',
@@ -81,18 +81,21 @@ export default async ({ world, who, atgrp }) => {
       // The version reported, as an app names it.
       cid: 'bafyreie5737gdxlw5i64vzichcalba3z2v5n6icifvx5xytvske7mr3hpm'
     },
-    'misleading',
+    'reasonMisleading',
     'Says the north ridge trail is open. It has been closed since the rockfall in September.'
   );
-  await report('dan', account('erin'), 'other');
-  await report('frank', account('bob'), 'spam', 'Sells headlamps.');
-  const resolve = (name, key, status, note) =>
-    call(name, 'org.atgrp.resolveModSubject', {
-      group: did,
-      ...account(key),
-      status,
-      ...(note ? { note } : {})
-    });
-  await resolve('carol', 'erin', 'escalated', 'Not sure what this is about. Alice, can you look?');
-  await resolve('carol', 'bob', 'resolved', 'He organises the group order. Not spam.');
+  await report('dan', account('erin'), 'reasonOther');
+  await report('frank', account('bob'), 'reasonSpam', 'Sells headlamps.');
+  await call('carol', 'org.atgrp.mod.updateSubject', {
+    group: did,
+    ...account('erin'),
+    addTags: ['escalated'],
+    note: 'Not sure what this is about. Alice, can you look?'
+  });
+  await call('carol', 'org.atgrp.mod.updateSubject', {
+    group: did,
+    ...account('bob'),
+    status: 'resolved',
+    note: 'He organises the group order. Not spam.'
+  });
 };

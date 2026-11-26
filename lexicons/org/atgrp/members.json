@@ -4,15 +4,18 @@
   "defs": {
     "main": {
       "type": "space",
+      "description": "Membership and administrative information for the group. Usually readable only by members.",
       "key": "literal:self",
-      "title": "Group: members",
-      "description": "Roles and their group-wide grants, who holds them, and the space index. Usually gated to members.",
+      "title": "Group members",
       "collections": [
         "org.atgrp.space",
         "org.atgrp.role",
         "org.atgrp.membership",
-        "org.atgrp.acceptance",
-        "com.atproto.label.record"
+        "org.atgrp.confirmation",
+        "org.atgrp.rule",
+        "org.atgrp.labeler",
+        "com.atproto.label.record",
+        "com.atproto.space.policy"
       ]
     }
   }

@@ -15,10 +15,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-/// Two scopes a role may be granted: reading the moderation queue, and
-/// inviting.
-const MOD_READ: &str = "rpc:org.atgrp.listModSubjects?aud=*";
-const INVITE: &str = "space:org.atgrp.invites?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete";
+/// Two permissions a role may be granted: reading the moderation queue,
+/// and inviting.
+const MOD_READ: &str = "rpc:org.atgrp.mod.querySubjects?aud=*";
+const INVITE: &str = "space:org.atgrp.inbox?authority=*&skey=self&collection=org.atgrp.invite&action=read_self&action=create&action=update&action=delete";
 
 /// A host at a free port, on the reference directory, resolving
 /// handles at the reference PDS.
@@ -138,7 +138,7 @@ async fn starts_shows_and_runs_a_group() {
     let bob_did = &net().accounts[1].did;
     assert!(
         uri.starts_with(&format!(
-            "at://{bob_did}/space/org.atgrp.invites/self/{did}/org.atgrp.invite/"
+            "at://{bob_did}/space/org.atgrp.inbox/self/{did}/org.atgrp.invite/"
         )),
         "{uri}"
     );
@@ -216,7 +216,8 @@ async fn writes_the_groups_rules_roles_and_profile() {
         h.host.group_record(&did, space, &collection, rkey).unwrap()
     };
 
-    // A rule, new at a key of the clock's; changed at it; deleted.
+    // A rule, in the members space, new at a key of the clock's; changed at
+    // it; deleted.
     let made = ok(
         &alice,
         &["rule", "set", group, "--title", "Be kind", "--text", ""],
@@ -224,7 +225,8 @@ async fn writes_the_groups_rules_roles_and_profile() {
     .await;
     let uri = said(&made)["uri"].as_str().unwrap().to_string();
     let rkey = uri.rsplit('/').next().unwrap().to_string();
-    assert_eq!(kept(&meta, "rule", &rkey).unwrap()["title"], "Be kind");
+    assert_eq!(kept(&members, "rule", &rkey).unwrap()["title"], "Be kind");
+    assert_eq!(kept(&meta, "rule", &rkey), None);
     let again = [
         "rule",
         "set",
@@ -239,13 +241,13 @@ async fn writes_the_groups_rules_roles_and_profile() {
         "1",
     ];
     ok(&alice, &again).await;
-    let rule = kept(&meta, "rule", &rkey).unwrap();
+    let rule = kept(&members, "rule", &rkey).unwrap();
     assert_eq!(
         (rule["title"].clone(), rule["order"].clone()),
         (json!("Be very kind"), json!(1))
     );
     ok(&alice, &["rule", "delete", group, &rkey]).await;
-    assert_eq!(kept(&meta, "rule", &rkey), None);
+    assert_eq!(kept(&members, "rule", &rkey), None);
 
     // A role, a bot's, with what it may do and give; added to, and back.
     let role = [
@@ -257,9 +259,9 @@ async fn writes_the_groups_rules_roles_and_profile() {
         "Ride leader",
         "--bot",
         "--no-default",
-        "--scopes",
+        "--permissions",
         INVITE,
-        "--assignable",
+        "--can-assign",
         "member",
     ];
     ok(&alice, &role).await;
@@ -269,33 +271,49 @@ async fn writes_the_groups_rules_roles_and_profile() {
         (json!(true), json!(false))
     );
     assert_eq!(
-        (leader()["scopes"].clone(), leader()["assignable"].clone()),
+        (
+            leader()["permissions"].clone(),
+            leader()["canAssign"].clone()
+        ),
         (json!([INVITE]), json!(["member"]))
     );
     // Each added to what it had, once; one taken away, the rest kept.
-    for scope in [MOD_READ, INVITE] {
+    for permission in [MOD_READ, INVITE] {
         ok(
             &alice,
-            &["role", "grant", group, "leader", "--scopes", scope],
+            &[
+                "role",
+                "grant",
+                group,
+                "leader",
+                "--permissions",
+                permission,
+            ],
         )
         .await;
     }
-    assert_eq!(leader()["scopes"], json!([INVITE, MOD_READ]));
+    assert_eq!(leader()["permissions"], json!([INVITE, MOD_READ]));
     let undo = [
-        "role", "grant", group, "leader", "--scopes", MOD_READ, "--undo",
+        "role",
+        "grant",
+        group,
+        "leader",
+        "--permissions",
+        MOD_READ,
+        "--undo",
     ];
     ok(&alice, &undo).await;
-    assert_eq!(leader()["scopes"], json!([INVITE]));
+    assert_eq!(leader()["permissions"], json!([INVITE]));
     // With nothing named, all of both; the rest of the role as it was.
     ok(&alice, &["role", "grant", group, "leader", "--undo"]).await;
     assert_eq!(
-        (leader().get("scopes"), leader().get("assignable")),
+        (leader().get("permissions"), leader().get("canAssign")),
         (None, None)
     );
     assert_eq!(leader()["displayName"], "Ride leader");
     let said_so = fails(
         &alice,
-        &["role", "grant", group, "ghost", "--scopes", INVITE],
+        &["role", "grant", group, "ghost", "--permissions", INVITE],
     )
     .await;
     assert!(said_so.contains("no such role: ghost"), "{said_so}");
@@ -303,32 +321,53 @@ async fn writes_the_groups_rules_roles_and_profile() {
     assert!(said_so.contains("RoleInUse"), "{said_so}");
     ok(&alice, &["role", "delete", group, "leader"]).await;
     assert_eq!(kept(&members, "role", "leader"), None);
+    // A role with no name to show: its ID stands for it.
+    ok(&alice, &["role", "set", group, "helpers"]).await;
+    assert_eq!(
+        kept(&members, "role", "helpers")
+            .unwrap()
+            .get("displayName"),
+        None
+    );
 
-    // The profile, changed in what is given; given empty, taken away.
-    let before = kept(&meta, "profile", "self").unwrap();
+    // The about record, changed in what is given; given empty, taken
+    // away; the config left alone unless the join policy is given.
+    let config = kept(&meta, "config", "self").unwrap();
     let profile = [
         "profile",
         "set",
         group,
         "--display-name",
         "Riders United",
-        "--url",
+        "--website",
         "https://riders.example",
     ];
     ok(&alice, &profile).await;
-    let written = kept(&meta, "profile", "self").unwrap();
+    let written = kept(&meta, "about", "self").unwrap();
     assert_eq!(written["displayName"], "Riders United");
-    assert_eq!(written["url"], "https://riders.example");
-    assert_eq!(written["joinPolicy"], before["joinPolicy"]);
+    assert_eq!(written["website"], "https://riders.example");
+    assert_eq!(kept(&meta, "config", "self").unwrap(), config);
     let profile = ["profile", "set", group, "--description", "Bikes"];
     ok(&alice, &profile).await;
-    let written = kept(&meta, "profile", "self").unwrap();
-    assert_eq!(written["url"], "https://riders.example");
+    let written = kept(&meta, "about", "self").unwrap();
+    assert_eq!(written["website"], "https://riders.example");
     assert_eq!(written["description"], "Bikes");
-    ok(&alice, &["profile", "set", group, "--url", ""]).await;
-    let written = kept(&meta, "profile", "self").unwrap();
-    assert_eq!(written.get("url"), None);
+    ok(&alice, &["profile", "set", group, "--website", ""]).await;
+    let written = kept(&meta, "about", "self").unwrap();
+    assert_eq!(written.get("website"), None);
     assert_eq!(written["description"], "Bikes");
+    ok(
+        &alice,
+        &["profile", "set", group, "--join-policy", "approval"],
+    )
+    .await;
+    assert_eq!(
+        kept(&meta, "config", "self").unwrap()["joinPolicy"],
+        "approval"
+    );
+    assert_eq!(kept(&meta, "about", "self").unwrap(), written);
+    let said_so = fails(&alice, &["profile", "set", group]).await;
+    assert!(said_so.contains("nothing to change"), "{said_so}");
 
     // The queue; a label on an account, and taken back, in its history.
     let queue = said(&ok(&alice, &["mod", "list", group, "--status", "open"]).await);
@@ -354,27 +393,71 @@ async fn writes_the_groups_rules_roles_and_profile() {
     let elsewhere = format!("at://did:plc:other/space/x.y/z/{bob}/a.b.c/d");
     let said_so = fails(&alice, &["mod", "label", group, &elsewhere, "spam"]).await;
     assert!(said_so.contains("not an account's DID"), "{said_so}");
+    // Its history, newest first unless asked otherwise, each event named.
+    let labelled = |history: &Value| -> Vec<Value> {
+        let events = history["events"].as_array().unwrap().iter();
+        let labels = events.filter(|e| !e["event"]["deleted"].is_null());
+        labels.map(|e| e["event"]["deleted"].clone()).collect()
+    };
     let history = said(&ok(&alice, &["mod", "history", group, bob]).await);
-    let deleted: Vec<&Value> = history["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|e| &e["event"]["deleted"])
-        .collect();
-    assert_eq!(deleted, [false, true], "{history}");
-    let resolve = [
+    assert_eq!(labelled(&history), [json!(true), json!(false)], "{history}");
+    assert!(history["events"][0]["eventId"].is_string(), "{history}");
+    let oldest = ["mod", "history", group, bob, "--sort", "oldest"];
+    let history = said(&ok(&alice, &oldest).await);
+    assert_eq!(labelled(&history), [json!(false), json!(true)], "{history}");
+    // Resolved, tagged and noted; found by status and tag; reopened with
+    // a tag taken off.
+    let update = [
         "mod",
-        "resolve",
+        "update",
         group,
         bob,
         "--status",
         "resolved",
         "--note",
         "Spoke to them",
+        "--add-tags",
+        "urgent,spam",
     ];
-    let resolved = said(&ok(&alice, &resolve).await);
-    assert_eq!(resolved["status"], "resolved", "{resolved}");
-    assert_eq!(resolved["subject"], bob.as_str(), "{resolved}");
+    let updated = said(&ok(&alice, &update).await);
+    assert_eq!(updated["status"], "resolved", "{updated}");
+    assert_eq!(updated["subject"], bob.as_str(), "{updated}");
+    assert_eq!(updated["tags"], json!(["spam", "urgent"]), "{updated}");
+    let subjects = async |words: &[&str]| {
+        let mut asked = vec!["mod", "list", group];
+        asked.extend(words);
+        said(&ok(&alice, &asked).await)["subjects"].clone()
+    };
+    assert_eq!(subjects(&["--status", "open"]).await, json!([]));
+    let all = subjects(&[]).await;
+    assert_eq!(all[0]["subject"], bob.as_str(), "{all}");
+    let filtered = [
+        "--status",
+        "resolved",
+        "--tags",
+        "urgent,other",
+        "--sort",
+        "updated",
+    ];
+    let found = subjects(&filtered).await;
+    assert_eq!(found[0]["subject"], bob.as_str(), "{found}");
+    assert_eq!(subjects(&["--tags", "other"]).await, json!([]));
+    assert_eq!(subjects(&["--sort", "newest"]).await, all);
+    let reopen = [
+        "mod",
+        "update",
+        group,
+        bob,
+        "--status",
+        "open",
+        "--remove-tags",
+        "spam",
+    ];
+    let reopened = said(&ok(&alice, &reopen).await);
+    assert_eq!(reopened["status"], "open", "{reopened}");
+    assert_eq!(reopened["tags"], json!(["urgent"]), "{reopened}");
+    let tagged = subjects(&["--status", "open", "--tags", "urgent"]).await;
+    assert_eq!(tagged[0]["subject"], bob.as_str(), "{tagged}");
 
     // A space, made as the group under the policy given, at a key of the
     // clock's.
@@ -468,12 +551,13 @@ async fn seeds_a_group_to_try_things_on() {
     assert!(said.contains("rule       Be kind\n"), "{said}");
     assert!(said.contains("role       moderator\n"), "{said}");
     assert!(said.ends_with(&format!("invited    {bob}\n")), "{said}");
-    // Its rules are its own records, written as the group, in its meta.
+    // Its rules are its own records, written as the group, in its members
+    // space.
     let trial = h.host.store.account("trial.groups.test").unwrap().unwrap();
-    let meta = group_host::group::meta_space(&trial.did);
+    let members = group_host::group::members_space(&trial.did);
     let rules = h
         .host
-        .group_records(&trial.did, &meta, "org.atgrp.rule")
+        .group_records(&trial.did, &members, "org.atgrp.rule")
         .unwrap();
     let titles: Vec<&str> = rules
         .iter()
@@ -481,14 +565,13 @@ async fn seeds_a_group_to_try_things_on() {
         .collect();
     assert_eq!(titles, ["Be kind", "Stay on topic"]);
     // Its moderator's role, which its admins give, as they give any.
-    let members = group_host::group::members_space(&trial.did);
     let moderator = h
         .host
         .group_record(&trial.did, &members, "org.atgrp.role", "moderator")
         .unwrap()
         .unwrap();
     assert_eq!(
-        moderator["scopes"],
+        moderator["permissions"],
         serde_json::json!([
             "include:org.atgrp.authModerate",
             "space:*?collection=com.atproto.label.record"

@@ -205,9 +205,11 @@ export function permissions(
 const HOST_METHODS: Record<string, () => string> = {
   'org.atgrp.listJoinRequests': () => m.permissions_host_join_requests(),
   'org.atgrp.denyJoinRequest': () => m.permissions_host_deny(),
-  'org.atgrp.listModSubjects': () => m.permissions_host_reports(),
-  'org.atgrp.getModSubjectHistory': () => m.permissions_host_reports(),
-  'org.atgrp.resolveModSubject': () => m.permissions_host_resolve()
+  'org.atgrp.internal.listInvites': () => m.permissions_host_invites(),
+  'org.atgrp.mod.querySubjects': () => m.permissions_host_reports(),
+  'org.atgrp.mod.querySubjectHistory': () => m.permissions_host_reports(),
+  'org.atgrp.internal.getModSubjectBlob': () => m.permissions_host_reports(),
+  'org.atgrp.mod.updateSubject': () => m.permissions_host_resolve()
 };
 
 const listed = (parts: string[]) =>

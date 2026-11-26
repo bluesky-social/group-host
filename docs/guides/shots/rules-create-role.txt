@@ -2,20 +2,23 @@
   - heading "Create a role" [level=2]
   - button "Close": ×
   - paragraph: Choose what people with this role can do, and which roles they can give. You give roles to members from the group's page.
-  - text: Its key
-  - textbox "Its key":
+  - text: Its ID
+  - textbox "Its ID":
     - /placeholder: moderator
     - text: ride-leader
-  - text: Its name
-  - textbox "Its name":
+  - text: Its name (optional)
+  - textbox "Its name (optional)":
     - /placeholder: Moderator
     - text: Ride leader
+  - paragraph: The ID is lowercase letters and hyphens, at least 3 of them. You can't change it later.
   - group "Running the group":
     - text: Running the group
     - checkbox "Profile and rules Change the group's profile and rules."
     - text: Profile and rules Change the group's profile and rules.
-    - checkbox "Moderation Approve, invite, label and remove members, change their roles, and review reports."
-    - text: Moderation Approve, invite, label and remove members, change their roles, and review reports.
+    - checkbox "Members Approve, invite and remove members, and change their roles."
+    - text: Members Approve, invite and remove members, and change their roles.
+    - checkbox "Moderation Label posts and members, remove members, and review reports."
+    - text: Moderation Label posts and members, remove members, and review reports.
     - checkbox "The whole group Everything above, and the group's settings and roles."
     - text: The whole group Everything above, and the group's settings and roles.
   - group "It may":

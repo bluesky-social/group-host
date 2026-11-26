@@ -584,12 +584,12 @@ async fn serves_and_lists_a_spaces_blobs() {
             .upload_blob(&f.group, b"elsewhere", "image/png")
             .unwrap();
     let link = |r: &Json| r["ref"]["$link"].as_str().unwrap().to_string();
-    let profile = |avatar: &Json| json!({"$type": "org.atgrp.profile", "displayName": "Riders", "avatar": avatar});
+    let about = |avatar: &Json| json!({"$type": "org.atgrp.about", "displayName": "Riders", "avatar": avatar});
     f.h.host
         .space_write(
             &f.group,
             &f.space,
-            &[create("org.atgrp.profile", "self", profile(&picture))],
+            &[create("org.atgrp.about", "self", about(&picture))],
         )
         .await
         .unwrap();
@@ -597,7 +597,7 @@ async fn serves_and_lists_a_spaces_blobs() {
     f.h.host
         .write(
             &f.group,
-            &[create("org.atgrp.profile", "self", profile(&elsewhere))],
+            &[create("org.atgrp.about", "self", about(&elsewhere))],
         )
         .unwrap();
 
@@ -648,12 +648,12 @@ async fn serves_and_lists_a_spaces_blobs() {
         .space_write(
             &f.group,
             &f.space,
-            &[create("org.atgrp.profile", "other", profile(&picture))],
+            &[create("org.atgrp.about", "other", about(&picture))],
         )
         .await
         .unwrap();
     let delete = |rkey: &str| Write::Delete {
-        collection: "org.atgrp.profile".into(),
+        collection: "org.atgrp.about".into(),
         rkey: rkey.into(),
     };
     f.h.host
@@ -681,18 +681,18 @@ async fn keeps_a_blob_of_a_deleted_space_its_repo_still_references() {
     let f = fixture().await;
     let host = &f.h.host;
     let picture = host.upload_blob(&f.group, b"picture", "image/png").unwrap();
-    let profile = json!({"$type": "org.atgrp.profile", "displayName": "Riders", "avatar": picture});
+    let about = json!({"$type": "org.atgrp.about", "displayName": "Riders", "avatar": picture});
     let own = host
         .create_space(&f.group, "org.atgrp.content", "own", &open())
         .unwrap();
     host.space_write(
         &f.group,
         &own,
-        &[create("org.atgrp.profile", "self", profile.clone())],
+        &[create("org.atgrp.about", "self", about.clone())],
     )
     .await
     .unwrap();
-    host.write(&f.group, &[create("org.atgrp.profile", "self", profile)])
+    host.write(&f.group, &[create("org.atgrp.about", "self", about)])
         .unwrap();
     host.end_space(&f.group, &own).unwrap();
     let cid = picture["ref"]["$link"].as_str().unwrap();

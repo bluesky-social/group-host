@@ -119,7 +119,7 @@ You can change any of this later on the same card.
 
 ## Give it a picture
 
-1. Further down, on the card **Pictures**, press **Add** beside
+1. Further down, on the card **Picture**, press **Add** beside
    **Avatar**. The avatar is a square picture, drawn round beside the
    group's name.
 
@@ -127,22 +127,20 @@ You can change any of this later on the same card.
    ![The dialog Add the avatar: A square picture, drawn round beside its name, a file field with Choose File, and the buttons Cancel and Add the avatar](shots/starting-avatar.png)
 
 2. Choose a PNG, JPEG or WebP picture, and press **Add the avatar**.
-3. Press **Add** beside **Banner**, and do the same. The banner is three times as
-   wide as it is high, and runs across the top of the group's page.
 
-Each row now shows its picture, with **Change** and **Remove** beside
-it. Removing takes a picture off at once, without asking.
+The row now shows the picture, with **Change** and **Remove** beside
+it. Removing takes the picture off at once, without asking.
 
 <!-- look /g/bookclub.groups.test/settings --as alice --seed bookclub-pictures --element 'section:has(.pictures)' -->
-![The Pictures card: Avatar with a round blue picture and Banner with a wide purple one, each with the buttons Remove and Change](shots/starting-pictures.png)
+![The Picture card: Avatar with a round blue picture, with the buttons Remove and Change](shots/starting-pictures.png)
 
 ## What does my group look like now?
 
-1. Press **← Book club**, above **Settings**. The card has its banner, its
-   avatar and its words.
+1. Press **← Book club**, above **Settings**. The card has its avatar
+   and its words.
 
 <!-- look /g/bookclub.groups.test --as alice --element '.group-card' -->
-![Book club's card: a purple banner, a round blue avatar, Book club and bookclub.groups.test, the words We read one book a month and meet to talk it over, and You're a member with the admin role](shots/starting-card-done.png)
+![Book club's card: a round blue avatar, Book club and bookclub.groups.test, the words We read one book a month and meet to talk it over, and You're a member with the admin role](shots/starting-card-done.png)
 
 Someone signed in who isn't a member sees the same card, without your
 standing, **Moderation** or **Settings**. Under it is the way to join
@@ -164,7 +162,7 @@ The `atgrp` command does the same, signed in as the handle in
 - Write what it is for:
   `atgrp profile set bookclub.groups.test --description "We read one book a month and meet to talk it over."`
 
-Pictures and **Who sees it** are set in the console only.
+The picture and **Who sees it** are set in the console only.
 
 Next, invite the people you want in it, as the guide to inviting people
 shows. You may also want to write its rules, under **Rules** in its

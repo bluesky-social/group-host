@@ -21,7 +21,7 @@ fn create(rkey: &str) -> Write {
     Write::Create {
         collection: "org.atgrp.rule".into(),
         rkey: rkey.into(),
-        value: json!({"$type": "org.atgrp.rule", "title": "Ride safe", "createdAt": "2026-11-03T00:00:00Z"}),
+        value: json!({"$type": "org.atgrp.rule", "title": "Ride safe", "text": "Helmets on."}),
     }
 }
 
@@ -146,7 +146,7 @@ async fn sends_every_event_after_a_cursor() {
                 Write::Update {
                     collection: "org.atgrp.rule".into(),
                     rkey: "a".into(),
-                    value: json!({"$type": "org.atgrp.rule", "title": "Ride safer", "createdAt": "2026-11-03T00:00:00Z"}),
+                    value: json!({"$type": "org.atgrp.rule", "title": "Ride safer", "text": "Helmets on."}),
                 },
             ],
         )
@@ -249,7 +249,7 @@ async fn reads_as_atprotos_own_consumer_reads_it() {
     for i in 0..40 {
         h.host.write(&did, &[create(&format!("r{i:02}"))]).unwrap();
     }
-    let rule = json!({"$type": "org.atgrp.rule", "title": "Ride safer", "createdAt": "2026-11-03T00:00:00Z"});
+    let rule = json!({"$type": "org.atgrp.rule", "title": "Ride safer", "text": "Helmets on."});
     let (collection, rkey) = ("org.atgrp.rule".to_string(), "r17".to_string());
     let update = Write::Update {
         collection: collection.clone(),

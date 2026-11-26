@@ -3,10 +3,9 @@
   import Avatar from '#lib/atoms/Avatar.svelte';
   import Rules from '#lib/molecules/Rules.svelte';
   /**
-   * A group as its profile shows it: its banner, when it has one; its
-   * picture (over the banner's foot), its name and handle beside it, and
-   * `nav`, the ways to its other pages, across from them; its words; its
-   * rules; then `children`, where the person looking stands
+   * A group as its profile shows it: its picture, its name and handle
+   * beside it, and `nav`, the ways to its other pages, across from them;
+   * its words; its rules; then `children`, where the person looking stands
    * with it. With no `name`, its profile is not theirs to see, and it is
    * its handle alone.
    */
@@ -15,7 +14,6 @@
     name,
     description,
     avatar,
-    banner,
     rules = [],
     nav,
     children
@@ -24,7 +22,6 @@
     name?: string;
     description?: string;
     avatar?: string | null;
-    banner?: string | null;
     rules?: { rkey: string; title: string; text?: string }[];
     nav?: Snippet;
     children?: Snippet;
@@ -32,7 +29,6 @@
 </script>
 
 <section class="group-card">
-  {#if name && banner}<img class="banner" src={banner} alt="" />{/if}
   <div class="group-card-body">
     {#if name}
       <div class="identity">

@@ -928,31 +928,15 @@ span.av::before {
 
 /* ── A group's own page ───────────────────────────────────────────── */
 
-/* Its card: the banner across the top, when it has one; its picture
-   (over the banner's foot, when there is one), its name and handle beside
-   it, and the ways to its other pages across from them; then its words,
-   its rules and where the person looking stands. */
-/* A banner wherever it is shown; on the card, edge to edge. */
-.banner {
-  display: block;
-  width: 100%;
-  aspect-ratio: var(--banner-ratio);
-  object-fit: cover;
-  border: var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--soft);
-}
+/* Its card: its picture, its name and handle beside it, and the ways to
+   its other pages across from them; then its words, its rules and where
+   the person looking stands. */
 .group-card {
   background: var(--panel);
   border: var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   overflow: hidden;
-}
-.group-card .banner {
-  border: 0;
-  border-bottom: var(--border);
-  border-radius: 0;
 }
 .group-card-body {
   display: flex;
@@ -972,12 +956,6 @@ span.av::before {
 .identity .av {
   border: var(--ring) solid var(--panel);
   box-shadow: var(--shadow);
-}
-.banner + .group-card-body .identity {
-  align-items: flex-end;
-}
-.banner + .group-card-body .identity > .av {
-  margin-top: calc(var(--avatar-lg) / -2 - var(--space-6));
 }
 .identity-name {
   flex: 1;
@@ -1321,23 +1299,6 @@ pre.raw {
 }
 .row-main .what {
   overflow-wrap: anywhere;
-}
-/* A banner, small, in a row about it. */
-.banner-thumb {
-  display: block;
-  flex: none;
-  width: calc(var(--avatar-md) * 3);
-  aspect-ratio: var(--banner-ratio);
-  object-fit: cover;
-  border: var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--soft);
-}
-/* On a phone, narrower, so its row's acts stay beside it. */
-@media (max-width: 640px) {
-  .banner-thumb {
-    width: calc(var(--avatar-md) * 1.5);
-  }
 }
 .pair {
   display: grid;

@@ -211,8 +211,8 @@ host's rotation key, and the handle here, or it fails with
 operation, the host doesn't send it again. So you can repeat a try that
 failed after sending. The host then switches the account on, tells the
 relays and its spaces, and makes it a group founded by the person who
-moved it. The group takes its profile's name and description
-([groups](groups.md)).
+moved it. Its `about` record takes the name and description of the
+account's `app.bsky.actor.profile` ([groups](groups.md)).
 
 ### From the console and the command
 

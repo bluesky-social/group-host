@@ -11,7 +11,7 @@
 //! the label, or its lapsing (`exp`), puts it all back. Only the group's
 //! own labels count: one anyone else writes takes nothing down. What is
 //! taken down stays in its writer's repo; the host only stops serving it,
-//! but to a moderator reviewing it (`getModSubjectHistory`,
+//! but to a moderator reviewing it (`mod.querySubjectHistory`,
 //! `getModSubjectBlob`) whom the space lets read it, as it was.
 
 use crate::Host;

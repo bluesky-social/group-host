@@ -6,10 +6,10 @@ same, and more. There's no one person behind it, so its members' roles
 decide what it may do. Much of what it keeps is private, so someone has
 to decide who reads it. This host does both for every group it holds.
 
-It implements the Atmosphere Groups proposal
-(https://tangled.org/opensocial.group/proposal). Members keep their own
+It implements the Atmosphere Groups spec
+(https://tangled.org/atmospheregroups.org/spec). Members keep their own
 accounts on their own PDSes, anywhere on the network. What the host adds
-beyond the proposal, for its console, its command and its operators, is
+beyond the spec, for its console, its command and its operators, is
 under `org.atgrp.internal.*`, and may change.
 
 ## What the host is to a group
@@ -33,8 +33,8 @@ under `org.atgrp.internal.*`, and may change.
 | --- | --- |
 | The group's identity | its DID document in the PLC directory, changed with the host's rotation key and any recovery keys ([recovery](recovery.md)) |
 | Its public records and files | its repo here |
-| Its profile, rules and labeler | its `meta` space, in the group's repo there |
-| Its roles, permissions, memberships and spaces | its `members` space, in the group's repo there |
+| Its `about` record and settings (`config`) | its `meta` space, in the group's repo there |
+| Its roles, memberships, rules, labeler and spaces | its `members` space, in the group's repo there |
 | What members write in its spaces | each member's own repo in the space, on their own PDS |
 | Invites | the invitee's inbox, a space of their own on their PDS ([membership](membership.md)) |
 | Join requests, the moderation queue, tokens, the index | the host's database |
@@ -56,7 +56,7 @@ under `org.atgrp.internal.*`, and may change.
 
 - [Spaces](spaces.md): what a space is, who reads and writes, credentials,
   and the index.
-- [Groups](groups.md): starting a group, what it shows, its profile,
+- [Groups](groups.md): starting a group, what it shows, its `about` record,
   spaces, handle and own domain, and ending it.
 - [Membership](membership.md): roles, joining, invites, and leaving.
 - [Signing in](signing-in.md): people, apps and MCP clients, and what a

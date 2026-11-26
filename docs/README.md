@@ -1,8 +1,8 @@
 # Docs
 
 The group host is the PDS, space authority and OAuth server for groups
-on atproto. It implements the Atmosphere Groups proposal
-(https://tangled.org/opensocial.group/proposal).
+on atproto. It implements the Atmosphere Groups spec
+(https://tangled.org/atmospheregroups.org/spec).
 
 - [Guides](guides/README.md) show how to do each thing in the console,
   step by step, with a picture of each screen:

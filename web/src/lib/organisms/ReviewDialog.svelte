@@ -7,7 +7,15 @@
   import SubjectHistory from '#lib/molecules/SubjectHistory.svelte';
   import ReportDialog from '#lib/organisms/ReportDialog.svelte';
   import { inDialog, inOpenDialog } from '#lib/forms.ts';
-  import { type Subject, TAKEDOWN, labelsOf, latestCid, reported, what } from '#lib/moderation.ts';
+  import {
+    type Subject,
+    ESCALATED,
+    TAKEDOWN,
+    labelsOf,
+    latestCid,
+    reported,
+    what
+  } from '#lib/moderation.ts';
   import { m } from '#lib/paraglide/messages.js';
   import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
   /**
@@ -17,8 +25,9 @@
    * record whose version the queue knows, the labels it
    * wears, each removable, those the group defines or has used
    * (`choices`, each its value and what it is called) to add and
-   * another; taking it down; then resolving or escalating it, or, for one
-   * the queue has never had, reporting it; and what happened to it. Each
+   * another; taking it down; then resolving it, escalating it (the
+   * `escalated` tag) or no longer, or reopening it once resolved, or, for
+   * one the queue has never had, reporting it; and what happened to it. Each
    * part only for one whose roles let them (`can`). `rules`, the group's
    * rules' titles by record key; `ruleList`, each rule's URI and title, to
    * cite; `reasons`, the report reasons the group takes. `opened`, open as
@@ -60,6 +69,7 @@
   const wearing = $derived(labelsOf(s.events));
   const takenDown = $derived(wearing.some((v) => TAKEDOWN.includes(v)));
   const toAdd = $derived(choices.filter((c) => !wearing.includes(c.val)));
+  const escalated = $derived(s.tags.includes(ESCALATED));
 </script>
 
 {#snippet which()}
@@ -200,7 +210,7 @@
       <form
         class="stack"
         method="post"
-        action="?/resolve"
+        action="?/decide"
         use:enhance={inDialog(id, (w) => (failed = w))}
       >
         <input type="hidden" name="subject" value={s.key} />
@@ -212,10 +222,21 @@
           <button class="quiet" type="button" popovertarget={id} popovertargetaction="hide"
             >{m.common_cancel()}</button
           >
-          <button class="quiet" type="submit" name="status" value="escalated"
-            >{m.review_dialog_escalate()}</button
-          >
-          <button type="submit" name="status" value="resolved">{m.review_dialog_resolve()}</button>
+          {#if escalated}
+            <button class="quiet" type="submit" name="escalate" value="remove"
+              >{m.review_dialog_unescalate()}</button
+            >
+          {:else if s.status === 'open'}
+            <button class="quiet" type="submit" name="escalate" value="add"
+              >{m.review_dialog_escalate()}</button
+            >
+          {/if}
+          {#if s.status === 'resolved'}
+            <button type="submit" name="status" value="open">{m.review_dialog_reopen()}</button>
+          {:else}
+            <button type="submit" name="status" value="resolved">{m.review_dialog_resolve()}</button
+            >
+          {/if}
         </div>
       </form>
     </div>

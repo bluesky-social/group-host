@@ -4,14 +4,11 @@
   "defs": {
     "main": {
       "type": "record",
+      "description": "An entry in the group's space index, in the members space. The group host maintains these records as spaces are created, deleted, or unlisted, and rejects direct writes.",
       "key": "tid",
-      "description": "An entry in the group's space index, in the members space. The host maintains it as spaces are created, deleted, or unlisted, and rejects direct writes.",
       "record": {
         "type": "object",
-        "required": [
-          "space",
-          "createdAt"
-        ],
+        "required": ["space", "createdAt"],
         "properties": {
           "space": {
             "type": "string",

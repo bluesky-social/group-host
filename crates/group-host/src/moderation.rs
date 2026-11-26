@@ -6,17 +6,21 @@
 //!   members space by custom. Whoever reads the content reads its labels.
 //!   Deleting a label takes it back; the queue keeps that it was written,
 //!   and by whom.
-//! - **The queue** (subjects, their status, what happened to each) is the
-//!   host's to keep, not the group's to publish.
-//! - **Reports** come through `org.atgrp.createReport`, from whoever
+//! - **The queue** (subjects, their status and tags, what happened to
+//!   each) is the host's to keep, not the group's to publish.
+//! - **Reports** come through `org.atgrp.mod.submitReport`, from whoever
 //!   can read what they report: an account in the group, a record in one
 //!   of its spaces here, or a member's record in their public repo.
+//! - **Appeals** come through `org.atgrp.mod.submitAppeal`, from the
+//!   account a label or an ejection is on, or the author of the record
+//!   labelled, though they have left; `org.atgrp.mod.querySelfHistory`
+//!   shows them what the group did, and nothing of who did it.
 
 use crate::Host;
 use crate::api::{Params, invalid, invalid_cursor, page, param};
 use crate::authority::Access;
 use crate::blobs::blob_refs;
-use crate::group::{members_space, meta_space};
+use crate::group::members_space;
 use crate::group_api::{doing, group_of, signed_in};
 use crate::index_api::served;
 use crate::oauth_resource::Refusal;
@@ -39,6 +43,9 @@ use std::sync::Arc;
 
 type Answer = Result<Json<Value>, XrpcError>;
 
+/// The `$type` of the moderation views and events, `org.atgrp.mod.defs`.
+const DEFS: &str = "org.atgrp.mod.defs";
+
 /// A subject in a group's queue: an account's DID, or a record's URI.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subject {
@@ -47,10 +54,13 @@ pub struct Subject {
     pub created_at: i64,
     pub updated_at: i64,
     pub reports: i64,
+    /// Its moderators' tags, in order.
+    pub tags: Vec<String>,
 }
 
-/// Something that happened to a subject: a `report`, a `status` set, a
-/// `label` written or taken back (`negate`), or an `eject`ion.
+/// Something that happened to a subject: a `report`, an `appeal`, a
+/// `status` set, `tag`s added or taken away, a `label` written or taken
+/// back (`negate`), or an `eject`ion.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Event {
     /// Its place in the host's history, once kept.
@@ -69,10 +79,28 @@ pub struct Event {
     /// The label record written.
     pub uri: Option<String>,
     pub note: Option<String>,
+    /// The tags a moderator added, and those taken away.
+    pub add: Vec<String>,
+    pub remove: Vec<String>,
     pub created_at: i64,
 }
 
-const SUBJECT_COLUMNS: &str = "s.subject, s.status, s.created_at, s.updated_at, (SELECT count(*) FROM mod_event e WHERE e.grp = s.grp AND e.subject = s.subject AND e.kind = 'report')";
+const SUBJECT_COLUMNS: &str = "s.subject, s.status, s.created_at, s.updated_at,
+    (SELECT count(*) FROM mod_event e WHERE e.grp = s.grp AND e.subject = s.subject AND e.kind = 'report'),
+    (SELECT group_concat(t.tag, ',' ORDER BY t.tag) FROM mod_tag t WHERE t.grp = s.grp AND t.subject = s.subject)";
+
+const EVENT_COLUMNS: &str = "seq, kind, actor, cid, reason_type, reason, rule, status, val, uri, note, created_at, added, removed, subject";
+
+/// Tags as a column keeps them: joined by commas, which a tag never holds.
+fn joined(tags: &[String]) -> Option<String> {
+    (!tags.is_empty()).then(|| tags.join(","))
+}
+
+/// Tags as a column kept them.
+fn split(tags: Option<String>) -> Vec<String> {
+    tags.map(|t| t.split(',').map(String::from).collect())
+        .unwrap_or_default()
+}
 
 fn subject_row(row: &Row) -> rusqlite::Result<Subject> {
     Ok(Subject {
@@ -81,11 +109,13 @@ fn subject_row(row: &Row) -> rusqlite::Result<Subject> {
         created_at: row.get(2)?,
         updated_at: row.get(3)?,
         reports: row.get(4)?,
+        tags: split(row.get(5)?),
     })
 }
 
-fn event_row(row: &Row) -> rusqlite::Result<Event> {
-    Ok(Event {
+/// An event, and the subject it happened to.
+fn event_row(row: &Row) -> rusqlite::Result<(String, Event)> {
+    let event = Event {
         seq: row.get(0)?,
         kind: row.get(1)?,
         actor: row.get(2)?,
@@ -98,27 +128,52 @@ fn event_row(row: &Row) -> rusqlite::Result<Event> {
         uri: row.get(9)?,
         note: row.get(10)?,
         created_at: row.get(11)?,
-    })
+        add: split(row.get(12)?),
+        remove: split(row.get(13)?),
+    };
+    Ok((row.get(14)?, event))
+}
+
+/// A history's order, the newest first or the oldest, as SQL compares
+/// and sorts by `seq`; and where a page after the event `after` starts.
+fn order(newest: bool, after: Option<i64>) -> (&'static str, &'static str, i64) {
+    match newest {
+        true => ("<", "DESC", after.unwrap_or(i64::MAX)),
+        false => (">", "ASC", after.unwrap_or(0)),
+    }
 }
 
 impl Store {
     /// Keeps `event` on `subject` in `group`'s queue, opening the subject
-    /// if it is new. A status set is the subject's; a report reopens one
-    /// resolved, as someone asks again.
+    /// if it is new. A status set is the subject's, and tags its to have
+    /// or lose; a report or an appeal reopens one resolved, as someone
+    /// asks again.
     pub fn moderate(&self, group: &str, subject: &str, event: &Event) -> Result<i64> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         let e = event;
-        let reopen = e.kind == "report";
+        let reopen = matches!(e.kind.as_str(), "report" | "appeal");
         tx.execute(
             "INSERT INTO mod_subject (grp, subject, status, created_at, updated_at) VALUES (?1, ?2, 'open', ?3, ?3)
              ON CONFLICT (grp, subject) DO UPDATE SET updated_at = ?3,
              status = coalesce(?5, CASE WHEN ?4 AND status = 'resolved' THEN 'open' ELSE status END)",
             params![group, subject, e.created_at, reopen, e.status],
         )?;
+        for tag in &e.add {
+            tx.execute(
+                "INSERT INTO mod_tag (grp, subject, tag) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
+                params![group, subject, tag],
+            )?;
+        }
+        for tag in &e.remove {
+            tx.execute(
+                "DELETE FROM mod_tag WHERE grp = ?1 AND subject = ?2 AND tag = ?3",
+                params![group, subject, tag],
+            )?;
+        }
         tx.execute(
-            "INSERT INTO mod_event (grp, subject, kind, actor, cid, reason_type, reason, rule, status, val, uri, note, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO mod_event (grp, subject, kind, actor, cid, reason_type, reason, rule, status, val, uri, note, added, removed, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 group,
                 subject,
@@ -132,6 +187,8 @@ impl Store {
                 e.val,
                 e.uri,
                 e.note,
+                joined(&e.add),
+                joined(&e.remove),
                 e.created_at
             ],
         )?;
@@ -151,45 +208,114 @@ impl Store {
             .optional()?)
     }
 
-    /// `group`'s queue, of `status`, the latest changed first, after
-    /// `before` (an `updated_at` and subject), at most `limit`.
+    /// `group`'s queue, of `status` if named, with any of `tags` if any
+    /// are named, in the order `sort` names: `oldest` or `newest` made,
+    /// or the latest `updated` first; after `after` (the time it sorts by,
+    /// and a subject), at most `limit`.
     pub fn subjects(
         &self,
         group: &str,
-        status: &str,
-        before: Option<(i64, &str)>,
+        status: Option<&str>,
+        tags: &[String],
+        sort: &str,
+        after: Option<(i64, &str)>,
         limit: u32,
     ) -> Result<Vec<Subject>> {
+        let (column, op, order, start) = match sort {
+            "newest" => ("created_at", "<", "DESC", i64::MAX),
+            "updated" => ("updated_at", "<", "DESC", i64::MAX),
+            _ => ("created_at", ">", "ASC", i64::MIN),
+        };
+        let (at, past) = after.unwrap_or((start, ""));
+        let tags = (!tags.is_empty()).then(|| json!(tags).to_string());
         let conn = self.conn();
-        let (at, after) = before.unwrap_or((i64::MAX, ""));
         let sql = format!(
-            "SELECT {SUBJECT_COLUMNS} FROM mod_subject s WHERE s.grp = ?1 AND s.status = ?2
-             AND (s.updated_at < ?3 OR (s.updated_at = ?3 AND s.subject > ?4))
-             ORDER BY s.updated_at DESC, s.subject LIMIT ?5"
+            "SELECT {SUBJECT_COLUMNS} FROM mod_subject s WHERE s.grp = ?1
+             AND (?2 IS NULL OR s.status = ?2)
+             AND (?3 IS NULL OR EXISTS (SELECT 1 FROM mod_tag t WHERE t.grp = s.grp
+                 AND t.subject = s.subject AND t.tag IN (SELECT value FROM json_each(?3))))
+             AND (s.{column} {op} ?4 OR (s.{column} = ?4 AND s.subject > ?5))
+             ORDER BY s.{column} {order}, s.subject LIMIT ?6"
         );
         let mut q = conn.prepare(&sql)?;
-        let rows = q.query_map(params![group, status, at, after, limit], subject_row)?;
+        let rows = q.query_map(params![group, status, tags, at, past, limit], subject_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// What happened to `subject` in `group`'s queue, in order: of the
-    /// version `cid` alone if named, after the event `after`, at most
-    /// `limit`.
+    /// What happened to `subject` in `group`'s queue, the `newest` first
+    /// or the oldest: of the version `cid` alone if named, after the
+    /// event `after`, at most `limit`.
     pub fn events(
         &self,
         group: &str,
         subject: &str,
         cid: Option<&str>,
-        after: i64,
+        newest: bool,
+        after: Option<i64>,
         limit: u32,
     ) -> Result<Vec<Event>> {
+        let (op, order, after) = order(newest, after);
         let conn = self.conn();
-        let sql = "SELECT seq, kind, actor, cid, reason_type, reason, rule, status, val, uri, note, created_at
-             FROM mod_event WHERE grp = ?1 AND subject = ?2 AND (?3 IS NULL OR cid = ?3) AND seq > ?4
-             ORDER BY seq LIMIT ?5";
-        let mut q = conn.prepare(sql)?;
+        let sql = format!(
+            "SELECT {EVENT_COLUMNS} FROM mod_event WHERE grp = ?1 AND subject = ?2
+             AND (?3 IS NULL OR cid = ?3) AND seq {op} ?4 ORDER BY seq {order} LIMIT ?5"
+        );
+        let mut q = conn.prepare(&sql)?;
         let rows = q.query_map(params![group, subject, cid, after, limit], event_row)?;
+        let rows = rows.map(|r| r.map(|(_, e)| e));
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The subjects in `group`'s queue that are `account`, or a record of
+    /// theirs: in a public repo, or in one of the group's spaces.
+    pub fn subjects_of(&self, group: &str, account: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let public = format!("at://{account}/");
+        let spaces = format!("at://{group}/space/");
+        let sql = "SELECT subject FROM mod_subject WHERE grp = ?1 AND (subject = ?2
+             OR substr(subject, 1, length(?3)) = ?3 OR substr(subject, 1, length(?4)) = ?4)
+             ORDER BY subject";
+        let mut q = conn.prepare(sql)?;
+        let rows = q.query_map(params![group, account, public, spaces], |r| r.get(0))?;
+        let subjects: Vec<String> = rows.collect::<rusqlite::Result<_>>()?;
+        // A record in a space is its author's by the repo its URI names.
+        let theirs = subjects.into_iter().filter(|s| account_of(s) == account);
+        Ok(theirs.collect())
+    }
+
+    /// What happened to `subjects` in `group`'s queue that its subject
+    /// sees: neither reports nor tags. The `newest` first or the oldest,
+    /// after the event `after`, at most `limit`; each with its subject.
+    pub fn own_events(
+        &self,
+        group: &str,
+        subjects: &[String],
+        newest: bool,
+        after: Option<i64>,
+        limit: u32,
+    ) -> Result<Vec<(String, Event)>> {
+        let (op, order, after) = order(newest, after);
+        let conn = self.conn();
+        let sql = format!(
+            "SELECT {EVENT_COLUMNS} FROM mod_event WHERE grp = ?1
+             AND subject IN (SELECT value FROM json_each(?2)) AND kind NOT IN ('report', 'tag')
+             AND seq {op} ?3 ORDER BY seq {order} LIMIT ?4"
+        );
+        let mut q = conn.prepare(&sql)?;
+        let subjects = json!(subjects).to_string();
+        let rows = q.query_map(params![group, subjects, after, limit], event_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Whether `subject` in `group`'s queue bears what its subject may
+    /// appeal: a label written and not since taken back, or an ejection.
+    pub fn appealable(&self, group: &str, subject: &str) -> Result<bool> {
+        let conn = self.conn();
+        let sql = "SELECT EXISTS (SELECT 1 FROM mod_event e WHERE e.grp = ?1 AND e.subject = ?2
+             AND (e.kind = 'eject' OR (e.kind = 'label' AND NOT EXISTS (SELECT 1 FROM mod_event n
+                 WHERE n.grp = e.grp AND n.subject = e.subject AND n.kind = 'negate'
+                 AND n.uri = e.uri AND n.seq > e.seq))))";
+        Ok(conn.query_row(sql, params![group, subject], |r| r.get(0))?)
     }
 }
 
@@ -225,9 +351,6 @@ pub fn space_of(uri: &str) -> Option<(String, String)> {
         (space, authority.to_string())
     })
 }
-
-/// The reason of a report that appeals what the group did to its subject.
-const APPEAL: &str = "appeal";
 
 /// The account a public record's URI is in, `at://<did>/<collection>/<rkey>`,
 /// a record in no space, each of its parts what it says.
@@ -268,6 +391,13 @@ fn subject_in(group: &str, asked: &Value) -> Result<(String, Option<String>), Xr
     subject_of(group, subject)?;
     let cid = asked["cid"].as_str().filter(|_| !syntax::is_did(subject));
     Ok((subject.to_string(), cid.map(String::from)))
+}
+
+/// Whether `subject` in `group` is `me`'s: my account, or a record I
+/// wrote, in my public repo or in one of the group's spaces.
+fn owns(group: &str, me: &str, subject: &str) -> bool {
+    let in_space = space_of(subject).is_some_and(|(_, authority)| authority == group);
+    subject == me || public_of(subject) == Some(me) || (in_space && account_of(subject) == me)
 }
 
 impl Host {
@@ -406,7 +536,7 @@ fn account_of(key: &str) -> &str {
     if parts.len() == 3 { parts[0] } else { parts[4] }
 }
 
-/// A subject as the queue answers it (`defs#modSubjectView`), with
+/// A subject as the queue answers it (`mod.defs#subjectView`), with
 /// `actors`, the people it names as a view names them.
 fn subject_view(s: &Subject, actors: &HashMap<String, Value>) -> Value {
     json!({
@@ -414,71 +544,111 @@ fn subject_view(s: &Subject, actors: &HashMap<String, Value>) -> Value {
         "actor": actors[account_of(&s.subject)],
         "status": s.status,
         "reportCount": s.reports,
+        "tags": s.tags,
         "createdAt": iso(s.created_at),
         "updatedAt": iso(s.updated_at),
     })
 }
 
-/// An event as the history answers it: one of the four kinds the union
-/// holds, with who did it as `actors` names them. A negation is the label
-/// taken back.
-fn event_view(e: &Event, actors: &HashMap<String, Value>) -> Value {
+/// Tags as an event lists them: none, when there are none.
+fn tags_of(tags: &[String]) -> Option<&[String]> {
+    (!tags.is_empty()).then_some(tags)
+}
+
+/// An event on `subject` as a history answers it (`mod.defs#eventView`):
+/// one of the kinds the union holds, with who did it as `actors` names
+/// them. A negation is the label taken back. Without `actors`, the event
+/// as its subject sees it: without who did it, nor any note.
+fn event_view(subject: &str, e: &Event, actors: Option<&HashMap<String, Value>>) -> Value {
+    let note = e.note.as_ref().filter(|_| actors.is_some());
     let event = match e.kind.as_str() {
         "report" => json!({
-            "$type": "org.atgrp.defs#reportEvent",
+            "$type": format!("{DEFS}#reportEvent"),
             "reasonType": e.reason_type,
             "reason": e.reason,
             "rule": e.rule,
         }),
+        "appeal" => json!({
+            "$type": format!("{DEFS}#appealEvent"),
+            "note": note,
+        }),
         "status" => json!({
-            "$type": "org.atgrp.defs#statusEvent",
+            "$type": format!("{DEFS}#statusEvent"),
             "status": e.status,
-            "note": e.note,
+            "note": note,
+        }),
+        "tag" => json!({
+            "$type": format!("{DEFS}#tagEvent"),
+            "add": tags_of(&e.add),
+            "remove": tags_of(&e.remove),
         }),
         "label" | "negate" => json!({
-            "$type": "org.atgrp.defs#labelEvent",
+            "$type": format!("{DEFS}#labelEvent"),
             "uri": e.uri,
             "val": e.val,
             "deleted": e.kind == "negate",
         }),
-        _ => json!({"$type": "org.atgrp.defs#ejectEvent"}),
+        _ => json!({"$type": format!("{DEFS}#ejectEvent")}),
     };
+    let by = actors.and(e.actor.as_ref());
     present(json!({
-        "id": e.seq.to_string(),
+        "eventId": e.seq.to_string(),
         "createdAt": iso(e.created_at),
-        "createdBy": e.actor,
-        "creator": e.actor.as_ref().map(|did| &actors[did]),
+        "subject": subject,
         "cid": e.cid,
+        "createdBy": by,
+        "creator": by.zip(actors).map(|(did, actors)| &actors[did]),
         "event": present(event),
     }))
 }
 
-/// The group's queue, of a status (`open` unless asked), the latest
-/// changed first, for one holding `mod.read`, or an app signed in as the
-/// group with its `rpc:` scope.
-pub async fn list_mod_subjects(
+/// The order `sort` asks for among `known`, the first unless it says.
+fn sort_of(p: &Params, known: &[&'static str]) -> Result<&'static str, XrpcError> {
+    let Some(asked) = p.get("sort") else {
+        return Ok(known[0]);
+    };
+    let found = known.iter().find(|k| **k == asked.as_str()).copied();
+    found.ok_or_else(|| invalid(format!("sort is one of {}", known.join(", "))))
+}
+
+/// The event a page of a history starts after, as its cursor names it.
+fn after_event(p: &Params) -> Result<Option<i64>, XrpcError> {
+    let cursor = p.get("cursor").map(|c| c.parse::<i64>());
+    cursor.transpose().map_err(|_| invalid_cursor())
+}
+
+/// The group's queue, of a status if asked, with any of the tags asked,
+/// in the order asked (the oldest first unless it says), for one holding
+/// `mod.read`, or an app signed in as the group with its `rpc:` scope.
+pub async fn query_subjects(
     State(host): State<Arc<Host>>,
-    Query(p): Query<Params>,
+    Query(pairs): Query<Vec<(String, String)>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Refusal> {
-    let group = param(&p, "group")?;
-    let lxm = format!("{NS}.listModSubjects");
-    doing(&host, &headers, "GET", &lxm, group, "mod.read").await?;
+    let p: Params = pairs.iter().cloned().collect();
+    let lxm = format!("{NS}.mod.querySubjects");
+    let asked = p.get("group").map(String::as_str);
+    let (group, _) = doing(&host, &headers, "GET", &lxm, asked, "mod.read").await?;
     let limit = page(&p, 50, 100)?;
+    let sort = sort_of(&p, &["oldest", "newest", "updated"])?;
     let cursor = p
         .get("cursor")
         .map(|c| c.split_once(':').unwrap_or((c, "")));
-    let before = match cursor {
+    let after = match cursor {
         None => None,
         Some((at, subject)) => {
             let at = at.parse::<i64>().map_err(|_| invalid_cursor())?;
             Some((at, subject))
         }
     };
-    let status = p.get("status").map_or("open", String::as_str);
+    let tags: Vec<String> = pairs
+        .into_iter()
+        .filter_map(|(k, v)| (k == "tags").then_some(v))
+        .collect();
+    let status = p.get("status").map(String::as_str);
     let subjects = host
         .store
-        .subjects(group, status, before, limit)
+        .subjects(&group, status, &tags, sort, after, limit)
         .map_err(XrpcError::internal)?;
     let actors = host.actor_views(subjects.iter().map(|s| account_of(&s.subject)));
     let actors = actors.await;
@@ -487,45 +657,48 @@ pub async fn list_mod_subjects(
     if subjects.len() == limit as usize
         && let Some(last) = subjects.last()
     {
-        out["cursor"] = json!(format!("{}:{}", last.updated_at, last.subject));
+        let at = match sort {
+            "updated" => last.updated_at,
+            _ => last.created_at,
+        };
+        out["cursor"] = json!(format!("{at}:{}", last.subject));
     }
     Ok(Json(out))
 }
 
-/// What happened to a subject in the group's queue, oldest first, a page
-/// at a time; and a record subject itself, as a moderator reviews it.
-/// For one holding `mod.read`, or an app signed in as the group with its
-/// `rpc:` scope, which sees the record as its member would.
-pub async fn get_mod_subject_history(
+/// What happened to a subject in the group's queue, the newest first
+/// unless asked, a page at a time; and a record subject itself, as a
+/// moderator reviews it. For one holding `mod.read`, or an app signed in
+/// as the group with its `rpc:` scope, which sees the record as its
+/// member would.
+pub async fn query_subject_history(
     State(host): State<Arc<Host>>,
     Query(p): Query<Params>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Refusal> {
-    let group = param(&p, "group")?;
-    let lxm = format!("{NS}.getModSubjectHistory");
-    let me = doing(&host, &headers, "GET", &lxm, group, "mod.read").await?;
+    let lxm = format!("{NS}.mod.querySubjectHistory");
+    let asked = p.get("group").map(String::as_str);
+    let (group, me) = doing(&host, &headers, "GET", &lxm, asked, "mod.read").await?;
     let subject = param(&p, "subject")?;
-    subject_of(group, subject)?;
+    subject_of(&group, subject)?;
     let limit = page(&p, 50, 100)?;
-    let after = match p.get("cursor") {
-        None => 0,
-        Some(c) => c.parse::<i64>().map_err(|_| invalid_cursor())?,
-    };
+    let newest = sort_of(&p, &["newest", "oldest"])? == "newest";
+    let after = after_event(&p)?;
     let cid = p.get("cid").map(String::as_str);
     let events = host
         .store
-        .events(group, subject, cid, after, limit)
+        .events(&group, subject, cid, newest, after, limit)
         .map_err(XrpcError::internal)?;
     let actors = host.actor_views(events.iter().filter_map(|e| e.actor.as_deref()));
     let actors = actors.await;
-    let views: Vec<Value> = events.iter().map(|e| event_view(e, &actors)).collect();
-    let mut out = json!({ "events": views });
+    let view = |e: &Event| event_view(subject, e, Some(&actors));
+    let mut out = json!({ "events": events.iter().map(view).collect::<Vec<_>>() });
     if events.len() == limit as usize
         && let Some(last) = events.last()
     {
         out["cursor"] = json!(last.seq.to_string());
     }
-    let reviewed = host.reviewed(group, subject, &me).await;
+    let reviewed = host.reviewed(&group, subject, &me).await;
     if let Some(r) = reviewed.map_err(XrpcError::internal)? {
         out["record"] = json!({
             "uri": subject,
@@ -573,38 +746,69 @@ pub async fn get_mod_subject_blob(
     Ok(served(mime, bytes))
 }
 
-/// Resolves or escalates a subject, with a note if one is given; setting
-/// the status it has keeps the note. For one holding `mod.resolve`, or an
-/// app signed in as the group with its `rpc:` scope, as its member.
-pub async fn resolve_mod_subject(
+/// The tags `body` lists under `key`, each in label value syntax.
+fn tags_in(body: &Value, key: &str) -> Result<Vec<String>, XrpcError> {
+    let listed = body[key].as_array().map(Vec::as_slice).unwrap_or_default();
+    let tags = listed.iter().map(|t| t.as_str().expect("its lexicon says"));
+    if let Some(bad) = tags.clone().find(|t| !is_own_label(t)) {
+        return Err(invalid(format!(
+            "{key}: {bad} is not lowercase letters and hyphens"
+        )));
+    }
+    Ok(tags.map(String::from).collect())
+}
+
+/// Changes a subject: its status (reopening it, or resolving it), a note
+/// beside it, its tags, each only if asked. A status or a note is a
+/// status event, a status unasked the one it has; tags, a tag event. For
+/// one holding `mod.resolve`, or an app signed in as the group with its
+/// `rpc:` scope, as its member.
+pub async fn update_subject(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, Refusal> {
-    let group = body["group"].as_str().expect("its lexicon requires it");
-    let lxm = format!("{NS}.resolveModSubject");
-    let me = doing(&host, &headers, "POST", &lxm, group, "mod.resolve").await?;
-    let (subject, cid) = subject_in(group, &body)?;
-    let status = body["status"].as_str().expect("its lexicon requires it");
-    let found = host.store.subject(group, &subject);
-    if found.map_err(XrpcError::internal)?.is_none() {
-        return Err(not_found().into());
-    }
-    let event = Event {
-        kind: "status".into(),
+    let lxm = format!("{NS}.mod.updateSubject");
+    let asked = body["group"].as_str();
+    let (group, me) = doing(&host, &headers, "POST", &lxm, asked, "mod.resolve").await?;
+    let (subject, cid) = subject_in(&group, &body)?;
+    let add = tags_in(&body, "addTags")?;
+    let remove = tags_in(&body, "removeTags")?;
+    let found = host.store.subject(&group, &subject);
+    let found = found.map_err(XrpcError::internal)?.ok_or_else(not_found)?;
+    let now = now_millis();
+    let at = Event {
         actor: Some(me),
         cid,
-        status: Some(status.into()),
-        note: body["note"].as_str().map(String::from),
-        created_at: now_millis(),
+        created_at: now,
         ..Event::default()
     };
-    host.store
-        .moderate(group, &subject, &event)
-        .map_err(XrpcError::internal)?;
-    let now = host.store.subject(group, &subject);
+    let status = body["status"].as_str();
+    let note = body["note"].as_str();
+    let mut events = Vec::new();
+    if status.is_some() || note.is_some() {
+        events.push(Event {
+            kind: "status".into(),
+            status: Some(status.unwrap_or(found.status.as_str()).into()),
+            note: note.map(String::from),
+            ..at.clone()
+        });
+    }
+    if !add.is_empty() || !remove.is_empty() {
+        events.push(Event {
+            kind: "tag".into(),
+            add,
+            remove,
+            ..at
+        });
+    }
+    for event in &events {
+        let kept = host.store.moderate(&group, &subject, event);
+        kept.map_err(XrpcError::internal)?;
+    }
+    let now = host.store.subject(&group, &subject);
     let now = now.map_err(XrpcError::internal)?;
-    let now = now.expect("just kept");
+    let now = now.expect("found above");
     let actors = host.actor_views([account_of(&now.subject)]).await;
     Ok(Json(subject_view(&now, &actors)))
 }
@@ -619,24 +823,23 @@ fn accepts(labeler: &Value, key: &str, value: &str) -> bool {
 
 /// A report, from one who can read its subject: an account in a group
 /// here, a record in one of its spaces, or a member's public record, into
-/// that group's queue. An appeal is a report only its subject files: the
-/// account, or the record's author, who may have been put out since.
-pub async fn create_report(
+/// that group's queue.
+pub async fn submit_report(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Answer {
-    let me = signed_in(&host, &headers, &format!("{NS}.createReport")).await?;
+    let me = signed_in(&host, &headers, &format!("{NS}.mod.submitReport")).await?;
     let group = body["group"].as_str().expect("its lexicon requires it");
     group_of(&host, group)?;
     let reason_type = body["reasonType"]
         .as_str()
         .expect("its lexicon requires it");
-    // A rule is cited by its URI, a record's in the group's meta space.
+    // A rule is cited by its URI, a record's in the group's members space.
     let rule = body["rule"].as_str();
-    let meta = meta_space(group);
-    if rule.is_some_and(|r| space_of(r).is_none_or(|(space, _)| space != meta)) {
-        return Err(invalid("rule is a rule in the group's meta space"));
+    let members = members_space(group);
+    if rule.is_some_and(|r| space_of(r).is_none_or(|(space, _)| space != members)) {
+        return Err(invalid("rule is a rule in the group's members space"));
     }
     let (subject, cid) = subject_in(group, &body)?;
     let labeler = host.labeler_of(group)?;
@@ -645,14 +848,6 @@ pub async fn create_report(
             "the group takes no reports of {reason_type}"
         )));
     }
-    let appeal = reason_type == APPEAL;
-    if appeal && account_of(&subject) != me {
-        return Err(invalid("only its subject may appeal"));
-    }
-    // What the queue already has of someone is theirs to appeal, though
-    // they no longer hold a role, nor read where it is.
-    let queued = host.store.subject(group, &subject);
-    let appealed = appeal && queued.map_err(XrpcError::internal)?.is_some();
     // A record in a space is reported in its own; an account, or a
     // member's public record, in the members space, where its labels go.
     let collection = subject
@@ -668,10 +863,10 @@ pub async fn create_report(
         None => {
             let account = public_of(&subject).unwrap_or(&subject);
             let roles = host.roles(group, account).map_err(XrpcError::internal)?;
-            if roles.is_empty() && !appealed {
+            if roles.is_empty() {
                 return Err(invalid_subject("not a member of this group"));
             }
-            members_space(group)
+            members
         }
     };
     let taken = accepts(&labeler, "subjectTypes", kind)
@@ -682,7 +877,7 @@ pub async fn create_report(
     let hosted = host.store.space(&space).map_err(XrpcError::internal)?;
     let hosted = hosted.ok_or_else(|| invalid_subject("not in a space hosted here"))?;
     let reads = host.may(&space, &hosted, Some(me.as_str()), Access::Read);
-    if !appealed && !reads.map_err(XrpcError::internal)? {
+    if !reads.map_err(XrpcError::internal)? {
         return Err(invalid_subject("not in a space you can read"));
     }
     // Counted once it goes in the queue: a refused one fills nothing.
@@ -700,22 +895,101 @@ pub async fn create_report(
     };
     let id = host.store.moderate(group, &subject, &event);
     let id = id.map_err(XrpcError::internal)?;
-    Ok(Json(json!({"id": id.to_string(), "createdAt": iso(now)})))
+    Ok(Json(
+        json!({"eventId": id.to_string(), "createdAt": iso(now)}),
+    ))
 }
 
-/// A label a group defines for itself: lowercase letters and hyphens, as
-/// atproto has a labeler's own values; never one of the values atproto
-/// defines, which start with `!`.
+/// An appeal of a label or an ejection, by the account it is on or the
+/// author of the record it is on, though they have left the group since:
+/// it reopens the subject in the group's queue.
+pub async fn submit_appeal(
+    State(host): State<Arc<Host>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Answer {
+    let me = signed_in(&host, &headers, &format!("{NS}.mod.submitAppeal")).await?;
+    let group = body["group"].as_str().expect("its lexicon requires it");
+    group_of(&host, group)?;
+    let subject = body["subject"].as_str().expect("its lexicon requires it");
+    if !owns(group, &me, subject) {
+        return Err(invalid_subject("not your account, nor a record of yours"));
+    }
+    let appealable = host.store.appealable(group, subject);
+    if !appealable.map_err(XrpcError::internal)? {
+        return Err(XrpcError::new(
+            StatusCode::BAD_REQUEST,
+            "NotAppealable",
+            "the group has neither labelled nor ejected it",
+        ));
+    }
+    // Counted as a report is: each asks the group's moderators to look.
+    host.spend(&crate::limits::REPORTS, &me, 1)?;
+    let now = now_millis();
+    let event = Event {
+        kind: "appeal".into(),
+        actor: Some(me),
+        note: body["note"].as_str().map(String::from),
+        created_at: now,
+        ..Event::default()
+    };
+    let id = host.store.moderate(group, subject, &event);
+    let id = id.map_err(XrpcError::internal)?;
+    Ok(Json(
+        json!({"eventId": id.to_string(), "createdAt": iso(now)}),
+    ))
+}
+
+/// What the group did to the caller's account and records, or to the one
+/// of them asked, the newest first unless asked, a page at a time: no
+/// report, tag or note, nor who did it. Theirs to read though they have
+/// left the group.
+pub async fn query_self_history(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+    headers: HeaderMap,
+) -> Answer {
+    let me = signed_in(&host, &headers, &format!("{NS}.mod.querySelfHistory")).await?;
+    let group = param(&p, "group")?;
+    group_of(&host, group)?;
+    let subjects = match p.get("subject") {
+        None => host
+            .store
+            .subjects_of(group, &me)
+            .map_err(XrpcError::internal)?,
+        Some(s) if owns(group, &me, s) => vec![s.clone()],
+        Some(_) => return Err(invalid_subject("not your account, nor a record of yours")),
+    };
+    let limit = page(&p, 50, 100)?;
+    let newest = sort_of(&p, &["newest", "oldest"])? == "newest";
+    let after = after_event(&p)?;
+    let events = host
+        .store
+        .own_events(group, &subjects, newest, after, limit);
+    let events = events.map_err(XrpcError::internal)?;
+    let views: Vec<Value> = events.iter().map(|(s, e)| event_view(s, e, None)).collect();
+    let mut out = json!({ "events": views });
+    if events.len() == limit as usize
+        && let Some((_, last)) = events.last()
+    {
+        out["cursor"] = json!(last.seq.to_string());
+    }
+    Ok(Json(out))
+}
+
+/// A label a group defines for itself, or a tag a moderator gives a
+/// subject: lowercase letters and hyphens, as atproto has a labeler's own
+/// values; never one of the values atproto defines, which start with `!`.
 fn is_own_label(label: &str) -> bool {
     !label.is_empty() && label.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
 }
 
 impl Host {
-    /// The group's labeler, as its meta space keeps it, and its policies'
-    /// values and definitions, made lists where it had none.
+    /// The group's labeler, as its members space keeps it, and its
+    /// policies' values and definitions, made lists where it had none.
     fn labeler_of(&self, group: &str) -> Result<Value, XrpcError> {
-        let meta = meta_space(group);
-        let kept = self.group_record(group, &meta, &format!("{NS}.labeler"), "self");
+        let members = members_space(group);
+        let kept = self.group_record(group, &members, &format!("{NS}.labeler"), "self");
         let mut labeler = kept.map_err(XrpcError::internal)?.unwrap_or_default();
         for key in ["labelValues", "labelValueDefinitions"] {
             if !labeler["policies"][key].is_array() {
@@ -747,7 +1021,7 @@ impl Host {
             rkey: "self".into(),
             value: labeler,
         };
-        self.space_write(group, &meta_space(group), &[write])
+        self.space_write(group, &members_space(group), &[write])
             .await?;
         Ok(())
     }

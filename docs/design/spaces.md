@@ -19,14 +19,14 @@ and the authority for each group's own spaces.
 ## The spaces a group keeps
 
 Starting a group makes two spaces. Meta,
-`at://<group>/space/org.atgrp.meta/self`, holds the group's profile,
-its rules and its labeler. Members,
-`at://<group>/space/org.atgrp.members/self`, holds the roles, the
-permissions and the memberships. It also holds the index: a
+`at://<group>/space/org.atgrp.meta/self`, holds what the group says
+about itself (`org.atgrp.about`) and its settings (`org.atgrp.config`).
+Members, `at://<group>/space/org.atgrp.members/self`, holds the roles,
+the memberships, the rules and the labeler. It also holds the index: a
 `org.atgrp.space` record, `{space, createdAt}`, for each of the
-group's listed spaces, which apps read to find them. A group listed on
-the network points at its meta space from a `org.atgrp.declaration`
-record in its public repo.
+group's other listed spaces, which apps read to find them. Meta and
+members are never in it. A group listed on the network says so with an
+empty `org.atgrp.declaration` record in its public repo.
 
 A group makes more spaces, and changes and ends them, through atproto's
 own space methods ([below](#making-changing-and-ending-a-space)). Meta
@@ -53,7 +53,7 @@ repo, the space, the revision and that digest.
 
 The group also writes in spaces it isn't the authority for. An invite
 goes in the group's repo in the invitee's inbox,
-`at://<invitee>/space/org.atgrp.invites/self`. The invitee's app
+`at://<invitee>/space/org.atgrp.inbox/self`. The invitee's app
 makes it a `com.atproto.memberspace.policy` space with `publicWrite` set
 and no members, so any group may write there and only its owner reads
 it. The host tells the invitee's PDS of each write
@@ -82,11 +82,12 @@ roles on every request. It holds:
 
 - `grants`, at most one a role. Each says whether the role's members
   read the space (`read`), whether they write there in their own name
-  (`write`), and which OAuth scopes they hold there acting as the group
-  (`scopes`), such as `space:<type>?collection=<nsid>`. A scope naming
-  another space grants nothing.
+  (`write`), and which permissions they hold there acting as the group
+  (`permissions`), such as `space:<type>?collection=<nsid>`. A
+  permission naming another space grants nothing.
 - `publicRead`: anyone at all may read the space, signed in or not.
-- `unlisted`: the space is left out of the group's index.
+- `unlisted`: the space is left out of the group's index. Meta and
+  members are never in it, so on their policies it changes nothing.
 
 A user reads the space if it's `publicRead`, or if a role they hold is
 granted `read`. Only members whose roles are granted `write` are in the
@@ -127,16 +128,16 @@ its session never reaches spaces. Each call is checked twice:
 `createSpace` takes a type, a key (or makes a new one) and a policy. Any
 policy but `org.atgrp.policy` fails `UnsupportedPolicy`. The host
 also refuses a grant of a role the group doesn't have, two grants of one
-role, a scope that's no space scope, and the meta and members types. A
+role, a permission that's no space permission, and the meta and members types. A
 space is made whole or not at all: if its policy can't be published,
 the host ends it again. Unless `unlisted`, it gets an index entry.
 
 `updateSpace` replaces the policy whole, publishes it, and lists or
 unlists the space to match. It grants no more than its caller holds. It
-changes only the grants of roles they may assign, adds only scopes their
+changes only the grants of roles they may assign, adds only permissions their
 roles hold, and grants `read` or `write` (or turns on `publicRead`) only
 if they have it there. Anything else fails `NotAuthorized`. A new
-group's admins hold every scope in its spaces (`space:*?collection=*`),
+group's admins hold every permission in its spaces (`space:*?collection=*`),
 so they may give any. On the members space, `member` keeps `read` and
 `write`, and `publicRead` stays off: every member holds `member`, and
 nobody else reads the roster. Any other policy there fails

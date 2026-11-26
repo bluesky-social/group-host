@@ -8,12 +8,14 @@
 //!
 //! Each space is kept under a policy, `org.atgrp.policy`: for each
 //! role, whether its holders read the space, whether they write in it in
-//! their own name (and so are in its writer set), and the scopes they hold
-//! there acting as the group; whether anyone may read it; and whether it
-//! is left out of the group's index. The host keeps the policy, publishes
-//! it in the space as the group's `com.atproto.space.policy/self`, and
-//! keeps the index, the `org.atgrp.space` entries in the members
-//! space, in step with it: both are written by the host alone. A space
+//! their own name (and so are in its writer set), and the permissions
+//! they hold there acting as the group; whether anyone may read it; and
+//! whether it is left out of the group's index. The host keeps the
+//! policy, publishes it in the space as the group's
+//! `com.atproto.space.policy/self`, and keeps the index, the
+//! `org.atgrp.space` entries in the members space, in step with it: both
+//! are written by the host alone. The meta and members spaces are never
+//! in the index, so `unlisted` means nothing in their policies. A space
 //! under any other policy is refused (`UnsupportedPolicy`).
 //!
 //! Making a space takes `manage=create` in the session's scope and a role
@@ -21,7 +23,7 @@
 //! granting `space.configure` or a grant in the space's policy managing
 //! updates; ending one, `manage=delete` likewise. A change grants no more
 //! than its user holds: it changes only the grants of roles they may
-//! assign, adds only scopes they hold, and grants reading or writing the
+//! assign, adds only permissions they hold, and grants reading or writing the
 //! space (to a role, or reading to anyone) only to one who reads or
 //! writes it. Who loses writing leaves the writer set. The meta and
 //! members spaces come and go with the group, and `member`, which every
@@ -34,7 +36,7 @@ use crate::authority::Access;
 use crate::group::{members_space, meta_space};
 use crate::group_config::put_in;
 use crate::lexicons::lexicons;
-use crate::member_writes::{assignable, held};
+use crate::member_writes::{can_assign, held};
 use crate::oauth_resource::{Acting, Refusal};
 use crate::oauth_scope::SpaceScope;
 use crate::rbac::{Grant, NS, POLICY, Policy, PolicyGrant, assigns};
@@ -88,7 +90,7 @@ fn described(nsid: &str, input: &Value) -> Result<(), XrpcError> {
 
 /// The policy `policy` asks for, as kept: of this host's kind, as its
 /// lexicon describes it, one grant a role, each of a role the group has,
-/// and each scope a space scope.
+/// and each permission a space scope.
 fn checked_policy(host: &Host, group: &str, policy: &Value) -> Result<Value, XrpcError> {
     if policy["$type"] != POLICY {
         return Err(refused(
@@ -110,10 +112,10 @@ fn checked_policy(host: &Host, group: &str, policy: &Value) -> Result<Value, Xrp
         if !roles.iter().any(|(r, _)| r == role) {
             return Err(invalid(format!("the group has no role {role}")));
         }
-        let scopes = grant["scopes"].as_array().into_iter().flatten();
-        for scope in scopes.filter_map(Value::as_str) {
+        let permissions = grant["permissions"].as_array().into_iter().flatten();
+        for scope in permissions.filter_map(Value::as_str) {
             if SpaceScope::parse(scope).is_none() {
-                return Err(invalid(format!("{scope} is no space scope")));
+                return Err(invalid(format!("{scope} is no space permission")));
             }
         }
     }
@@ -172,7 +174,8 @@ impl Host {
     /// Publishes `policy`, the policy of `group`'s space at `uri`, as the
     /// group's `com.atproto.space.policy/self` there, unless it is so
     /// already, and lists the space in the group's index, or takes it out,
-    /// as the policy says.
+    /// as the policy says: but for the meta and members spaces, which are
+    /// never listed.
     pub(crate) async fn publish_policy(
         &self,
         group: &str,
@@ -183,6 +186,9 @@ impl Host {
         let there = self.group_record(group, uri, PUBLISHED, "self");
         if there.map_err(XrpcError::internal)?.as_ref() != Some(&record) {
             let _published = put_in(self, group, uri, PUBLISHED, "self", record).await?;
+        }
+        if uri == meta_space(group) || uri == members_space(group) {
+            return Ok(());
         }
         match policy["unlisted"] == true {
             true => self.unindex_space(group, uri).await,
@@ -367,8 +373,8 @@ fn grant_of(policy: &Policy, role: &str) -> PolicyGrant {
 
 /// Refuses a policy `next`, in place of `now`, by a holder of `roles`
 /// under `grants`, that changes the grant of a role they may not assign,
-/// adds a scope they do not hold, or grants reading or writing the space
-/// (to a role, or reading to anyone) that they do not have there.
+/// adds a permission they do not hold, or grants reading or writing the
+/// space (to a role, or reading to anyone) that they do not have there.
 fn escalates(
     group: &str,
     roles: &[String],
@@ -376,9 +382,9 @@ fn escalates(
     now: &Policy,
     next: &Policy,
 ) -> Result<(), XrpcError> {
-    let union = assignable(grants, roles, None);
+    let union = can_assign(grants, roles, None);
     let mut mine = held(grants, roles);
-    mine.extend(now.scopes(roles));
+    mine.extend(now.permissions(roles));
     let named: BTreeSet<&String> = now
         .grants
         .iter()
@@ -406,7 +412,10 @@ fn escalates(
                 "you do not write in this space, to let others",
             ));
         }
-        let added = after.scopes.iter().filter(|s| !before.scopes.contains(s));
+        let added = after
+            .permissions
+            .iter()
+            .filter(|s| !before.permissions.contains(s));
         for scope in added {
             if !covers(&mine, scope, group) {
                 return Err(not_authorized(format!(

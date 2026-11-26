@@ -6,7 +6,7 @@
       "type": "permission-set",
       "description": "For personal sessions, acting as the user rather than the group.",
       "title": "Groups",
-      "detail": "See groups and your invites, join or leave groups, and report content.",
+      "detail": "View and interact with your groups.",
       "permissions": [
         {
           "type": "permission",
@@ -14,9 +14,7 @@
           "spaceType": "org.atgrp.meta",
           "authority": "*",
           "skey": "self",
-          "action": [
-            "read"
-          ]
+          "action": ["read"]
         },
         {
           "type": "permission",
@@ -24,28 +22,17 @@
           "spaceType": "org.atgrp.members",
           "authority": "*",
           "skey": "self",
-          "collection": [
-            "org.atgrp.acceptance"
-          ],
-          "action": [
-            "read",
-            "create",
-            "update",
-            "delete"
-          ]
+          "collection": ["org.atgrp.confirmation"],
+          "action": ["read", "create", "update", "delete"]
         },
         {
           "type": "permission",
           "resource": "space",
-          "spaceType": "org.atgrp.invites",
+          "spaceType": "org.atgrp.inbox",
           "authority": "self",
           "skey": "self",
-          "action": [
-            "read"
-          ],
-          "manage": [
-            "create"
-          ]
+          "action": ["read"],
+          "manage": ["create"]
         },
         {
           "type": "permission",
@@ -58,7 +45,9 @@
             "org.atgrp.leaveGroup",
             "org.atgrp.internal.getActorInvites",
             "org.atgrp.internal.declineInvite",
-            "org.atgrp.createReport"
+            "org.atgrp.mod.submitReport",
+            "org.atgrp.mod.submitAppeal",
+            "org.atgrp.mod.querySelfHistory"
           ]
         }
       ]

@@ -53,7 +53,7 @@ fn names_each_tool_for_its_command() {
             "space_records",
             "mod_list",
             "mod_history",
-            "mod_resolve",
+            "mod_update",
             "mod_label",
         ]
     );
@@ -109,11 +109,13 @@ fn makes_each_schema_from_the_lexicons() {
     assert_eq!(eject.input_schema["required"], json!(["member"]));
     assert_eq!(eject.input_schema["properties"]["member"]["format"], "did");
 
-    // The profile, at its one key: none to say, nor when it was made;
+    // The about record and the config, at their one key: none to say;
     // each field changed only if given.
     let profile = tool("profile_set");
     let fields = &profile.input_schema["properties"];
     assert_eq!(fields["display_name"]["maxLength"], 640);
+    assert_eq!(fields["website"]["format"], "uri");
+    assert!(fields.get("url").is_none() && fields.get("banner").is_none());
     assert!(fields.get("rkey").is_none() && fields.get("created_at").is_none());
     assert_eq!(profile.input_schema["required"], json!([]));
     assert!(
@@ -127,7 +129,7 @@ fn makes_each_schema_from_the_lexicons() {
         tool("role_set").input_schema["properties"]["bot"]["type"],
         "boolean"
     );
-    assert!(profile.description.contains("The group's profile"));
+    assert!(profile.description.contains("org.atgrp.config"));
 
     // A rule to change, or none for a new one; one to delete.
     let rule = tool("rule_set");
@@ -141,18 +143,20 @@ fn makes_each_schema_from_the_lexicons() {
         json!(["rule"])
     );
     assert_eq!(tool("role_delete").args, ["role"]);
-    // A role's scopes and the roles it may give, as its record has them.
+    // A role's permissions and the roles it may give, as its record has
+    // them; its name optional.
     let set = tool("role_set");
     let fields = &set.input_schema["properties"];
-    assert_eq!(fields["scopes"]["maxItems"], 100);
-    assert_eq!(fields["assignable"]["items"]["type"], "string");
+    assert_eq!(fields["permissions"]["maxItems"], 100);
+    assert_eq!(fields["can_assign"]["items"]["type"], "string");
+    assert_eq!(set.input_schema["required"], json!(["role"]));
 
-    // A role's grant: its scopes plain strings; with undo, dropped.
+    // A role's grant: its permissions plain strings; with undo, dropped.
     let grant = tool("role_grant");
     let fields = &grant.input_schema["properties"];
     assert_eq!(fields["role"]["format"], "record-key");
-    assert_eq!(fields["scopes"]["items"]["type"], "string");
-    assert_eq!(fields["assignable"]["items"]["type"], "string");
+    assert_eq!(fields["permissions"]["items"]["type"], "string");
+    assert_eq!(fields["can_assign"]["items"]["type"], "string");
     assert_eq!(fields["undo"]["type"], "boolean");
     assert_eq!(grant.input_schema["required"], json!(["role"]));
     assert!(
@@ -172,10 +176,16 @@ fn makes_each_schema_from_the_lexicons() {
 
     // A closed set, as JSON Schema's own; limits as the lexicon's.
     let fields = &tool("mod_list").input_schema["properties"];
-    assert_eq!(
-        fields["status"]["enum"],
-        json!(["open", "escalated", "resolved"])
+    assert_eq!(fields["status"]["enum"], json!(["open", "resolved"]));
+    assert_eq!(fields["tags"]["items"]["type"], "string");
+    assert!(
+        fields["sort"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("updated")
     );
+    let sort = &tool("mod_history").input_schema["properties"]["sort"];
+    assert!(sort["description"].as_str().unwrap().contains("newest"));
     assert_eq!(fields["limit"]["type"], "integer");
     assert!(fields["limit"].get("maximum").is_some());
 
@@ -191,16 +201,22 @@ fn makes_each_schema_from_the_lexicons() {
     assert_eq!(label.args, ["subject", "val"]);
     assert!(label.description.contains("com.atproto.label.record"));
     // The methods' own subject, a DID or a URI, with its version apart.
-    let resolve = &tool("mod_resolve").input_schema["properties"];
-    assert_eq!(resolve["subject"]["format"], "uri");
-    assert_eq!(resolve["cid"]["format"], "cid");
+    let update = &tool("mod_update").input_schema;
+    assert_eq!(update["properties"]["subject"]["format"], "uri");
+    assert_eq!(update["properties"]["cid"]["format"], "cid");
+    assert_eq!(
+        update["properties"]["status"]["enum"],
+        json!(["open", "resolved"])
+    );
+    assert_eq!(update["properties"]["add_tags"]["items"]["type"], "string");
+    assert_eq!(
+        update["properties"]["remove_tags"]["items"]["type"],
+        "string"
+    );
+    assert_eq!(update["required"], json!(["subject"]));
     let history = &tool("mod_history").input_schema["properties"]["subject"];
     assert_eq!(history["format"], "uri");
-    assert!(
-        tool("mod_resolve").input_schema["properties"]
-            .get("undo")
-            .is_none()
-    );
+    assert!(update["properties"].get("undo").is_none());
     assert_eq!(
         tool("space_records").input_schema["required"],
         json!(["space"])
@@ -304,17 +320,30 @@ fn plans_a_method_asked_with_its_arguments() {
         panic!()
     };
     assert_eq!(nsid, "org.atgrp.internal.deleteLabelDefinition");
-    // A subject and its version, sent as they are given.
-    let call = |args: Value| match planned("mod_resolve", args).unwrap() {
+    // A subject and its version, sent as they are given, tags and all.
+    let call = |args: Value| match planned("mod_update", args).unwrap() {
         Plan::Call { nsid, input, .. } => (nsid, input),
         other => panic!("{other:?}"),
     };
     let post = "at://did:plc:g/space/x/self/did:plc:a/com.example.post/1";
-    let asked = json!({"subject": post, "cid": "bafy", "status": "resolved"});
+    let asked = json!({"subject": post, "cid": "bafy", "status": "open", "add_tags": ["urgent"], "remove_tags": ["spam"]});
+    let sent = json!({"subject": post, "cid": "bafy", "status": "open", "addTags": ["urgent"], "removeTags": ["spam"]});
+    assert_eq!(call(asked), ("org.atgrp.mod.updateSubject".into(), sent));
+    let Ok(Plan::Call { nsid, input, .. }) = planned(
+        "mod_list",
+        json!({"status": "open", "tags": ["urgent"], "sort": "updated"}),
+    ) else {
+        panic!()
+    };
+    assert_eq!(nsid, "org.atgrp.mod.querySubjects");
     assert_eq!(
-        call(asked.clone()),
-        ("org.atgrp.resolveModSubject".into(), asked)
+        input,
+        json!({"status": "open", "tags": ["urgent"], "sort": "updated"})
     );
+    let Ok(Plan::Call { nsid, .. }) = planned("mod_history", json!({"subject": post})) else {
+        panic!()
+    };
+    assert_eq!(nsid, "org.atgrp.mod.querySubjectHistory");
 }
 
 #[test]
@@ -325,7 +354,9 @@ fn plans_a_record_written_as_the_group() {
         rkey: rkey.map(String::from),
         record,
     };
-    // In snake case, in the lexicon's own case: the fields to change.
+    // In snake case, in the lexicon's own case: the fields to change, each
+    // in its own record; the config only if its field is given.
+    let fields = |v: Value| v.as_object().unwrap().clone();
     assert_eq!(
         planned(
             "profile_set",
@@ -333,29 +364,63 @@ fn plans_a_record_written_as_the_group() {
         ),
         Ok(Plan::Edit {
             space: "org.atgrp.meta".into(),
-            collection: "org.atgrp.profile".into(),
             rkey: "self".into(),
-            fields: json!({"displayName": "Riders", "description": ""})
-                .as_object()
-                .unwrap()
-                .clone(),
+            records: vec![(
+                "org.atgrp.about".into(),
+                fields(json!({"displayName": "Riders", "description": ""}))
+            )],
         })
+    );
+    assert_eq!(
+        planned(
+            "profile_set",
+            json!({"website": "https://riders.example", "join_policy": "invite"})
+        ),
+        Ok(Plan::Edit {
+            space: "org.atgrp.meta".into(),
+            rkey: "self".into(),
+            records: vec![
+                (
+                    "org.atgrp.about".into(),
+                    fields(json!({"website": "https://riders.example"}))
+                ),
+                (
+                    "org.atgrp.config".into(),
+                    fields(json!({"joinPolicy": "invite"}))
+                ),
+            ],
+        })
+    );
+    assert_eq!(
+        planned("profile_set", json!({"join_policy": "open"})),
+        Ok(Plan::Edit {
+            space: "org.atgrp.meta".into(),
+            rkey: "self".into(),
+            records: vec![(
+                "org.atgrp.config".into(),
+                fields(json!({"joinPolicy": "open"}))
+            )],
+        })
+    );
+    assert_eq!(
+        planned("profile_set", json!({})),
+        Err("nothing to change: give a field".into())
     );
     let rule = json!({"$type": "org.atgrp.rule", "title": "Be kind", "text": ""});
     assert_eq!(
         planned("rule_set", json!({"title": "Be kind", "text": ""})),
-        Ok(write("meta", "rule", None, Some(rule.clone())))
+        Ok(write("members", "rule", None, Some(rule.clone())))
     );
     assert_eq!(
         planned(
             "rule_set",
             json!({"rule": "3k", "title": "Be kind", "text": ""})
         ),
-        Ok(write("meta", "rule", Some("3k"), Some(rule)))
+        Ok(write("members", "rule", Some("3k"), Some(rule)))
     );
     assert_eq!(
         planned("rule_delete", json!({"rule": "3k"})),
-        Ok(write("meta", "rule", Some("3k"), None))
+        Ok(write("members", "rule", Some("3k"), None))
     );
     assert_eq!(
         planned("rule_delete", json!({"rule": 3})),
@@ -422,23 +487,26 @@ fn plans_an_invite_and_a_grant() {
         Err("person is required, as text".into())
     );
     assert_eq!(
-        planned("role_grant", json!({"role": "leader", "scopes": ["rpc:x"]})),
+        planned(
+            "role_grant",
+            json!({"role": "leader", "permissions": ["rpc:x"]})
+        ),
         Ok(Plan::Grant {
             role: "leader".into(),
-            scopes: vec!["rpc:x".into()],
-            assignable: vec![],
+            permissions: vec!["rpc:x".into()],
+            can_assign: vec![],
             undo: false,
         })
     );
     assert_eq!(
         planned(
             "role_grant",
-            json!({"role": "leader", "assignable": ["member"], "undo": true})
+            json!({"role": "leader", "can_assign": ["member"], "undo": true})
         ),
         Ok(Plan::Grant {
             role: "leader".into(),
-            scopes: vec![],
-            assignable: vec!["member".into()],
+            permissions: vec![],
+            can_assign: vec!["member".into()],
             undo: true,
         })
     );
@@ -483,7 +551,7 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
         other => panic!("{other:?}"),
     };
     let names = |n: &[&str]| n.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    let kept = json!({"$type": "org.atgrp.role", "displayName": "Leader", "scopes": ["b", "c", "b"], "assignable": ["member"], "createdAt": NOW});
+    let kept = json!({"$type": "org.atgrp.role", "displayName": "Leader", "permissions": ["b", "c", "b"], "canAssign": ["member"]});
     // What is named is added to what the role had, once; the rest of the
     // record as it was.
     let record = written(regrant(
@@ -495,7 +563,7 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
     ));
     assert_eq!(
         record,
-        json!({"$type": "org.atgrp.role", "displayName": "Leader", "scopes": ["b", "c", "d"], "assignable": ["member", "*"], "createdAt": NOW})
+        json!({"$type": "org.atgrp.role", "displayName": "Leader", "permissions": ["b", "c", "d"], "canAssign": ["member", "*"]})
     );
     // With undo, what is named is taken away, a list left empty with it;
     // with nothing named, both lists go.
@@ -506,12 +574,12 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
         &names(&["member"]),
         true,
     ));
-    assert_eq!(record["scopes"], json!(["c"]));
-    assert!(record.get("assignable").is_none());
+    assert_eq!(record["permissions"], json!(["c"]));
+    assert!(record.get("canAssign").is_none());
     let record = written(regrant(&kept, "leader", &[], &[], true));
     assert_eq!(
         record,
-        json!({"$type": "org.atgrp.role", "displayName": "Leader", "createdAt": NOW})
+        json!({"$type": "org.atgrp.role", "displayName": "Leader"})
     );
     // A role the group does not have is not granted anything.
     assert_eq!(
@@ -524,13 +592,14 @@ fn regrants_one_role_keeping_the_rest_of_its_record() {
 fn edits_a_record_keeping_what_is_not_given() {
     let avatar =
         json!({"$type": "blob", "ref": {"$link": "bafy"}, "mimeType": "image/png", "size": 3});
-    let kept = json!({"$type": "org.atgrp.profile", "displayName": "Riders", "description": "Bikes", "avatar": avatar, "url": "https://a.test", "joinPolicy": "open"});
-    let fields =
-        json!({"displayName": "Riders United", "description": "", "url": null, "banner": avatar});
+    let newer =
+        json!({"$type": "blob", "ref": {"$link": "bafz"}, "mimeType": "image/png", "size": 4});
+    let kept = json!({"$type": "org.atgrp.about", "displayName": "Riders", "description": "Bikes", "avatar": avatar, "website": "https://a.test"});
+    let fields = json!({"displayName": "Riders United", "description": "", "website": null, "avatar": newer});
     let plan = edited(
         &kept,
         "org.atgrp.meta".into(),
-        "org.atgrp.profile".into(),
+        "org.atgrp.about".into(),
         "self".into(),
         fields.as_object().unwrap().clone(),
     );
@@ -538,19 +607,19 @@ fn edits_a_record_keeping_what_is_not_given() {
         plan,
         Plan::Write {
             space: "org.atgrp.meta".into(),
-            collection: "org.atgrp.profile".into(),
+            collection: "org.atgrp.about".into(),
             rkey: Some("self".into()),
             record: Some(
-                json!({"$type": "org.atgrp.profile", "displayName": "Riders United", "avatar": avatar, "banner": avatar, "joinPolicy": "open"})
+                json!({"$type": "org.atgrp.about", "displayName": "Riders United", "avatar": newer})
             ),
         }
     );
     // None yet: only what is given.
-    let fields = json!({"displayName": "Riders"});
+    let fields = json!({"joinPolicy": "approval"});
     let plan = edited(
         &Value::Null,
         "org.atgrp.meta".into(),
-        "org.atgrp.profile".into(),
+        "org.atgrp.config".into(),
         "self".into(),
         fields.as_object().unwrap().clone(),
     );
@@ -559,7 +628,7 @@ fn edits_a_record_keeping_what_is_not_given() {
     };
     assert_eq!(
         record,
-        Some(json!({"$type": "org.atgrp.profile", "displayName": "Riders"}))
+        Some(json!({"$type": "org.atgrp.config", "joinPolicy": "approval"}))
     );
 }
 #[tokio::test]

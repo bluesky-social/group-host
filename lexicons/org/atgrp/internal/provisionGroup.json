@@ -31,12 +31,8 @@
               "maxLength": 3000
             },
             "joinPolicy": {
-              "type": "string",
-              "knownValues": [
-                "org.atgrp.profile#open",
-                "org.atgrp.profile#request",
-                "org.atgrp.profile#invite"
-              ]
+              "type": "ref",
+              "ref": "org.atgrp.internal.defs#joinPolicy"
             },
             "metaPublicRead": {
               "type": "boolean",

@@ -4,14 +4,14 @@
   "defs": {
     "main": {
       "type": "space",
+      "description": "Basic information and settings for the group. Often public, even when the rest of the group is not.",
       "key": "literal:self",
-      "title": "Group: about",
-      "description": "The group's public face. Profile, rules, how to get in. Often readable by anyone, though may be private to members.",
+      "title": "Group info",
       "collections": [
-        "org.atgrp.profile",
-        "org.atgrp.rule",
-        "org.atgrp.labeler",
-        "com.atproto.label.record"
+        "org.atgrp.about",
+        "org.atgrp.config",
+        "com.atproto.label.record",
+        "com.atproto.space.policy"
       ]
     }
   }

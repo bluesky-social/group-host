@@ -40,8 +40,8 @@ The host runs each tool as the member who connected the client, in that
 group. A tool does one of four things:
 
 - It asks one of the host's methods, as the member.
-- It writes one of the group's records (a profile, rule, role or
-  membership) as the member's own session for the group would. It
+- It writes one of the group's records (its about and config records, a
+  rule, role or membership) as the member's own session for the group would. It
   carries the scope a group token for that space carries, holds to the
   member's current roles, and logs the write under the client.
 - It writes an invite in the invitee's inbox, or takes it back, the same
@@ -65,13 +65,13 @@ isn't text, the host refuses it before asking anything:
 A write replaces the record whole and drops any field not given. The
 exceptions are `profile_set` and `role_grant`, which change only what
 they're given. You can't upload a picture through MCP, so `profile_set`
-keeps the group's pictures as they are.
+keeps the group's avatar unless given one already uploaded.
 
 ## group
 
 | Tool               | Command            | Lexicon                            | What it does                                                                                 |
 | ------------------ | ------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------- |
-| `group_show`       | `group show`       | `org.atgrp.internal.getGroup`          | shows the group as the member may see it: its profile, rules, member count, roles and spaces |
+| `group_show`       | `group show`       | `org.atgrp.internal.getGroup`          | shows the group as the member may see it: its about record, rules, member count, roles and spaces |
 | `group_deactivate` | `group deactivate` | `org.atgrp.internal.deactivateGroup`   | switches the group off. With `undo`, `org.atgrp.internal.activateGroup` switches it back on      |
 | `group_handle`     | `group handle`     | `org.atgrp.internal.updateGroupHandle` | gives the group a handle on a domain that names it, or gives its own address back            |
 | `group_domain`     | `group domain`     | `org.atgrp.internal.putGroupDomain`    | serves the group at its handle's own domain once that domain reaches this host. With `undo`, `org.atgrp.internal.deleteGroupDomain` stops |
@@ -80,13 +80,13 @@ keeps the group's pictures as they are.
 
 | Tool          | Command       | Lexicon                  | What it does                                                                                                                                       |
 | ------------- | ------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profile_set` | `profile set` | `org.atgrp.profile` | changes the fields given in the group's profile (at `self` in its meta space) as the group, and keeps the rest. A field given empty or `null` is removed |
+| `profile_set` | `profile set` | `org.atgrp.about`, `org.atgrp.config` | changes the fields given in the group's about record (at `self` in its meta space) as the group, and keeps the rest. `join_policy` changes its config record beside it, which is written only when it's given. A field given empty or `null` is removed. It answers `{"written": [...]}`, one write for each record changed |
 
 ## rule
 
 | Tool          | Command       | Lexicon               | What it does                                                                                                                                 |
 | ------------- | ------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rule_set`    | `rule set`    | `org.atgrp.rule` | writes a rule in the meta space as the group. It writes the one `rule` names by its key, or without one a new rule keyed by the host's clock |
+| `rule_set`    | `rule set`    | `org.atgrp.rule` | writes a rule in the members space as the group. It writes the one `rule` names by its key, or without one a new rule keyed by the host's clock |
 | `rule_delete` | `rule delete` | `org.atgrp.rule` | deletes the rule `rule` names                                                                                                                |
 
 ## label
@@ -100,9 +100,9 @@ keeps the group's pictures as they are.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `role_set` | `role set` | `org.atgrp.role` | writes the role `role` (its id) in the members space, as the group, with its `scopes` and the roles its holders may assign (`assignable`, `*` for every role) |
+| `role_set` | `role set` | `org.atgrp.role` | writes the role `role` (its id: lowercase letters and hyphens, three or more) in the members space, as the group, with its `permissions` and the roles its holders may assign (`can_assign`, `*` for every role) |
 | `role_delete` | `role delete` | `org.atgrp.role` | deletes a role nobody holds |
-| `role_grant` | `role grant` | `org.atgrp.role` | adds the `scopes` given, and the roles its holders may assign (`assignable`), to those in the record of `role`. With `undo`, it takes them away, or takes all of both if none are given. The rest of the record stays as it was, and the write follows the same rules as any write of it. A role the group doesn't have is refused |
+| `role_grant` | `role grant` | `org.atgrp.role` | adds the `permissions` given, and the roles its holders may assign (`can_assign`), to those in the record of `role`. With `undo`, it takes them away, or takes all of both if none are given. The rest of the record stays as it was, and the write follows the same rules as any write of it. A role the group doesn't have is refused |
 
 ## member
 
@@ -141,7 +141,7 @@ does.
 
 | Tool | Command | Lexicon | What it does |
 | --- | --- | --- | --- |
-| `mod_list` | `mod list` | `org.atgrp.listModSubjects` | shows the moderation queue |
-| `mod_history` | `mod history` | `org.atgrp.getModSubjectHistory` | shows what was done about a subject |
-| `mod_resolve` | `mod resolve` | `org.atgrp.resolveModSubject` | resolves or escalates a subject |
+| `mod_list` | `mod list` | `org.atgrp.mod.querySubjects` | shows the moderation queue: every subject, or those of a `status` (`open` or `resolved`) or with any of the `tags`, oldest first, newest first or latest updated first (`sort`) |
+| `mod_history` | `mod history` | `org.atgrp.mod.querySubjectHistory` | shows what was done about a subject, newest or oldest first (`sort`) |
+| `mod_update` | `mod update` | `org.atgrp.mod.updateSubject` | resolves or reopens a subject (`status`), adds or removes its tags (`add_tags`, `remove_tags`), or adds a `note`. What isn't given stays as it was |
 | `mod_label` | `mod label` | `com.atproto.space.createRecord` | labels a subject `val` as the group, with a `com.atproto.label.record` record beside it, where the member's roles write labels. With `undo`, it deletes the label (`com.atproto.space.deleteRecord`) |

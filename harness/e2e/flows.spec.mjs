@@ -420,6 +420,8 @@ test("changing a group's profile", async () => {
   await page.goto(url('/g/hikers.groups.test'));
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Hikers of the Hills');
+  const site = page.getByRole('textbox', { name: /^Its own site/ });
+  await site.fill('https://hikers.example/');
   // Changed, it says so beside Save, and Save is the thing to press.
   const profile = page.locator('form[action="?/profile"]');
   const said = profile.getByRole('status');
@@ -434,6 +436,7 @@ test("changing a group's profile", async () => {
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(
     'Hikers of the Hills'
   );
+  await expect(site).toHaveValue('https://hikers.example/');
   await page.goto(url('/g/hikers.groups.test'));
   await expect(page.getByRole('heading', { name: 'Hikers of the Hills' })).toBeVisible();
   await expect(page.getByText('Walks on Sundays.')).toBeVisible();
@@ -582,11 +585,18 @@ test('defining a role, then giving it less', async () => {
   await page.goto(url('/g/hikers.groups.test/settings/roles'));
   await page.getByRole('button', { name: 'Create a role' }).click();
   const create = page.getByRole('dialog', { name: 'Create a role' });
-  await create.getByRole('textbox', { name: 'Its key' }).fill('leader');
-  await create.getByRole('textbox', { name: 'Its name' }).fill('Ride leader');
-  // Moderation, a part in running the group: what comes with it shows
+  // An ID the host would refuse is said so as it is typed.
+  const id = create.getByRole('textbox', { name: 'Its ID' });
+  await id.fill('ab');
+  await expect
+    .poll(() => id.evaluate((input) => input.validationMessage))
+    .toBe('Use at least 3 lowercase letters or hyphens, and nothing else.');
+  await id.fill('leader');
+  await expect.poll(() => id.evaluate((input) => input.validity.valid)).toBe(true);
+  await create.getByRole('textbox', { name: /^Its name/ }).fill('Ride leader');
+  // Members, a part in running the group: what comes with it shows
   // ticked, and can't be unticked while it is.
-  await create.locator('input[name=set][value=moderate]').check();
+  await create.locator('input[name=set][value=members]').check();
   const admit = create.locator('input[name=action][value=admit]');
   await expect(admit).toBeChecked();
   await expect(admit).toBeDisabled();
@@ -595,20 +605,20 @@ test('defining a role, then giving it less', async () => {
     has: page.locator('strong', { hasText: 'Ride leader' })
   });
   await expect(row.locator('.tags')).toContainText('admit');
-  await expect(row.locator('.tags')).toContainText('mod.read');
+  await expect(row.locator('.tags')).toContainText('role.assign');
   // To take some of that away: no part, and only invite, ticked alone.
   await row.locator('.action-menu summary').click();
   await row.getByRole('button', { name: 'Change', exact: true }).click();
   const change = page.getByRole('dialog', { name: 'Change this role' }).filter({ visible: true });
-  const moderate = change.locator('input[name=set][value=moderate]');
-  await expect(moderate).toBeChecked();
+  const members = change.locator('input[name=set][value=members]');
+  await expect(members).toBeChecked();
   await expect(change.locator('input[name=action][value=invite]')).toBeDisabled();
-  await moderate.uncheck();
+  await members.uncheck();
   await expect(change.locator('input[name=action][value=admit]')).not.toBeChecked();
   await change.getByRole('checkbox', { name: 'invite', exact: true }).check();
   await change.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(change).toBeHidden();
-  // Saved as shown: invite, and nothing moderation gave.
+  // Saved as shown: invite, and nothing the members part gave.
   await expect(row.locator('.tags')).toHaveText('invite');
   await row.locator('.action-menu summary').click();
   await row.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -735,22 +745,40 @@ test('moderating: a label, and the queue', async () => {
     .getByRole('button', { name: 'Take down' })
     .click();
   await expect(review.locator('.labels')).toContainText('!takedown');
-  // Escalated with a note, it leaves the open queue for the escalated.
+  // Escalated with a note: tagged so, it stays open, and shows on the
+  // escalated tab too.
   await review.getByRole('textbox', { name: 'Note' }).fill('Asked him to stop');
   await review.getByRole('button', { name: 'Escalate' }).click();
-  await expect(row(who.bob.handle)).toHaveCount(0);
+  await expect(review).toHaveCount(0);
+  await expect(row(who.bob.handle).locator(':scope > .row-main .tags')).toContainText('Escalated');
   await page
     .getByRole('navigation', { name: 'The queue' })
     .getByRole('link', { name: 'Escalated' })
     .click();
-  await expect(row(who.bob.handle).locator(':scope > .history .events')).toContainText(
-    /Escalated by[\s\S]*Asked him to stop/
-  );
+  const history = () => row(who.bob.handle).locator(':scope > .history .events');
+  await expect(history()).toContainText('Escalated by');
+  await expect(history()).toContainText('Asked him to stop');
+  // Resolved, it leaves the escalated tab for the resolved.
   await row(who.bob.handle).getByRole('button', { name: 'Review' }).click();
   await review.getByRole('button', { name: 'Resolve' }).click();
   await expect(review).toHaveCount(0);
+  await expect(row(who.bob.handle)).toHaveCount(0);
   await page.goto(url('/g/hikers.groups.test/moderation?status=resolved'));
-  await expect(row(who.bob.handle).locator(':scope > .history .events')).toContainText('Resolved');
+  await expect(history()).toContainText('Resolved');
+  // Reopened, it is open again; then no longer escalated.
+  await row(who.bob.handle).getByRole('button', { name: 'Review' }).click();
+  await review.getByRole('button', { name: 'Reopen' }).click();
+  await expect(review).toHaveCount(0);
+  await expect(row(who.bob.handle)).toHaveCount(0);
+  await page.goto(url('/g/hikers.groups.test/moderation?status=open'));
+  await expect(history()).toContainText('Reopened');
+  await row(who.bob.handle).getByRole('button', { name: 'Review' }).click();
+  await review.getByRole('button', { name: 'Remove escalation' }).click();
+  await expect(review).toHaveCount(0);
+  await expect(history()).toContainText('Escalation removed');
+  await expect(row(who.bob.handle).locator(':scope > .row-main .tags')).not.toContainText(
+    'Escalated'
+  );
   // Someone nobody reported is reported from their review, into the open queue.
   await page.goto(url('/g/hikers.groups.test/moderation'));
   await page.getByRole('combobox', { name: 'Find an account' }).fill(who.dan.handle);
@@ -832,7 +860,7 @@ test('approving an app that reads her group, and revoking it', async () => {
   const riders = page.locator('form', { hasText: '@riders.groups.test' });
   await expect(
     riders.getByText(
-      "Read the group's profile and rules and its members, their roles and its labels, and write nothing"
+      "Read the group's profile and its members, roles, rules and labels, and write nothing"
     )
   ).toBeVisible();
   await expect(

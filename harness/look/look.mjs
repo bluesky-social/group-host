@@ -267,7 +267,9 @@ const tools = {
       (r) => r.ok
     ),
   /// `name` asks to join the group `handle`, with `message` if given: let
-  /// in at once where anyone may join, else waiting.
+  /// in at once where anyone may join, else waiting. A seed run again,
+  /// after one that failed partway, is answered their request or
+  /// membership as it is.
   ask: async (name, handle, message) => {
     const { did } = await fetch(
       `${world.host}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`
@@ -280,13 +282,11 @@ const tools = {
       body: JSON.stringify({ group: did, ...(message ? { message } : {}) })
     });
     const said = await res.json();
-    // A seed run again, after one that failed partway, finds them in.
-    if (said.error === 'AlreadyMember') return said;
     if (!res.ok) throw new Error(`${name} asking to join ${handle}: ${JSON.stringify(said)}`);
     return said;
   },
   /// A page of the console, signed in as `name`, for what only the
-  /// console writes (a group's pictures): `page.goto(world.base + path)`;
+  /// console writes (a group's picture): `page.goto(world.base + path)`;
   /// closed with `page.context().close()`.
   page: async (name) => {
     const context = await browser.newContext({

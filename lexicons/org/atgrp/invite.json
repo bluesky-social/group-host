@@ -4,24 +4,24 @@
   "defs": {
     "main": {
       "type": "record",
+      "description": "An invitation to join the group, written by the group into the invitee's inbox space. Deleting it revokes the invite.",
       "key": "tid",
-      "description": "An invitation, written by the group in its own repo in the invitee's inbox (org.atgrp.invites), through com.atproto.space.*. Deleting it revokes it.",
       "record": {
         "type": "object",
         "required": ["createdAt"],
         "properties": {
-          "message": {
+          "createdAt": {
             "type": "string",
-            "maxGraphemes": 2000,
-            "maxLength": 20000
+            "format": "datetime"
           },
           "expiresAt": {
             "type": "string",
             "format": "datetime"
           },
-          "createdAt": {
+          "message": {
             "type": "string",
-            "format": "datetime"
+            "maxGraphemes": 2000,
+            "maxLength": 20000
           }
         }
       }

@@ -87,88 +87,86 @@ async function asked(event: Event & { request: Request }) {
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
-const PROFILE = 'org.atgrp.profile';
+const ABOUT = 'org.atgrp.about';
+const CONFIG = 'org.atgrp.config';
 const RULE = 'org.atgrp.rule';
 type Did = `did:${string}:${string}`;
 
+/** A role ID as the host takes one: label value syntax, at least three characters. */
+const ROLE_ID = /^[a-z-]{3,64}$/;
+
 /**
- * A picture the profile names by its CID, as the record holds it: its
- * type and size as the host serves it.
+ * A picture the about record names by its CID, as the record holds it:
+ * its type and size as the host serves it.
  */
 async function picture(event: Event, did: string, cid?: string) {
-  if (!cid) return [];
+  if (!cid) return undefined;
   const res = await event.fetch(`/img/${did}/${cid}`);
-  if (!res.ok) return [];
+  if (!res.ok) return undefined;
   const size = (await res.arrayBuffer()).byteLength;
-  return [{ $type: 'blob', ref: { $link: cid }, mimeType: res.headers.get('content-type'), size }];
+  return { $type: 'blob', ref: { $link: cid }, mimeType: res.headers.get('content-type'), size };
 }
+
+type About = Record<string, unknown>;
 
 /**
- * The group's meta space, and its profile there as it is now, to put back
- * whole with what is changed: what the form does not show is kept.
+ * The group's meta space, its about record there as it is now, to put
+ * back whole with what is changed (what the form does not show is kept),
+ * and how people join, as its config record says.
  */
-async function profileNow(event: Event, group: string) {
+async function aboutNow(event: Event, group: string) {
   const { group: now } = await xrpc<typeof getGroup.main>(event, 'org.atgrp.internal.getGroup', {
-    group: group as `did:${string}:${string}`
+    group: group as Did
   });
-  const kept = Object.fromEntries(
-    ['description', 'url'].flatMap((k) => (k in now ? [[k, now[k as keyof typeof now]]] : []))
-  );
-  const [avatar] = await picture(event, now.did, now.avatar);
-  const [banner] = await picture(event, now.did, now.banner);
-  const pictures = { ...(avatar ? { avatar } : {}), ...(banner ? { banner } : {}) };
-  const profile: Record<string, unknown> = {
-    ...kept,
-    ...pictures,
-    displayName: now.displayName ?? now.handle,
-    joinPolicy: now.joinPolicy ?? 'approval'
+  const avatar = await picture(event, now.did, now.avatar);
+  const about: About = {
+    ...(now.description ? { description: now.description } : {}),
+    ...(now.website ? { website: now.website } : {}),
+    ...(avatar ? { avatar } : {}),
+    displayName: now.displayName ?? now.handle
   };
   // Shown only to someone signed in, as everyone here is.
-  return { meta: now.meta ?? '', profile };
+  return { meta: now.meta ?? '', about, joinPolicy: now.joinPolicy ?? 'approval' };
 }
 
-type Profile = Record<string, unknown>;
-
-/** What `write` comes to, given the group's session in its meta space and its profile now: or why not. */
+/** What `write` comes to, given the group's session in its meta space and its about record now: or why not. */
 async function asMeta(
   event: Event,
   group: string,
-  write: (session: GroupSession, profile: Profile) => Promise<Done>
+  write: (session: GroupSession, about: About, joinPolicy: string) => Promise<Done>
 ) {
-  const { meta, profile } = await profileNow(event, group);
-  return withGroup(event, group, meta, (session) => write(session, profile));
+  const { meta, about, joinPolicy } = await aboutNow(event, group);
+  return withGroup(event, group, meta, (session) => write(session, about, joinPolicy));
 }
 
-/** The profile put back whole, as the group. */
-const putProfile = (session: GroupSession, profile: Profile) =>
+/** The about record put back whole, as the group. */
+const putAbout = (session: GroupSession, about: About) =>
   session.write('com.atproto.space.putRecord', {
-    collection: PROFILE,
+    collection: ABOUT,
     rkey: 'self',
-    record: { $type: PROFILE, ...profile }
+    record: { $type: ABOUT, ...about }
   });
 
 /** What a group's settings change: each drawn again after, or the host's refusal said. */
 const all = {
   picture: async (event) => {
     const { group, form } = await asked(event);
-    const slot = text(form, 'slot') === 'banner' ? 'banner' : 'avatar';
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0)
       return fail(400, { failed: m.settings_picture_needed() });
     const bytes = await file.arrayBuffer();
-    return asMeta(event, group, async (session, profile) => {
+    return asMeta(event, group, async (session, about) => {
       const up = await session.upload(bytes, file.type || 'application/octet-stream');
       if (!('blob' in up)) return up;
-      return putProfile(session, { ...profile, [slot]: up.blob });
+      return putAbout(session, { ...about, avatar: up.blob });
     });
   },
   unpicture: async (event) => {
-    const { group, form } = await asked(event);
-    const slot = text(form, 'slot') === 'banner' ? 'banner' : 'avatar';
-    return asMeta(event, group, async (session, profile) => {
-      const kept = { ...profile };
-      delete kept[slot];
-      return putProfile(session, kept);
+    const { group } = await asked(event);
+    return asMeta(event, group, async (session, about) => {
+      const kept = { ...about };
+      delete kept.avatar;
+      return putAbout(session, kept);
     });
   },
   visibility: async (event) => {
@@ -192,31 +190,35 @@ const all = {
   },
   profile: async (event) => {
     const { group, form } = await asked(event);
-    return asMeta(event, group, async (session, now) => {
+    return asMeta(event, group, async (session, now, joinPolicy) => {
       // The form's own fields replace what is there: one left empty goes.
-      const profile: Record<string, unknown> = {
-        ...now,
-        displayName: text(form, 'displayName'),
-        joinPolicy: text(form, 'joinPolicy') || now.joinPolicy
-      };
-      for (const k of ['description', 'url']) {
-        if (text(form, k)) profile[k] = text(form, k);
-        else delete profile[k];
+      const about: About = { ...now, displayName: text(form, 'displayName') };
+      for (const k of ['description', 'website']) {
+        if (text(form, k)) about[k] = text(form, k);
+        else delete about[k];
       }
-      return putProfile(session, profile);
+      const failed = await putAbout(session, about);
+      // How people join is its config record, written only when it changes.
+      const policy = text(form, 'joinPolicy') || joinPolicy;
+      if (failed || policy === joinPolicy) return failed;
+      return session.write('com.atproto.space.putRecord', {
+        collection: CONFIG,
+        rkey: 'self',
+        record: { $type: CONFIG, joinPolicy: policy }
+      });
     });
   },
   rule: async (event) => {
     const { group, form } = await asked(event);
     const record = { $type: RULE, title: text(form, 'title'), text: text(form, 'text') };
-    return asMeta(event, group, (session) =>
+    return withGroup(event, group, membersOf(group), (session) =>
       session.write('com.atproto.space.createRecord', { collection: RULE, record })
     );
   },
   unrule: async (event) => {
     const { group, form } = await asked(event);
     const rkey = text(form, 'rkey');
-    return asMeta(event, group, (session) =>
+    return withGroup(event, group, membersOf(group), (session) =>
       session.write('com.atproto.space.deleteRecord', { collection: RULE, rkey })
     );
   },
@@ -231,26 +233,27 @@ const all = {
       }
     );
     const was = roles?.find((r) => r.key === key);
+    if (!was && !ROLE_ID.test(key)) return fail(400, { failed: m.settings_role_id_invalid() });
     // The form shows the group's permission sets and the actions; any
-    // other scope it does not show stays as it was.
+    // other permission it does not show stays as it was.
     const named = new Set([...Object.values(SCOPES), ...SETS.map((s) => s.scope)]);
     const kept =
       bindings
         ?.find((b) => b.role === key)
-        ?.scopes?.map((s) => s.scope)
+        ?.permissions?.map((s) => s.scope)
         .filter((s) => !named.has(s)) ?? [];
     const sets = form.getAll('set').map((k) => SETS.find((s) => s.key === k)?.scope);
     const actions = form.getAll('action').map((a) => SCOPES[String(a) as keyof typeof SCOPES]);
     const chosen = [...sets, ...actions].filter((s) => s !== undefined);
+    const name = text(form, 'name');
     const role = {
       $type: 'org.atgrp.role',
       ...(was?.description ? { description: was.description } : {}),
       ...(was?.bot ? { bot: true } : {}),
-      displayName: text(form, 'name'),
+      ...(name ? { displayName: name } : {}),
       default: form.get('default') === 'on',
-      scopes: [...new Set([...kept, ...chosen])],
-      assignable: form.getAll('assignable').map(String),
-      createdAt: new Date().toISOString()
+      permissions: [...new Set([...kept, ...chosen])],
+      canAssign: form.getAll('canAssign').map(String)
     };
     return applyAsGroup(event, group, membersOf(group), [
       {

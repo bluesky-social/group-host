@@ -838,21 +838,30 @@ impl Host {
             }
             Plan::Edit {
                 space,
-                collection,
                 rkey,
-                fields,
+                records,
             } => {
                 let uri = format!("at://{}/space/{space}/self", who.group);
-                let kept = self.group_record(&who.group, &uri, &collection, &rkey);
-                let kept = kept.map_err(XrpcError::internal).map_err(said)?;
-                let kept = kept.unwrap_or_default();
-                let write = group_host_mcp::edited(&kept, space, collection, rkey, fields);
-                Box::pin(self.carry_out(who, write)).await
+                let mut done = Vec::new();
+                for (collection, fields) in records {
+                    let kept = self.group_record(&who.group, &uri, &collection, &rkey);
+                    let kept = kept.map_err(XrpcError::internal).map_err(said)?;
+                    let kept = kept.unwrap_or_default();
+                    let write = group_host_mcp::edited(
+                        &kept,
+                        space.clone(),
+                        collection,
+                        rkey.clone(),
+                        fields,
+                    );
+                    done.push(Box::pin(self.carry_out(who, write)).await?);
+                }
+                Ok(json!({ "written": done }))
             }
             Plan::Grant {
                 role,
-                scopes,
-                assignable,
+                permissions,
+                can_assign,
                 undo,
             } => {
                 let members = crate::group::members_space(&who.group);
@@ -860,7 +869,7 @@ impl Host {
                 let kept = self.group_record(&who.group, &members, &collection, &role);
                 let kept = kept.map_err(XrpcError::internal).map_err(said)?;
                 let kept = kept.unwrap_or_default();
-                let write = group_host_mcp::regrant(&kept, &role, &scopes, &assignable, undo)?;
+                let write = group_host_mcp::regrant(&kept, &role, &permissions, &can_assign, undo)?;
                 Box::pin(self.carry_out(who, write)).await
             }
             Plan::Space { kind, skey, policy } => {

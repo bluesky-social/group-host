@@ -130,7 +130,7 @@ async fn an_admin_makes_a_space() {
     let rides = calendar(&did, "rides");
     let made = policy(json!([
         {"role": "member", "read": true},
-        {"role": "admin", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?collection=org.atgrp.event")]},
+        {"role": "admin", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?collection=org.atgrp.event")]},
     ]));
     let body = json!({"spaceType": CALENDAR, "skey": "rides", "policy": made});
     let said = method(&h, &alice, &did, &rides, "createSpace", body).await;
@@ -216,7 +216,7 @@ async fn an_admin_makes_a_space() {
         ),
         (
             at("laps"),
-            json!({"spaceType": CALENDAR, "skey": "laps", "policy": policy(json!([{"role": "member", "scopes": ["repo:org.atgrp.event"]}]))}),
+            json!({"spaceType": CALENDAR, "skey": "laps", "policy": policy(json!([{"role": "member", "permissions": ["repo:org.atgrp.event"]}]))}),
             (400, "InvalidRequest"),
         ),
         // The meta and members spaces come with the group.
@@ -270,7 +270,7 @@ async fn a_space_changes_under_its_policy() {
     // Members read it still but write no more, and leave its writer set;
     // it leaves the index, and its published policy follows.
     let next = json!({"$type": POLICY, "unlisted": true, "grants": [
-        {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=update")]},
+        {"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?manage=update")]},
     ]});
     let body = json!({"space": rides, "policy": next});
     let said = method(&h, &alice, &did, &rides, "updateSpace", body).await;
@@ -298,7 +298,7 @@ async fn a_space_changes_under_its_policy() {
     assert_eq!(said.status, 200, "{}", said.body);
     assert!(entry(&h, &did, &rides).is_some());
     let mine = policy(
-        json!([{"role": "member", "read": true, "write": true, "scopes": [format!("space:{CALENDAR}?manage=update")]}]),
+        json!([{"role": "member", "read": true, "write": true, "permissions": [format!("space:{CALENDAR}?manage=update")]}]),
     );
     let body = json!({"space": rides, "policy": mine});
     let said = method(&h, &bob, &did, &rides, "updateSpace", body).await;
@@ -459,20 +459,54 @@ async fn the_host_alone_writes_a_policy_and_the_index() {
         )
         .await;
     assert_eq!(said.error(), (403, "ScopeMissing"));
-    // A new group's spaces: members read meta, and read and write members.
+    // A new group's spaces: members and admins read meta, and members
+    // read and write members; neither space is in the group's index.
     assert_eq!(
         published(&h, &did, &meta).unwrap()["policy"],
         json!({"$type": POLICY, "publicRead": true, "grants": [
             {"role": "member", "read": true},
-            {"role": "admin", "read": true, "scopes": [format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule")]},
+            {"role": "admin", "read": true},
         ]})
     );
     assert_eq!(
         published(&h, &did, &members).unwrap()["policy"],
         json!({"$type": POLICY, "grants": [{"role": "member", "read": true, "write": true}]})
     );
-    assert!(entry(&h, &did, &meta).is_some());
-    assert!(entry(&h, &did, &members).is_some());
+    assert!(entry(&h, &did, &meta).is_none());
+    assert!(entry(&h, &did, &members).is_none());
+}
+
+#[tokio::test]
+async fn the_meta_and_members_spaces_are_never_indexed_or_hidden() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let (meta, members) = (meta_space(&did), members_space(&did));
+    // `unlisted` in their policies is taken, and means nothing.
+    for (space, grants) in [
+        (
+            &meta,
+            json!([{"role": "member", "read": true}, {"role": "admin", "read": true}]),
+        ),
+        (
+            &members,
+            json!([{"role": "member", "read": true, "write": true}]),
+        ),
+    ] {
+        let asked = json!({"$type": POLICY, "unlisted": true, "grants": grants});
+        let body = json!({"space": space, "policy": asked});
+        let said = method(&h, &alice, &did, space, "updateSpace", body).await;
+        assert_eq!(said.status, 200, "{}", said.body);
+        assert_eq!(entry(&h, &did, space), None);
+    }
+    // getGroup still lists both, first, to a member who reads them.
+    let shown = view(&h, &did, Some(&alice)).await;
+    let uris: Vec<_> = shown["spaces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["uri"].clone())
+        .collect();
+    assert_eq!(uris[..2], [json!(meta), json!(members)]);
 }
 
 #[tokio::test]
@@ -480,7 +514,7 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
     let h = start(&[], false).await;
     let (did, [alice, bob, _]) = group(&h).await;
     // Hosts change any space, and give `member` alone; Bob is one.
-    let host = json!({"$type": format!("{NS}.role"), "displayName": "Host", "scopes": ["space:*?manage=update"], "assignable": ["member"], "createdAt": "2026-11-03T00:00:00Z"});
+    let host = json!({"$type": format!("{NS}.role"), "displayName": "Host", "permissions": ["space:*?manage=update"], "canAssign": ["member"]});
     let role = Write::Create {
         collection: format!("{NS}.role"),
         rkey: "host".into(),
@@ -522,7 +556,7 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
         (
             &rides,
             change(
-                json!([{"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?collection=org.atgrp.event")]}, admin]),
+                json!([{"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?collection=org.atgrp.event")]}, admin]),
             ),
         ),
         // Reading, where he does not read.
@@ -541,7 +575,7 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
     }
     // A scope he holds, for a role he gives, he may give.
     let body = change(json!([
-        {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=update")]},
+        {"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?manage=update")]},
         admin,
     ]));
     let said = method(&h, &bob, &did, &rides, "updateSpace", body).await;
@@ -550,7 +584,7 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
     // any space, any scope a grant may hold there.
     let body = change(json!([
         {"role": "host", "read": true, "write": true},
-        {"role": "member", "read": true, "scopes": [
+        {"role": "member", "read": true, "permissions": [
             format!("space:{CALENDAR}?collection=org.atgrp.event"),
             format!("space:{CALENDAR}?action=read_self"),
             "space:*?manage=delete",
@@ -575,8 +609,8 @@ async fn a_change_grants_no_more_than_its_maker_holds() {
         assert_eq!(said.error(), (400, "MembersSpaceFixed"), "{asked}");
     }
     let kept = policy(
-        json!([{"role": "member", "read": true, "write": true, "scopes": [
-            format!("space:{NS}.members?collection={NS}.acceptance"),
+        json!([{"role": "member", "read": true, "write": true, "permissions": [
+            format!("space:{NS}.members?collection={NS}.confirmation"),
         ]}]),
     );
     let body = json!({"space": members, "policy": kept});
@@ -661,7 +695,7 @@ async fn an_admin_ends_a_space() {
     // One left out of the index ends as well, by the grant in its policy
     // to delete it; and one whose ender lost that grant is not ended.
     let hidden = calendar(&did, "hidden");
-    let deleters = json!({"$type": POLICY, "unlisted": true, "grants": [{"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=delete")]}]});
+    let deleters = json!({"$type": POLICY, "unlisted": true, "grants": [{"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?manage=delete")]}]});
     let body = json!({"spaceType": CALENDAR, "skey": "hidden", "policy": deleters});
     let said = method(&h, &alice, &did, &hidden, "createSpace", body).await;
     assert_eq!(said.status, 200, "{}", said.body);

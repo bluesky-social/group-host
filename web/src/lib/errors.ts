@@ -16,7 +16,6 @@ const SAID: Record<string, () => string> = {
   AlreadyAdded: m.error_already_added,
   AlreadyDeactivated: m.error_already_deactivated,
   AlreadyHere: m.error_already_here,
-  AlreadyMember: m.error_already_member,
   AuthMissing: m.error_auth_missing,
   AuthRequired: m.error_auth_missing,
   AuthenticationRequired: m.error_auth_missing,

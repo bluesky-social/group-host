@@ -3,8 +3,8 @@
 For every agent working here: CLAUDE.md is this file, imported.
 
 This is a group host for atproto, built in Rust and Svelte,
-implementing the Atmosphere Groups proposal
-(https://tangled.org/opensocial.group/proposal). `docs/design/README.md`
+implementing the Atmosphere Groups spec
+(https://tangled.org/atmospheregroups.org/spec). `docs/design/README.md`
 says what is here, what is still to come, and in what order.
 
 Use `rustup run stable cargo` (the Justfile's `cargo`), not a system cargo.

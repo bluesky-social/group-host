@@ -493,6 +493,20 @@ pub const MIGRATIONS: &[&str] = &[
     CREATE INDEX issued_credential_grant ON issued_credential (grant_id);
     ALTER TABLE space_registration ADD COLUMN grant_id TEXT;
 ",
+    // A subject's tags, which its moderators give it, and a tag event's
+    // tags added and taken away; the queue in the order its subjects came.
+    "
+    CREATE TABLE mod_tag (
+        grp TEXT NOT NULL REFERENCES account (did),
+        subject TEXT NOT NULL,
+        tag TEXT NOT NULL,
+        PRIMARY KEY (grp, subject, tag)
+    );
+    CREATE INDEX mod_tag_tag ON mod_tag (grp, tag);
+    ALTER TABLE mod_event ADD COLUMN added TEXT;
+    ALTER TABLE mod_event ADD COLUMN removed TEXT;
+    CREATE INDEX mod_subject_created ON mod_subject (grp, created_at);
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -648,6 +662,7 @@ const FORGET_ACCOUNT: &[&str] = &[
     "DELETE FROM migration_export WHERE did = ?1",
     "DELETE FROM recovery_key WHERE grp = ?1",
     "DELETE FROM mod_event WHERE grp = ?1",
+    "DELETE FROM mod_tag WHERE grp = ?1",
     "DELETE FROM mod_subject WHERE grp = ?1",
     "DELETE FROM app_password WHERE grp = ?1",
     "DELETE FROM group_activity WHERE grp = ?1",

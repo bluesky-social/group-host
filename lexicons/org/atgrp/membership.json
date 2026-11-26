@@ -4,14 +4,11 @@
   "defs": {
     "main": {
       "type": "record",
+      "description": "A member's roles in the group, keyed by the member's DID. Written by the group in the members space, and paired with the member's confirmation.",
       "key": "any",
-      "description": "A member's roles in the group, keyed by the member's DID, in the members space. Written by the group authority, and paired with the member's acceptance. Writes are bounded by the writer's assignable roles. Creating one admits one waiting to join and decides their request; deleting one ejects the member.",
       "record": {
         "type": "object",
-        "required": [
-          "roles",
-          "createdAt"
-        ],
+        "required": ["roles", "createdAt"],
         "properties": {
           "roles": {
             "type": "array",
@@ -19,7 +16,7 @@
             "items": {
               "type": "string",
               "format": "record-key",
-              "description": "A role record's key."
+              "description": "Role definition record key."
             }
           },
           "createdAt": {

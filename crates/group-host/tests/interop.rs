@@ -158,7 +158,7 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
 
     // The group writes there, and its host tells Bob's PDS.
     let rule =
-        json!({"$type": "org.atgrp.rule", "title": "Clip in", "createdAt": "2026-11-03T00:00:00Z"});
+        json!({"$type": "org.atgrp.rule", "title": "Clip in", "text": "Clip in before the climb."});
     let commit = h
         .host
         .space_write(
@@ -447,7 +447,7 @@ async fn an_invite_into_an_inbox_on_the_reference_pds() {
         "com.atproto.space.createSpace",
         jwt,
         &json!({
-            "spaceType": "org.atgrp.invites",
+            "spaceType": "org.atgrp.inbox",
             "skey": "self",
             "policy": {"$type": "com.atproto.memberspace.policy", "publicWrite": true},
         }),

@@ -4,38 +4,32 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Leave the group.",
+      "description": "Leave a group, deleting the caller's membership, which the group authored. The caller should also delete their confirmation. Requires service auth.",
       "input": {
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": [
-            "group"
-          ],
+          "required": ["group"],
           "properties": {
             "group": {
               "type": "string",
-              "format": "did",
-              "description": "The group DID. Every method is served by the group's host and authorized against that group's roles."
+              "format": "did"
             }
           }
         }
       },
-      "output": {
-        "encoding": "application/json",
-        "schema": {
-          "type": "object",
-          "properties": {}
-        }
-      },
       "errors": [
         {
+          "name": "GroupNotFound",
+          "description": "The group isn't hosted here."
+        },
+        {
           "name": "NotAMember",
-          "description": "The account is not a member of the group."
+          "description": "The caller isn't a member of the group."
         },
         {
           "name": "LastConfigurer",
-          "description": "You're the group's only admin. Make someone else an admin first."
+          "description": "The caller is the group's only admin."
         }
       ]
     }

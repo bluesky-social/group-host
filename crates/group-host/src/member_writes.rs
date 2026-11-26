@@ -3,14 +3,16 @@
 //! (memberships). The host makes each write only as it keeps the group
 //! whole, and does what the write means.
 //!
-//! - A role is a key of 64 characters at most. It goes only once nobody
-//!   holds it.
-//! - Roles are the configurers'. In a role a writer changes the grant
-//!   (its scopes and `assignable`) only of a role they may assign, or one
-//!   the batch makes; adds no scope their own roles do not hold, a
-//!   permission set as the scopes it lists; and lets the role assign only
-//!   roles they may assign. `*` in `assignable` is every role, those made
-//!   later too, and only one who may assign every role may give it.
+//! - A role is keyed by its ID, as a label value is written: lowercase
+//!   letters and `-`, 3 to 64 of them. It goes only once nobody holds it.
+//! - Roles are written by those whose permissions write them
+//!   (`authManageAdmin`). In a role a writer changes the grant (its
+//!   `permissions` and `canAssign`) only of a role they may assign, or
+//!   one the batch makes; adds no permission their own roles do not
+//!   hold, a permission set as the permissions it lists; and lets the
+//!   role assign only roles they may assign. `*` in `canAssign` is every
+//!   role, those made later too, and only one who may assign every role
+//!   may give it.
 //! - Writing a membership for someone waiting to join admits them, with
 //!   roles the writer's `admit` grants may give, and their request goes.
 //!   Writing one for a member changes their roles, each one added or taken
@@ -36,7 +38,9 @@ use crate::group_members::Members;
 use crate::moderation::Event;
 use crate::oauth_resource::Acting;
 use crate::oauth_scope::{scopes_of, set_of};
-use crate::rbac::{EVERY_ROLE, Grant, NS, actions_for, actions_of, assigns, roles_of};
+use crate::rbac::{
+    EVERY_ROLE, Grant, NS, actions_for, actions_of, assigns, members_records_writes, roles_of,
+};
 use crate::repo::Write;
 use crate::scopes::covers;
 use crate::time::now_millis;
@@ -51,8 +55,24 @@ fn bad(error: &'static str, message: impl Into<String>) -> XrpcError {
     XrpcError::new(StatusCode::BAD_REQUEST, error, message)
 }
 
-/// The longest role key.
-const ROLE_KEY_AT_MOST: usize = 64;
+/// The longest role ID.
+const ROLE_ID_AT_MOST: usize = 64;
+
+/// The shortest role ID: apps may show it.
+const ROLE_ID_AT_LEAST: usize = 3;
+
+/// Refuses a role ID that is not as the proposal has them: label value
+/// syntax (lowercase letters and `-`), 3 to 64 characters.
+fn role_id(rkey: &str) -> Result<(), XrpcError> {
+    let syntax = rkey.bytes().all(|b| b.is_ascii_lowercase() || b == b'-');
+    let length = (ROLE_ID_AT_LEAST..=ROLE_ID_AT_MOST).contains(&rkey.len());
+    if !syntax || !length {
+        return Err(invalid(format!(
+            "a role ID is {ROLE_ID_AT_LEAST} to {ROLE_ID_AT_MOST} lowercase letters and -, not {rkey}"
+        )));
+    }
+    Ok(())
+}
 
 /// Which of the members space's collections a write is of, if one of
 /// these.
@@ -62,16 +82,17 @@ fn kind(write: &Write) -> Option<&'static str> {
     ["role", "membership"].into_iter().find(|k| *k == name)
 }
 
-/// What a holder of `roles` may write in the members space, as the group,
-/// by collection: roles if they configure the group; memberships as they
-/// may admit (create), give roles (update) and put out (delete).
-pub fn members_writes(grants: &[Grant], roles: &[String]) -> BTreeMap<String, BTreeSet<String>> {
+/// What a holder of `roles` may write in `group`'s members space, as the
+/// group, by collection: its rules, labeler and roles as their
+/// permissions across the group write them; memberships as they may
+/// admit (create), give roles (update) and put out (delete).
+pub fn members_writes(
+    grants: &[Grant],
+    roles: &[String],
+    group: &str,
+) -> BTreeMap<String, BTreeSet<String>> {
     let actions = actions_for(grants, roles);
-    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    if actions.contains("group.configure") {
-        let all = ["create", "update", "delete"].map(String::from);
-        out.insert(format!("{NS}.role"), all.into());
-    }
+    let mut out = members_records_writes(grants, roles, group);
     let by = [
         ("admit", "create"),
         ("role.assign", "update"),
@@ -108,17 +129,18 @@ pub(crate) fn own_scopes(
 
 /// The roles holders of `roles` may give or take, for `action`, or for
 /// any if none is named: `*` among them for every role.
-pub(crate) fn assignable(
+pub(crate) fn can_assign(
     grants: &[Grant],
     roles: &[String],
     action: Option<&str>,
 ) -> BTreeSet<String> {
     let theirs = grants.iter().filter(|g| roles.contains(&g.role));
-    let doing = theirs.filter(|g| action.is_none_or(|a| actions_of(&g.scopes).contains(a)));
-    doing.flat_map(|g| g.assignable.iter().cloned()).collect()
+    let doing = theirs.filter(|g| action.is_none_or(|a| actions_of(&g.permissions).contains(a)));
+    doing.flat_map(|g| g.can_assign.iter().cloned()).collect()
 }
 
-/// The scopes `scope` is, a permission set of ours as those it lists.
+/// The permissions `scope` is, a permission set of ours as those it
+/// lists.
 pub(crate) fn expanded(scope: &str) -> Vec<String> {
     match set_of(scope) {
         Some(set) => scopes_of(set),
@@ -126,12 +148,12 @@ pub(crate) fn expanded(scope: &str) -> Vec<String> {
     }
 }
 
-/// The scopes holders of `roles` hold across the group, each permission
-/// set as the scopes it lists.
+/// The permissions holders of `roles` hold across the group, each
+/// permission set as the permissions it lists.
 pub(crate) fn held(grants: &[Grant], roles: &[String]) -> Vec<String> {
     let theirs = grants.iter().filter(|g| roles.contains(&g.role));
     theirs
-        .flat_map(|g| g.scopes.iter().flat_map(|s| expanded(s)))
+        .flat_map(|g| g.permissions.iter().flat_map(|s| expanded(s)))
         .collect()
 }
 
@@ -158,7 +180,7 @@ impl Book {
     fn run(&self) -> bool {
         let configuring = |r: &String| {
             let grant = self.roles.get(r);
-            grant.is_some_and(|g| actions_of(&g.scopes).contains("group.configure"))
+            grant.is_some_and(|g| actions_of(&g.permissions).contains("group.configure"))
         };
         let mut held = self.members.values().flatten();
         held.any(configuring)
@@ -210,7 +232,7 @@ impl Writer<'_> {
         changed: impl IntoIterator<Item = &'a String>,
         action: &str,
     ) -> Result<(), XrpcError> {
-        let mine = assignable(self.grants, self.roles, Some(action));
+        let mine = can_assign(self.grants, self.roles, Some(action));
         let blocked: Vec<&String> = changed.into_iter().filter(|r| !assigns(&mine, r)).collect();
         if !blocked.is_empty() {
             return Err(bad(
@@ -224,8 +246,9 @@ impl Writer<'_> {
     /// Refuses a write of the role `key`, its grant `was` before and `now`
     /// after (none for none, as one made or deleted), that changes the
     /// grant of a role the writer may not assign unless the batch makes
-    /// it (`new`), adds a scope their roles do not hold, or lets the role
-    /// assign one they may not. The roles it lets the role assign anew.
+    /// it (`new`), adds a permission their roles do not hold, or lets the
+    /// role assign one they may not. The roles it lets the role assign
+    /// anew.
     fn role(
         &self,
         key: &str,
@@ -235,10 +258,10 @@ impl Writer<'_> {
     ) -> Result<Vec<String>, XrpcError> {
         let none = Grant::of(key, &Value::Null);
         let (before, after) = (was.unwrap_or(&none), now.unwrap_or(&none));
-        if (&before.scopes, &before.assignable) == (&after.scopes, &after.assignable) {
+        if (&before.permissions, &before.can_assign) == (&after.permissions, &after.can_assign) {
             return Ok(Vec::new());
         }
-        let union = assignable(self.grants, self.roles, None);
+        let union = can_assign(self.grants, self.roles, None);
         if !new && !assigns(&union, key) {
             return Err(bad(
                 "NotAssignable",
@@ -246,7 +269,10 @@ impl Writer<'_> {
             ));
         }
         let held = held(self.grants, self.roles);
-        let added = after.scopes.iter().filter(|s| !before.scopes.contains(s));
+        let added = after
+            .permissions
+            .iter()
+            .filter(|s| !before.permissions.contains(s));
         for scope in added {
             let covered = expanded(scope).iter().all(|s| covers(&held, s, self.group));
             if !covered {
@@ -256,8 +282,8 @@ impl Writer<'_> {
                 ));
             }
         }
-        let listed = after.assignable.iter();
-        let listed: Vec<&String> = listed.filter(|r| !before.assignable.contains(r)).collect();
+        let listed = after.can_assign.iter();
+        let listed: Vec<&String> = listed.filter(|r| !before.can_assign.contains(r)).collect();
         // Every role only from one who may give every role.
         let mine = |r: &&String| match r.as_str() {
             EVERY_ROLE => union.contains(EVERY_ROLE),
@@ -280,7 +306,7 @@ impl Host {
         roles: &[String],
     ) -> Result<BTreeMap<String, BTreeSet<String>>, XrpcError> {
         let members = Members::of(self, group)?;
-        Ok(members_writes(&members.grants, roles))
+        Ok(members_writes(&members.grants, roles, group))
     }
 
     /// Refuses `writes` in `group`'s members space, by the member who signed
@@ -312,11 +338,7 @@ impl Host {
                     writer.role(rkey, was.as_ref(), None, new)?;
                 }
                 (Some("role"), Write::Create { value, .. } | Write::Update { value, .. }) => {
-                    if rkey.len() > ROLE_KEY_AT_MOST {
-                        return Err(invalid(format!(
-                            "a role is a key of {ROLE_KEY_AT_MOST} characters at most"
-                        )));
-                    }
+                    role_id(rkey)?;
                     let now = Grant::of(rkey, value);
                     let new = !before.roles.contains_key(rkey);
                     let names = writer.role(rkey, book.roles.get(rkey), Some(&now), new)?;

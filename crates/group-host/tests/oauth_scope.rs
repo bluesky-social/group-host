@@ -35,7 +35,7 @@ fn asked(scopes: &[&str]) -> Vec<String> {
 
 /// Makes `did` the role `grant` is of, with that grant.
 async fn define(h: &Running, did: &str, grant: Grant) {
-    let value = json!({"$type": format!("{NS}.role"), "displayName": grant.role, "scopes": grant.scopes, "assignable": grant.assignable});
+    let value = json!({"$type": format!("{NS}.role"), "displayName": grant.role, "permissions": grant.permissions, "canAssign": grant.can_assign});
     let write = Write::Create {
         collection: format!("{NS}.role"),
         rkey: grant.role,
@@ -59,8 +59,8 @@ async fn group(h: &Running) -> (String, String, Authority) {
     )
     .await;
     let policy = json!({"$type": "org.atgrp.policy", "grants": [
-        {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
-        {"role": "admin", "read": true, "scopes": [format!("space:{CALENDAR}?collection=*")]},
+        {"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?collection={EVENT}&action=create")]},
+        {"role": "admin", "read": true, "permissions": [format!("space:{CALENDAR}?collection=*")]},
     ]});
     let made = h
         .host
@@ -81,12 +81,12 @@ async fn keeps_for_each_role_what_its_grants_hold() {
     let (did, _, _) = group(&h).await;
     let all = asked(&[
         "atproto",
-        "include:org.atgrp.authManageGroup",
+        "include:org.atgrp.authManageAdmin",
         "include:com.example.other",
         "repo:app.bsky.feed.post?action=create",
         "repo:app.bsky.feed.like",
         "rpc:app.bsky.feed.getTimeline?aud=*",
-        "rpc:org.atgrp.listModSubjects?aud=*",
+        "rpc:org.atgrp.mod.querySubjects?aud=*",
         "rpc:*?aud=*",
         "blob:*/*",
         "transition:generic",
@@ -96,12 +96,12 @@ async fn keeps_for_each_role_what_its_grants_hold() {
         admin,
         asked(&[
             "atproto",
-            "include:org.atgrp.authManageGroup",
+            "include:org.atgrp.authManageAdmin",
             "repo:app.bsky.feed.post?action=create",
             "repo:app.bsky.feed.like",
             "rpc:app.bsky.feed.getTimeline?aud=*",
             // One of the host's own, as an admin holds mod.read.
-            "rpc:org.atgrp.listModSubjects?aud=*",
+            "rpc:org.atgrp.mod.querySubjects?aud=*",
             "blob:*/*",
         ])
     );
@@ -325,7 +325,7 @@ async fn keeps_a_manage_scope_for_roles_that_may_do_it_to_spaces() {
     // A space's policy lets members change it, and so spaces of its
     // type, that one by its key; none other, and never ending it.
     let policy = json!({"$type": "org.atgrp.policy", "grants": [
-        {"role": "member", "read": true, "scopes": [format!("space:{CALENDAR}?manage=update")]},
+        {"role": "member", "read": true, "permissions": [format!("space:{CALENDAR}?manage=update")]},
     ]});
     h.host.store.set_policy(&uri, &policy).unwrap();
     for (scope, kept) in [
@@ -369,7 +369,7 @@ fn makes_a_grant_concrete() {
     let scope = concrete(
         &asked(&[
             "atproto",
-            "include:org.atgrp.authManageProfile",
+            "include:org.atgrp.authManageBasic",
             "space:com.example.calendar?authority=self&skey=rides",
             "space:com.example.calendar",
             "space:com.example.calendar?action=read",
@@ -382,7 +382,8 @@ fn makes_a_grant_concrete() {
         scopes,
         [
             "atproto",
-            "space:org.atgrp.meta?authority=did:plc:riders&skey=self&collection=org.atgrp.profile&collection=org.atgrp.rule&action=read&action=create&action=update&action=delete",
+            "space:org.atgrp.meta?authority=did:plc:riders&skey=self&collection=org.atgrp.about&action=read&action=create&action=update&action=delete",
+            "space:org.atgrp.members?authority=did:plc:riders&skey=self&collection=org.atgrp.rule&action=read&action=create&action=update&action=delete",
             "space:com.example.calendar?authority=did:plc:riders&skey=rides&collection=*",
             "space:com.example.calendar?collection=*",
             "space:com.example.calendar?action=read",
@@ -390,65 +391,59 @@ fn makes_a_grant_concrete() {
     );
 }
 
-/// Sets `did`'s meta space's policy: as a new group's, and `role` writing
-/// its profile and rules as the group.
-fn profile_writer(h: &Running, did: &str, role: &str) {
-    let write = format!("space:{NS}.meta?collection={NS}.profile&collection={NS}.rule");
-    let policy = json!({"$type": "org.atgrp.policy", "grants": [
-        {"role": "member", "read": true},
-        {"role": "admin", "read": true, "scopes": [write]},
-        {"role": role, "read": true, "scopes": [write]},
-    ]});
-    h.host.store.set_policy(&meta_space(did), &policy).unwrap();
-}
-
 #[tokio::test]
 async fn keeps_of_a_permission_set_what_the_roles_grant() {
     let h = start(&[], false).await;
     let (did, _, _) = group(&h).await;
-    let moderate = format!("include:{NS}.authModerate");
-    define(
-        &h,
-        &did,
-        Grant {
-            role: "moderator".into(),
-            scopes: vec![moderate],
-            assignable: vec![],
-        },
-    )
-    .await;
+    let set = |name: &str| format!("include:{NS}.{name}");
+    for (role, permissions) in [
+        ("moderator", set("authModerate")),
+        ("editor", set("authManageBasic")),
+    ] {
+        let grant = Grant {
+            role: role.into(),
+            permissions: vec![permissions],
+            can_assign: vec![],
+        };
+        define(&h, &did, grant).await;
+    }
     for (role, actions) in [
         ("doorkeeper", &["admit", "eject"][..]),
         ("steward", &["space.configure"][..]),
-        ("editor", &[][..]),
     ] {
         define(&h, &did, Grant::with(role, actions, &[], &[])).await;
     }
-    profile_writer(&h, &did, "editor");
     let narrow =
         |r: &[&str], scopes: &[&str]| h.host.narrow(&did, &roles(r), &asked(scopes)).unwrap();
-    let group = "include:org.atgrp.authManageGroup";
+    let admin = "include:org.atgrp.authManageAdmin";
+    let members = "include:org.atgrp.authManageMembers";
     let moderation = "include:org.atgrp.authModerate";
-    let profile = "include:org.atgrp.authManageProfile";
+    let basic = "include:org.atgrp.authManageBasic";
     // Whole, for roles that grant all of it.
-    for set in [group, moderation, profile] {
+    for set in [admin, members, moderation, basic] {
         assert_eq!(narrow(&["admin"], &[set]), [set], "{set}");
     }
-    // A moderator asked to run the group gets moderation: each tier
-    // holds the one below it.
-    assert_eq!(narrow(&["moderator"], &[group]), [moderation]);
+    // A moderator asked to run the group gets moderation, which the admin
+    // set holds; of running its members, putting them out.
+    assert_eq!(narrow(&["moderator"], &[admin]), [moderation]);
     assert_eq!(narrow(&["moderator"], &[moderation]), [moderation]);
-    assert_eq!(narrow(&["moderator"], &[profile]), Vec::<String>::new());
-    // A role that writes the profile and rules by the meta space's
-    // policy gets the profile, from any tier.
-    for set in [group, profile] {
-        assert_eq!(narrow(&["editor"], &[set]), [profile], "{set}");
+    assert_eq!(narrow(&["moderator"], &[basic]), Vec::<String>::new());
+    assert_eq!(
+        narrow(&["moderator"], &[members]),
+        [format!(
+            "space:{NS}.members?authority=self&skey=self&collection={NS}.membership&action=read&action=delete"
+        )]
+    );
+    // A role holding the basics, the about record and rules, gets them
+    // from the admin set too.
+    for set in [admin, basic] {
+        assert_eq!(narrow(&["editor"], &[set]), [basic], "{set}");
     }
     assert_eq!(narrow(&["editor"], &[moderation]), Vec::<String>::new());
-    // Less than any tier: what of it the roles grant, as scopes.
+    // Less than any set: what of it the roles grant, as scopes.
     let all = "action=read&action=create&action=update&action=delete";
     assert_eq!(
-        narrow(&["doorkeeper"], &[moderation, "blob:*/*"]),
+        narrow(&["doorkeeper"], &[members, "blob:*/*"]),
         [
             format!(
                 "space:{NS}.members?authority=self&skey=self&collection={NS}.membership&action=read&action=create&action=delete"
@@ -459,18 +454,17 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
         ]
     );
     assert_eq!(
-        narrow(&["steward"], &[group]),
+        narrow(&["steward"], &[admin]),
         [
             format!("space:{NS}.meta?authority=self&skey=self&action=read&manage=update"),
             format!("space:{NS}.members?authority=self&skey=self&action=read&manage=update"),
         ]
     );
     assert_eq!(
-        narrow(&["editor", "doorkeeper"], &[group]),
+        narrow(&["editor", "doorkeeper"], &[admin]),
         [
-            format!(
-                "space:{NS}.meta?authority=self&skey=self&collection={NS}.profile&collection={NS}.rule&{all}"
-            ),
+            format!("space:{NS}.meta?authority=self&skey=self&collection={NS}.about&{all}"),
+            format!("space:{NS}.members?authority=self&skey=self&collection={NS}.rule&{all}"),
             format!(
                 "space:{NS}.members?authority=self&skey=self&collection={NS}.membership&action=read&action=create&action=delete"
             ),
@@ -479,7 +473,7 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
         ]
     );
     assert_eq!(
-        narrow(&["member"], &[group, "blob:*/*"]),
+        narrow(&["member"], &[admin, "blob:*/*"]),
         Vec::<String>::new()
     );
     // A person's own set is never kept for a group's session, nor what is
@@ -487,7 +481,7 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
     for role in ["admin", "moderator", "member"] {
         let others = [
             "include:org.atgrp.authParticipate",
-            "include:org.atgrp.profile",
+            "include:org.atgrp.about",
         ];
         assert_eq!(narrow(&[role], &others), Vec::<String>::new(), "{role}");
     }
@@ -505,8 +499,8 @@ async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
         &did,
         Grant {
             role: "moderator".into(),
-            scopes: vec![moderate.clone()],
-            assignable: vec![],
+            permissions: vec![moderate.clone()],
+            can_assign: vec![],
         },
     )
     .await;
@@ -515,8 +509,8 @@ async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
         &did,
         Grant {
             role: "labeller".into(),
-            scopes: vec![moderate, every.clone()],
-            assignable: vec![],
+            permissions: vec![moderate, every.clone()],
+            can_assign: vec![],
         },
     )
     .await;
@@ -539,7 +533,7 @@ async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
     // As does a grant of them in its policy, there only.
     let policy = json!({"$type": "org.atgrp.policy", "grants": [
         {"role": "member", "read": true},
-        {"role": "moderator", "read": true, "scopes": [every]},
+        {"role": "moderator", "read": true, "permissions": [every]},
     ]});
     h.host.store.set_policy(&calendar_uri, &policy).unwrap();
     let moderator = narrow(&["member", "moderator"], &[&every]);
@@ -548,11 +542,15 @@ async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
 }
 
 #[tokio::test]
-async fn a_profile_writer_keeps_the_profile_with_what_it_approved() {
+async fn a_holder_of_the_basics_keeps_the_about_record_and_rules_with_what_it_approved() {
     let h = start(&[], false).await;
     let (did, _, alice) = group(&h).await;
-    define(&h, &did, Grant::with("editor", &[], &[], &[])).await;
-    profile_writer(&h, &did, "editor");
+    let basics = Grant {
+        role: "editor".into(),
+        permissions: vec![format!("include:{NS}.authManageBasic")],
+        can_assign: vec![],
+    };
+    define(&h, &did, basics).await;
     let [_, bob, _] = people(&h).await;
     let membership = json!({"$type": format!("{NS}.membership"), "roles": ["member", "editor"], "createdAt": "2026-11-03T00:00:00Z"});
     let write = Write::Create {
@@ -564,37 +562,67 @@ async fn a_profile_writer_keeps_the_profile_with_what_it_approved() {
         .space_write(&did, &members_space(&did), &[write])
         .await
         .unwrap();
-    let app = App::loopback("atproto include:org.atgrp.authManageGroup");
+    let app = App::loopback("atproto include:org.atgrp.authManageAdmin");
     let tokens = app.sign_in(&h, &bob, &did).await;
-    assert!(
-        tokens["scope"]
-            .as_str()
-            .unwrap()
-            .contains(&format!("collection={NS}.profile")),
-        "{tokens}"
-    );
+    let scope = tokens["scope"].as_str().unwrap();
+    for collection in ["about", "rule"] {
+        assert!(
+            scope.contains(&format!("collection={NS}.{collection}")),
+            "{scope}"
+        );
+    }
     let token = tokens["access_token"].as_str().unwrap();
-    let meta = meta_space(&did);
-    let profile = json!({"$type": format!("{NS}.profile"), "displayName": "Bob's riders", "joinPolicy": "open"});
+    let (meta, members) = (meta_space(&did), members_space(&did));
+    let about = json!({"$type": format!("{NS}.about"), "displayName": "Bob's riders"});
     let said = app
-        .put(&h, token, &meta, &format!("{NS}.profile"), "self", profile)
+        .put(&h, token, &meta, &format!("{NS}.about"), "self", about)
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
-    // Its labeler is the group's administration's, not its profile's.
+    let rule = json!({"$type": format!("{NS}.rule"), "title": "Ride safe", "text": "Helmets on."});
+    let said = app
+        .put(
+            &h,
+            token,
+            &members,
+            &format!("{NS}.rule"),
+            "3jzfcijpj2z2a",
+            rule,
+        )
+        .await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    // The config and labeler are the group's administration's, not the
+    // basics'.
+    let config = json!({"$type": format!("{NS}.config"), "joinPolicy": "open"});
+    let said = app
+        .put(&h, token, &meta, &format!("{NS}.config"), "self", config)
+        .await;
+    assert_eq!(said.status, 403, "{}", said.body);
     let labeler = h
         .host
-        .group_record(&did, &meta, &format!("{NS}.labeler"), "self")
+        .group_record(&did, &members, &format!("{NS}.labeler"), "self")
         .unwrap()
         .unwrap();
     let said = app
-        .put(&h, token, &meta, &format!("{NS}.labeler"), "self", labeler)
+        .put(
+            &h,
+            token,
+            &members,
+            &format!("{NS}.labeler"),
+            "self",
+            labeler,
+        )
         .await;
     assert_eq!(said.status, 403, "{}", said.body);
     // Alice, an admin, keeps all of it.
-    let alices = App::loopback("atproto include:org.atgrp.authManageGroup");
+    let alices = App::loopback("atproto include:org.atgrp.authManageAdmin");
     let tokens = alices.sign_in(&h, &alice, &did).await;
     let scope = tokens["scope"].as_str().unwrap();
-    assert!(scope.contains(&format!("collection={NS}.role")), "{scope}");
+    for collection in ["role", "config", "labeler"] {
+        assert!(
+            scope.contains(&format!("collection={NS}.{collection}")),
+            "{scope}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -602,9 +630,9 @@ async fn keeps_an_inbox_scope_for_roles_that_may_invite() {
     let h = start(&[], false).await;
     let (did, _, _) = group(&h).await;
     define(&h, &did, Grant::with("host", &["invite"], &[], &[])).await;
-    let any = format!("space:{NS}.invites?collection={NS}.invite&action=create");
-    let bobs = format!("space:{NS}.invites?authority=did:plc:bob&collection={NS}.invite");
-    let other = format!("space:{NS}.invites?collection={NS}.rule");
+    let any = format!("space:{NS}.inbox?collection={NS}.invite&action=create");
+    let bobs = format!("space:{NS}.inbox?authority=did:plc:bob&collection={NS}.invite");
+    let other = format!("space:{NS}.inbox?collection={NS}.rule");
     let wanted = [any.as_str(), bobs.as_str(), other.as_str(), "blob:image/*"];
     let narrow = |r: &[&str]| {
         let wanted = asked(&wanted);
@@ -621,7 +649,7 @@ async fn keeps_an_inbox_scope_for_roles_that_may_invite() {
 #[test]
 fn makes_a_permission_set_concrete() {
     let did = "did:plc:riders";
-    let scope = concrete(&asked(&["include:org.atgrp.authManageGroup"]), did);
+    let scope = concrete(&asked(&["include:org.atgrp.authManageAdmin"]), did);
     let scopes: Vec<&str> = scope.split(' ').collect();
     let all = "action=read&action=create&action=update&action=delete";
     let at = format!("authority={did}&skey=self");
@@ -630,23 +658,23 @@ fn makes_a_permission_set_concrete() {
         scopes,
         [
             format!(
-                "space:{NS}.meta?{at}&collection={NS}.profile&collection={NS}.rule&collection={NS}.labeler&collection=com.atproto.label.record&{all}"
+                "space:{NS}.meta?{at}&collection={NS}.about&collection={NS}.config&collection=com.atproto.label.record&{all}"
             ),
             format!("space:{NS}.meta?{at}&action=read&manage=update"),
             format!(
-                "space:{NS}.members?{at}&collection={NS}.role&collection={NS}.membership&collection=com.atproto.label.record&{all}"
+                "space:{NS}.members?{at}&collection={NS}.rule&collection={NS}.labeler&collection={NS}.role&collection={NS}.membership&collection=com.atproto.label.record&{all}"
             ),
             format!("space:{NS}.members?{at}&action=read&manage=update"),
             format!(
-                "space:{NS}.invites?authority=*&skey=self&collection={NS}.invite&action=read_self&action=create&action=update&action=delete"
+                "space:{NS}.inbox?authority=*&skey=self&collection={NS}.invite&action=read_self&action=create&action=update&action=delete"
             ),
             format!("rpc:{NS}.listJoinRequests?aud=*"),
             format!("rpc:{NS}.denyJoinRequest?aud=*"),
             format!("rpc:{INTERNAL}.listInvites?aud=*"),
-            format!("rpc:{NS}.listModSubjects?aud=*"),
-            format!("rpc:{NS}.getModSubjectHistory?aud=*"),
+            format!("rpc:{NS}.mod.querySubjects?aud=*"),
+            format!("rpc:{NS}.mod.querySubjectHistory?aud=*"),
             format!("rpc:{INTERNAL}.getModSubjectBlob?aud=*"),
-            format!("rpc:{NS}.resolveModSubject?aud=*"),
+            format!("rpc:{NS}.mod.updateSubject?aud=*"),
         ]
     );
 }
@@ -670,9 +698,9 @@ fn unions_a_roles_writes() {
     let space = SpaceRef::parse("at://did:plc:g/space/com.example.calendar/rides").unwrap();
     let at = "space:com.example.calendar";
     let policy = json!({"grants": [
-        {"role": "a", "scopes": [format!("{at}?collection=x&action=create"), format!("{at}?collection=y")]},
-        {"role": "b", "scopes": [format!("{at}?collection=x&action=delete&action=other")]},
-        {"role": "c", "scopes": [format!("{at}?collection=z")]},
+        {"role": "a", "permissions": [format!("{at}?collection=x&action=create"), format!("{at}?collection=y")]},
+        {"role": "b", "permissions": [format!("{at}?collection=x&action=delete&action=other")]},
+        {"role": "c", "permissions": [format!("{at}?collection=z")]},
     ]});
     let writes = Policy::of(&policy, &space).writes(&roles(&["a", "b"]));
     let x: Vec<&str> = writes["x"].iter().map(String::as_str).collect();

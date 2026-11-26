@@ -23,7 +23,7 @@
     shown,
     more = false,
     me,
-    assignable = [],
+    canAssign = [],
     canEject = false
   }: {
     members: Member[];
@@ -31,7 +31,7 @@
     shown: number;
     more?: boolean;
     me?: string;
-    assignable?: string[];
+    canAssign?: string[];
     canEject?: boolean;
   } = $props();
   const named = (member: Member) => member.actor.handle ?? member.actor.did;
@@ -63,14 +63,14 @@
           {#if member.actor.did !== me}<ActionMenu
               label={m.member_list_more({ member: named(member) })}
               actions={[
-                ...(assignable.length
+                ...(canAssign.length
                   ? [{ text: m.member_list_change_roles(), opens: `roles-${i}` }]
                   : []),
                 ...(canEject ? [{ text: m.member_list_remove(), opens: `eject-${i}` }] : [])
               ]}
             />{/if}
         </MemberRow>
-        {#if member.actor.did !== me && assignable.length}
+        {#if member.actor.did !== me && canAssign.length}
           <FormDialog
             id={`roles-${i}`}
             title={m.member_list_change_roles()}
@@ -81,12 +81,12 @@
                 {#snippet person()}<Person actor={member.actor} />{/snippet}
               </ParaglideMessage>{/snippet}
             <input type="hidden" name="did" value={member.actor.did} />
-            {#each member.roles.filter((r) => !assignable.includes(r.role)) as kept (kept.role)}
+            {#each member.roles.filter((r) => !canAssign.includes(r.role)) as kept (kept.role)}
               <input type="hidden" name="role" value={kept.role} />
             {/each}
             <fieldset>
               <legend>{m.member_list_roles_legend()}</legend>
-              {#each assignable as role (role)}
+              {#each canAssign as role (role)}
                 <label
                   ><input
                     type="checkbox"

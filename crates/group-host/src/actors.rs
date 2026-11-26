@@ -72,7 +72,7 @@ impl Host {
         let roles = self.roles(group, viewer).map_err(XrpcError::internal)?;
         let meta = meta_space(group);
         if self.reads_space(&meta, &roles)? {
-            let profile = self.group_record(group, &meta, &format!("{NS}.profile"), "self");
+            let profile = self.group_record(group, &meta, &format!("{NS}.about"), "self");
             let profile = profile.map_err(XrpcError::internal)?.unwrap_or_default();
             if let Some(name) = profile.get("displayName") {
                 view["displayName"] = name.clone();

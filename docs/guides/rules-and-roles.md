@@ -89,15 +89,15 @@ each. They show by their short names:
 | `space.create`, `space.configure`, `space.delete` | Make a space (a part of the group with its own say over who reads and writes in it), change who can read and write one, and delete one. |
 | `group.configure` | Change the group's settings: its profile, rules, roles, apps and recovery keys. |
 
-Three parts in running the group bring several permissions at once,
+Four parts in running the group bring several permissions at once,
 under **Running the group** when you create or change a role:
 
 - **Profile and rules** lets them change the group's profile and rules.
   It adds none of the permissions above.
-- **Moderation** brings `mod.read`, `mod.resolve`, `invite`, `admit`,
-  `eject` and `role.assign`, and labels on the group's members and
-  profile. To label posts everywhere in the group too, tick `label` as
-  well.
+- **Members** brings `invite`, `admit`, `eject` and `role.assign`.
+- **Moderation** brings `mod.read`, `mod.resolve` and `eject`, and
+  labels on the group's profile and members. To label posts everywhere
+  in the group too, tick `label` as well.
 - **The whole group** brings all of that, and `group.configure`.
 
 A role also says which roles its members can give. That list limits
@@ -109,9 +109,11 @@ every role, even ones made later, so admins can give any role.
 ## How do I create a role?
 
 1. In **Settings**, press the **Roles** tab, then **Create a role**.
-2. In **Its key**, type a short name for the role, such as
-   "ride-leader". Use lowercase letters, digits and hyphens.
-3. In **Its name**, type the name people see, such as "Ride leader".
+2. In **Its ID**, type a short name for the role that never changes,
+   such as "ride-leader". Use at least three lowercase letters and
+   hyphens, and nothing else.
+3. In **Its name**, which you may leave empty, type the name people
+   see, such as "Ride leader".
 4. Under **Running the group**, tick a part if the role should bring
    all it gives. A ride leader needs none. Under **It may**, tick what
    else the role lets its members do. A ride leader here gets
@@ -122,13 +124,13 @@ every role, even ones made later, so admins can give any role.
 6. Tick **Every new member gets it** if everyone let in should have this
    role too.
 
-   <!-- look /g/riders.groups.test/settings/roles --as alice --click 'button[popovertarget=define-role]' --type '#define-role [name=role]=ride-leader' --type '#define-role [name=name]=Ride leader' --click '#define-role input[value=invite]' --click '#define-role input[value=admit]' --click '#define-role input[value="mod.read"]' --click '#define-role input[name=assignable][value=member]' --element ':popover-open' -->
-   ![The Create a role dialog: ride-leader in Its key, Ride leader in Its name, mod.read, invite and admit ticked under It may, Member ticked under People with it can give](shots/rules-create-role.png)
+   <!-- look /g/riders.groups.test/settings/roles --as alice --click 'button[popovertarget=define-role]' --type '#define-role [name=role]=ride-leader' --type '#define-role [name=name]=Ride leader' --click '#define-role input[value=invite]' --click '#define-role input[value=admit]' --click '#define-role input[value="mod.read"]' --click '#define-role input[name=canAssign][value=member]' --element ':popover-open' -->
+   ![The Create a role dialog: ride-leader in Its ID, Ride leader in Its name, mod.read, invite and admit ticked under It may, Member ticked under People with it can give](shots/rules-create-role.png)
 
 7. Press **Create**. The role shows last in the list, with its
    permissions.
 
-   <!-- look /g/riders.groups.test/settings/roles --as alice --click 'button[popovertarget=define-role]' --type '#define-role [name=role]=ride-leader' --type '#define-role [name=name]=Ride leader' --click '#define-role input[value=invite]' --click '#define-role input[value=admit]' --click '#define-role input[value="mod.read"]' --click '#define-role input[name=assignable][value=member]' --click '#define-role button[type=submit]' --element section -->
+   <!-- look /g/riders.groups.test/settings/roles --as alice --click 'button[popovertarget=define-role]' --type '#define-role [name=role]=ride-leader' --type '#define-role [name=name]=Ride leader' --click '#define-role input[value=invite]' --click '#define-role input[value=admit]' --click '#define-role input[value="mod.read"]' --click '#define-role input[name=canAssign][value=member]' --click '#define-role button[type=submit]' --element section -->
    ![Roles 3: Admin, Member, and Ride leader ride-leader with admit, invite and mod.read, each with a ⋯ menu](shots/rules-role-made.png)
 
 You can give a role only permissions your own roles hold, and the
@@ -151,15 +153,14 @@ dialog offers only those.
    role keeps one by one.
 
    <!-- look /g/riders.groups.test/settings/roles --as alice --click '.roles > li:has(strong:text-is("Ride leader")) .action-menu summary' --click '.action-menu[open] .menu button:has-text("Change")' --click ':popover-open input[name=set][value=moderate]' --element ':popover-open' -->
-   ![The Change this role dialog for Ride leader: Moderation ticked under Running the group, and under It may, mod.read, mod.resolve, invite, admit, eject and role.assign ticked and greyed, each saying Comes with moderation, and label not ticked](shots/rules-change-role.png)
+   ![The Change this role dialog for Ride leader: Moderation ticked under Running the group, and under It may, mod.read, mod.resolve and eject ticked and greyed, each saying Comes with moderation, invite and admit ticked, and label not ticked](shots/rules-change-role.png)
 
 4. Press **Save**. The dialog closes, and the role's row shows what it
    lets its members do now.
 
-A permission a role has from a scope the dialog doesn't show, such as
-Admin's making and deleting spaces, says "Comes with its other
-permissions". The dialog keeps those as they are. Change them from a
-terminal.
+A permission a role has that the dialog doesn't show, such as Admin's
+making and deleting spaces, says "Comes with its other permissions".
+The dialog keeps those as they are. Change them from a terminal.
 
 ## How do I give a role to a member?
 
@@ -222,9 +223,9 @@ The [`atgrp` command](../reference/cli.md) does each of these:
   sets its place.
 - Delete a rule: `atgrp rule delete <group> <rule>`.
 - Create a role: `atgrp role set <group> <role> --display-name
-  <name> --scopes <permission,…> --assignable <role,…>`, with
+  <name> --permissions <permission,…> --can-assign <role,…>`, with
   `--default` if every new member gets it. `atgrp role grant
-  <group> <role> --scopes <permission,…>` adds to what a role has.
+  <group> <role> --permissions <permission,…>` adds to what a role has.
 - Give or take roles: `atgrp member assign <group> <member>
   <role,role…>`, naming all the roles they keep, `member` among them.
 - Delete a role: `atgrp role delete <group> <role>`.
