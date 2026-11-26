@@ -4,8 +4,8 @@ import { defineConfig } from 'astro/config';
 import { REPO, remarkLinks, remarkShots } from './plugins.mjs';
 import { remarkReference } from './reference.mjs';
 
-/** Where the site is served: a private repository's site is at its own host's root. */
-const base = '/';
+/** Where the site is served: a public repository's is under its name, on its owner's knotless.page host. */
+const base = '/group-host/';
 
 // The sidebar follows docs/README.md: guides, design, then reference, then deploying and development.
 const page = (label, slug) => ({ label, slug });

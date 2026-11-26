@@ -1,9 +1,10 @@
 # The docs, as `just docs` checks them: every relative link and anchor
 # lands (harness/docs.mjs); and the site docs-site/ makes of them builds.
-# `just docs-deploy` deploys it, from the owner's machine: the site of a
-# private repository is kept in its space, which an app password, all a
-# run could sign in with, cannot write. The site's packages are kept
-# between runs and installed again only when its lockfile changes.
+# On a push to main, the site is deployed as the repository's, at
+# https://chadtmiller-com.knotless.page/group-host/, as the owner, with
+# RELEASE_PASSWORD, the app password of theirs release.yml takes, sealed
+# to this runner for main alone. The site's packages are kept between
+# runs and installed again only when its lockfile changes.
 image: node:24.22.1
 # The shared runner host, as every workflow here.
 runners: [runner.knotless.dev]
@@ -16,6 +17,10 @@ on:
     base: [refs/heads/main, refs/heads/feature/*]
     paths: [docs/**, README.md, AGENTS.md, harness/docs.mjs, harness/shots.mjs, docs-site/**, lexicons/**, web/src/tokens.css, .knotless/workflows/docs.yml, .knotless/uses.lock]
 cache: [docs-site/node_modules]
+secrets: [RELEASE_PASSWORD]
+env:
+  REPO: knotless://chadtmiller.com/group-host
+  KNOTLESS_APPVIEW: https://knotless.dev
 steps:
   - uses: chadtmiller.com/steps/npm-ci@1
     name: packages
@@ -24,3 +29,10 @@ steps:
     run: node harness/docs.mjs
   - name: site
     run: cd docs-site && npm run build
+  - name: deploy
+    on: {refs: [refs/heads/main]}
+    run: |
+      curl -fsSL "$KNOTLESS_APPVIEW/install.sh" | KNOTLESS_INSTALL_DIR=/usr/local/bin sh
+      owner=${REPO#knotless://}
+      export KNOTLESS_IDENTIFIER=${owner%%/*} KNOTLESS_PASSWORD="$RELEASE_PASSWORD"
+      knotless repo site "$REPO" docs-site/dist --not-found 404.html

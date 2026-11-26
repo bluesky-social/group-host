@@ -75,7 +75,8 @@ right, and come before the code they test.
   the lexicons by @atproto/lex (`npm run lex`, which `dev`, `build` and
   `check` run first) into `web/src/lib/lexicons`, not kept in git.
 - `docs-site/`: the docs as a site, made from `docs/` as it is, and
-  deployed with `just docs-deploy` (`docs/development.md`).
+  deployed by the `docs` check on each push to `main`
+  (`docs/development.md`).
 - `harness/`: the checks beside the tests, and the console's flows end to
   end (`harness/e2e`).
 
@@ -217,7 +218,7 @@ pulls into it or into a `feature/` branch:
   then `just shots --check`: each guide's pictures drawn again, failing
   when what one shows has changed.
 - `docs`: `just docs`, every link and anchor landing, and the docs site's
-  build.
+  build; on a push to `main`, the site deployed.
 
 Two more check nothing. `mirror`: each push to `main` or a tag pushes
 the same commit to a copy on GitHub

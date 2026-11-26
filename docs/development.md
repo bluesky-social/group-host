@@ -199,15 +199,15 @@ any page links to its entry there. It matches by its whole NSID, or by
 its name alone where no other listed method has that name. The site
 looks like the console, from `web/src/tokens.css`.
 
-`just docs-site` serves it as it changes, at http://localhost:4321/. A
+`just docs-site` serves it as it changes, at http://localhost:4321/group-host/. A
 new page goes in the sidebar in `docs-site/astro.config.mjs`.
 
-The repository is private, so its site is too. knotless serves it to
-its members alone, at a host of its own, which `just docs-deploy`
-prints. It's kept in the repository's space, which only its owner can
-write, signed in with `knotless login`. An app password can't write to
-a space, so no workflow can deploy it. The owner runs `just
-docs-deploy` after a change to the docs lands.
+knotless serves it as the repository's site, at
+https://chadtmiller-com.knotless.page/group-host/, so it's built with
+`/group-host/` as its base. The `docs` check deploys it on each push to
+`main`, as the owner, with the app password `RELEASE_PASSWORD` that
+`release` takes too. `just docs-deploy` deploys a build from here, as
+the owner signed in with `knotless login`.
 
 ## The checks
 

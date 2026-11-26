@@ -39,16 +39,16 @@ lex:
 docs:
     node harness/docs.mjs
 
-# The docs as their site, at http://localhost:4321/, redrawn as they change.
+# The docs as their site, at http://localhost:4321/group-host/, redrawn as they change.
 docs-site:
     cd docs-site && npm ci --no-audit --no-fund && npm run dev
 
-# An app password cannot write the space a private repository's site is
-# kept in, so this runs as its owner, signed in with `knotless login`.
-# The docs site, built and deployed as the repository's, for its members.
+# The docs site, built and deployed as the repository's, at
+# https://chadtmiller-com.knotless.page/group-host/, as its owner, signed
+# in with `knotless login`. The docs check deploys it on each push to main.
 docs-deploy:
     cd docs-site && npm ci --no-audit --no-fund && npm run build
-    knotless site knotless://chadtmiller.com/group-host docs-site/dist --not-found 404.html
+    knotless repo site knotless://chadtmiller.com/group-host docs-site/dist --not-found 404.html
 
 # Tags the release that last landed, then cuts the next from main's
 # change files as the `Release <version>` pull (deploy/release.sh), as
