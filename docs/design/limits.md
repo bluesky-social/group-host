@@ -61,7 +61,7 @@ group's and its person's limits.
 | What | Points | Window | Counted by |
 | --- | --- | --- | --- |
 | every request, but those below that have their own | 3000 | 5 minutes | address |
-| `com.atproto.sync.getRepo` | 6000 | 5 minutes | address |
+| `com.atproto.sync.getRepo`, `com.atproto.sync.getRecord`, together | 6000 | 5 minutes | address |
 | `createGroup`, `provisionGroup` | 100 | 5 minutes | address |
 | `/oauth/par` | 300 | 5 minutes | address |
 | `/mcp/register` | 30 | 5 minutes | address |
@@ -75,8 +75,9 @@ group's and its person's limits.
 | `requestJoin` | 10, and 100 | 5 minutes, and a day | person |
 
 A request to a method with a limit of its own spends from the
-every-request limit too. `com.atproto.sync.getRepo` is the one
-exception, since a relay reads whole repos in bursts. The host's health
+every-request limit too. `com.atproto.sync.getRepo` and
+`com.atproto.sync.getRecord` are the exceptions, since a relay reads
+whole repos in bursts, and an app a record each of its accounts wrote. The host's health
 check, `/tls/ask` and the firehose (`com.atproto.sync.subscribeRepos`)
 spend nothing.
 

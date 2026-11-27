@@ -186,6 +186,19 @@ pub async fn get_repo(
     Ok(([(header::CONTENT_TYPE, "application/vnd.ipld.car")], car).into_response())
 }
 
+/// A record with the proof of it, or of its absence, from the repo's
+/// signed commit: a CAR, as a PDS answers it.
+pub async fn get_sync_record(
+    State(host): State<Arc<Host>>,
+    Query(p): Query<Params>,
+) -> Result<Response, XrpcError> {
+    let did = &did_of(&host, param(&p, "did")?)?;
+    let (collection, rkey) = (param(&p, "collection")?, param(&p, "rkey")?);
+    let car = host.record_proof(did, collection, rkey);
+    let car = car.map_err(XrpcError::internal)?;
+    Ok(([(header::CONTENT_TYPE, "application/vnd.ipld.car")], car).into_response())
+}
+
 pub async fn get_latest_commit(State(host): State<Arc<Host>>, Query(p): Query<Params>) -> Answer {
     let did = &did_of(&host, param(&p, "did")?)?;
     let head = host.store.head(did).map_err(XrpcError::internal)?;

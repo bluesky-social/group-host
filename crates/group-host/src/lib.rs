@@ -198,6 +198,10 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
         .route("/xrpc/com.atproto.repo.listRecords", get(api::list_records))
         .route("/xrpc/com.atproto.sync.getRepo", get(api::get_repo))
         .route(
+            "/xrpc/com.atproto.sync.getRecord",
+            get(api::get_sync_record),
+        )
+        .route(
             "/xrpc/com.atproto.sync.getLatestCommit",
             get(api::get_latest_commit),
         )

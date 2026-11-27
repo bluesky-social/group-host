@@ -48,7 +48,8 @@ macro_rules! limit {
 
 /// Every request from one address, but those [`by_path`] spares.
 pub const BY_ADDRESS: Limit = limit!("address", 3000, 5 * MINUTE);
-/// A whole repo, read from one address, as a relay reads them.
+/// A whole repo, or a record with its proof, read from one address, as a
+/// relay or an app reads them.
 pub const SYNC_REPO: Limit = limit!("sync-repo", 6000, 5 * MINUTE);
 /// Groups made from one address, each an identity in the directory.
 pub const NEW_GROUPS: Limit = limit!("new-groups", 100, 5 * MINUTE);
@@ -246,7 +247,7 @@ fn by_path(path: &str) -> &'static [Limit] {
         // Asked by the machine's own checks and the proxy, and a relay's
         // stream, open for as long as it reads.
         "/xrpc/_health" | "/tls/ask" | "/xrpc/com.atproto.sync.subscribeRepos" => &[],
-        "/xrpc/com.atproto.sync.getRepo" => &[SYNC_REPO],
+        "/xrpc/com.atproto.sync.getRepo" | "/xrpc/com.atproto.sync.getRecord" => &[SYNC_REPO],
         "/xrpc/org.atgrp.internal.createGroup" | "/xrpc/org.atgrp.internal.provisionGroup" => {
             &[BY_ADDRESS, NEW_GROUPS]
         }

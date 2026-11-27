@@ -4,12 +4,13 @@
 mod common;
 
 use atproto::mst::Tree;
-use atproto::{Commit, PublicKey, car};
+use atproto::{Cid, Commit, PublicKey, car, drisl};
 use common::start;
 use group_host::repo::Write;
 use group_host::store::{Account, Head, Store};
 use group_host::xrpc::XrpcError;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 const RIDERS: &str = "riders.groups.test";
 
@@ -573,5 +574,117 @@ async fn describes_itself_as_a_pds_that_names_groups_under_its_domain() {
     assert_eq!(
         described["blobUploadLimit"],
         h.host.config.blob_upload_limit
+    );
+}
+
+/// The record `key` names in the tree under `root`, found down the path
+/// `blocks` prove: `None` when the path proves it absent. A node the path
+/// needs and `blocks` lack fails it, as an app reading the proof fails.
+fn proved(blocks: &BTreeMap<Cid, Vec<u8>>, root: Cid, key: &str) -> Option<Cid> {
+    let link = |v: &drisl::Value| match v {
+        drisl::Value::Link(c) => Some(*c),
+        _ => None,
+    };
+    let mut at = root;
+    loop {
+        let drisl::Value::Map(node) = drisl::decode(&blocks[&at]).unwrap() else {
+            panic!("{at} is not a tree node");
+        };
+        let drisl::Value::Array(written) = &node["e"] else {
+            panic!("a node without entries");
+        };
+        let (mut last, mut below) = (Vec::new(), link(&node["l"]));
+        for entry in written {
+            let drisl::Value::Map(e) = entry else {
+                panic!("an entry that is not a map");
+            };
+            let (drisl::Value::Integer(shared), drisl::Value::Bytes(rest)) = (&e["p"], &e["k"])
+            else {
+                panic!("an entry without its key");
+            };
+            last.truncate(*shared as usize);
+            last.extend_from_slice(rest);
+            let here = std::str::from_utf8(&last).unwrap();
+            if here == key {
+                return link(&e["v"]);
+            }
+            if here > key {
+                break;
+            }
+            below = link(&e["t"]);
+        }
+        at = below?;
+    }
+}
+
+#[tokio::test]
+async fn proves_a_record_or_its_absence_from_the_signed_commit() {
+    let h = start(&[], false).await;
+    let did = h.host.create_account(RIDERS).await.unwrap();
+    let writes: Vec<Write> = (0..200)
+        .map(|i| create(&format!("r{i:03}"), "A rule"))
+        .collect();
+    let head = h.host.write(&did, &writes).unwrap();
+    let signing = h.host.store.account(&did).unwrap().unwrap().signing;
+    let signing = PublicKey::from_did_key(&signing.public().did_key()).unwrap();
+    let proof = |rkey: &str| {
+        let url = format!(
+            "{}/xrpc/com.atproto.sync.getRecord?did={did}&collection=org.atgrp.rule&rkey={rkey}",
+            h.url
+        );
+        let http = h.http.clone();
+        async move {
+            let res = http.get(url).send().await.unwrap();
+            assert_eq!(res.status(), 200);
+            assert_eq!(res.headers()["content-type"], "application/vnd.ipld.car");
+            car::read(&res.bytes().await.unwrap()).unwrap()
+        }
+    };
+
+    // The record, reached from the signed commit's tree, its block with it.
+    let car = proof("r123").await;
+    assert_eq!(car.roots, [head.cid]);
+    let commit = Commit::verified(&car.blocks[&car.roots[0]], &did, &signing).unwrap();
+    let cid = proved(&car.blocks, commit.data, "org.atgrp.rule/r123").unwrap();
+    let (_, record) = h
+        .get(
+            "com.atproto.repo.getRecord",
+            &format!("repo={did}&collection=org.atgrp.rule&rkey=r123"),
+        )
+        .await;
+    assert_eq!(cid.to_string(), record["cid"]);
+    assert_eq!(Cid::of_cbor(&car.blocks[&cid]), cid);
+    // A proof, not the repo: a path down a tree of many layers.
+    assert!(car.blocks.len() < 20);
+
+    // A record not there is proved absent from the same commit.
+    for rkey in ["r123x", "a", "zzz"] {
+        let car = proof(rkey).await;
+        let commit = Commit::verified(&car.blocks[&car.roots[0]], &did, &signing).unwrap();
+        let key = format!("org.atgrp.rule/{rkey}");
+        assert_eq!(proved(&car.blocks, commit.data, &key), None, "{rkey}");
+    }
+
+    // A repo not here, and a group switched off, are refused by name.
+    for (query, error) in [
+        (
+            "did=did:plc:nobody&collection=org.atgrp.rule&rkey=r1",
+            "RepoNotFound",
+        ),
+        (&*format!("did={did}&rkey=r1"), "InvalidRequest"),
+    ] {
+        let (status, body) = h.get("com.atproto.sync.getRecord", query).await;
+        assert_eq!((status, body["error"].as_str()), (400, Some(error)));
+    }
+    h.host.deactivate_account(&did, &did, &[]).unwrap();
+    let (status, body) = h
+        .get(
+            "com.atproto.sync.getRecord",
+            &format!("did={did}&collection=org.atgrp.rule&rkey=r123"),
+        )
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (400, Some("RepoDeactivated"))
     );
 }

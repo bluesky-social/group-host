@@ -488,6 +488,21 @@ impl Host {
         walk(tree.root_node(), &records, &mut blocks);
         Ok(car::write(&[head.cid], blocks.iter().map(|(c, b)| (c, *b))))
     }
+
+    /// The proof of `collection/rkey` in `did`'s repo as it is now, as a
+    /// CAR rooted at its signed commit: the commit, the tree's nodes down
+    /// to the key's place and its neighbours', and the record when it is
+    /// there; when it is not, the same nodes prove it absent.
+    pub fn record_proof(&self, did: &str, collection: &str, rkey: &str) -> Result<Vec<u8>> {
+        let head = self.store.head(did)?.context("an account has a repo")?;
+        let tree = Tree::build(&self.store.paths(did)?);
+        let mut blocks = tree.covering_proof(&format!("{collection}/{rkey}"));
+        let record = self.store.record(did, collection, rkey)?;
+        blocks.extend(record.map(|r| (r.cid, r.value)));
+        let commit = std::iter::once((&head.cid, &head.block[..]));
+        let rest = blocks.iter().map(|(c, b)| (c, &b[..]));
+        Ok(car::write(&[head.cid], commit.chain(rest)))
+    }
 }
 
 /// An `#identity` event: `did` known as `handle`, for the relays to
