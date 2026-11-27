@@ -83,9 +83,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto"
-version = "0.4.3"
+version = "0.4.4"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "0eefab92b923b5ca527f1e1f251ddcc8001d2d568a435bc9d8220bd2c1ceae8e"
+checksum = "2c5e4e543f0b770a3dc16c30bb5874837aef4979fe714bc7219d0adb4eec176a"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -101,9 +101,9 @@ dependencies = [
 
 [[package]]
 name = "atproto-client"
-version = "0.6.0"
+version = "0.7.1"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "224e5ba76374157d99c1f1f91816fef07f54e3b1a1ccd4a1025e51f5bfabc75b"
+checksum = "6e744df30aeca5f942e7cbb0fafddc7d6bd4abf922737f0ba594844180e32297"
 dependencies = [
  "atproto",
  "bytes",

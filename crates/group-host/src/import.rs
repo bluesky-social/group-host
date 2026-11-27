@@ -39,7 +39,7 @@ use anyhow::Result;
 use atproto::plc::Signed;
 use atproto::service_auth;
 use atproto::{Cid, PublicKey, did};
-use atproto_client::service_auth::verify_any;
+use atproto_client::service_auth::{Error as Unverified, verify_with};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
@@ -360,13 +360,15 @@ async fn proof(host: &Host, jwt: &str) -> Result<String, XrpcError> {
     if !did.starts_with("did:plc:") {
         return Err(not_plc());
     }
-    if !for_host(host, &claims.aud) || claims.lxm.as_deref() != Some(CREATE_ACCOUNT) {
-        return Err(bad("not for this host's createAccount"));
-    }
     let now = (now_millis() / 1000) as u64;
-    let auds = [claims.aud.as_str()];
-    let checked = verify_any(&host.identity, jwt, &auds, CREATE_ACCOUNT, now).await;
-    checked.map_err(|e| bad(&e.to_string()))?;
+    let ours = |aud: &str| for_host(host, aud);
+    let checked = verify_with(&host.identity, jwt, ours, CREATE_ACCOUNT, now).await;
+    checked.map_err(|e| match e {
+        Unverified::Unresolved { did, error } => {
+            invalid(format!("could not resolve {did}: {error}"))
+        }
+        e => bad(&e.to_string()),
+    })?;
     Ok(did)
 }
 

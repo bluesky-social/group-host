@@ -10,7 +10,6 @@ use crate::space::NOTIFY_REPO_UPDATE;
 use crate::space_api::{credential, forbidden, now, refused, service_caller};
 use crate::store::{Registration, Space};
 use crate::xrpc::XrpcError;
-use atproto::service_auth::Claims;
 use atproto::space::SpaceRef;
 use atproto::space_auth::{self, Kind, Make, space_host_aud};
 use atproto::{PublicKey, Value as Drisl, syntax, tid};
@@ -217,15 +216,13 @@ pub async fn notify_repo_update(
 ) -> Answer {
     let uri = text(&body, "space")?;
     let space = space_ref(uri)?;
-    let for_authority = |claims: &Claims| {
-        let aud = &claims.aud;
-        match *aud == space.authority || *aud == space_host_aud(&space.authority) {
+    let for_authority =
+        |aud: &str| match aud == space.authority || aud == space_host_aud(&space.authority) {
             true => Ok(()),
             false => Err(forbidden(
                 "notifyRepoUpdate is not for this space's authority",
             )),
-        }
-    };
+        };
     let caller = service_caller(&host, &headers, NOTIFY_REPO_UPDATE, for_authority).await?;
     let (repo, rev) = (text(&body, "repo")?, text(&body, "repoRev")?);
     if !syntax::is_tid(rev) {

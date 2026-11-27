@@ -16,7 +16,7 @@ use atproto::space::{
 };
 use atproto::space_auth::{self, CLOCK_SKEW, CREDENTIAL_MAX_AGE, Expect, Kind, TokenError};
 use atproto::{Cid, drisl, syntax};
-use atproto_client::service_auth::{Error as Unverified, verify_any};
+use atproto_client::service_auth::{Error as Unverified, verify_with};
 use axum::Json;
 use axum::extract::{Query, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
@@ -82,9 +82,13 @@ pub(crate) async fn credential(
     let check =
         |key: &atproto::PublicKey| space_auth::verify(Kind::Credential, jwt, key, &expect, now());
     let checked = host.identity.with_key(&token.iss, check).await;
-    let checked = checked
-        .ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", token.iss)))?;
-    checked.map_err(refused)?;
+    let no_key = |e| {
+        unauthorized(
+            "BadJwtIss",
+            format!("no signing key for {}: {e}", token.iss),
+        )
+    };
+    checked.map_err(no_key)?.map_err(refused)?;
     let audience = text("atproto-space-audience").filter(|a| syntax::is_did(a));
     let audience = audience.ok_or_else(|| {
         unauthorized("BadSpaceSignature", "missing or invalid space audience DID")
@@ -489,7 +493,7 @@ pub(crate) async fn service_caller(
     host: &Host,
     headers: &HeaderMap,
     lxm: &str,
-    ours: impl FnOnce(&Claims) -> Result<(), XrpcError>,
+    ours: impl Fn(&str) -> Result<(), XrpcError>,
 ) -> Result<Claims, XrpcError> {
     let bearer = headers
         .get(header::AUTHORIZATION)
@@ -503,13 +507,20 @@ pub(crate) async fn service_caller(
             format!("a token not for {lxm}"),
         ));
     }
-    ours(&claims)?;
-    let auds = [claims.aud.as_str()];
-    let checked = verify_any(&host.identity, token, &auds, lxm, now()).await;
-    checked.map_err(|e| match e {
-        Unverified::NoKey(_) => unauthorized("BadJwtIss", e.to_string()),
-        e => unauthorized("BadJwt", e.to_string()),
-    })?;
+    // The audience's refusal, kept for the answer in place of the crate's.
+    let refusal = std::sync::Mutex::new(None);
+    let keep = |e| *refusal.lock().expect("a refusal kept") = Some(e);
+    let takes = |aud: &str| ours(aud).map_err(keep).is_ok();
+    let checked = verify_with(&host.identity, token, takes, lxm, now()).await;
+    checked.map_err(
+        |e| match (refusal.lock().expect("a refusal kept").take(), e) {
+            (Some(refused), _) => refused,
+            (None, e @ (Unverified::Unresolved { .. } | Unverified::NoKey(_))) => {
+                unauthorized("BadJwtIss", e.to_string())
+            }
+            (None, e) => unauthorized("BadJwt", e.to_string()),
+        },
+    )?;
     Ok(claims)
 }
 
@@ -524,10 +535,10 @@ pub async fn notify_credentials_revoked(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, XrpcError> {
-    let hosted_here = |claims: &Claims| {
-        let hosted = host.store.account(&claims.aud);
+    let hosted_here = |aud: &str| {
+        let hosted = host.store.account(aud);
         let hosted = hosted.map_err(XrpcError::internal)?;
-        match hosted.is_some_and(|a| a.did == claims.aud) {
+        match hosted.is_some_and(|a| a.did == aud) {
             true => Ok(()),
             false => Err(forbidden("revocation audience is not a repo hosted here")),
         }
