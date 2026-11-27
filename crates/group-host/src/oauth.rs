@@ -15,7 +15,7 @@ use crate::Host;
 use crate::oauth_clients::{registered, same_auth};
 use crate::oauth_store::{Grant, Request, Tokens};
 use crate::time::now_millis;
-use atproto::jose;
+use atproto::{dpop, jose};
 use axum::Json;
 use axum::extract::rejection::FormRejection;
 use axum::extract::{Form, Query, Request as HttpRequest, State};
@@ -242,7 +242,9 @@ async fn push(host: &Host, headers: &HeaderMap, form: OAuthForm) -> Result<Value
     let redirect = redirect.filter(|r| registered(&uris, r));
     let redirect =
         redirect.ok_or_else(|| invalid_request("redirect_uri is not one the client registered"))?;
-    let challenge = form.get("code_challenge").filter(|c| !c.is_empty());
+    let challenge = form
+        .get("code_challenge")
+        .filter(|c| dpop::pkce_well_formed(c));
     let s256 = form.get("code_challenge_method").map(String::as_str) == Some("S256");
     let challenge = challenge.filter(|_| s256);
     let challenge = challenge.ok_or_else(|| invalid_request("PKCE with S256 is required"))?;
@@ -441,14 +443,9 @@ async fn exchange(host: &Host, headers: &HeaderMap, form: OAuthForm) -> Result<V
             if form.get("redirect_uri").map(String::as_str) != p["redirect_uri"].as_str() {
                 return Err(invalid_grant("redirect_uri is not the request's"));
             }
-            // As RFC 7636 has one: 43 to 128 unreserved characters.
-            let verifier = form.get("code_verifier").filter(|v| {
-                (43..=128).contains(&v.len())
-                    && v.bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b"-._~".contains(&b))
-            });
-            let verifier = verifier.map_or(String::new(), |v| jose::sha256(v));
-            if p["code_challenge"] != verifier {
+            let verifier = form.get("code_verifier").map_or("", String::as_str);
+            let challenge = p["code_challenge"].as_str().unwrap_or_default();
+            if !dpop::pkce_proves(verifier, challenge) {
                 return Err(invalid_grant("the code_verifier is not the challenge's"));
             }
             if p["dpop_jkt"] != jkt {

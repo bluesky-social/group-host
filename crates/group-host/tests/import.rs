@@ -20,9 +20,9 @@ use axum::routing::get as route;
 use common::groups::*;
 use common::spaces::*;
 use common::{Running, serve, start_reachable};
+use group_host::group::rkey_did;
 use group_host::group::{members_space, meta_space};
 use group_host::import::label_of;
-use group_host::import_space::record_key_to_did;
 use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
@@ -1268,17 +1268,16 @@ async fn brings_only_what_this_host_would_keep_as_its_policy_says() {
 #[test]
 fn reads_a_members_did_from_its_record_key() {
     assert_eq!(
-        record_key_to_did("did:web:localhost:2583"),
+        rkey_did("did:web:localhost:2583"),
         "did:web:localhost%3A2583"
     );
     for same in [
         "did:plc:alice",
         "did:web:example.com",
-        "did:web::2583",
         "did:web:localhost:",
         "did:web:localhost:25a",
     ] {
-        assert_eq!(record_key_to_did(same), same);
+        assert_eq!(rkey_did(same), same);
     }
 }
 

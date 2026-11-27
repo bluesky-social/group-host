@@ -4,7 +4,7 @@
 
 mod common;
 
-use atproto::jose;
+use atproto::{dpop, jose};
 use common::groups::*;
 use common::oauth::*;
 use common::spaces::*;
@@ -199,7 +199,7 @@ async fn checks_each_proof() {
     let form = app.request(&challenge, &[]);
     app.post(&h, "/oauth/par", &form).await;
     let path = "/oauth/par";
-    let proof = |change: &dyn Fn(&mut Json)| app.proof_with(&h, "POST", path, change);
+    let proof = |change: &dyn Fn(&mut dpop::Claims)| app.proof_with(&h, "POST", path, change);
     let reused = proof(&|_| {});
     let first = app.send(&h, path, &form, Some(reused.clone())).await;
     assert_eq!(first.status, 201, "{}", first.body);
@@ -221,14 +221,16 @@ async fn checks_each_proof() {
             "not an EC key",
         ),
         (jose::sign(&other, &header, &json!({})), "bad signature"),
-        (proof(&|c| c["jti"] = json!("")), "without a jti"),
-        (proof(&|c| c["htm"] = json!("GET")), "htm"),
+        (proof(&|c| c.jti = String::new()), "without a jti"),
+        (proof(&|c| c.htm = "GET".into()), "htm"),
         (
-            proof(&|c| c["htu"] = json!("https://elsewhere.test/oauth/par")),
+            proof(&|c| c.htu = "https://elsewhere.test/oauth/par".into()),
             "htu",
         ),
-        (proof(&|c| c["iat"] = json!(now() - 600)), "too old"),
-        (proof(&|c| c["iat"] = json!(now() + 600)), "from the future"),
+        (proof(&|c| c.iat -= 600), "too old"),
+        (proof(&|c| c.iat += 600), "from the future"),
+        // An ath where the request carries no token.
+        (proof(&|c| c.ath = Some(jose::sha256("a token"))), "ath"),
     ] {
         let said = app.send(&h, path, &form, Some(sent)).await;
         assert_eq!(said.status, 400);
@@ -240,7 +242,7 @@ async fn checks_each_proof() {
             &h,
             path,
             &form,
-            Some(proof(&|c| c["nonce"] = json!("stale"))),
+            Some(proof(&|c| c.nonce = Some("stale".into()))),
         )
         .await;
     assert_eq!(said.error(), (400, "use_dpop_nonce"));
@@ -250,9 +252,7 @@ async fn checks_each_proof() {
             &h,
             path,
             &form,
-            Some(proof(&|c| {
-                c["htu"] = json!("https://host.test/oauth/par?x#y")
-            })),
+            Some(proof(&|c| c.htu = "https://host.test/oauth/par?x#y".into())),
         )
         .await;
     assert_eq!(said.status, 201, "{}", said.body);

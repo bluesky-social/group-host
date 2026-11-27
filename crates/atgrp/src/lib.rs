@@ -12,9 +12,9 @@
 //! host for a group token (`getGroupAuth`), bound to a DPoP key of its own.
 
 use anyhow::{Context, Result, anyhow, bail};
-use atproto::jose;
 use atproto::keys::{Curve, Keypair};
-use atproto::space::{SPACE_URI_PREFIX, SpaceRef};
+use atproto::space::{SPACE_URI_PREFIX, SpaceRecordUri, SpaceRef};
+use atproto::{did, dpop};
 use group_host_mcp::{Plan, Tool};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -134,8 +134,8 @@ account
 pub struct Env {
     /// The host, `ATGRP_HOST`.
     pub host: String,
-    /// Its DID, `ATGRP_HOST_DID`.
-    pub host_did: String,
+    /// Its DID, `ATGRP_HOST_DID`: by default the did:web of its address.
+    pub host_did: Option<String>,
     /// The PDS the person signs in at, `PDS_URL`.
     pub pds: String,
     /// The person, `ATGRP_AS`, and their password,
@@ -150,12 +150,12 @@ pub struct Env {
 }
 
 /// The did:web a host at `url` is by default, as the host names itself.
-pub fn did_web(url: &str) -> String {
+pub fn did_web(url: &str) -> Result<String> {
     let host = url
         .trim_start_matches("https://")
         .trim_start_matches("http://")
         .trim_end_matches('/');
-    format!("did:web:{}", host.replace(':', "%3A"))
+    Ok(did::web(host)?)
 }
 
 impl Env {
@@ -163,7 +163,7 @@ impl Env {
     pub fn from(var: impl Fn(&str) -> Option<String>) -> Env {
         let host = var("ATGRP_HOST").unwrap_or_else(|| "http://localhost:2600".into());
         let host = host.trim_end_matches('/').to_string();
-        let host_did = var("ATGRP_HOST_DID").unwrap_or_else(|| did_web(&host));
+        let host_did = var("ATGRP_HOST_DID");
         let pds = var("PDS_URL").unwrap_or_else(|| "http://localhost:2583".into());
         let invite = var("ATGRP_SEED_INVITE").unwrap_or_default();
         Env {
@@ -415,20 +415,14 @@ impl<'a> GroupSession<'a> {
 
     /// A DPoP proof of a POST to `nsid`, for `token` if it carries one.
     fn proof(&self, nsid: &str, token: Option<&str>) -> String {
-        let mut claims = json!({
-            "jti": jose::random(12),
-            "htm": "POST",
-            "htu": format!("{}/xrpc/{nsid}", self.public),
-            "iat": atproto::time::now_millis() / 1000,
-        });
-        if let Some(nonce) = self.nonce.lock().expect("not poisoned").clone() {
-            claims["nonce"] = json!(nonce);
-        }
+        let url = format!("{}/xrpc/{nsid}", self.public);
+        let now = atproto::time::now_millis() as u64 / 1000;
+        let mut claims = dpop::Claims::new("POST", &url, now);
+        claims.nonce = self.nonce.lock().expect("not poisoned").clone();
         if let Some(token) = token {
-            claims["ath"] = json!(jose::sha256(token));
+            claims = claims.token(token);
         }
-        let header = json!({"typ": "dpop+jwt", "jwk": jose::jwk(&self.key.public())});
-        jose::sign(&self.key, &header, &claims)
+        dpop::sign(&self.key, &claims)
     }
 
     /// POSTs `body` to `nsid` with `authorization` and a fresh proof, once
@@ -589,9 +583,13 @@ async fn signed_in(env: &Env) -> Result<Client> {
 /// Runs the command `args` name (without the program's own name), in
 /// `env`, returning what it prints.
 pub async fn run(args: &[String], env: &Env) -> Result<String> {
+    let did = env
+        .host_did
+        .clone()
+        .map_or_else(|| did_web(&env.host), Ok)?;
     let host = Host {
         url: env.host.clone(),
-        did: env.host_did.clone(),
+        did,
     };
     let words: Vec<&str> = args.iter().map(String::as_str).collect();
     match words.as_slice() {
@@ -610,9 +608,10 @@ pub async fn run(args: &[String], env: &Env) -> Result<String> {
             let [group] = a.take()?;
             let to = a.flags.get("to").ok_or_else(usage)?.trim_end_matches('/');
             let did = a.flags.get("to-did").map(|d| d.to_string());
+            let did = did.map_or_else(|| did_web(to), Ok)?;
             let dest = Host {
                 url: to.to_string(),
-                did: did.unwrap_or_else(|| did_web(to)),
+                did,
             };
             migrate(&signed_in(env).await?, &host, &dest, group).await
         }
@@ -832,10 +831,8 @@ async fn carry_out(me: &Client, host: &Host, group: &str, plan: Plan) -> Result<
             let invites = listed["invites"].as_array().into_iter().flatten();
             let mut waiting = invites.filter(|i| i["invitee"] == person.as_str());
             let uri = waiting.next().map(|i| text(&i["uri"]).to_string());
-            let rkey = uri
-                .as_deref()
-                .and_then(|u| u.rsplit('/').next())
-                .unwrap_or_default();
+            let record = uri.as_deref().map(SpaceRecordUri::parse).transpose()?;
+            let rkey = record.map(|r| r.rkey).unwrap_or_default();
             let inbox = inbox_of(&person);
             let session = GroupSession::start(me, host, group, &inbox).await?;
             let body =
@@ -938,7 +935,7 @@ async fn label(
     let mut uris = Vec::new();
     for r in ours {
         let uri = text(&r["uri"]);
-        let rkey = uri.rsplit('/').next().unwrap_or_default();
+        let rkey = SpaceRecordUri::parse(uri)?.rkey;
         let body = json!({"repo": group, "space": space, "collection": collection, "rkey": rkey});
         session
             .call("com.atproto.space.deleteRecord", &body)

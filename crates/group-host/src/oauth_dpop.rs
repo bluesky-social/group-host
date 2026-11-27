@@ -3,11 +3,12 @@
 //! of the time, so the host checks one without keeping it; a proof is
 //! good once, its `jti` spent as a token's is.
 //!
-//! For the keys atproto uses: ES256 and ES256K.
+//! The proof itself is checked by `atproto::dpop`; the nonces and the
+//! spent `jti`s are the host's.
 
 use crate::Host;
 use crate::oauth::OAuthError;
-use atproto::jose;
+use atproto::{dpop, jose};
 use axum::http::HeaderMap;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -16,8 +17,8 @@ use sha2::Sha256;
 const NONCE_STEP: i64 = 3 * 60_000;
 /// How old a proof may be, in seconds, and how far a client's clock may
 /// be ahead.
-const PROOF_MAX_AGE: i64 = 60;
-const CLOCK_SKEW: i64 = 10;
+const PROOF_MAX_AGE: u64 = 60;
+const CLOCK_SKEW: u64 = 10;
 
 /// A proof checked: the thumbprint of the key that signed it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,11 +34,6 @@ pub(crate) fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC takes a key of any length");
     mac.update(message);
     mac.finalize().into_bytes().to_vec()
-}
-
-/// `url` without its query or fragment, as `htu` names a request.
-fn bare(url: &str) -> &str {
-    url.split(['?', '#']).next().unwrap_or_default()
 }
 
 impl Host {
@@ -80,39 +76,25 @@ impl Host {
             return Err(invalid("one DPoP proof, not several"));
         }
         let proof = proof.to_str().unwrap_or_default();
-        let (header, _) = jose::parts(proof).map_err(|e| invalid(e.0))?;
-        if header["typ"] != "dpop+jwt" {
-            return Err(invalid("a DPoP proof is typed dpop+jwt"));
-        }
-        let key = jose::from_jwk(&header["jwk"]).map_err(|e| invalid(e.0))?;
-        let (_, claims) = jose::verify(proof, &key).map_err(|e| invalid(e.0))?;
-        let jti = claims["jti"].as_str().filter(|j| !j.is_empty());
-        let jti = jti.ok_or_else(|| invalid("a DPoP proof without a jti"))?;
-        if claims["htm"] != method {
-            return Err(invalid("the DPoP proof's htm is not this request's"));
-        }
-        let htu = claims["htu"].as_str().map(bare);
-        if htu != Some(&format!("{}{path}", self.config.public_url)) {
-            return Err(invalid("the DPoP proof's htu is not this request's"));
-        }
-        let secs = now / 1000;
-        let iat = claims["iat"].as_i64().unwrap_or_default();
-        if iat < secs - PROOF_MAX_AGE - CLOCK_SKEW || iat > secs + CLOCK_SKEW {
-            return Err(invalid("a DPoP proof too old, or from the future"));
-        }
-        let nonce = claims["nonce"].as_str();
-        if !nonce.is_some_and(|n| self.nonce_ok(n, now)) {
+        let url = format!("{}{path}", self.config.public_url);
+        let request = dpop::Request {
+            method,
+            url: &url,
+            token,
+        };
+        let secs = (now / 1000) as u64;
+        let checked = dpop::verify(proof, &request, secs, PROOF_MAX_AGE, CLOCK_SKEW);
+        let dpop::Proof { jkt, claims, .. } = checked.map_err(|e| invalid(e.0))?;
+        if !claims.nonce.is_some_and(|n| self.nonce_ok(&n, now)) {
             return Err(OAuthError::bad(
                 "use_dpop_nonce",
                 "the authorization server requires a nonce in the DPoP proof",
             ));
         }
-        if token.is_some_and(|t| claims["ath"] != jose::sha256(t)) {
-            return Err(invalid("the DPoP proof's ath is not this token's"));
-        }
-        let jkt = jose::thumbprint(&key);
-        let until = (iat + PROOF_MAX_AGE + CLOCK_SKEW) * 1000;
-        let fresh = self.store.spend(&format!("dpop:{jkt}"), jti, until, now);
+        let until = (claims.iat + PROOF_MAX_AGE + CLOCK_SKEW) as i64 * 1000;
+        let fresh = self
+            .store
+            .spend(&format!("dpop:{jkt}"), &claims.jti, until, now);
         if !fresh.map_err(OAuthError::internal)? {
             return Err(invalid("a DPoP proof used before"));
         }

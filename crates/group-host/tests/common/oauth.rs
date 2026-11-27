@@ -6,8 +6,8 @@
 use super::Running;
 use super::groups::{INTERNAL, NS, auth, post};
 use super::spaces::{Authority, now};
-use atproto::jose;
 use atproto::{Curve, Keypair};
+use atproto::{dpop, jose};
 use reqwest::header::HeaderMap;
 use serde_json::{Value as Json, json};
 use std::sync::Mutex;
@@ -71,20 +71,13 @@ impl App {
         h: &Running,
         method: &str,
         path: &str,
-        change: impl Fn(&mut Json),
+        change: impl Fn(&mut dpop::Claims),
     ) -> String {
-        let mut claims = json!({
-            "jti": jose::random(12),
-            "htm": method,
-            "htu": format!("{}{path}", h.host.config.public_url),
-            "iat": now(),
-        });
-        if let Some(nonce) = self.nonce.lock().unwrap().clone() {
-            claims["nonce"] = json!(nonce);
-        }
+        let url = format!("{}{path}", h.host.config.public_url);
+        let mut claims = dpop::Claims::new(method, &url, now());
+        claims.nonce = self.nonce.lock().unwrap().clone();
         change(&mut claims);
-        let header = json!({"typ": "dpop+jwt", "jwk": jose::jwk(&self.key.public())});
-        jose::sign(&self.key, &header, &claims)
+        dpop::sign(&self.key, &claims)
     }
 
     /// POSTs `form` to `path` once, with `proof` if any.
@@ -217,7 +210,7 @@ impl App {
     /// A proof of a request to a resource, hashing `token`.
     pub fn resource_proof(&self, h: &Running, method: &str, nsid: &str, token: &str) -> String {
         self.proof_with(h, method, &format!("/xrpc/{nsid}"), |c| {
-            c["ath"] = json!(jose::sha256(token));
+            c.ath = Some(jose::sha256(token));
         })
     }
 

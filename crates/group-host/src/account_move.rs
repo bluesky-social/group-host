@@ -33,7 +33,7 @@ use crate::time::now_millis;
 use crate::xrpc::XrpcError;
 use anyhow::Result;
 use atproto::space::SPACE_URI_PREFIX;
-use atproto::{Curve, Keypair, did, jose};
+use atproto::{Curve, Keypair, did, dpop};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -279,18 +279,10 @@ impl Host {
         // Each asked for once: a nonce, and a renewed token.
         let (mut nonce, mut nonced, mut renewed) = (None::<String>, false, false);
         loop {
-            let mut claims = json!({
-                "jti": jose::random(12),
-                "htm": method.as_str(),
-                "htu": url,
-                "iat": now_millis() / 1000,
-                "ath": jose::sha256(&m.access),
-            });
-            if let Some(n) = &nonce {
-                claims["nonce"] = json!(n);
-            }
-            let header = json!({"typ": "dpop+jwt", "jwk": jose::jwk(&key.public())});
-            let proof = jose::sign(&key, &header, &claims);
+            let now = now_millis() as u64 / 1000;
+            let mut claims = dpop::Claims::new(method.as_str(), &url, now).token(&m.access);
+            claims.nonce = nonce.clone();
+            let proof = dpop::sign(&key, &claims);
             let mut req = pinned.request(method.clone(), at.clone()).query(query);
             req = req.header("authorization", format!("DPoP {}", m.access));
             req = req.header("dpop", proof);

@@ -14,6 +14,7 @@
 //! the member, in the one group they connected the MCP client to, which is why
 //! no tool asks which group.
 
+use atproto::AtUri;
 use atproto::space::{SpaceRecordUri, SpaceRef};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -933,8 +934,7 @@ pub fn label_space(group: &str, subject: &str) -> Option<String> {
     if let Ok(record) = SpaceRecordUri::parse(subject) {
         return (record.space.authority == group).then(|| record.space.to_string());
     }
-    let public = subject.strip_prefix("at://");
-    let public = public.is_some_and(|path| path.split('/').count() == 3);
+    let public = AtUri::parse(subject).is_ok_and(|at| at.rkey().is_some());
     let (authority, kind, skey) = (group.into(), MEMBERS.into(), "self".into());
     let members = SpaceRef {
         authority,

@@ -177,7 +177,8 @@ Details:
 - When `PUBLIC_URL` is http, the host allows client documents at any
   address, for test networks.
 - DPoP proofs are ES256 or ES256K, and each must carry a nonce from the
-  host (`use_dpop_nonce` otherwise).
+  host (`use_dpop_nonce` otherwise). A proof hashes the access token
+  its request carries in `ath`, and has no `ath` when it carries none.
 
 ## Approving
 

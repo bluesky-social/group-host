@@ -98,6 +98,10 @@ fn refuses_what_does_not_read() {
         "PUBLIC_URL is no origin: https://example.com/path"
     );
     assert_eq!(
+        err(&[("PUBLIC_URL", "https://a..example")]),
+        "not a host, with a port if any: a..example"
+    );
+    assert_eq!(
         err(&[("BLOB_UPLOAD_LIMIT", "lots")]),
         "BLOB_UPLOAD_LIMIT is no number of bytes: lots"
     );

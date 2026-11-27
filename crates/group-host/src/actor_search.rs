@@ -12,6 +12,7 @@
 use crate::Host;
 use crate::api::Params;
 use crate::xrpc::XrpcError;
+use atproto::did;
 use axum::Json;
 use axum::extract::{Query, State};
 use serde_json::{Value, json};
@@ -33,16 +34,6 @@ type Named = Arc<Vec<(String, String)>>;
 /// directory is read again, so callers at once share one read of it.
 #[derive(Default)]
 pub struct Handles(tokio::sync::Mutex<Option<(Instant, Named)>>);
-
-/// The handle an operation of the directory's export names, if it is one
-/// that names one: a tombstone, or an update naming none, names none.
-fn handle_of(op: &Value) -> Option<String> {
-    let aka = op["alsoKnownAs"].as_array().into_iter().flatten();
-    let named = aka
-        .filter_map(Value::as_str)
-        .find_map(|a| a.strip_prefix("at://"));
-    named.map(str::to_ascii_lowercase)
-}
 
 impl Host {
     /// Every DID the directory names a handle for, and the handle: from the
@@ -76,7 +67,9 @@ impl Host {
             let live = lines.iter().filter(|e| e["nullified"] != true);
             for entry in live {
                 let did = entry["did"].as_str().unwrap_or_default().to_string();
-                last.insert(did, handle_of(&entry["operation"]));
+                // A tombstone, or an update naming none, names none.
+                let handle = did::handle(&entry["operation"]).map(|h| h.to_ascii_lowercase());
+                last.insert(did, handle);
             }
         }
         let handles: Vec<(String, String)> = last

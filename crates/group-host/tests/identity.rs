@@ -40,10 +40,10 @@ async fn reads_what_it_can_and_refuses_the_rest() {
     let err = |e: anyhow::Error| format!("{e:#}");
     for (did, why) in [
         ("did:key:zQ3sh", "did:key:zQ3sh: not a did:plc or a did:web"),
-        ("did:web:", "did:web: is not a did:web of a host"),
+        ("did:web:", "not a did:web of a host: did:web:"),
         (
             "did:web:example.com:users:alice",
-            "did:web:example.com:users:alice is not a did:web of a host",
+            "a did:web is of a host alone, with no path: did:web:example.com:users:alice",
         ),
     ] {
         assert_eq!(err(r.document(did).await.unwrap_err()), why);

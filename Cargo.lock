@@ -65,9 +65,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto"
-version = "0.4.0"
+version = "0.4.1"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "ed3fd1d892f62d57c8d54977e151f3c2615e171b751e0578a7cd119ca3b3335b"
+checksum = "b95bddb1f03ef47c03ea99906a855b36e30dd3d7de3cc2fb23258e9d33df1fa3"
 dependencies = [
  "base64 0.22.1",
  "blake3",

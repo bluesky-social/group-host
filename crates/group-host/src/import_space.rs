@@ -26,7 +26,7 @@
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
-use crate::group::{members_space, meta_space};
+use crate::group::{members_space, meta_space, rkey_did};
 use crate::group_api::signed_in;
 use crate::lexicons::lexicons;
 use crate::migration::create;
@@ -75,21 +75,6 @@ fn unsupported(why: &str) -> XrpcError {
     )
 }
 
-/// A member's DID from its record key, as the PDS writes it: a localhost
-/// did:web's port, which a record key cannot hold encoded, unencoded.
-pub fn record_key_to_did(rkey: &str) -> String {
-    let port = rkey
-        .strip_prefix("did:web:")
-        .and_then(|rest| rest.split_once(':'))
-        .filter(|(host, port)| {
-            !host.is_empty() && !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())
-        });
-    match port {
-        Some((host, port)) => format!("did:web:{host}%3A{port}"),
-        None => rkey.to_string(),
-    }
-}
-
 /// What this host keeps of the space `meta` holds: its policy, as ours,
 /// and each account's grant beside it (reading, writing).
 pub(crate) fn kept(meta: &SpaceMeta) -> Result<(serde_json::Value, Vec<Grant>), XrpcError> {
@@ -112,7 +97,7 @@ pub(crate) fn kept(meta: &SpaceMeta) -> Result<(serde_json::Value, Vec<Grant>), 
         return Err(unsupported("only some apps using it"));
     }
     let grants = meta.policy_state.iter().map(|(key, value)| {
-        let did = key.strip_prefix(MEMBER_PREFIX).map(record_key_to_did);
+        let did = key.strip_prefix(MEMBER_PREFIX).map(rkey_did);
         let did = did.filter(|d| members && syntax::is_did(d));
         let (Some(did), Some(Value::Bool(read)), Some(Value::Bool(write))) =
             (did, value.get("read"), value.get("write"))

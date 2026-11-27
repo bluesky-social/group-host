@@ -327,7 +327,7 @@ pub async fn list_blobs(State(host): State<Arc<Host>>, Query(p): Query<Params>) 
 /// The host's own DID document, when its DID is a `did:web` of its address.
 pub async fn did_json(State(host): State<Arc<Host>>) -> Result<Json<Value>, StatusCode> {
     let did = &host.config.service_did;
-    if !did.starts_with("did:web:") {
+    if atproto::did::web_host(did).is_err() {
         return Err(StatusCode::NOT_FOUND);
     }
     // Its groups' PDS, and the service an app reaches through a person's

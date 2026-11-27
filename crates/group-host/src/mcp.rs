@@ -32,8 +32,8 @@ use crate::store::Store;
 use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
-use atproto::jose;
 use atproto::space::SpaceRef;
+use atproto::{dpop, jose};
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, Request, StatusCode, header};
@@ -484,7 +484,7 @@ pub async fn authorize(
     if p.get("response_type").map(String::as_str) != Some("code") {
         return back("unsupported_response_type");
     }
-    if !s256 || !(43..=128).contains(&challenge.len()) || !resource {
+    if !s256 || !dpop::pkce_well_formed(challenge) || !resource {
         return back("invalid_request");
     }
     let request = McpRequest {
@@ -615,8 +615,7 @@ pub async fn token(
                 return Ok(bad("invalid_grant", "an unknown or used code"));
             };
             let verifier = field("code_verifier");
-            let proved = (43..=128).contains(&verifier.len())
-                && jose::sha256(verifier) == request.code_challenge;
+            let proved = dpop::pkce_proves(verifier, &request.code_challenge);
             if request.client_id != field("client_id")
                 || request.redirect_uri != field("redirect_uri")
                 || !proved

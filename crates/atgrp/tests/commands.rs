@@ -530,7 +530,7 @@ async fn switches_a_group_off_and_on_and_deletes_it() {
     let me = me.await.unwrap();
     let at = HostAt {
         url: h.url.clone(),
-        did: did_web(&h.url),
+        did: did_web(&h.url).unwrap(),
     };
     let key = Keypair::generate(Curve::K256).public().did_key();
     let body = json!({"group": did, "key": key});
@@ -604,6 +604,16 @@ async fn moves_a_group_to_another_host() {
     let to = format!("{}/", b.url);
     let said = fails(&bob, &["group", "move", "riders.groups.test", "--to", &to]).await;
     assert!(said.contains("org.atgrp.internal.migratePrepare"), "{said}");
+    // An address with a path names no did:web to move to.
+    let elsewhere = [
+        "group",
+        "move",
+        "riders.groups.test",
+        "--to",
+        "https://b.test/x",
+    ];
+    let said = fails(&alice, &elsewhere).await;
+    assert!(said.contains("not a host"), "{said}");
     let said = ok(
         &alice,
         &[
@@ -897,6 +907,8 @@ async fn says_what_is_wrong_with_what_it_is_asked() {
     );
     let mut gone = alice.clone();
     gone.host = "http://127.0.0.1:1".into();
+    // Named by the DID of the host it was, which a PDS signs a token for.
+    gone.host_did = Some(did_web(&alice.host).unwrap());
     for args in [
         &["group", "show", "x.test"][..],
         &["group", "create", "x.groups.test"],
@@ -926,7 +938,10 @@ async fn answers_a_call_a_persons_pds_proxies() {
         .unwrap();
     let res = http
         .get(format!("{}/xrpc/org.atgrp.internal.getViewer", n.pds))
-        .header("atproto-proxy", format!("{}#atgrp", did_web(&h.url)))
+        .header(
+            "atproto-proxy",
+            format!("{}#atgrp", did_web(&h.url).unwrap()),
+        )
         .bearer_auth(session["accessJwt"].as_str().unwrap())
         .send()
         .await
@@ -937,14 +952,22 @@ async fn answers_a_call_a_persons_pds_proxies() {
     assert_eq!(said["actor"]["did"], alice.did.as_str(), "{said}");
 }
 
-#[test]
-fn reads_its_environment() {
+#[tokio::test]
+async fn reads_its_environment() {
     let env = Env::from(|_| None);
     assert_eq!(env.host, "http://localhost:2600");
-    assert_eq!(env.host_did, "did:web:localhost%3A2600");
+    assert_eq!(env.host_did, None);
+    assert_eq!(did_web(&env.host).unwrap(), "did:web:localhost%3A2600");
     assert_eq!(env.pds, "http://localhost:2583");
     assert!(env.handle.is_none() && env.seed_invite.is_empty());
-    assert_eq!(did_web("https://groups.example/"), "did:web:groups.example");
+    assert_eq!(
+        did_web("https://groups.example/").unwrap(),
+        "did:web:groups.example"
+    );
+    // An address with a path has no did:web, here or to move to.
+    let env = Env::from(|k| (k == "ATGRP_HOST").then(|| "https://a.example/x".into()));
+    let said = run(&["group".into(), "list".into()], &env).await;
+    assert!(said.unwrap_err().to_string().contains("not a host"));
 }
 
 #[tokio::test]

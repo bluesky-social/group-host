@@ -261,10 +261,15 @@ fn plans_a_label_beside_its_subject() {
     );
     assert_eq!(label_space("did:plc:other", post), None);
     assert_eq!(
-        label_space("did:plc:g", "at://did:plc:a/x.y/rides").as_deref(),
+        label_space("did:plc:g", "at://did:plc:a/com.example.post/rides").as_deref(),
         Some(members)
     );
-    assert_eq!(label_space("did:plc:g", "at://did:plc:g/x.y"), None);
+    assert_eq!(
+        label_space("did:plc:g", "at://did:plc:g/com.example.post"),
+        None
+    );
+    // Nor an AT URI whose parts are not what they say.
+    assert_eq!(label_space("did:plc:g", "at://did:plc:a/x.y/rides"), None);
     let old = "at://did:plc:g/space/x.y.z/rides/did:plc:a/com.example.post/1";
     assert_eq!(label_space("did:plc:g", old), None);
     let bad = "at:space/did:plc:g/x.y.z/rides/did:plc:a/com.example.post";

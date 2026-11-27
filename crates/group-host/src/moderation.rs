@@ -32,7 +32,7 @@ use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use anyhow::Result;
 use atproto::space::{SPACE_URI_PREFIX, SpaceRecordUri};
-use atproto::{Cid, drisl, syntax};
+use atproto::{AtUri, Cid, drisl, syntax};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -346,13 +346,11 @@ pub fn space_of(uri: &str) -> Option<(String, String)> {
 
 /// The account a public record's URI is in, `at://<did>/<collection>/<rkey>`,
 /// a record in no space, each of its parts what it says.
-fn public_of(uri: &str) -> Option<&str> {
-    let parts: Vec<&str> = uri.strip_prefix("at://")?.split('/').collect();
-    let [did, collection, rkey] = parts[..] else {
-        return None;
-    };
-    let valid = syntax::is_did(did) && syntax::is_nsid(collection) && syntax::is_record_key(rkey);
-    valid.then_some(did)
+fn public_of(uri: &str) -> Option<String> {
+    let at = AtUri::parse(uri).ok()?;
+    let record = at.rkey().is_some() && at.fragment().is_none();
+    let did = Some(at.authority()).filter(|did| record && syntax::is_did(did));
+    did.map(String::from)
 }
 
 /// Refuses a record subject's URI that is neither in one of `group`'s
@@ -389,7 +387,9 @@ fn subject_in(group: &str, asked: &Value) -> Result<(String, Option<String>), Xr
 /// wrote, in my public repo or in one of the group's spaces.
 fn owns(group: &str, me: &str, subject: &str) -> bool {
     let in_space = space_of(subject).is_some_and(|(_, authority)| authority == group);
-    subject == me || public_of(subject) == Some(me) || (in_space && account_of(subject) == me)
+    subject == me
+        || public_of(subject).is_some_and(|did| did == me)
+        || (in_space && account_of(subject) == me)
 }
 
 impl Host {
@@ -416,7 +416,7 @@ impl Host {
             }
             // A public record's author's roles, in the members space alone.
             let roles = match public_of(subject).filter(|_| members) {
-                Some(did) => self.roles(group, did).map_err(XrpcError::internal)?,
+                Some(did) => self.roles(group, &did).map_err(XrpcError::internal)?,
                 None => Vec::new(),
             };
             if roles.is_empty() {
@@ -519,14 +519,13 @@ fn present(mut value: Value) -> Value {
 
 /// The account a subject is, or whose record it is: a record's repo, as
 /// the queue keeps it, in a space or a public repo.
-fn account_of(key: &str) -> &str {
+fn account_of(key: &str) -> String {
     // One in a space's author comes after the space; a public record's
     // repo first.
-    if let Some(path) = key.strip_prefix(SPACE_URI_PREFIX) {
-        return path.split('/').nth(3).expect("a record in a space");
+    if let Ok(record) = SpaceRecordUri::parse(key) {
+        return record.author;
     }
-    let public = key.strip_prefix("at://");
-    public.map_or(key, |path| path.split('/').next().unwrap_or(path))
+    AtUri::parse(key).map_or_else(|_| key.to_string(), |at| at.authority().to_string())
 }
 
 /// A subject as the queue answers it (`mod.defs#subjectView`), with
@@ -534,7 +533,7 @@ fn account_of(key: &str) -> &str {
 fn subject_view(s: &Subject, actors: &HashMap<String, Value>) -> Value {
     json!({
         "subject": s.subject,
-        "actor": actors[account_of(&s.subject)],
+        "actor": actors[&account_of(&s.subject)],
         "status": s.status,
         "reportCount": s.reports,
         "tags": s.tags,
@@ -643,8 +642,8 @@ pub async fn query_subjects(
         .store
         .subjects(&group, status, &tags, sort, after, limit)
         .map_err(XrpcError::internal)?;
-    let actors = host.actor_views(subjects.iter().map(|s| account_of(&s.subject)));
-    let actors = actors.await;
+    let accounts: Vec<String> = subjects.iter().map(|s| account_of(&s.subject)).collect();
+    let actors = host.actor_views(accounts.iter().map(String::as_str)).await;
     let views: Vec<Value> = subjects.iter().map(|s| subject_view(s, &actors)).collect();
     let mut out = json!({ "subjects": views });
     if subjects.len() == limit as usize
@@ -802,7 +801,7 @@ pub async fn update_subject(
     let now = host.store.subject(&group, &subject);
     let now = now.map_err(XrpcError::internal)?;
     let now = now.expect("found above");
-    let actors = host.actor_views([account_of(&now.subject)]).await;
+    let actors = host.actor_views([account_of(&now.subject).as_str()]).await;
     Ok(Json(subject_view(&now, &actors)))
 }
 
@@ -843,8 +842,12 @@ pub async fn submit_report(
     }
     // A record in a space is reported in its own; an account, or a
     // member's public record, in the members space, where its labels go.
-    let collection =
-        (!syntax::is_did(&subject)).then(|| subject.rsplit('/').nth(1).expect("a record's URI"));
+    let collection = match SpaceRecordUri::parse(&subject) {
+        Ok(record) => Some(record.collection),
+        Err(_) => AtUri::parse(&subject)
+            .ok()
+            .and_then(|at| at.collection().map(String::from)),
+    };
     let kind = if collection.is_some() {
         "record"
     } else {
@@ -853,8 +856,8 @@ pub async fn submit_report(
     let space = match space_of(&subject) {
         Some((space, _)) => space,
         None => {
-            let account = public_of(&subject).unwrap_or(&subject);
-            let roles = host.roles(group, account).map_err(XrpcError::internal)?;
+            let account = public_of(&subject).unwrap_or_else(|| subject.clone());
+            let roles = host.roles(group, &account).map_err(XrpcError::internal)?;
             if roles.is_empty() {
                 return Err(invalid_subject("not a member of this group"));
             }
@@ -862,7 +865,7 @@ pub async fn submit_report(
         }
     };
     let taken = accepts(&labeler, "subjectTypes", kind)
-        && collection.is_none_or(|c| accepts(&labeler, "subjectCollections", c));
+        && collection.is_none_or(|c| accepts(&labeler, "subjectCollections", &c));
     if !taken {
         return Err(invalid_subject("the group takes no reports of this kind"));
     }

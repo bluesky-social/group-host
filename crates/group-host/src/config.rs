@@ -3,6 +3,7 @@
 //! `docs/reference/config.md`.
 
 use anyhow::{Context, Result, bail};
+use atproto::did;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -107,8 +108,10 @@ impl Config {
         else {
             bail!("PUBLIC_URL is no origin: {public_url}");
         };
-        let service_did =
-            var("SERVICE_DID").unwrap_or_else(|| format!("did:web:{}", host.replace(':', "%3A")));
+        let service_did = match var("SERVICE_DID") {
+            Some(did) => did,
+            None => did::web(host)?,
+        };
         let handle_domain = var("HANDLE_DOMAIN").unwrap_or_else(|| ".test".into());
         if !handle_domain.starts_with('.') {
             bail!("HANDLE_DOMAIN starts with a dot: .{handle_domain}");

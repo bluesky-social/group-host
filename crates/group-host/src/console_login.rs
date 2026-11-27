@@ -33,8 +33,8 @@ use crate::oauth_dpop::hmac;
 use crate::store::Store;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
-use atproto::jose;
 use atproto::{Curve, Keypair, did};
+use atproto::{dpop, jose};
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
@@ -329,13 +329,9 @@ impl Host {
         let mut nonce: Option<String> = None;
         for _ in 0..2 {
             let now = now_millis() / 1000;
-            let mut claims =
-                json!({"jti": jose::random(12), "htm": "POST", "htu": url, "iat": now});
-            if let Some(n) = &nonce {
-                claims["nonce"] = json!(n);
-            }
-            let header = json!({"typ": "dpop+jwt", "jwk": jose::jwk(&key.public())});
-            let proof = jose::sign(key, &header, &claims);
+            let mut claims = dpop::Claims::new("POST", url, now as u64);
+            claims.nonce = nonce.clone();
+            let proof = dpop::sign(key, &claims);
             let id = self.console_client_id();
             let assertion = jose::sign(
                 &self.console_key(),
@@ -503,7 +499,7 @@ pub(crate) async fn sign_in(
     let key = Keypair::generate(Curve::P256);
     let (verifier, state) = (jose::random(32), jose::random(16));
     let callback = host.console_callback();
-    let challenge = jose::sha256(&verifier);
+    let challenge = dpop::pkce_challenge(&verifier);
     let hint = match identifier {
         Some(who) => ("login_hint", who.as_str()),
         None => ("prompt", "create"),

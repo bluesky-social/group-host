@@ -113,12 +113,8 @@ impl Resolver {
     /// names, rather than one the host is set to read it at
     /// (`DID_WEB_HOSTS`) or the PLC directory.
     fn url(&self, did: &str) -> Result<(String, bool)> {
-        if let Some(host) = did.strip_prefix("did:web:") {
-            // A did:web of a host alone: one with a path names no host here.
-            if host.is_empty() || host.contains(':') {
-                bail!("{did} is not a did:web of a host");
-            }
-            let host = host.replace("%3A", ":");
+        if did.starts_with("did:web:") {
+            let host = did::web_host(did)?;
             let (host, named) = match self.did_web_hosts.get(&host) {
                 Some(set) => (set, false),
                 None => (&host, true),
