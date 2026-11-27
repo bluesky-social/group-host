@@ -17,15 +17,17 @@ impl Running {
 }
 
 fn start(data: &std::path::Path) -> Running {
-    start_logging(data, "off")
+    start_logging(data, "off", &[])
 }
 
-/// The binary, logging what `filter` lets through.
-fn start_logging(data: &std::path::Path, filter: &str) -> Running {
+/// The binary, logging what `filter` lets through, its environment `vars`
+/// besides.
+fn start_logging(data: &std::path::Path, filter: &str, vars: &[(&str, &str)]) -> Running {
     let mut child = Command::new(env!("CARGO_BIN_EXE_group-host"))
         .env("PORT", "0")
         .env("DATA_DIR", data)
         .env("RUST_LOG", filter)
+        .envs(vars.iter().copied())
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -77,7 +79,7 @@ async fn answers_health_and_refuses_unknown_methods() {
 #[tokio::test]
 async fn keeps_the_lines_it_logs_and_counts_its_requests() {
     let data = tempfile::tempdir().unwrap();
-    let host = start_logging(data.path(), "info");
+    let host = start_logging(data.path(), "info", &[]);
     let http = reqwest::Client::new();
     let asked = http.get(format!("{}/xrpc/org.atgrp.noSuchQuery", host.1));
     let res = asked.send().await.unwrap();
@@ -122,6 +124,40 @@ async fn keeps_the_lines_it_logs_and_counts_its_requests() {
     let report = stats.report(&store, 1, now).unwrap();
     assert_eq!(report["days"][0]["requests"], 1, "{report}");
     assert_eq!(report["routes"][0]["route"], "/xrpc/{nsid}");
+}
+
+/// As it starts, with nothing written, the host asks the relays to read
+/// its firehose, so a relay reads it before a group's first events.
+#[tokio::test]
+async fn asks_the_relays_to_crawl_as_it_starts() {
+    let (told, mut asked) = tokio::sync::mpsc::unbounded_channel();
+    let ask = move |axum::Json(body): axum::Json<serde_json::Value>| {
+        let told = told.clone();
+        async move { told.send(body).unwrap() }
+    };
+    let route = "/xrpc/com.atproto.sync.requestCrawl";
+    let relay = axum::Router::new().route(route, axum::routing::post(ask));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let relay_url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, relay).await.unwrap() });
+
+    let data = tempfile::tempdir().unwrap();
+    let vars = [
+        ("PDS_CRAWLERS", relay_url.as_str()),
+        ("PUBLIC_URL", "https://groups.example.com"),
+    ];
+    let host = start_logging(data.path(), "off", &vars);
+    let wait = std::time::Duration::from_secs(10);
+    let said = tokio::time::timeout(wait, asked.recv()).await.unwrap();
+    assert_eq!(
+        said,
+        Some(serde_json::json!({"hostname": "groups.example.com"}))
+    );
+    // The relay may be asked before the host serves, and so before it
+    // listens for SIGTERM: once it answers, it stops as it should.
+    let health = reqwest::get(format!("{}/xrpc/_health", host.1)).await;
+    assert_eq!(health.unwrap().status(), 200);
+    assert!(host.stop().success());
 }
 
 #[test]

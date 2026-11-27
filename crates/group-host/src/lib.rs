@@ -87,8 +87,6 @@ pub struct Host {
     writing: repo::Writing,
     /// Told of each new event, which wakes the firehose's streams.
     pub events: tokio::sync::broadcast::Sender<()>,
-    /// When the relays were last told of news.
-    crawled: std::sync::Mutex<Option<std::time::Instant>>,
     pub(crate) http: reqwest::Client,
     /// The spaces the index is to read, and its wake.
     indexing: std::sync::Mutex<std::collections::BTreeSet<String>>,
@@ -128,7 +126,6 @@ impl Host {
             clock,
             writing: Default::default(),
             events: tokio::sync::broadcast::channel(16).0,
-            crawled: Default::default(),
             http: client(),
             indexing: Default::default(),
             index_wake: Default::default(),
@@ -690,6 +687,10 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     // Every line from here kept for the operators too, written as it goes.
     logs::sink(&host.logs);
     tokio::spawn(admin::keeping(host.clone(), admin::FLUSH));
+    // The relays asked to read the firehose now, before anything is
+    // written, and again every twenty minutes, so one is reading when a
+    // group's first events go out.
+    tokio::spawn(firehose::crawling(host.clone(), firehose::CRAWL_EVERY));
     let config = &host.config;
     tracing::info!(
         public_url = %config.public_url,

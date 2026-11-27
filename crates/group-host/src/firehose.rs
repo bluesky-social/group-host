@@ -2,6 +2,7 @@
 //! keeps, after a cursor if one is given, then each as it happens, over a
 //! WebSocket. A frame is a header (`op` 1 and the event's `t`) then its
 //! body, both DRISL; a refusal, a header of `op` -1 and an error body.
+//! And the relays, asked to read it.
 
 use crate::Host;
 use crate::store::Sequenced;
@@ -13,9 +14,36 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// How many events are read from the database at a time.
 const PAGE: u32 = 500;
+
+/// How long between asking the relays to read the firehose.
+pub const CRAWL_EVERY: Duration = Duration::from_secs(20 * 60);
+
+/// Asks each relay `PDS_CRAWLERS` names to read the firehose
+/// (`requestCrawl`), now and then every `every`, whether or not anything
+/// was written. A relay that starts reading a host takes only the events
+/// after it connects, so it must be reading before a group's first events
+/// go out. One that stopped reading a host, as after failing to reach it a
+/// while, reads it again only when asked; asking one that reads already
+/// changes nothing.
+pub async fn crawling(host: Arc<Host>, every: Duration) {
+    let hostname = host.config.public_url.split("://").nth(1);
+    let body = serde_json::json!({ "hostname": hostname.unwrap_or_default() });
+    loop {
+        for crawler in &host.config.crawlers {
+            let url = format!("{crawler}/xrpc/com.atproto.sync.requestCrawl");
+            let asked = host.http.post(url).json(&body).send().await;
+            match asked.and_then(|r| r.error_for_status()) {
+                Ok(_) => tracing::info!(crawler, "asked the relay to crawl"),
+                Err(e) => tracing::warn!(crawler, error = %e, "requestCrawl failed"),
+            }
+        }
+        tokio::time::sleep(every).await;
+    }
+}
 
 fn map<const N: usize>(fields: [(&str, Value); N]) -> Value {
     Value::Map(

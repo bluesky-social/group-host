@@ -37,7 +37,8 @@ pub struct Config {
     /// Who this host starts groups for, `GROUP_FOUNDERS`, comma-separated
     /// DIDs: anyone when it names none.
     pub group_founders: Vec<String>,
-    /// The relays told of this host's news, `PDS_CRAWLERS`, comma-separated.
+    /// The relays asked to read this host's firehose, `PDS_CRAWLERS`,
+    /// comma-separated.
     pub crawlers: Vec<String>,
     /// The most bytes one blob may be, `BLOB_UPLOAD_LIMIT`.
     pub blob_upload_limit: u64,

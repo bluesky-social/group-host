@@ -56,8 +56,8 @@ under `org.atgrp.internal.*`, and may change.
 
 - [Spaces](spaces.md): what a space is, who reads and writes, credentials,
   and the index.
-- [Groups](groups.md): starting a group, what it shows, its `about` record,
-  spaces, handle and own domain, and ending it.
+- [Groups](groups.md): starting a group, how relays hear of it, what it
+  shows, its `about` record, spaces, handle and own domain, and ending it.
 - [Membership](membership.md): roles, joining, invites, and leaving.
 - [Signing in](signing-in.md): people, apps and MCP clients, and what a
   token may do.

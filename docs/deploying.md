@@ -166,7 +166,7 @@ curl https://group.example.com/xrpc/_health
 {"version":"0.1.0","commit":"dc64028..."}
 ```
 
-As it starts, the host logs a `serving` line with its `public_url`, `did`, `version` and `commit`. The host's lines are JSON. Both containers log through docker's `journald` driver, so their lines stay in the machine's journal after a container is removed:
+As it starts, the host logs a `serving` line with its `public_url`, `did`, `version` and `commit`. It also asks each relay in `GROUP_HOST_CRAWLERS` to read its firehose, as it starts and every 20 minutes after, logging `asked the relay to crawl` or `requestCrawl failed` with the relay and why ([how relays hear of a group](design/groups.md#how-relays-hear-of-a-group)). The host's lines are JSON. Both containers log through docker's `journald` driver, so their lines stay in the machine's journal after a container is removed:
 
 ```sh
 docker compose logs -f host

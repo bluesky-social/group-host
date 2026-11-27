@@ -65,6 +65,35 @@ Details:
   group's display name is 64 graphemes at most, and its description
   2,000.
 
+## How relays hear of a group
+
+Apps learn of a group the way they learn of any account. A relay reads
+the host's firehose (`com.atproto.sync.subscribeRepos`) and passes its
+events on to them. Starting a group puts out its `#identity` and
+`#account` events and its first commits, the declaration among them. A
+relay that reads a host for the first time connects with no cursor, so
+it takes only the events after it connects. If no relay is reading when
+a group starts, none of them ever sees those events.
+
+So the host asks each relay in `PDS_CRAWLERS` to read its firehose
+(`com.atproto.sync.requestCrawl`) as it starts, before it writes
+anything, and every 20 minutes after. It asks whether or not it wrote
+anything, and asking a relay that's already reading changes nothing. A
+relay stops reading a host it can't reach for a few minutes, as during a
+long upgrade, and reads it again only when asked. The ask at the start
+and the one every 20 minutes bring it back. Once a relay has taken one
+event from the host, it reconnects with a cursor, and the host sends it
+every event it missed, since the host keeps them all.
+
+The host doesn't send a relay that connects with no cursor any events
+from before it connected. An event stream starts such a subscriber at
+its current position, and the host's events are one log that every
+subscriber reads, so it can't put out events for one of them. A group
+whose first events no relay saw reaches the relays with its next event,
+such as a commit or a handle change. An app that reads only the
+relays' commits still lacks the records written before that, and has to
+read the group's repo itself (`com.atproto.sync.getRepo`).
+
 ## Its address
 
 A group needs a name before it has a domain of its own. So the host gives

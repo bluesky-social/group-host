@@ -467,38 +467,9 @@ impl Host {
         Ok(Checked { path, put, blobs })
     }
 
-    /// Wakes the firehose's streams, and tells the relays in
-    /// `PDS_CRAWLERS` this host has news: at most every twenty minutes,
-    /// and the first time after it starts, so a relay that marked it
-    /// offline comes back.
+    /// Wakes the firehose's streams: an event was written.
     pub(crate) fn announce(&self) {
         let _ = self.events.send(());
-        let mut last = self.crawled.lock().expect("not poisoned");
-        if last.is_some_and(|at| at.elapsed() < CRAWL_EVERY) {
-            return;
-        }
-        *last = Some(std::time::Instant::now());
-        let hostname = self
-            .config
-            .public_url
-            .split("://")
-            .nth(1)
-            .unwrap_or_default()
-            .to_string();
-        for crawler in self.config.crawlers.clone() {
-            let body = serde_json::json!({ "hostname": hostname });
-            let send = self
-                .http
-                .post(format!("{crawler}/xrpc/com.atproto.sync.requestCrawl"))
-                .json(&body)
-                .send();
-            tokio::spawn(async move {
-                let said = send.await.and_then(|r| r.error_for_status());
-                if let Err(e) = said {
-                    tracing::warn!(crawler, error = %e, "requestCrawl failed");
-                }
-            });
-        }
     }
 
     /// `did`'s whole repo as a CAR file: its commit, then each node of its
@@ -518,9 +489,6 @@ impl Host {
         Ok(car::write(&[head.cid], blocks.iter().map(|(c, b)| (c, *b))))
     }
 }
-
-/// How long between telling the relays of news.
-const CRAWL_EVERY: std::time::Duration = std::time::Duration::from_secs(20 * 60);
 
 /// An `#identity` event: `did` known as `handle`, for the relays to
 /// read its document afresh.

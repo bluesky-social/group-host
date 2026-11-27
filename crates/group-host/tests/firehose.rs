@@ -1,5 +1,5 @@
 //! The firehose: every event after a cursor, then each as it is made, as
-//! sync 1.1 frames them; and the relays told of news.
+//! sync 1.1 frames them; and the relays asked to read it.
 
 mod common;
 
@@ -323,8 +323,11 @@ async fn refuses_a_cursor_it_cannot_follow() {
     assert!(refused.to_string().contains("400"), "{refused}");
 }
 
+/// The relays are asked to read the firehose at once and again every so
+/// often, with nothing written, so one that stopped reading the host reads
+/// it again before its next events.
 #[tokio::test]
-async fn tells_the_relays_of_news() {
+async fn asks_the_relays_to_crawl_every_so_often() {
     let asked: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
     let seen = asked.clone();
     let relay = Router::new().route(
@@ -342,20 +345,21 @@ async fn tells_the_relays_of_news() {
     // One relay that answers, one that is not there, and a blank.
     let crawlers = format!("{relay_url}/, http://127.0.0.1:1, ");
     let h = start(&[("PDS_CRAWLERS", crawlers.as_str())], false).await;
-    let did = h.host.create_account(RIDERS).await.unwrap();
-    h.host.write(&did, &[create("a")]).unwrap();
-    for _ in 0..50 {
-        if !asked.lock().unwrap().is_empty() {
+    let every = Duration::from_millis(50);
+    let crawling = group_host::firehose::crawling(h.host.clone(), every);
+    let going = tokio::spawn(crawling);
+    for _ in 0..100 {
+        if asked.lock().unwrap().len() >= 3 {
             break;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    // Told once, though two things happened, as twenty minutes have not passed.
-    assert_eq!(
-        *asked.lock().unwrap(),
-        vec![json!({"hostname": "host.test"})]
-    );
+    going.abort();
+    let asked = asked.lock().unwrap().clone();
+    assert!(asked.len() >= 3, "{asked:?}");
+    assert!(asked.iter().all(|a| *a == json!({"hostname": "host.test"})));
+    // Nothing was written: the host asks all the same.
+    assert_eq!(h.host.store.last_seq().unwrap(), 0);
     assert_eq!(
         h.host.config.crawlers,
         vec![relay_url, "http://127.0.0.1:1".to_string()]
