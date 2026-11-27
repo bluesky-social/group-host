@@ -166,16 +166,7 @@ pub async fn get_authorization(
     let requested = requested(&request);
     let metadata = host.client(&request.client_id, now_millis()).await;
     let metadata = metadata.map(|c| c.metadata).unwrap_or_default();
-    let mut client = json!({"clientId": request.client_id});
-    for (k, from) in [
-        ("name", "client_name"),
-        ("uri", "client_uri"),
-        ("logo", "logo_uri"),
-    ] {
-        if let Some(v) = metadata[from].as_str() {
-            client[k] = json!(v);
-        }
-    }
+    let client = host.app_view(&request.client_id, &metadata);
     let groups = match host.named_group(&request)? {
         Some(named) => vec![named],
         None => host.groups_of(&me)?,

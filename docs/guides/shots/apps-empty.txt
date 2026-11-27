@@ -18,8 +18,8 @@
   - button "Create an app password"
   - paragraph: No app passwords
   - paragraph: Create one for an app that signs in with a handle and password, like the Bluesky app.
-  - heading "What apps did as the group" [level=2]
-  - paragraph: Each write an app made while signed in as the group, newest first.
-  - paragraph: No app has written anything yet
-  - paragraph: When an app signed in as the group writes something, it shows up here.
+  - heading "Changes made as the group" [level=2]
+  - paragraph: By apps, and by members in the console, newest first.
+  - paragraph: No changes made as the group yet
+  - paragraph: When an app or someone in the console changes something as the group, it shows up here.
 - contentinfo: console.group-host.internal runs Atmosphere Groups

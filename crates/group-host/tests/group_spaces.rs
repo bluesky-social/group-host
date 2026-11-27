@@ -719,3 +719,53 @@ async fn an_admin_ends_a_space() {
         .await;
     assert_eq!(said.error(), (400, "SpaceNotFound"));
 }
+
+#[tokio::test]
+async fn its_log_says_what_each_change_did_to_a_space() {
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    let rides = calendar(&did, "rides");
+    let grants = json!([{"role": "member", "read": true}]);
+    let closed = json!({"$type": POLICY, "grants": grants});
+    let open = json!({"$type": POLICY, "publicRead": true, "grants": grants});
+    let body = json!({"spaceType": CALENDAR, "skey": "rides", "policy": closed});
+    let said = method(&h, &alice, &did, &rides, "createSpace", body).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+    // Opened to anyone, changed while open, then closed again.
+    for policy in [&open, &open, &closed] {
+        let body = json!({"space": rides, "policy": policy});
+        let said = method(&h, &alice, &did, &rides, "updateSpace", body).await;
+        assert_eq!(said.status, 200, "{}", said.body);
+    }
+    let body = json!({"space": rides});
+    let said = method(&h, &alice, &did, &rides, "deleteSpace", body).await;
+    assert_eq!(said.status, 200, "{}", said.body);
+
+    let lxm = format!("{INTERNAL}.listGroupTokens");
+    let query = format!("group={did}");
+    let (status, listed) = get(&h, &lxm, &query, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{listed}");
+    let changes: Vec<(&str, &Json)> = listed["activity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a.get("space").is_some())
+        .map(|a| {
+            // A change to a space is no write.
+            assert_eq!(a.get("write"), None, "{a}");
+            (a["action"].as_str().unwrap(), &a["space"])
+        })
+        .collect();
+    let space = |operation: &str| json!({"space": rides, "operation": operation});
+    let switched = |public_read: bool| json!({"space": rides, "operation": "update", "publicRead": public_read});
+    assert_eq!(
+        changes,
+        [
+            (format!("deleted space {rides}").as_str(), &space("delete")),
+            (format!("closed space {rides}").as_str(), &switched(false)),
+            (format!("updated space {rides}").as_str(), &space("update")),
+            (format!("opened space {rides}").as_str(), &switched(true)),
+            (format!("created space {rides}").as_str(), &space("create")),
+        ]
+    );
+}

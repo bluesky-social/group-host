@@ -8,8 +8,10 @@
 //! password is involved, and there is nothing to refresh.
 //!
 //! `listGroupTokens` shows a group's configurers every grant that acts as
-//! it, whose it is, and what was done with grants lately;
-//! `revokeGroupToken` ends one.
+//! it, whose it is, and what was done with grants lately: each app as its
+//! client metadata names it (`apps.rs`), each write with what its kind of
+//! record is as its lexicon describes it (`permission_sets.rs`), and each
+//! change to a space as what it did. `revokeGroupToken` ends one.
 
 use crate::Host;
 use crate::api::{Params, invalid, param};
@@ -25,11 +27,12 @@ use crate::time::{iso, now_millis};
 use crate::xrpc::XrpcError;
 use atproto::jose;
 use atproto::space::SpaceRef;
+use atproto::syntax::is_nsid;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 /// How long a group token lasts.
@@ -278,7 +281,7 @@ pub async fn get_group_auth(
 /// collection and key, the space, if it was in one, and the DID of whom
 /// it is about, if any: a record kept under someone's DID (a
 /// membership), or one written in their inbox (an invite). Nothing, for
-/// what was not a write.
+/// what was not a write, a change to a space among it.
 fn write_of(action: &str) -> Option<(Value, Option<String>)> {
     let (done, rest) = action.split_once(' ')?;
     let at = ["created", "updated", "deleted"]
@@ -287,7 +290,7 @@ fn write_of(action: &str) -> Option<(Value, Option<String>)> {
     let (path, space) = rest
         .split_once(" in ")
         .map_or((rest, None), |(p, s)| (p, Some(s)));
-    let (collection, rkey) = path.split_once('/')?;
+    let (collection, rkey) = path.split_once('/').filter(|(c, _)| is_nsid(c))?;
     let inbox = space.and_then(|s| SpaceRef::parse(s).ok()).filter(is_inbox);
     let about = rkey.starts_with("did:").then(|| rkey.to_string());
     let about = about.or(inbox.map(|s| s.authority));
@@ -301,6 +304,66 @@ fn write_of(action: &str) -> Option<(Value, Option<String>)> {
         write["space"] = json!(space);
     }
     Some((write, about))
+}
+
+/// The words the log says a change to one of the group's spaces in, each
+/// with its operation, and, for one that opened it to anyone or closed it
+/// to those its policy names, whether anyone may read it now.
+const SPACE_CHANGES: [(&str, &str, Option<bool>); 5] = [
+    ("created", "create", None),
+    ("updated", "update", None),
+    ("deleted", "delete", None),
+    ("opened", "update", Some(true)),
+    ("closed", "update", Some(false)),
+];
+
+/// What a change to one of the group's spaces in its log was, as its
+/// words say it (`opened space <uri>`): the space, the operation, and
+/// whether anyone may read it now, where that changed. Nothing, for what
+/// was not one.
+fn space_of(action: &str) -> Option<Value> {
+    let (done, uri) = action.split_once(" space ")?;
+    let (_, operation, public_read) = SPACE_CHANGES.iter().find(|(d, ..)| *d == done)?;
+    let mut view = json!({"space": uri, "operation": operation});
+    if let Some(public_read) = public_read {
+        view["publicRead"] = json!(public_read);
+    }
+    Some(view)
+}
+
+impl Host {
+    /// The apps `ids` name, as a page shows them, where their metadata can
+    /// be read: each read once.
+    async fn client_views<'a>(
+        &self,
+        ids: impl Iterator<Item = &'a str>,
+    ) -> HashMap<&'a str, Value> {
+        let now = now_millis();
+        let ids: BTreeSet<&str> = ids.collect();
+        let read = ids
+            .into_iter()
+            .map(async |id| (id, self.client_view(id, now).await));
+        let read = futures::future::join_all(read).await;
+        read.into_iter()
+            .filter_map(|(id, v)| Some((id, v?)))
+            .collect()
+    }
+
+    /// What each kind of record among `collections` is, as its lexicon
+    /// describes it, where that can be read: each read once.
+    async fn descriptions<'a>(
+        &self,
+        collections: impl Iterator<Item = &'a str>,
+    ) -> HashMap<String, String> {
+        let collections: BTreeSet<&str> = collections.collect();
+        let read = collections
+            .into_iter()
+            .map(async |c| (c.to_string(), self.lexicon_description(c).await));
+        let read = futures::future::join_all(read).await;
+        read.into_iter()
+            .filter_map(|(c, d)| Some((c, d?)))
+            .collect()
+    }
 }
 
 /// Every grant that acts as the group, and what grants did lately, for
@@ -330,6 +393,14 @@ pub async fn list_group_tokens(
         .flatten()
         .filter_map(|(_, about)| about.as_deref());
     let actors = host.actor_views(members.chain(abouts)).await;
+    // The apps, as their metadata names them, and the kinds of record
+    // written, as their lexicons describe them.
+    let ids = grants.iter().map(|g| g.client_id.as_str());
+    let ids = ids.chain(log.iter().filter_map(|a| a.client_id.as_deref()));
+    let clients = host.client_views(ids).await;
+    let collections = writes.iter().flatten();
+    let collections = collections.filter_map(|(w, _)| w["collection"].as_str());
+    let descriptions = host.descriptions(collections).await;
     let sessions: Vec<Value> = grants
         .iter()
         .map(|g| {
@@ -346,6 +417,9 @@ pub async fn list_group_tokens(
             if let Some(used) = g.used_at {
                 view["lastUsedAt"] = json!(iso(used));
             }
+            if let Some(client) = clients.get(g.client_id.as_str()) {
+                view["client"] = client.clone();
+            }
             view
         })
         .collect();
@@ -358,13 +432,25 @@ pub async fn list_group_tokens(
                 json!({"member": a.member, "actor": actor, "action": a.action, "at": iso(a.at)});
             if let Some(client) = &a.client_id {
                 view["clientId"] = json!(client);
+                if let Some(app) = clients.get(client.as_str()) {
+                    view["client"] = app.clone();
+                }
             }
-            // A write, said as its parts, and whom it is about.
-            if let Some((write, about)) = write {
+            // A write, said as its parts, with what its kind of record
+            // is, and whom it is about.
+            if let Some((mut write, about)) = write {
+                let kind = write["collection"].as_str();
+                if let Some(said) = kind.and_then(|c| descriptions.get(c)) {
+                    write["description"] = json!(said);
+                }
                 view["write"] = write;
                 if let Some(about) = about {
                     view["subject"] = actors[&about].clone();
                 }
+            }
+            // A change to one of the group's spaces.
+            if let Some(space) = space_of(&a.action) {
+                view["space"] = space;
             }
             view
         })

@@ -6,6 +6,7 @@
 // behind the https front here (`tlsFront`); `just dev` runs one for a
 // person to look at (dev.mjs), behind portless.
 
+import { serveApps } from './oauth-app.mjs';
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -104,6 +105,10 @@ export async function start({
     const base = await front(consolePort, net, children);
     const host = `http://localhost:${hostPort}`;
     const did = `did:web:localhost%3A${hostPort}`;
+    // Apps on the web to sign in as a group (oauth-app.mjs), and the
+    // host's DNS-over-HTTPS, which resolves no other app's lexicon here.
+    const apps = await serveApps(host);
+    children.push({ kill: apps.close });
 
     const server = spawn(join(root, 'target/debug/group-host'), [], {
       stdio: ['ignore', 'pipe', 'inherit'],
@@ -117,6 +122,7 @@ export async function start({
         DID_WEB_SCHEME: 'http',
         HANDLE_DOMAIN: handleDomain,
         HANDLE_RESOLVERS: net.pds,
+        DNS_OVER_HTTPS: `${apps.origin}/dns-query`,
         // Every browser, page and command here is one address, asking far
         // more than any one person would.
         RATE_LIMITS: 'off'
@@ -161,7 +167,7 @@ export async function start({
     if (!made.ok) throw new Error(`createGroup: ${await made.text()}`);
     const riders = await made.json();
 
-    return { base, host, did, net, riders: riders.did, stop };
+    return { base, host, did, net, riders: riders.did, apps: apps.origin, stop };
   } catch (e) {
     stop();
     throw e;

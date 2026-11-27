@@ -6,6 +6,7 @@ import {
   ScopePermissionsTransition,
   SpacePermission
 } from '@atproto/oauth-scopes';
+import { spaceThing } from '#lib/activity.ts';
 import { intl } from '#lib/locale.ts';
 import { m } from '#lib/paraglide/messages.js';
 
@@ -241,6 +242,42 @@ function readsOnly(spaces: Spaces[], group: { handle: string }): string | undefi
             : m.permissions_reads_space({ type: s.type })
     );
   return m.permissions_spaces_read({ spaces: listed(named) });
+}
+
+/**
+ * What a session's scope lets an app do as the group, in a line for the
+ * list of apps: post and change records, if it writes anything at all;
+ * else what it reads of the group's spaces, and what the methods it calls
+ * show it.
+ */
+export function reach(scope: string): string {
+  const scopes = scope.split(' ');
+  const p = new ScopePermissionsTransition(scopes);
+  const spaces = scopes.flatMap((s) => SpacePermission.fromString(s) ?? []);
+  const writes =
+    p.hasTransitionGeneric ||
+    scopes.some((s) => IncludeScope.fromString(s) || RepoPermission.fromString(s)) ||
+    spaces.some((sp) => sp.manage || sp.action.some((a) => a !== 'read' && a !== 'read_self'));
+  if (writes) return m.group_apps_can_write();
+  const more = scopes.flatMap(
+    (s) =>
+      RpcPermission.fromString(s)?.lxm.map(
+        (lxm) => HOST_METHODS[lxm]?.() ?? m.group_apps_call_other()
+      ) ?? []
+  );
+  if (p.hasTransitionChatBsky) more.push(m.group_apps_call_other());
+  // The group's own spaces first, as a person thinks of the group.
+  const rank = (type: string) => ['org.atgrp.meta', 'org.atgrp.members'].indexOf(type) >>> 0;
+  const types = [...new Set(spaces.map((sp) => sp.spaceType))].sort((a, b) => rank(a) - rank(b));
+  const read = types.includes('*')
+    ? m.group_apps_spaces_every()
+    : types.length
+      ? m.group_apps_spaces({ things: listed(types.map(spaceThing)) })
+      : undefined;
+  if (read && more.length) return m.group_apps_can_read_and({ spaces: read, more: listed(more) });
+  if (read) return m.group_apps_can_read({ spaces: read });
+  if (more.length) return m.group_apps_can({ more: listed(more) });
+  return m.group_apps_can_identify();
 }
 
 /** What the PDS warns of before an app gets so much: every space anywhere, or the whole identity. */

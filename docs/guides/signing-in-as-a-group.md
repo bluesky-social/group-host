@@ -5,6 +5,11 @@ a bot or a script. A group has no password of its own, so you create an
 app password for the app. An app password works for one app, and you
 can revoke it at any time without changing anything else.
 
+Some apps sign in as a group without a password, as they sign you in.
+The app sends you to the console, and you approve it there, as
+[How do I approve an app that asks to sign in as the group?](#how-do-i-approve-an-app-that-asks-to-sign-in-as-the-group)
+shows.
+
 ## Before you begin
 
 You need a group where you have the admin role. If you have none yet,
@@ -20,10 +25,10 @@ You need a group where you have the admin role. If you have none yet,
 
 2. Press **Settings**, then the **Apps** tab. It has three cards, empty
    for now: **Apps acting as the group**, **App passwords** and
-   **What apps did as the group**.
+   **Changes made as the group**.
 
    <!-- look /g/nightshift.groups.test/settings/apps --as bob -->
-   ![The Apps tab of Night shift's settings: Apps acting as the group 0, App passwords 0 with Create an app password, and What apps did as the group, each empty](shots/apps-empty.png)
+   ![The Apps tab of Night shift's settings: Apps acting as the group 0, App passwords 0 with Create an app password, and Changes made as the group, each empty](shots/apps-empty.png)
 
 By default only admins may create app passwords. A member may create
 them too if one of their roles may write every collection as the group.
@@ -89,23 +94,51 @@ The host doesn't serve feeds. If you sign the Bluesky app in as the
 group, its timeline will look empty or broken. Posting still works. So
 the app is for posting as the group, as a bot or a script does.
 
+## How do I approve an app that asks to sign in as the group?
+
+Some apps sign in as a group the way they sign you in, with no
+password. You start in the app. It asks for the group's handle and
+sends you to the console.
+
+1. The console shows the app's name and icon, and what it would get as
+   the group. Here the app is "Darkroom", asking to post as Night shift
+   and to keep its own profile for the group.
+
+   <!-- look apps:/darkroom/sign-in?hint=nightshift.groups.test --as bob -->
+   ![Sign in an app: Darkroom's icon, and Darkroom wants to sign in as one of your groups. Below, Night shift, what it would get, Bluesky and Repository, then Sign it in as Night shift and Decline](shots/apps-approve.png)
+
+2. Press **Sign it in as Night shift**. You're sent back to the app,
+   which now acts as the group. Press **Decline** to send it back with
+   nothing.
+
+The app gets only what your roles let you give. What it asks for beyond
+that is listed apart, and it doesn't get it.
+
 ## Where do I see what the app does?
 
 1. Open **Settings** and **Apps** again. Under
    **Apps acting as the group**, each app signed in as the group has a
-   row, named for the password it used, with the member it is for and
-   when it was last used.
+   row. An app signed in with a password is named for the password. An
+   app you approved shows its own name and icon, and the domain it
+   signed in from. Each row says what the app can do, who approved it
+   or made its password, and when it was last used.
 
-   <!-- look /g/nightshift.groups.test/settings/apps --as bob --seed nightshift-apps --element 'section:has(h2:text-is("Apps acting as the group"))' -->
-   ![Apps acting as the group 1: Phone, With an app password, for bob.test, when it was last used, and Revoke](shots/apps-signed-in.png)
+   <!-- look /g/nightshift.groups.test/settings/apps --as bob --seed nightshift-oauth --seed nightshift-apps --element 'section:has(h2:text-is("Apps acting as the group"))' -->
+   ![Apps acting as the group 3: Phone, Can post and make changes as the group, With an app password created by bob.test; Darkroom, Can read the group's profile and members, and see requests to join, Approved by bob.test; Darkroom with its icon, Can post and make changes as the group, Approved by bob.test; each with Revoke](shots/apps-signed-in.png)
 
-2. Under **What apps did as the group**, each thing an app wrote as the
-   group is listed, newest first, with the member whose password it used.
+   One app can sign in more than once, for different things. Here
+   Darkroom posts as the group, and also reads its members to show them
+   in Darkroom. The line under each name tells them apart.
 
-   <!-- look /g/nightshift.groups.test/settings/apps --as bob --element 'section:has(h2:text-is("What apps did as the group"))' -->
-   ![What apps did as the group: Phone deleted a post, Phone posted, Phone posted, each For bob.test with the date](shots/apps-activity.png)
+2. Under **Changes made as the group**, each change made as the group
+   is listed, newest first. That's what apps wrote, with who approved
+   each, and what members changed here in the console, such as who sees
+   the group.
 
-The list shows only writes, and no reads. It stays after you revoke an
+   <!-- look /g/nightshift.groups.test/settings/apps --as bob --element 'section:has(h2:text-is("Changes made as the group"))' -->
+   ![Changes made as the group: Phone deleted a post, Phone posted, Phone posted, each App password created by bob.test; bob.test made the group members-only, In the console; Darkroom created the group's Darkroom profile, Approved by bob.test](shots/apps-activity.png)
+
+The list shows only changes, and no reads. It stays after you revoke an
 app or its password, so you can still see what it did.
 
 ## How do I stop an app?

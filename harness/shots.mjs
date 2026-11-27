@@ -72,7 +72,7 @@ export function shotsIn(text) {
         ? 'a look line with no picture under it'
         : own
           ? `${own}: a guide's picture is drawn at one size in both schemes`
-          : !args[0]?.startsWith('/')
+          : !/^(\/|apps:\/)/.test(args[0] ?? '')
             ? 'a look line starts with the page, as /g/riders.groups.test'
             : null;
       out.push({ line: i + 1, name: next?.[1], args, problem });

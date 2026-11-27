@@ -1,10 +1,13 @@
-//! Other apps' permission sets, as an app signing in as a group asks for
-//! one: `include:social.grain.authFull?aud=did:web:grain.social%23grain_appview`.
-//! Each is read as atproto publishes lexicons: the TXT record
-//! `_lexicon.<authority>` (the NSID's segments but the last, reversed)
-//! names a DID, from `DNS_OVER_HTTPS`, and that DID's repo, at its PDS,
-//! holds the set as the record `com.atproto.lexicon.schema/<nsid>`. A set
-//! read, or found missing, is kept ten minutes.
+//! Other apps' lexicons: their permission sets, as an app signing in as a
+//! group asks for one
+//! (`include:social.grain.authFull?aud=did:web:grain.social%23grain_appview`),
+//! and what a kind of record an app wrote as the group is, as its lexicon
+//! describes it. Each is read as atproto publishes lexicons: the TXT
+//! record `_lexicon.<authority>` (the NSID's segments but the last,
+//! reversed) names a DID, from `DNS_OVER_HTTPS`, and that DID's repo, at
+//! its PDS, holds the lexicon as the record
+//! `com.atproto.lexicon.schema/<nsid>`. A lexicon read, or found missing,
+//! is kept ten minutes, for both.
 //!
 //! What an include gives is what atproto's permissions give of one: each
 //! `repo` permission's collections and each `rpc` permission's methods,
@@ -24,9 +27,9 @@ use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
-/// How long a set read, or found missing, is kept.
+/// How long a lexicon read, or found missing, is kept.
 const KEEP_FOR: i64 = 10 * 60_000;
-/// How many sets are kept at once.
+/// How many lexicons are kept at once.
 const KEEP_AT_MOST: usize = 1000;
 /// The collection a lexicon is published in.
 const SCHEMA: &str = "com.atproto.lexicon.schema";
@@ -37,7 +40,9 @@ const TXT: u64 = 16;
 /// `include:` scope that asked for it.
 pub type Sets = BTreeMap<String, Value>;
 
-/// The sets read, by NSID, and when: `None` for one that did not resolve.
+/// The lexicons read, by NSID, and when: of each, its main def (`main`)
+/// and its own description (`description`), or `None` for one that did
+/// not resolve.
 #[derive(Default)]
 pub struct Read(Mutex<HashMap<String, (i64, Option<Value>)>>);
 
@@ -108,17 +113,17 @@ fn txt(data: &str) -> String {
 impl Read {
     fn get(&self, nsid: &str, now: i64) -> Option<Option<Value>> {
         let kept = self.0.lock().expect("not poisoned");
-        let (at, set) = kept.get(nsid).filter(|(at, _)| now - at < KEEP_FOR)?;
+        let (at, lexicon) = kept.get(nsid).filter(|(at, _)| now - at < KEEP_FOR)?;
         tracing::debug!(nsid, at, "kept");
-        Some(set.clone())
+        Some(lexicon.clone())
     }
 
-    fn keep(&self, nsid: &str, now: i64, set: Option<Value>) {
+    fn keep(&self, nsid: &str, now: i64, lexicon: Option<Value>) {
         let mut kept = self.0.lock().expect("not poisoned");
         // Full, all of them go.
         let full = kept.len() >= KEEP_AT_MOST;
         kept.retain(|_, _| !full);
-        kept.insert(nsid.into(), (now, set));
+        kept.insert(nsid.into(), (now, lexicon));
     }
 }
 
@@ -137,20 +142,39 @@ impl Host {
         sets
     }
 
-    /// The set `nsid`, kept or read now.
+    /// The set `nsid`, its lexicon's main def, if it is one.
     async fn permission_set(&self, nsid: &str) -> Option<Value> {
-        let now = crate::time::now_millis();
-        if let Some(kept) = self.sets.get(nsid, now) {
-            return kept;
-        }
-        let set = self.read_set(nsid).await;
-        tracing::info!(nsid, resolved = set.is_some(), "read a permission set");
-        self.sets.keep(nsid, now, set.clone());
-        set
+        let lexicon = self.lexicon(nsid).await?;
+        let set = lexicon["main"]["type"] == "permission-set";
+        set.then(|| lexicon["main"].clone())
     }
 
-    /// The set `nsid`, read from its publisher's repo.
-    async fn read_set(&self, nsid: &str) -> Option<Value> {
+    /// What the kind of record `collection`, another app's, is, as its
+    /// lexicon says: its main def's description, or else the lexicon's
+    /// own. None for one of this host's.
+    pub async fn lexicon_description(&self, collection: &str) -> Option<String> {
+        let theirs = Some(collection).filter(|c| !c.starts_with(&format!("{NS}.")));
+        let lexicon = self.lexicon(theirs?).await?;
+        let main = lexicon["main"]["description"].as_str();
+        let said = main.or(lexicon["description"].as_str())?;
+        Some(said.into())
+    }
+
+    /// The lexicon `nsid`, kept or read now.
+    async fn lexicon(&self, nsid: &str) -> Option<Value> {
+        let now = crate::time::now_millis();
+        if let Some(kept) = self.lexicons.get(nsid, now) {
+            return kept;
+        }
+        let lexicon = self.read_lexicon(nsid).await;
+        tracing::info!(nsid, resolved = lexicon.is_some(), "read a lexicon");
+        self.lexicons.keep(nsid, now, lexicon.clone());
+        lexicon
+    }
+
+    /// The lexicon `nsid`, read from its publisher's repo: its main def
+    /// and its description, all that is kept of it.
+    async fn read_lexicon(&self, nsid: &str) -> Option<Value> {
         let publisher = self.lexicon_did(nsid).await?;
         let doc = self.identity.document(&publisher).await.ok()?;
         let pds = did::pds(&doc)?;
@@ -162,9 +186,9 @@ impl Host {
         ];
         let url = Url::parse_with_params(&at, q).ok()?;
         let record = self.public_json(url.as_str(), "a lexicon").await.ok()?;
-        let main = &record["value"]["defs"]["main"];
-        let set = record["value"]["id"] == nsid && main["type"] == "permission-set";
-        set.then(|| main.clone())
+        let lexicon = &record["value"];
+        let kept = json!({"main": lexicon["defs"]["main"], "description": lexicon["description"]});
+        (lexicon["id"] == nsid).then_some(kept)
     }
 
     /// The DID the `_lexicon` TXT record of `nsid`'s authority names: one

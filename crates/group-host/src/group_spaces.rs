@@ -314,11 +314,18 @@ impl Host {
         // An app's grant whose member reads it no more ends its reads.
         let ended = self.end_grant_reads(group).await;
         ended.map_err(XrpcError::internal)?;
+        // Opened to anyone, or closed to those its policy names, or
+        // changed otherwise.
+        let done = match (now.public_read, next.public_read) {
+            (false, true) => "opened",
+            (true, false) => "closed",
+            _ => "updated",
+        };
         let logged = self.record(
             group,
             member,
             Some(&acting.grant.client_id),
-            &format!("updated space {uri}"),
+            &format!("{done} space {uri}"),
         );
         logged.map_err(XrpcError::internal)
     }

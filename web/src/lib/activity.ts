@@ -1,50 +1,116 @@
-// What apps did as a group, as the pages say it: each write as a short
+// What was done as a group, as the pages say it: each write as a short
 // sentence, from the parts the host gives (its operation, the record's
-// collection and key, and whom it is about), never as the log's own words.
+// collection and key, the space it was in, a space's change, and whom it
+// is about), never as the log's own words; and the apps that did it, by
+// the names their client metadata gives.
 
 import { m } from '#lib/paraglide/messages.js';
 
 type Actor = { did: string; handle?: string };
-type Write = { operation: string; collection: string; rkey: string; space?: string };
+/** An app as its client metadata names it, as the host read it. */
+export type Client = { clientId: string; name?: string; uri?: string; logo?: string };
+type Write = {
+  operation: string;
+  collection: string;
+  rkey: string;
+  space?: string;
+  description?: string;
+};
+type Space = { space: string; operation: string; publicRead?: boolean };
 export type Act = {
   member: string;
   actor?: Actor;
   clientId?: string;
+  client?: Client;
   action: string;
   write?: Write;
+  space?: Space;
   subject?: Actor;
   at: string;
 };
 
 /** The client a member uses to act as the group from this console, or the command. */
 const OWN = 'getGroupAuth';
-
-/** An app by its address's host, as people know it, past the scheme. */
-export const app = (id: string) =>
-  id.replace(/^https?:\/\//, '').replace(/\/client-metadata\.json$|\/$/, '');
+/** What an app password's grant is named by, before the password's name. */
+const PASSWORD = 'app-password:';
 
 /** Someone, by their handle where it is known. */
 const named = (a?: Actor) => (a ? (a.handle ? `@${a.handle}` : a.did) : m.activity_someone());
 
 /**
- * An app as a reader knows it: one signed in with an app password, by
- * the password's name; this console, as itself; any other by its address.
+ * Where an app is, as people know it: the host of its client ID, the
+ * address its metadata was read from, so an app cannot claim another's.
+ * None for this console, an app password, or an app on this device.
  */
-export function appName(id: string): string {
-  if (id === OWN) return m.activity_this_console();
-  const password = id.match(/^app-password:(.+)$/);
-  return password ? password[1] : app(id);
+export function domain(id: string): string | undefined {
+  if (!/^https?:\/\//.test(id)) return undefined;
+  const at = new URL(id);
+  return at.origin === 'http://localhost' && at.pathname === '/' ? undefined : at.hostname;
 }
 
-/** Who did it: the app, by its name or address; or the member themselves, from here. */
-export const doer = (a: Act): string =>
-  a.clientId && a.clientId !== OWN ? appName(a.clientId) : named(a.actor ?? { did: a.member });
-
-/** The name an avatar is drawn from, past the marks around it. */
-export const bare = (name: string) => name.replace(/^@/, '');
+/**
+ * An app as a reader knows it: this console, as itself; one signed in
+ * with an app password, by the password's name; any other by the name its
+ * metadata gives, or where it is.
+ */
+export function appName(id: string, client?: Client): string {
+  if (id === OWN) return m.activity_this_console();
+  if (id.startsWith(PASSWORD)) return id.slice(PASSWORD.length);
+  return client?.name ?? domain(id) ?? id;
+}
 
 /** Whether an app did it, for a member who let it in, rather than the member themselves. */
 export const byApp = (a: Act) => !!a.clientId && a.clientId !== OWN;
+
+/** Whether an app password's app did it. */
+export const byPassword = (a: Act) => !!a.clientId?.startsWith(PASSWORD);
+
+/**
+ * Who did it: an app, by its name and, where it has one, its domain
+ * beside it ("Grain (grain.social)"); or the member themselves, from here.
+ */
+export function doer(a: Act): string {
+  if (!a.clientId || !byApp(a)) return named(a.actor ?? { did: a.member });
+  const name = appName(a.clientId, a.client);
+  const at = a.client?.name ? domain(a.clientId) : undefined;
+  return at ? m.activity_app({ name, domain: at }) : name;
+}
+
+/** The name an avatar is drawn from: the app's or the member's, past the marks around it. */
+export const bare = (a: Act) =>
+  byApp(a) ? appName(a.clientId!, a.client) : doer(a).replace(/^@/, '');
+
+/** A part of an NSID in words: `privateGallery`, "private gallery". */
+export const words = (part: string) => part.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+
+/** A kind of space by what the group keeps in it: its profile, its members, its pool. */
+export function spaceThing(kind: string): string {
+  if (kind === 'org.atgrp.meta') return m.activity_space_profile();
+  if (kind === 'org.atgrp.members') return m.activity_space_members();
+  return words(kind.split('.').at(-1) ?? kind);
+}
+
+/** A space of the group's, by what it keeps ("the group's pool"), from its URI. */
+function spaceName(uri: string): string {
+  const kind = uri.split('/')[2] ?? '';
+  if (kind === 'org.atgrp.inbox') return m.activity_space_inbox();
+  return m.activity_space_of({ thing: spaceThing(kind) });
+}
+
+/** A kind of record by its app and its name's last part: `social.grain.actor.profile`, "Grain profile". */
+function recordKind(collection: string): string {
+  const parts = collection.split('.');
+  if (parts.length < 3) return collection;
+  const app = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+  return m.activity_record_kind({ app, thing: words(parts.at(-1)!) });
+}
+
+/** One record of `collection`: the group's own, as its profile is, or one of many. */
+function record(w: Write): string {
+  const kind = recordKind(w.collection);
+  if (w.rkey === 'self') return m.activity_record_own({ kind });
+  return /^[aeiou]/i.test(kind) ? m.activity_record_an({ kind }) : m.activity_record_a({ kind });
+}
 
 /** A sentence said of who did it (`doer`) and whom it is about (`who`). */
 type Say = (inputs: { doer: string; who: string }) => string;
@@ -89,32 +155,43 @@ const SAID: Record<string, (op: string) => Say | undefined> = {
     })[op]
 };
 
-/** A write to a collection said of no more than that. */
-const DONE: Record<string, (inputs: { doer: string; collection: string }) => string> = {
-  create: m.activity_record_create,
-  update: m.activity_record_update,
-  delete: m.activity_record_delete
+type Inputs = { doer: string; record: string };
+/** A write to another app's record, said of the record, in the group's repo or in a space. */
+const DONE: Record<string, [(i: Inputs) => string, (i: Inputs & { space: string }) => string]> = {
+  create: [m.activity_record_create, m.activity_record_create_in],
+  update: [m.activity_record_update, m.activity_record_update_in],
+  delete: [m.activity_record_delete, m.activity_record_delete_in]
 };
 
-/** What a space's making, change or end is said as, from the log's `<verb> space <uri>`. */
-const SPACE: Record<string, (inputs: { doer: string }) => string> = {
-  created: m.activity_space_create,
-  updated: m.activity_space_update,
-  deleted: m.activity_space_delete
-};
+/** What a change to one of the group's spaces is said as. */
+function spaceLine(doer: string, s: Space): string {
+  const meta = s.space.split('/')[2] === 'org.atgrp.meta';
+  const space = spaceName(s.space);
+  if (s.operation === 'create') return m.activity_space_create({ doer, space });
+  if (s.operation === 'delete') return m.activity_space_delete({ doer, space });
+  if (s.publicRead === true)
+    return meta ? m.activity_group_public({ doer }) : m.activity_space_public({ doer, space });
+  if (s.publicRead === false)
+    return meta
+      ? m.activity_group_members_only({ doer })
+      : m.activity_space_members_only({ doer, space });
+  return m.activity_space_update({ doer, space });
+}
 
-/** What was done, as a sentence: who did it, and what the write did ("@alice changed the profile"). */
+/** What another app's record is, as its lexicon says, under the sentence naming it. */
+export const about = (a: Act) =>
+  a.write && !SAID[a.write.collection]?.(a.write.operation) ? a.write.description : undefined;
+
+/** What was done, as a sentence: who did it, and what it did ("@alice changed the profile"). */
 export function line(a: Act): string {
   const who = doer(a);
+  if (a.space) return spaceLine(who, a.space);
   const w = a.write;
-  if (!w) {
-    const space = SPACE[a.action.match(/^(\w+) space /)?.[1] ?? ''];
-    return space ? space({ doer: who }) : m.activity_action({ doer: who, action: a.action });
-  }
+  if (!w) return m.activity_action({ doer: who, action: a.action });
   const said = SAID[w.collection]?.(w.operation);
   if (said) return said({ doer: who, who: named(a.subject) });
+  const inputs = { doer: who, record: record(w) };
   const done = DONE[w.operation];
-  return done
-    ? done({ doer: who, collection: w.collection })
-    : m.activity_record_other({ doer: who, operation: w.operation, collection: w.collection });
+  if (!done) return m.activity_record_other({ ...inputs, operation: w.operation });
+  return w.space ? done[1]({ ...inputs, space: spaceName(w.space) }) : done[0](inputs);
 }

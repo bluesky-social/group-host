@@ -660,7 +660,7 @@ test('creating an app password, and revoking what it signed in', async () => {
   // Its sessions a page at a time: shown all, to find it.
   while (await page.getByRole('button', { name: 'Show more' }).count())
     await page.getByRole('button', { name: 'Show more' }).click();
-  await page.getByRole('button', { name: "Revoke app-password:Phone's access" }).click();
+  await page.getByRole('button', { name: "Revoke Phone's access" }).click();
   await page
     .getByRole('dialog', { name: "Revoke this app's access?" })
     .filter({ visible: true })
@@ -882,15 +882,19 @@ test('approving an app that reads her group, and revoking it', async () => {
     );
   expect((await requests()).status).toBe(200);
 
-  // Listed among the apps acting as the group, and revoked there.
+  // Listed among the apps acting as the group, by what it may do, and
+  // revoked there. The loopback client names itself an app on this device.
   await page.goto(url('/g/riders.groups.test/settings/apps'));
-  await page.getByRole('button', { name: `Revoke ${app.id}'s access` }).click();
+  const reader = page.locator('.sessions li', {
+    hasText: "Can read the group's profile and members, and see requests to join"
+  });
+  await reader.getByRole('button', { name: "Revoke An app on this device's access" }).click();
   await page
     .getByRole('dialog', { name: "Revoke this app's access?" })
     .filter({ visible: true })
     .getByRole('button', { name: 'Revoke', exact: true })
     .click();
-  await expect(page.getByRole('button', { name: `Revoke ${app.id}'s access` })).toHaveCount(0);
+  await expect(reader).toHaveCount(0);
   expect((await requests()).status).toBe(401);
 });
 

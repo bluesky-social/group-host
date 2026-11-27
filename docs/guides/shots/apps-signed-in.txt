@@ -1,6 +1,14 @@
-- heading "Apps acting as the group1" [level=2]
+- heading "Apps acting as the group3" [level=2]
 - list:
   - listitem:
     - strong: Phone
-    - text: With an app password, for bob.test ; last used <date>
-    - button "Revoke app-password:Phone's access": Revoke
+    - text: Can post and make changes as the group With an app password created by bob.test , last used <date>
+    - button "Revoke Phone's access": Revoke
+  - listitem:
+    - strong: Darkroom
+    - text: localhost Can read the group's profile and members, and see requests to join Approved by bob.test
+    - button "Revoke Darkroom's access": Revoke
+  - listitem:
+    - strong: Darkroom
+    - text: localhost Can post and make changes as the group Approved by bob.test , last used <date>
+    - button "Revoke Darkroom's access": Revoke

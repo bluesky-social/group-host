@@ -1,9 +1,11 @@
 <script lang="ts">
+  import Avatar from '#lib/atoms/Avatar.svelte';
   import Dialog from '#lib/molecules/Dialog.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import GroupRow from '#lib/molecules/GroupRow.svelte';
   import Permissions from '#lib/molecules/Permissions.svelte';
   import { permissions, warnings, type Label } from '#lib/permissions.ts';
+  import { appLogo } from '#lib/images.ts';
   import { intl } from '#lib/locale.ts';
   import { m } from '#lib/paraglide/messages.js';
   import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
@@ -31,7 +33,7 @@
     requestUri,
     mcp = false
   }: {
-    client: { clientId: string; name?: string; uri?: string };
+    client: { clientId: string; name?: string; uri?: string; logo?: string };
     groups: Group[];
     labels: Label[];
     requested?: { scope: string }[];
@@ -66,11 +68,14 @@
     </p>
   {:else}
     <div class="app-asks">
-      <p>
-        <ParaglideMessage message={m.authorize_request_wants}>
-          {#snippet app()}<strong>{name}</strong>{/snippet}
-        </ParaglideMessage>
-      </p>
+      <span class="app-who">
+        <Avatar app size="md" src={appLogo(client)} {name} />
+        <p>
+          <ParaglideMessage message={m.authorize_request_wants}>
+            {#snippet app()}<strong>{name}</strong>{/snippet}
+          </ParaglideMessage>
+        </p>
+      </span>
       {#if requested.length}<button class="quiet small" type="button" popovertarget="asked"
           >{m.authorize_request_details()}</button
         >{/if}

@@ -1,0 +1,19 @@
+- banner:
+  - link "Atmosphere Groups":
+  - group: "@bob.test"
+- main:
+  - heading "Sign in an app" [level=1]
+  - paragraph:
+    - strong: Darkroom
+    - text: wants to sign in as one of your groups.
+  - button "Technical details"
+  - link "Night shift":
+  - text: "@nightshift.groups.test"
+  - list:
+    - listitem: Bluesky Use parts of the group's Bluesky account
+    - listitem:
+      - text: Repository Publish changes
+      - button "Details"
+  - button "Sign it in as Night shift"
+  - button "Decline"
+- contentinfo: console.group-host.internal runs Atmosphere Groups

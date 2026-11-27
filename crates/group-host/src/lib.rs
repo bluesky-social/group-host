@@ -9,6 +9,7 @@ pub mod actors;
 pub mod admin;
 pub mod api;
 pub mod app_passwords;
+pub mod apps;
 pub mod authority;
 pub mod authority_api;
 pub mod authorization;
@@ -95,8 +96,10 @@ pub struct Host {
     pub(crate) clients: oauth_clients::Clients,
     /// The handles the directory names, as last read for a search.
     pub(crate) handles: actor_search::Handles,
-    /// Other apps' permission sets, as read.
-    pub(crate) sets: permission_sets::Read,
+    /// Other apps' lexicons, as read.
+    pub(crate) lexicons: permission_sets::Read,
+    /// Apps' logos, as read.
+    pub(crate) logos: apps::Logos,
     /// The lines it logged, kept for its operators.
     pub logs: Arc<logs::Logs>,
     /// How it is used, counted for its operators.
@@ -133,7 +136,8 @@ impl Host {
             index_wake: Default::default(),
             clients: Default::default(),
             handles: Default::default(),
-            sets: Default::default(),
+            lexicons: Default::default(),
+            logos: Default::default(),
             logs: Arc::new(logs),
             stats,
             limits,
@@ -432,6 +436,7 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             "/console/client-metadata.json",
             get(console_login::client_metadata),
         )
+        .route("/img/app", get(apps::logo))
         .route("/img/{did}/{cid}", get(blobs::image))
         .route("/console/login", get(console_login::login))
         .route("/console/move/login", get(account_move::login))

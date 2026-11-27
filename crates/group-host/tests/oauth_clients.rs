@@ -9,6 +9,7 @@ use atproto::{Curve, Keypair};
 use axum::Router;
 use axum::extract::{Path, State};
 use axum::routing::get;
+use common::groups::get as ask;
 use common::groups::*;
 use common::oauth::*;
 use common::spaces::*;
@@ -37,14 +38,36 @@ async fn doc(
 
 /// A server of client metadata documents, by name.
 async fn documents() -> (Docs, String) {
-    let docs: Docs = Arc::default();
-    let url = serve(
-        Router::new()
-            .route("/{name}", get(doc))
-            .with_state(docs.clone()),
-    )
-    .await;
+    let (docs, _, url) = documents_and_files().await;
     (docs, url)
+}
+
+type Files = Arc<Mutex<HashMap<String, (u16, Vec<u8>)>>>;
+
+async fn file(
+    State(files): State<Files>,
+    Path(name): Path<String>,
+) -> (axum::http::StatusCode, Vec<u8>) {
+    let found = files.lock().unwrap().get(&name).cloned();
+    let (status, body) = found.unwrap_or((404, Vec::new()));
+    (axum::http::StatusCode::from_u16(status).unwrap(), body)
+}
+
+/// A server of client metadata documents, by name, and of files, by name
+/// under `/files/`, a client's logo among them.
+async fn documents_and_files() -> (Docs, Files, String) {
+    let docs: Docs = Arc::default();
+    let files: Files = Arc::default();
+    let router = Router::new()
+        .route("/{name}", get(doc))
+        .with_state(docs.clone())
+        .merge(
+            Router::new()
+                .route("/files/{name}", get(file))
+                .with_state(files.clone()),
+        );
+    let url = serve(router).await;
+    (docs, files, url)
 }
 
 /// A confidential client's metadata, at `id`, with these keys.
@@ -676,4 +699,182 @@ async fn keeps_what_it_read_a_while() {
         .insert("console.json".into(), (200, doc.to_string()));
     let read = h.host.client(&id, now + 12 * 60_000).await.unwrap();
     assert_eq!(read.metadata["client_name"], "Renamed again");
+}
+
+/// A public client's metadata, at `id`, named Rides, with its home page
+/// and `logo`.
+fn public_client(id: &str, logo: &str) -> Json {
+    let mut doc = confidential(id, &[]);
+    let fields = doc.as_object_mut().unwrap();
+    fields.remove("jwks");
+    fields.remove("token_endpoint_auth_signing_alg");
+    doc["token_endpoint_auth_method"] = json!("none");
+    doc["client_name"] = json!("Rides");
+    doc["client_uri"] = json!(format!("{}/", id.rsplit_once('/').unwrap().0));
+    doc["logo_uri"] = json!(logo);
+    doc
+}
+
+/// What `/img/app` answers for the client `id`, or with no id at all.
+async fn logo_of(h: &Running, id: Option<&str>) -> reqwest::Response {
+    let asked = h.http.get(format!("{}/img/app", h.url));
+    let asked = match id {
+        Some(id) => asked.query(&[("id", id)]),
+        None => asked,
+    };
+    asked.send().await.unwrap()
+}
+
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+#[tokio::test]
+async fn shows_an_app_as_its_metadata_names_it_and_serves_its_logo() {
+    let h = start_reachable(&[]).await;
+    let (docs, files, url) = documents_and_files().await;
+    let put_file = |name: &str, status: u16, bytes: Vec<u8>| {
+        files.lock().unwrap().insert(name.into(), (status, bytes));
+    };
+    let put_client = |name: &str, logo: &str| {
+        let id = format!("{url}/{name}.json");
+        let doc = public_client(&id, logo).to_string();
+        docs.lock()
+            .unwrap()
+            .insert(format!("{name}.json"), (200, doc));
+        id
+    };
+    put_file("logo.png", 200, PNG.to_vec());
+    let logo = format!("{url}/files/logo.png");
+    let id = put_client("rides", &logo);
+    let (did, alice) = group(&h).await;
+    let app = App::new(&id);
+    let named = json!({"clientId": id, "name": "Rides", "uri": format!("{url}/"), "logo": logo});
+
+    // The approval page names it so.
+    let request_uri = app.push(&h, &[]).await;
+    let lxm = format!("{INTERNAL}.getAuthorization");
+    let query = format!("requestUri={request_uri}");
+    let (status, asked) = ask(&h, &lxm, &query, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{asked}");
+    assert_eq!(asked["client"], named);
+
+    // So does the list of what acts as the group: its session, and what
+    // it did.
+    app.sign_in(&h, &alice, &did).await;
+    let lxm = format!("{INTERNAL}.listGroupTokens");
+    let query = format!("group={did}");
+    let (status, listed) = ask(&h, &lxm, &query, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{listed}");
+    assert_eq!(listed["sessions"][0]["client"], named);
+    assert_eq!(listed["activity"][0]["clientId"], id.as_str());
+    assert_eq!(listed["activity"][0]["client"], named);
+
+    // Its logo, served from here as an image and nothing more.
+    let res = logo_of(&h, Some(&id)).await;
+    assert_eq!(res.status(), 200);
+    for (name, value) in [
+        ("content-type", "image/png"),
+        ("x-content-type-options", "nosniff"),
+        ("content-security-policy", "default-src 'none'; sandbox"),
+        ("cache-control", "private, max-age=600"),
+    ] {
+        assert_eq!(res.headers()[name], value, "{name}");
+    }
+    assert_eq!(res.bytes().await.unwrap(), PNG);
+
+    // Nothing of a logo it may not show, that is no image, too large, or
+    // that cannot be read; nor for what is no app with metadata.
+    put_file(
+        "logo.svg",
+        200,
+        b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(),
+    );
+    put_file("big.png", 200, [PNG, &[0; 256 * 1024]].concat());
+    put_file("gone.png", 500, PNG.to_vec());
+    let mut unserved = vec![
+        put_client("svg", &format!("{url}/files/logo.svg")),
+        put_client("big", &format!("{url}/files/big.png")),
+        put_client("gone", &format!("{url}/files/gone.png")),
+        put_client("missing", &format!("{url}/files/missing.png")),
+        put_client("elsewhere", "https://elsewhere.test/logo.png"),
+    ];
+    let elsewhere = h.host.client(&unserved[4], 0).await.unwrap();
+    assert_eq!(
+        elsewhere.metadata["logo_uri"],
+        "https://elsewhere.test/logo.png"
+    );
+    unserved.extend([
+        String::new(),
+        "getGroupAuth".into(),
+        "http://localhost".into(),
+        format!("{url}/nothing.json"),
+    ]);
+    for id in &unserved {
+        assert_eq!(logo_of(&h, Some(id)).await.status(), 404, "{id}");
+    }
+    assert_eq!(logo_of(&h, None).await.status(), 404);
+
+    // Kept a while, and read again after.
+    let now = group_host::time::now_millis();
+    let kept = h.host.logo(&id, now).await.unwrap();
+    assert_eq!(kept.kind, "image/png");
+    let jpeg = b"\xff\xd8\xff\xe0\0\x10JFIF".to_vec();
+    put_file("logo.png", 200, jpeg.clone());
+    let kept = h.host.logo(&id, now + 60_000).await.unwrap();
+    assert_eq!(kept.kind, "image/png");
+    let read = h.host.logo(&id, now + 11 * 60_000).await.unwrap();
+    assert_eq!((read.kind, read.bytes.to_vec()), ("image/jpeg", jpeg));
+    // A hundred others, and it starts over.
+    put_file("logo.png", 200, b"GIF89a\x01\0\x01\0".to_vec());
+    for i in 0..100 {
+        let none = h.host.logo(&format!("x{i}"), now + 11 * 60_000).await;
+        assert_eq!(none, None);
+    }
+    let read = h.host.logo(&id, now + 12 * 60_000).await.unwrap();
+    assert_eq!(read.kind, "image/gif");
+}
+
+#[test]
+fn shows_only_what_is_on_the_clients_own_origin() {
+    use group_host::apps::shown;
+    let id = "https://rides.test/client.json";
+    for (url, is) in [
+        ("https://rides.test/logo.png", true),
+        ("https://rides.test:443/a/b.png?size=2", true),
+        ("https://cdn.rides.test/logo.png", false),
+        ("https://rides.test:8443/logo.png", false),
+        ("http://rides.test/logo.png", false),
+        ("https://me@rides.test/logo.png", false),
+        ("https://:secret@rides.test/logo.png", false),
+        ("https://rides.test/logo.png#x", false),
+        ("data:image/png;base64,AAAA", false),
+        ("javascript:alert(1)", false),
+        ("/logo.png", false),
+    ] {
+        assert_eq!(shown(id, url, false), is, "{url}");
+    }
+    assert!(!shown("nonsense", "https://rides.test/logo.png", false));
+    // http, for a host on http itself.
+    let local = "http://127.0.0.1:2583/client.json";
+    assert!(shown(local, "http://127.0.0.1:2583/logo.png", true));
+    assert!(!shown(local, "http://127.0.0.1:2583/logo.png", false));
+}
+
+#[test]
+fn knows_an_image_by_its_first_bytes() {
+    use group_host::apps::image_kind;
+    let cases: [(&[u8], Option<&str>); 10] = [
+        (PNG, Some("image/png")),
+        (b"\xff\xd8\xff\xdb", Some("image/jpeg")),
+        (b"GIF87a\x01\0", Some("image/gif")),
+        (b"GIF89a\x01\0", Some("image/gif")),
+        (b"RIFF\x24\0\0\0WEBPVP8 ", Some("image/webp")),
+        (b"RIFF\x24\0\0\0WAVEfmt ", None),
+        (b"<svg xmlns='http://www.w3.org/2000/svg'/>", None),
+        (b"<?xml version='1.0'?><svg/>", None),
+        (b"\x89PNG", None),
+        (b"", None),
+    ];
+    for (bytes, kind) in cases {
+        assert_eq!(image_kind(bytes), kind, "{bytes:?}");
+    }
 }

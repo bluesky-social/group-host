@@ -108,9 +108,22 @@ async fn get_record(Query(q): Query<HashMap<String, String>>) -> Response {
         (q["repo"].as_str(), q["collection"].as_str()),
         (SERVICE, "com.atproto.lexicon.schema")
     );
+    let record = json!({"type": "record", "key": "tid"});
+    let mut id = q["rkey"].clone();
+    let mut description = None;
     let main = match q["rkey"].as_str() {
         SET => set(),
         "test.grain.notASet" => json!({"type": "query"}),
+        "test.grain.photo" => json!({"type": "record", "description": "A photo in a gallery"}),
+        "test.grain.gallery" => {
+            description = Some("Galleries of photos");
+            record
+        }
+        // Published under another's name.
+        "test.grain.comment" => {
+            id = "test.grain.photo".into();
+            json!({"type": "record", "description": "A photo in a gallery"})
+        }
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -119,7 +132,10 @@ async fn get_record(Query(q): Query<HashMap<String, String>>) -> Response {
                 .into_response();
         }
     };
-    let value = json!({"$type": "com.atproto.lexicon.schema", "lexicon": 1, "id": q["rkey"], "defs": {"main": main}});
+    let mut value = json!({"$type": "com.atproto.lexicon.schema", "lexicon": 1, "id": id, "defs": {"main": main}});
+    if let Some(description) = description {
+        value["description"] = json!(description);
+    }
     Json(json!({"uri": "at://x", "value": value})).into_response()
 }
 
@@ -521,6 +537,62 @@ async fn reads_another_apps_permission_set_as_it_publishes_it() {
     );
     let (status, _) = approve(&h, &alice, &request_uri, &did).await;
     assert_eq!(status, 200);
+}
+
+#[tokio::test]
+async fn says_what_another_apps_records_are_as_their_lexicons_describe_them() {
+    let (h, _) = network(true).await;
+    let (did, [alice, bob, _]) = group(&h).await;
+    let kinds = [
+        "test.grain.photo",
+        "test.grain.gallery",
+        "test.grain.comment",
+        "test.grain.like",
+        "app.bsky.feed.post",
+    ];
+    let scope: Vec<String> = kinds.iter().map(|k| format!("repo:{k}")).collect();
+    let (app, token) = signed_in(&h, &bob, &did, &format!("atproto {}", scope.join(" "))).await;
+    for kind in kinds {
+        let record = json!({"$type": kind, "createdAt": "2026-11-26T00:00:00Z"});
+        let body = json!({"repo": did, "collection": kind, "rkey": "one", "record": record});
+        let said = app
+            .call(&h, "com.atproto.repo.createRecord", &token, Some(&body))
+            .await;
+        assert_eq!(said.status, 200, "{}", said.body);
+    }
+    let lxm = format!("{INTERNAL}.listGroupTokens");
+    let query = format!("group={did}");
+    let (status, listed) = get(&h, &lxm, &query, &[auth(&h, &alice, &lxm)]).await;
+    assert_eq!(status, 200, "{listed}");
+    let described: HashMap<&str, Option<&str>> = listed["activity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|a| {
+            let write = &a["write"];
+            let kind = write["collection"].as_str()?;
+            Some((kind, write["description"].as_str()))
+        })
+        .collect();
+    // Its main def's description, or else the lexicon's own; nothing for
+    // one published under another's name, one not published, or one whose
+    // publisher cannot be found.
+    assert_eq!(
+        described,
+        HashMap::from([
+            ("test.grain.photo", Some("A photo in a gallery")),
+            ("test.grain.gallery", Some("Galleries of photos")),
+            ("test.grain.comment", None),
+            ("test.grain.like", None),
+            ("app.bsky.feed.post", None),
+        ])
+    );
+    // The app, as the loopback client is named.
+    let session = &listed["sessions"][0];
+    assert_eq!(
+        session["client"],
+        json!({"clientId": app.id, "name": "An app on this device"})
+    );
 }
 
 #[tokio::test]

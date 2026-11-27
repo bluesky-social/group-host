@@ -3,40 +3,45 @@
   import Avatar from '#lib/atoms/Avatar.svelte';
   import Empty from '#lib/molecules/Empty.svelte';
   import Person from '#lib/molecules/Person.svelte';
-  import { bare, byApp, doer, line, type Act } from '#lib/activity.ts';
+  import { about, bare, byApp, byPassword, line, type Act } from '#lib/activity.ts';
   import { when } from '#lib/dates.ts';
+  import { appLogo } from '#lib/images.ts';
   import { m } from '#lib/paraglide/messages.js';
   /**
-   * What apps wrote as the group, newest first: a row for each, as a
-   * sentence (who did what), and under it, quieter, the member who
-   * approved the app and when.
+   * What was done as the group, newest first: a row for each write or
+   * change to a space, as a sentence (who did what); under it, quieter,
+   * what another app's record is, as its lexicon says; then, for an app,
+   * the member who approved it or made its password, and when; for a
+   * member in the console, that it was there, and when.
    */
   let { activity }: { activity: Act[] } = $props();
-  const writes = $derived(activity.filter((a) => a.write));
+  const done = $derived(activity.filter((a) => a.write || a.space));
   // A page of them at a time, more as asked for.
   let shown = $state(10);
 </script>
 
-{#if writes.length}
+{#if done.length}
   <ul class="activity">
-    {#each writes.slice(0, shown) as a, i (i)}
+    {#each done.slice(0, shown) as a, i (i)}
+      {@const described = about(a)}
       <li>
-        <Avatar name={bare(doer(a))} />
+        <Avatar app={byApp(a)} src={appLogo(a.client)} name={bare(a)} />
         <span class="row-main">
           <span class="who">{line(a)}</span>
+          {#if described}<span class="what">{described}</span>{/if}
           <span class="what"
             >{#if byApp(a)}<ParaglideMessage
-                message={m.group_activity_for}
+                message={byPassword(a) ? m.group_activity_password : m.group_activity_approved}
                 inputs={{ when: when(a.at) }}
               >
                 {#snippet person()}<Person actor={a.actor ?? { did: a.member }} />{/snippet}
-              </ParaglideMessage>{:else}{when(a.at)}{/if}</span
+              </ParaglideMessage>{:else}{m.group_activity_console({ when: when(a.at) })}{/if}</span
           >
         </span>
       </li>
     {/each}
   </ul>
-  {#if writes.length > shown}<button class="quiet small" type="button" onclick={() => (shown += 10)}
+  {#if done.length > shown}<button class="quiet small" type="button" onclick={() => (shown += 10)}
       >{m.common_show_more()}</button
     >{/if}
 {:else}

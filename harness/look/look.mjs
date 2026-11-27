@@ -11,7 +11,10 @@
 // takes a while; `--up` starts one and keeps it, until ctrl-c, for every
 // look after to use. A look with none up starts its own, and stops it.
 // A world starts with Riders (riders.groups.test), alice's, and nothing
-// else in it: a seed (--seed) puts in what a page should show.
+// else in it: a seed (--seed) puts in what a page should show. A path
+// starting `apps:` is at the world's apps on the web (../oauth-app.mjs):
+// `apps:/darkroom/sign-in?hint=riders.groups.test` is Darkroom asking to
+// sign in as Riders, at the console's page for it.
 //
 // Options:
 //
@@ -126,7 +129,9 @@ for (let i = 0; i < argv.length; i++) {
   else targets.push(a);
 }
 if (!up && !targets.length) fail('which page? a path, as / or /g/riders.groups.test/settings');
-for (const t of targets) if (!t.startsWith('/')) fail(`${t}: a page is its path, starting with /`);
+for (const t of targets)
+  if (!t.startsWith('/') && !t.startsWith('apps:/'))
+    fail(`${t}: a page is its path, starting with / (or apps:/, at the world's apps)`);
 for (const n of as)
   if (!ACCOUNTS.includes(n)) fail(`--as ${n}: no such account; one of ${ACCOUNTS.join(', ')}`);
 
@@ -170,6 +175,7 @@ async function newWorld() {
       mail: net.mail,
       accounts: net.accounts,
       riders: w.riders,
+      apps: w.apps,
       seeded: [],
       signedIn: {}
     },
@@ -367,7 +373,8 @@ try {
     for (const target of targets) {
       const page = await context.newPage();
       const settled = quiet(page);
-      await page.goto(world.base + target, { waitUntil: 'networkidle' });
+      const to = target.startsWith('apps:') ? world.apps + target.slice(5) : world.base + target;
+      await page.goto(to, { waitUntil: 'networkidle' });
       // Each in the middle of the screen, so what it opens is in the picture.
       for (const s of steps) {
         if (s.key) await page.keyboard.press(s.key);

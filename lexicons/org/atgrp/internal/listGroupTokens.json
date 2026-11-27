@@ -62,6 +62,11 @@
           "type": "string",
           "description": "The app's OAuth client id."
         },
+        "client": {
+          "type": "ref",
+          "ref": "#clientView",
+          "description": "The app, as its OAuth client metadata names it, when that can be read."
+        },
         "member": {
           "type": "string",
           "format": "did",
@@ -124,14 +129,24 @@
           "type": "string",
           "description": "The app's OAuth client id."
         },
+        "client": {
+          "type": "ref",
+          "ref": "#clientView",
+          "description": "The app, as its OAuth client metadata names it, when that can be read."
+        },
         "action": {
           "type": "string",
-          "description": "The method it called, or the record it wrote."
+          "description": "The method it called, the record it wrote, or what it did to a space, as the log says it."
         },
         "write": {
           "type": "ref",
           "ref": "#writeView",
           "description": "The record it wrote, in parts, when it was a write."
+        },
+        "space": {
+          "type": "ref",
+          "ref": "#spaceView",
+          "description": "The space it made, changed or ended, when it did that."
         },
         "subject": {
           "type": "ref",
@@ -172,6 +187,63 @@
         "space": {
           "type": "string",
           "description": "The space it was written in, by its at:space/ URI; none for the group's public repo."
+        },
+        "description": {
+          "type": "string",
+          "description": "What the kind of record is, as its lexicon describes it, when that lexicon is another app's and can be read."
+        }
+      }
+    },
+    "clientView": {
+      "type": "object",
+      "description": "An app, as its OAuth client metadata names it.",
+      "required": [
+        "clientId"
+      ],
+      "properties": {
+        "clientId": {
+          "type": "string",
+          "description": "The app's OAuth client id."
+        },
+        "name": {
+          "type": "string",
+          "description": "Its name (client_name)."
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "Its home page (client_uri), when on the client id's own origin."
+        },
+        "logo": {
+          "type": "string",
+          "format": "uri",
+          "description": "Its logo (logo_uri), when the host serves it at /img/app?id=<clientId>, as a page is to draw it."
+        }
+      }
+    },
+    "spaceView": {
+      "type": "object",
+      "description": "A change an app made to one of the group's spaces.",
+      "required": [
+        "space",
+        "operation"
+      ],
+      "properties": {
+        "space": {
+          "type": "string",
+          "description": "The space, by its at:space/ URI."
+        },
+        "operation": {
+          "type": "string",
+          "knownValues": [
+            "create",
+            "update",
+            "delete"
+          ]
+        },
+        "publicRead": {
+          "type": "boolean",
+          "description": "Whether anyone may read the space now, when this change switched it: true, made readable by anyone; false, made readable only by those its policy names."
         }
       }
     }

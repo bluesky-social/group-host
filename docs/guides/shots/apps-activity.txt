@@ -1,6 +1,8 @@
-- heading "What apps did as the group" [level=2]
-- paragraph: Each write an app made while signed in as the group, newest first.
+- heading "Changes made as the group" [level=2]
+- paragraph: By apps, and by members in the console, newest first.
 - list:
-  - listitem: Phone deleted a post For bob.test , <date>
-  - listitem: Phone posted For bob.test , <date>
-  - listitem: Phone posted For bob.test , <date>
+  - listitem: Phone deleted a post App password created by bob.test , <date>
+  - listitem: Phone posted App password created by bob.test , <date>
+  - listitem: Phone posted App password created by bob.test , <date>
+  - listitem: "@bob.test made the group members-only In the console, <date>"
+  - listitem: Darkroom (localhost) created the group's Darkroom profile Approved by bob.test , <date>

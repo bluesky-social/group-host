@@ -195,6 +195,22 @@ details". Each of the host's permission sets is named in its own words,
 the `title` and `detail` of its lexicon, both those asked for and any
 tier a group would give in place of one.
 
+The client is named by its metadata: its `client_name`, its
+`client_uri` and its `logo_uri`. The host gives the home page and the
+logo only when each is an https URL on the client id's own origin
+(http too, while the host itself is on http), with no credentials or
+fragment. The loopback client is "An app on this device", with neither.
+A page draws the logo from the host, at `/img/app?id=<client_id>`, so a
+reader's browser never asks the app's server for anything. The host
+fetches the logo from a public address, following no redirect, and
+serves it only when the answer succeeds, is at most 256 KiB, and its
+first bytes are a PNG, JPEG, GIF or WebP image, whatever type its
+server says. It never serves SVG. It serves the image with its type,
+`nosniff` and a sandboxing `Content-Security-Policy`, for a browser to
+keep 10 minutes. It keeps what it read for each client id, or that
+there was nothing, for 10 minutes, and up to 100 clients at once.
+Anything it doesn't serve is a 404.
+
 `approveAuthorization` requires the member to hold a role in the chosen
 group. If the app named a group, the chosen group must be that one. The
 host narrows the scope to the member's roles, issues a code good for 60
@@ -247,8 +263,8 @@ are at that moment.
   (`_lexicon.grain.social`) at `DNS_OVER_HTTPS`
   ([configuration](../reference/config.md)). The DID it names keeps the
   set as the record `com.atproto.lexicon.schema/<nsid>` in its repo,
-  read from its PDS at a public address. The host keeps a set it read,
-  or found missing, for ten minutes. A set gives what atproto's
+  read from its PDS at a public address. The host keeps a lexicon it
+  read, or found missing, for ten minutes. A set gives what atproto's
   permissions give of one. That's each collection its `repo`
   permissions name and each method its `rpc` permissions name, all
   within the set's own namespace (`social.grain.`). An `rpc` permission
@@ -536,11 +552,22 @@ any one with `org.atgrp.internal.revokeGroupToken`. An app ends its own at
 
 `listGroupTokens` also returns the group's latest 20 log entries, each
 naming the member, the action, the time and the client. The log records
-sign-ins, group tokens taken, each write made with a token, app
-passwords made and revoked, and grants revoked with `revokeGroupToken`.
-It doesn't record refreshes. It also doesn't record grants that end
-another way, at `/oauth/revoke`, by `deleteSession`, or when a member is
-removed.
+sign-ins, group tokens taken, each write made with a token, each space
+made, changed or ended, app passwords made and revoked, and grants
+revoked with `revokeGroupToken`. It doesn't record refreshes. It also
+doesn't record grants that end another way, at `/oauth/revoke`, by
+`deleteSession`, or when a member is removed.
+
+Each session and entry names its app as the approval page does, by its
+client metadata, where that can be read: an OAuth client's, not a group
+token's or an app password's. Each write comes in its parts. When it's a
+kind of record of another app's, it also says what that kind is, in the
+`description` of its lexicon's main def, or else the lexicon's own. The
+host reads that lexicon as it reads another app's permission set, and
+the same kept copy serves both. A change to a space comes as what it
+did: made, changed or ended. A change that let anyone read the space is
+logged as `opened space <uri>`, one that took that back as `closed space
+<uri>`, and the list says which with `publicRead`.
 
 ## App passwords
 

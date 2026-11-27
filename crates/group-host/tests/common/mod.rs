@@ -339,6 +339,9 @@ async fn start_on(
         ("PLC_URL", plc_url.as_str()),
         ("HANDLE_DOMAIN", ".groups.test"),
         ("PUBLIC_URL", "https://host.test"),
+        // No lexicon of another app's resolves but where a test serves
+        // one: the internet is never asked.
+        ("DNS_OVER_HTTPS", "http://127.0.0.1:1/dns-query"),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v.to_string()))

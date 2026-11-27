@@ -83,11 +83,13 @@
         },
         "uri": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "description": "Its home page (client_uri), when on the client id's own origin."
         },
         "logo": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "description": "Its logo (logo_uri), when the host serves it at /img/app?id=<clientId>, as a page is to draw it."
         },
         "clientId": {
           "type": "string"
