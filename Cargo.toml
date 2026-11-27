@@ -17,7 +17,7 @@ unsafe_code = "forbid"
 
 [workspace.dependencies]
 atproto = { version = "0.4.3", registry = "atproto" }
-atproto-client = { version = "0.4", registry = "atproto" }
+atproto-client = { version = "0.6", registry = "atproto" }
 group-host = { path = "crates/group-host" }
 group-host-mcp = { path = "crates/group-host-mcp" }
 anyhow = "1"

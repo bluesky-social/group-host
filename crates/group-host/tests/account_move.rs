@@ -61,6 +61,9 @@ struct Old {
     refuse_refresh: Mutex<Option<&'static str>>,
     /// Whether it asks for a DPoP nonce without giving one.
     nonceless: Mutex<bool>,
+    /// The move to forget as it refreshes a session: one cancelled
+    /// meanwhile.
+    ends_move: Mutex<Option<(group_host::store::Store, String)>>,
 }
 
 impl Old {
@@ -137,6 +140,11 @@ async fn token(
     if let Some(error) = refusal.filter(|_| form["grant_type"] == "refresh_token") {
         let body = Json(json!({"error": error}));
         return (StatusCode::BAD_REQUEST, body).into_response();
+    }
+    if form["grant_type"] == "refresh_token"
+        && let Some((store, mover)) = old.ends_move.lock().unwrap().take()
+    {
+        store.forget_move(&mover).unwrap();
     }
     let mut given = old.tokens.lock().unwrap();
     let access = format!("at{}", given.len() + 1);
@@ -689,7 +697,7 @@ async fn refreshes_a_token_about_to_lapse_and_says_what_its_server_refused() {
     let nothing = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     kept.pds = format!("http://{}", nothing.local_addr().unwrap());
     drop(nothing);
-    store.keep_oauth_session(&kept).unwrap();
+    assert!(store.keep_oauth_session(&kept).unwrap());
     let unreachable = w.call("startAccountMove", Some(json!({}))).await;
     assert_eq!(error(&unreachable), (502, "UpstreamFailure"));
     // Forgotten before it started, it leaves nothing to discard.
@@ -843,6 +851,65 @@ async fn a_refresh_refused_ends_the_move_or_says_what_its_server_said() {
     assert_eq!(w.call("getAccountMove", None).await, (200, json!({})));
 }
 
+#[tokio::test]
+async fn a_move_ended_while_its_session_was_refreshed_stays_ended() {
+    let w = world().await;
+    *w.old.first_lasts.lock().unwrap() = 10;
+    w.sign_in_to_move().await;
+    // Cancelled as its server refreshes it: the refreshed session is not
+    // kept, and its tokens are given back.
+    *w.old.ends_move.lock().unwrap() = Some((w.h.host.store.clone(), w.person.clone()));
+    let said = w.call("startAccountMove", Some(json!({}))).await;
+    assert_eq!(error(&said), (400, "NotFound"));
+    let given = w.old.tokens.lock().unwrap().last().cloned().unwrap();
+    let revoked = w.old.revoked.lock().unwrap().clone();
+    assert!(revoked.contains(&format!("r{given}")), "{revoked:?}");
+    assert_eq!(w.call("getAccountMove", None).await, (200, json!({})));
+}
+
+#[tokio::test]
+async fn a_console_sign_in_coming_back_to_the_move_callback_is_refused() {
+    let w = world().await;
+    let b = browser();
+    let url = reqwest::Url::parse_with_params(
+        &format!("{}/console/login", w.h.url),
+        &[("handle", w.did.as_str())],
+    )
+    .unwrap();
+    // Approved, then refused: either way, at the move's callback it is a
+    // sign-in this browser did not start there, and nothing is kept.
+    for refusal in [None, Some("access_denied")] {
+        let started = b.get(url.clone()).send().await.unwrap();
+        let login = set_cookie(&started, "group_host_login").unwrap();
+        let approved = b.get(location(&started)).send().await.unwrap();
+        let mut back = reqwest::Url::parse(&location(&approved)).unwrap();
+        back.set_path("/console/move/callback");
+        if let Some(error) = refusal {
+            let state = back
+                .query_pairs()
+                .find(|(k, _)| k == "state")
+                .unwrap()
+                .1
+                .into_owned();
+            back.query_pairs_mut()
+                .clear()
+                .append_pair("error", error)
+                .append_pair("state", &state)
+                .append_pair("iss", &w.old.base());
+        }
+        let cookies = format!("{login}; {}", w.cookie);
+        let res = b.get(back).header("cookie", cookies).send().await.unwrap();
+        assert_eq!(res.status(), 400);
+        assert!(
+            res.text()
+                .await
+                .unwrap()
+                .contains("did not start that sign-in")
+        );
+        assert_eq!(w.call("getAccountMove", None).await, (200, json!({})));
+    }
+}
+
 #[test]
 fn a_database_from_before_lets_its_sign_ins_under_way_go() {
     use group_host::store::{MIGRATIONS, Store};
@@ -864,7 +931,7 @@ fn a_database_from_before_lets_its_sign_ins_under_way_go() {
     drop(conn);
     // Opened, it lets them go, and keeps what comes after.
     let store = Store::open(&path).unwrap();
-    assert_eq!(store.request("s").unwrap(), None);
+    assert_eq!(store.take_request("s").unwrap(), None);
     assert!(store.move_of("did:plc:m", 2).unwrap().is_none());
     assert_eq!(store.keep_move("did:plc:m", "did:plc:a", 2).unwrap(), None);
     assert_eq!(store.sweep_moves(2).unwrap(), ["did:plc:a"]);

@@ -7,10 +7,10 @@
 //! only once the account's own authorization server, followed again from
 //! its DID, is the one that issued them. It asks for `atproto` alone: the
 //! console's methods act as the group, never as the person, so the host
-//! needs only to know who they are. Once their PDS says so, it revokes
-//! what it was given, and keeps nothing of theirs. A request waiting for
-//! the browser to come back is kept in the database by its state
-//! ([`Requests`]), so any of the host's processes answers it.
+//! needs only to know who they are. Once their PDS says so, it gives back
+//! what it was given unkept, and keeps nothing of theirs. A request
+//! waiting for the browser to come back is kept in the database by its
+//! state ([`Requests`]), so any of the host's processes answers it.
 //!
 //! The browser holds only a cookie the host signed, naming the person,
 //! HttpOnly and SameSite=Lax; where the console is on https, named
@@ -74,24 +74,21 @@ const TAKES: i64 = login::PENDING_FOR as i64 * 1000;
 const KID: &str = "console";
 
 /// What a sign-in carries to the browser's return, beside what the OAuth
-/// client keeps: the page to go back to, the secret the browser that
-/// started it holds in its cookie, and, for an account being moved here,
-/// who is moving it.
+/// client keeps: the page to go back to, and, for an account being moved
+/// here, who is moving it.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Started {
     pub back: String,
-    browser: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mover: Option<String>,
 }
 
-/// The requests waiting for the browser to come back, in the database:
-/// both of the console's OAuth clients keep theirs here.
+/// The requests waiting for the browser to come back, in the database.
 pub(crate) struct Requests(pub Store);
 
 /// A store's failure, as the OAuth client takes it.
 pub(crate) fn unstored(e: anyhow::Error) -> StoreError {
-    StoreError(format!("{e:#}"))
+    StoreError::Failed(format!("{e:#}"))
 }
 
 impl StateStore for Requests {
@@ -120,15 +117,6 @@ impl Store {
     /// The request `state` names, forgotten as it is read.
     pub fn take_request(&self, state: &str) -> anyhow::Result<Option<login::Pending>> {
         let sql = "DELETE FROM console_request WHERE state = ?1 RETURNING pending";
-        let conn = self.conn();
-        let found = conn.query_row(sql, [state], |r| r.get(0)).optional();
-        let found: Option<String> = found?;
-        Ok(found.map(|p| serde_json::from_str(&p)).transpose()?)
-    }
-
-    /// The request `state` names, left as it is.
-    pub fn request(&self, state: &str) -> anyhow::Result<Option<login::Pending>> {
-        let sql = "SELECT pending FROM console_request WHERE state = ?1";
         let conn = self.conn();
         let found = conn.query_row(sql, [state], |r| r.get(0)).optional();
         let found: Option<String> = found?;
@@ -169,32 +157,29 @@ fn client_id(config: &Config) -> String {
     format!("{}/console/client-metadata.json", config.console_url)
 }
 
-/// The console's two OAuth clients, under its one client id and key, each
-/// call they make through [`observe::Calls`]: one signing people in, who
-/// keeps no session past its callback, and one signing in to accounts
-/// being moved here, keeping their sessions in the database until the move
-/// is done ([`crate::account_move::Moves`]). They are two, each with a
-/// callback of its own, as a sign-in ends any session its client keeps
-/// for the same account: someone signing in to the console as an account
-/// would otherwise end its move.
-pub(crate) fn clients(
+/// The console's OAuth client, under its client id and key, each call it
+/// makes through [`observe::Calls`]: signing people in, whose sessions it
+/// never keeps, and signing in to accounts being moved here, whose
+/// sessions it keeps in the database until the move is done
+/// ([`crate::account_move::Moves`]).
+pub(crate) fn client(
     config: &Config,
     secrets: &Secrets,
     store: &Store,
     guarded: &Guarded,
     identity: &Resolver,
-) -> (login::Client, login::Client) {
-    let id = client_id(config);
-    let requests: Arc<dyn StateStore> = Arc::new(Requests(store.clone()));
-    let client = || {
-        let credentials = login::Credentials::private_key_jwt(console_key(secrets), KID);
-        let credentials = credentials.expect("a P-256 key");
-        login::Client::new(&id, credentials, guarded.clone(), identity.clone())
-            .states(requests.clone())
-            .sending(Arc::new(observe::Calls))
-    };
-    let moves = Arc::new(crate::account_move::Moves(store.clone()));
-    (client(), client().sessions(moves))
+) -> login::Client {
+    let credentials = login::Credentials::private_key_jwt(console_key(secrets), KID);
+    let credentials = credentials.expect("a P-256 key");
+    login::Client::new(
+        &client_id(config),
+        credentials,
+        guarded.clone(),
+        identity.clone(),
+    )
+    .states(Arc::new(Requests(store.clone())))
+    .sessions(Arc::new(crate::account_move::Moves(store.clone())))
+    .sending(Arc::new(observe::Calls))
 }
 
 fn failed(status: StatusCode, why: impl Into<String>) -> Response {
@@ -203,9 +188,11 @@ fn failed(status: StatusCode, why: impl Into<String>) -> Response {
     (status, format!("Signing in failed: {why}")).into_response()
 }
 
-/// Why a sign-in could not start or finish, as the browser is told.
+/// Why a sign-in could not start or finish, as the browser is told: by
+/// what failed, a failed callback's cause.
 fn refused(e: &login::Error) -> Response {
     use login::Error;
+    let e = e.cause();
     let (status, why) = match e {
         Error::UnknownState => (StatusCode::BAD_REQUEST, TOOK_TOO_LONG.to_string()),
         Error::Identity(_) | Error::Handle { .. } => (
@@ -424,8 +411,8 @@ pub async fn login(
 }
 
 /// Starts a sign-in to `q`'s `handle`, for `mover` where it is an account
-/// they are moving here: asking what a move needs, by the client that keeps
-/// moves' sessions.
+/// they are moving here: asking what a move needs, coming back to the
+/// move's callback.
 pub(crate) async fn sign_in(
     host: &Host,
     q: &HashMap<String, String>,
@@ -440,17 +427,15 @@ pub(crate) async fn sign_in(
         (None, true) => host.config.signup_pds.as_str(),
         (None, false) => return failed(StatusCode::BAD_REQUEST, "say who you are"),
     };
-    let (client, redirect_uri, scope) = match mover {
+    let (redirect_uri, scope) = match mover {
         Some(_) => (
-            &host.moving,
             host.move_callback(),
             format!("atproto {}", host.move_scope()),
         ),
-        None => (&host.console, host.console_callback(), "atproto".into()),
+        None => (host.console_callback(), "atproto".into()),
     };
     let started = Started {
         back: back_to(q.get("back")),
-        browser: jose::random(16),
         mover,
     };
     let carried = serde_json::to_string(&started).expect("JSON");
@@ -460,45 +445,61 @@ pub(crate) async fn sign_in(
         prompt: create.then_some("create"),
         app_state: Some(&carried),
     };
-    let to = match client.authorize(input, &ask).await {
+    let to = match host.console.authorize(input, &ask).await {
         Ok(to) => to,
         Err(e) => return refused(&e),
     };
-    let held = cookie(host, STARTED, &started.browser, TAKES / 1000);
-    ([(header::SET_COOKIE, held)], Redirect::to(&to)).into_response()
+    let held = cookie(host, STARTED, &to.state, TAKES / 1000);
+    ([(header::SET_COOKIE, held)], Redirect::to(&to.url)).into_response()
 }
 
-/// The session the browser's return, `query`, grants by `client`, at its
-/// `callback`, and what its sign-in carried: only in the browser that
-/// started it, at the callback it was started for, and for an account
-/// being moved, while the one moving it is still the one signed in. Else
-/// the answer refusing it. The request is answered once; one refused
-/// before its code is redeemed is left to lapse.
+/// What a sign-in carried, if it was started for the callback it came back
+/// to: a move's if `moving`.
+fn carried(app_state: Option<&str>, moving: bool) -> Option<Started> {
+    let started = serde_json::from_str::<Started>(app_state?).ok()?;
+    (started.mover.is_some() == moving).then_some(started)
+}
+
+/// The session the browser's return, `query`, grants, not yet kept, and
+/// what its sign-in carried: only in the browser that started it, by the
+/// cookie naming its state, at the callback it was started for (a move's,
+/// if `moving`), and for an account being moved, while the one moving it
+/// is still the one signed in. Else the answer refusing it, and a session
+/// granted given back; a sign-in refused at the other callback is told as
+/// one this browser did not start. A request answered elsewhere is left
+/// to lapse.
 pub(crate) async fn come_back(
     host: &Host,
     headers: &HeaderMap,
     query: &str,
-    client: &login::Client,
-    callback: &str,
+    moving: bool,
 ) -> Result<Result<(Session, Started), Response>, XrpcError> {
-    let state = Callback::parse(query).state.unwrap_or_default();
-    let pending = host.store.request(&state).map_err(XrpcError::internal)?;
-    let started = pending
-        .filter(|p| p.redirect_uri == callback)
-        .and_then(|p| serde_json::from_str::<Started>(&p.app_state?).ok())
-        .filter(|s| host.cookie_of(headers, STARTED) == Some(s.browser.as_str()));
-    let Some(started) = started else {
+    let state = Callback::parse(query).state;
+    if state.is_none() || host.cookie_of(headers, STARTED) != state.as_deref() {
         return Ok(Err(failed(StatusCode::BAD_REQUEST, TOOK_TOO_LONG)));
-    };
-    let caller = host.console_caller(headers).map_err(XrpcError::internal)?;
-    if started.mover.is_some() && caller != started.mover {
-        let why = "sign in to the console again first";
-        return Ok(Err(failed(StatusCode::FORBIDDEN, why)));
     }
-    Ok(match client.callback(query).await {
-        Ok((session, _)) => Ok((session, started)),
-        Err(e) => Err(refused(&e)),
-    })
+    let came = match host.console.callback_unkept(query).await {
+        Ok(came) => came,
+        Err(e) if e.app_state().is_some() && carried(e.app_state(), moving).is_none() => {
+            return Ok(Err(failed(StatusCode::BAD_REQUEST, TOOK_TOO_LONG)));
+        }
+        Err(e) => return Ok(Err(refused(&e))),
+    };
+    let started = carried(came.app_state.as_deref(), moving);
+    let caller = host.console_caller(headers).map_err(XrpcError::internal)?;
+    let again = "sign in to the console again first";
+    let checked = match started {
+        Some(s) if s.mover.is_some() && caller != s.mover => Err((StatusCode::FORBIDDEN, again)),
+        Some(s) => Ok(s),
+        None => Err((StatusCode::BAD_REQUEST, TOOK_TOO_LONG)),
+    };
+    match checked {
+        Ok(started) => Ok(Ok((came.session, started))),
+        Err((status, why)) => {
+            host.console.discard(came.session).await;
+            Ok(Err(failed(status, why)))
+        }
+    }
 }
 
 /// The browser comes back from approving: the code is exchanged, the
@@ -509,16 +510,13 @@ pub async fn callback(
     RawQuery(query): RawQuery,
 ) -> Result<Response, XrpcError> {
     let query = query.unwrap_or_default();
-    let at = host.console_callback();
-    let back = come_back(&host, &headers, &query, &host.console, &at).await?;
-    let (session, started) = match back {
+    let (session, started) = match come_back(&host, &headers, &query, false).await? {
         Ok(back) => back,
         Err(refused) => return Ok(refused),
     };
-    let did = session.did;
+    let did = session.did.clone();
     // Knowing who they are is all the host wanted: it keeps nothing.
-    let revoked = host.console.revoke(&did).await;
-    tracing::debug!(?revoked, "gave back the console's tokens");
+    host.console.discard(session).await;
     let now = now_millis();
     let session = cookie(&host, COOKIE, &host.session_cookie(&did, now), LASTS / 1000);
     // The account in use before, if another, is kept beside it.

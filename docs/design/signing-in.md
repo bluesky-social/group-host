@@ -124,9 +124,12 @@ Details:
 
 - The host keeps the sign-in under way by its `state` for 15 minutes,
   in its database, so any of its processes answers it. The browser
-  holds a secret the request carries in a cookie, and the callback
-  requires both. A callback refused for want of that cookie leaves the
-  request to lapse.
+  holds that `state` in a cookie, and the callback must come back to the
+  browser holding it. A callback refused for want of that cookie leaves
+  the request to lapse. A sign-in comes back only to the callback it was
+  started for: one to the console arriving at a move's callback, or the
+  other way round, is refused, whether approved or not, and a session it
+  was granted is given back.
 - The authorization server's `issuer` must equal the URL its metadata
   came from. The callback must carry `iss`, equal to that issuer.
   Atproto's servers always send it, and the host refuses a callback
@@ -138,12 +141,15 @@ Details:
 Moving an account onto this host needs more, because the host must act
 at the old PDS. That sign-in asks a wider scope, needs a console session
 already, comes back to `/console/move/callback`, and keeps its session
-at most 24 hours. Its client keeps that session in the database, by the
-account, and refreshes it, the server read again from the account's DID
-first, as it is about to lapse. Each client ends any session it keeps
-for an account it signs in to again, so the two are apart: signing in to
-the console as an account never ends its move. [moving](moving.md)
-explains it.
+at most 24 hours. The console has one OAuth client for both. It keeps
+no session of a console sign-in: once the account is known, its tokens
+are given back. A move's session it keeps in the database, by the
+account, while the move is under way, and refreshes it, the server read
+again from the account's DID first, as it is about to lapse. So signing
+in to the console as an account never ends its move. A move finished or
+cancelled while its session was being refreshed stays ended: the
+refreshed tokens are given back, and the move answers `NotFound`.
+[moving](moving.md) explains it.
 
 ## Calling the host's own methods
 

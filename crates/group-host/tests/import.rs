@@ -551,7 +551,8 @@ async fn refuses_the_account_signed_in_a_did_web_and_one_whose_did_names_no_key(
             json!({"serviceJwt": token("did:plc:nobody", &w.key, &w.h.host.config.service_did, CREATE_ACCOUNT)}),
         )
         .await;
-    assert_eq!(error(&said), (400, "InvalidRequest"));
+    // A DID that resolves to nothing has no key to check its token by.
+    assert_eq!(error(&said), (400, "InvalidToken"));
     // A DID whose document names no key.
     let rotation = Keypair::generate(Curve::K256);
     let mut op = Op::atproto(

@@ -5,8 +5,8 @@
 //! The person, signed in to the console, signs in to the account too
 //! (`/console/move/login`), approving at its server what a move needs and
 //! no more: a `createAccount` token for this host, its identity, and
-//! reading its own repos and files in spaces. The console's second OAuth
-//! client (`console_login::clients`) keeps that session in the database,
+//! reading its own repos and files in spaces. The console's OAuth client
+//! (`console_login::client`) keeps that session in the database,
 //! by the account ([`Moves`]), and the host keeps which account each
 //! person is moving, one at a time, until the move is finished or
 //! forgotten, and then gives the session back. Its calls to the account's
@@ -62,8 +62,13 @@ impl SessionStore for Moves {
         self.0.oauth_session(did).map_err(unstored)
     }
 
+    /// A session kept only while its account's move is: one whose move
+    /// was finished, cancelled or swept meanwhile has ended.
     fn put(&self, session: &Session) -> Result<(), StoreError> {
-        self.0.keep_oauth_session(session).map_err(unstored)
+        match self.0.keep_oauth_session(session).map_err(unstored)? {
+            true => Ok(()),
+            false => Err(StoreError::Ended),
+        }
     }
 
     fn delete(&self, did: &str) -> Result<(), StoreError> {
@@ -73,7 +78,7 @@ impl SessionStore for Moves {
 
 const MOVE_OF: &str = "SELECT s.session FROM account_move m JOIN move_session s ON s.did = m.did WHERE m.mover = ?1 AND m.started > ?2";
 const KEEP_MOVE: &str = "INSERT INTO account_move (mover, did, started) VALUES (?1, ?2, ?3) ON CONFLICT (mover) DO UPDATE SET did = ?2, started = ?3";
-const KEEP_SESSION: &str = "INSERT INTO move_session (did, session) VALUES (?1, ?2) ON CONFLICT (did) DO UPDATE SET session = ?2";
+const KEEP_SESSION: &str = "INSERT INTO move_session (did, session) SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM account_move WHERE did = ?1) ON CONFLICT (did) DO UPDATE SET session = ?2";
 
 impl Store {
     /// The session of the account `mover` signed in to move, while it is
@@ -124,12 +129,12 @@ impl Store {
         Ok(found.map(|s| serde_json::from_str(&s)).transpose()?)
     }
 
-    /// Keeps `session`, in place of any for its account.
-    pub fn keep_oauth_session(&self, session: &Session) -> Result<()> {
+    /// Keeps `session`, in place of any for its account, while the account
+    /// is being moved: whether it is.
+    pub fn keep_oauth_session(&self, session: &Session) -> Result<bool> {
         let kept = serde_json::to_string(session)?;
-        self.conn()
-            .execute(KEEP_SESSION, params![session.did, kept])?;
-        Ok(())
+        let conn = self.conn();
+        Ok(conn.execute(KEEP_SESSION, params![session.did, kept])? == 1)
     }
 
     /// Forgets the session kept for `did`.
@@ -208,19 +213,21 @@ impl Host {
     /// Gives `did`'s session back to its server, as far as it hears, and
     /// forgets it.
     async fn give_back(&self, did: &str) {
-        let given = self.moving.revoke(did).await;
+        let given = self.console.revoke(did).await;
         tracing::debug!(?given, did, "gave back a moving account's session");
     }
 
     /// `did`'s session, refreshed if it is about to lapse, or `now_anyway`.
     async fn moving_session(&self, did: &str, now_anyway: bool) -> Result<Session, XrpcError> {
         let session = match now_anyway {
-            true => self.moving.refresh(did).await,
-            false => self.moving.session(did).await,
+            true => self.console.refresh(did).await.map(|r| r.session),
+            false => self.console.session(did).await,
         };
         session.map_err(|e| match e {
             login::Error::NoRefresh(_) => sign_in_again(),
             e if e.refusal().is_some_and(|r| r.error == "invalid_grant") => sign_in_again(),
+            // Finished or cancelled while it was refreshed.
+            login::Error::Ended(_) => none_here(),
             e => upstream(e),
         })
     }
@@ -235,8 +242,8 @@ impl Host {
         at_most: usize,
     ) -> Result<(Xrpc, Auth), XrpcError> {
         let session = self.moving_session(did, renew).await?;
-        let auth = self.moving.auth(&session).map_err(upstream)?;
-        Ok((self.moving.pds(&session).at_most(at_most), auth))
+        let auth = self.console.auth(&session).map_err(upstream)?;
+        Ok((self.console.pds(&session).at_most(at_most), auth))
     }
 
     /// `call` of the account's server, as the account `did`, made once
@@ -404,18 +411,20 @@ pub async fn callback(
     RawQuery(query): RawQuery,
 ) -> Result<Response, XrpcError> {
     let query = query.unwrap_or_default();
-    let at = host.move_callback();
-    let back = come_back(&host, &headers, &query, &host.moving, &at).await?;
-    let (session, started) = match back {
+    let (session, started) = match come_back(&host, &headers, &query, true).await? {
         Ok(back) => back,
         Err(refused) => return Ok(refused),
     };
-    // Only a move's sign-in comes back here, carrying who moves it.
+    // A move's sign-in carries who moves it. Its session is kept while the
+    // move is, in place of any kept for the account before, which is given
+    // back, as is the account they were moving before, if another.
     let mover = started.mover.unwrap_or_default();
     let before = host.store.keep_move(&mover, &session.did, now_millis());
     if let Some(before) = before.map_err(XrpcError::internal)? {
         host.give_back(&before).await;
     }
+    let kept = host.console.keep(&session).await;
+    kept.map_err(XrpcError::internal)?;
     tracing::info!(did = session.did, mover, "signed in to an account to move");
     let done = [(header::SET_COOKIE, done(&host))];
     Ok((done, Redirect::to(&started.back)).into_response())
@@ -511,8 +520,8 @@ pub async fn finish_account_move(
     let done = host
         .complete_import_as(&me, &m.did, &signed["operation"])
         .await?;
-    host.give_back(&m.did).await;
     host.store.forget_move(&me).map_err(XrpcError::internal)?;
+    host.give_back(&m.did).await;
     Ok(Json(done))
 }
 
@@ -528,7 +537,7 @@ pub async fn cancel_account_move(State(host): State<Arc<Host>>, headers: HeaderM
     if pending.is_some_and(|p| p.founder == me) {
         host.forget(&m.did);
     }
-    host.give_back(&m.did).await;
     host.store.forget_move(&me).map_err(XrpcError::internal)?;
+    host.give_back(&m.did).await;
     Ok(Json(json!({})))
 }

@@ -95,10 +95,9 @@ pub struct Host {
     /// domain. Held to https at public addresses, but for a host on http
     /// itself (`PUBLIC_URL`), as on a network of test servers.
     pub(crate) guarded: Guarded,
-    /// The console's OAuth clients: signing people in, and signing in to
-    /// accounts being moved here (`console_login::clients`).
+    /// The console's OAuth client, signing people in and signing in to
+    /// accounts being moved here (`console_login::client`).
     pub(crate) console: atproto_client::oauth::Client,
-    pub(crate) moving: atproto_client::oauth::Client,
     /// The spaces the index is to read, and its wake.
     indexing: std::sync::Mutex<std::collections::BTreeSet<String>>,
     index_wake: tokio::sync::Notify,
@@ -135,8 +134,7 @@ impl Host {
         // Each call to a host others' data names traced and logged.
         let guarded = guarded.sending(Arc::new(observe::Calls));
         let identity = resolver(&config, guarded.clone());
-        let (console, moving) =
-            console_login::clients(&config, &secrets, &store, &guarded, &identity);
+        let console = console_login::client(&config, &secrets, &store, &guarded, &identity);
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
         let limits = limits::Limiter::new(config.rate_limits);
@@ -152,7 +150,6 @@ impl Host {
             http: client(),
             guarded,
             console,
-            moving,
             indexing: Default::default(),
             index_wake: Default::default(),
             clients: Default::default(),

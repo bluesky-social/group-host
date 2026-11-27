@@ -101,9 +101,9 @@ dependencies = [
 
 [[package]]
 name = "atproto-client"
-version = "0.4.0"
+version = "0.6.0"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "81f32e71ca81cee2b36389863573b43de81b17239ac214122f0bb9bbb48f73c5"
+checksum = "224e5ba76374157d99c1f1f91816fef07f54e3b1a1ccd4a1025e51f5bfabc75b"
 dependencies = [
  "atproto",
  "bytes",

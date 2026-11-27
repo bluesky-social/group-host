@@ -17,6 +17,7 @@ use crate::scopes::covers;
 use crate::space_api::{service_caller, unauthorized};
 use crate::token_writes::missing;
 use crate::xrpc::XrpcError;
+use atproto::service_auth::Claims;
 use atproto::space::SpaceRef;
 use axum::Json;
 use axum::extract::{Query, State};
@@ -47,13 +48,14 @@ pub(crate) async fn caller(
     if !headers.contains_key(header::AUTHORIZATION) {
         return host.console_caller(headers).map_err(XrpcError::internal);
     }
-    let claims = service_caller(host, headers, lxm).await?;
-    if !for_host(host, &claims.aud) {
-        return Err(unauthorized(
+    let ours = |claims: &Claims| match for_host(host, &claims.aud) {
+        true => Ok(()),
+        false => Err(unauthorized(
             "BadJwtAudience",
             format!("a token for {}, not this host", claims.aud),
-        ));
-    }
+        )),
+    };
+    let claims = service_caller(host, headers, lxm, ours).await?;
     Ok(Some(claims.account().to_string()))
 }
 

@@ -1079,6 +1079,21 @@ async fn reads_no_more_with_a_credential_its_authority_revoked() {
             .await
             .unwrap();
     assert_eq!(res.status(), 401);
+    // Nor a token that is no JWT.
+    let res =
+        f.h.http
+            .post(format!(
+                "{}/xrpc/com.atproto.space.notifyCredentialsRevoked",
+                f.h.url
+            ))
+            .header("authorization", "Bearer nonsense")
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+    assert_eq!(res.status(), 401);
+    let said: Json = res.json().await.unwrap();
+    assert_eq!(said["error"], "BadJwt");
 
     // Still readable until the authority itself says otherwise.
     let (headers, _) = signed(&f.syncer, &f.group, &f.kem, COMMIT_MAC);

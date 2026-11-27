@@ -16,6 +16,7 @@ use atproto::space::{
 };
 use atproto::space_auth::{self, CLOCK_SKEW, CREDENTIAL_MAX_AGE, Expect, Kind, TokenError};
 use atproto::{Cid, drisl, syntax};
+use atproto_client::service_auth::{Error as Unverified, verify_any};
 use axum::Json;
 use axum::extract::{Query, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
@@ -482,30 +483,33 @@ pub async fn list_blobs(
 }
 
 /// The claims of the request's service auth (`Authorization: Bearer`),
-/// signed by its issuer's key and for `lxm`.
+/// for `lxm`, for an audience `ours` takes (else its refusal), and signed
+/// by its issuer's key: the audience is judged before any key is read.
 pub(crate) async fn service_caller(
     host: &Host,
     headers: &HeaderMap,
     lxm: &str,
+    ours: impl FnOnce(&Claims) -> Result<(), XrpcError>,
 ) -> Result<Claims, XrpcError> {
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|a| a.strip_prefix("Bearer "));
     let token = bearer.ok_or_else(|| unauthorized("AuthMissing", "service auth is required"))?;
-    let bad = |e: service_auth::AuthError| unauthorized("BadJwt", e.0);
-    let (_, claims) = service_auth::parts(token).map_err(bad)?;
-    let check = |key: &atproto::PublicKey| service_auth::verify(token, key, now());
-    let checked = host.identity.with_key(claims.account(), check).await;
-    let checked = checked
-        .ok_or_else(|| unauthorized("BadJwtIss", format!("no signing key for {}", claims.iss)))?;
-    let claims = checked.map_err(bad)?;
+    let (_, claims) = service_auth::parts(token).map_err(|e| unauthorized("BadJwt", e.0))?;
     if claims.lxm.as_deref() != Some(lxm) {
         return Err(unauthorized(
             "BadJwtLexiconMethod",
             format!("a token not for {lxm}"),
         ));
     }
+    ours(&claims)?;
+    let auds = [claims.aud.as_str()];
+    let checked = verify_any(&host.identity, token, &auds, lxm, now()).await;
+    checked.map_err(|e| match e {
+        Unverified::NoKey(_) => unauthorized("BadJwtIss", e.to_string()),
+        e => unauthorized("BadJwt", e.to_string()),
+    })?;
     Ok(claims)
 }
 
@@ -520,7 +524,15 @@ pub async fn notify_credentials_revoked(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, XrpcError> {
-    let claims = service_caller(&host, &headers, NOTIFY_REVOKED).await?;
+    let hosted_here = |claims: &Claims| {
+        let hosted = host.store.account(&claims.aud);
+        let hosted = hosted.map_err(XrpcError::internal)?;
+        match hosted.is_some_and(|a| a.did == claims.aud) {
+            true => Ok(()),
+            false => Err(forbidden("revocation audience is not a repo hosted here")),
+        }
+    };
+    let claims = service_caller(&host, &headers, NOTIFY_REVOKED, hosted_here).await?;
     let space = body["space"].as_str().unwrap_or_default();
     let space = SpaceRef::parse(space).map_err(|e| invalid(e.to_string()))?;
     let jtis: Option<Vec<String>> = body["credentials"].as_array().and_then(|c| {
@@ -533,13 +545,6 @@ pub async fn notify_credentials_revoked(
         .ok_or_else(|| invalid("credentials are 1 to 100 credentials' jti"))?;
     if claims.account() != space.authority {
         return Err(forbidden("revocation issuer is not the space authority"));
-    }
-    let hosted = host
-        .store
-        .account(&claims.aud)
-        .map_err(XrpcError::internal)?;
-    if !hosted.is_some_and(|a| a.did == claims.aud) {
-        return Err(forbidden("revocation audience is not a repo hosted here"));
     }
     let until = now() + CREDENTIAL_MAX_AGE + 2 * CLOCK_SKEW;
     host.store
