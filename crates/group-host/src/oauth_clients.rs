@@ -9,6 +9,7 @@ use crate::Host;
 use crate::index_api::capped;
 use crate::oauth::OAuthError;
 use atproto::jose;
+use atproto_client::sender::SendError;
 use reqwest::Url;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -247,7 +248,11 @@ impl Host {
         let asked = self.guarded.get(url).map_err(|e| unreadable(e.0))?;
         let sent = asked.header("accept", "application/json");
         // With its causes: a name the guard would not resolve says so there.
-        let failed = |e: reqwest::Error| unreadable(format!("{:#}", anyhow::Error::new(e)));
+        let failed = |e: SendError| {
+            let causes = anyhow::Error::new(e);
+            let causes: Vec<String> = causes.chain().skip(1).map(ToString::to_string).collect();
+            unreadable(causes.join(": "))
+        };
         let res = sent.send().await.map_err(failed)?;
         if !res.status().is_success() {
             return Err(unreadable(format!("answered {}", res.status())));

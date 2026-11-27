@@ -57,6 +57,8 @@ struct Old {
     spaces: Mutex<bool>,
     undescribed: Mutex<bool>,
     no_refresh: Mutex<bool>,
+    /// The error it refuses a refresh with, if it does.
+    refuse_refresh: Mutex<Option<&'static str>>,
     /// Whether it asks for a DPoP nonce without giving one.
     nonceless: Mutex<bool>,
 }
@@ -91,18 +93,13 @@ fn nonce_first(headers: &HeaderMap) -> Option<Response> {
 }
 
 async fn resource(State(old): State<Arc<Old>>) -> Json<Json_> {
-    Json(json!({ "authorization_servers": [old.base()] }))
+    let base = old.base();
+    Json(json!({ "resource": base, "authorization_servers": [base] }))
 }
 
 async fn server(State(old): State<Arc<Old>>) -> Json<Json_> {
     let base = old.base();
-    Json(json!({
-        "issuer": base,
-        "pushed_authorization_request_endpoint": format!("{base}/par"),
-        "authorization_endpoint": format!("{base}/authorize"),
-        "token_endpoint": format!("{base}/token"),
-        "revocation_endpoint": format!("{base}/revoke"),
-    }))
+    Json(common::oauth::server_metadata(&base, &base))
 }
 
 async fn par(
@@ -114,7 +111,8 @@ async fn par(
         return ask;
     }
     old.pushed.lock().unwrap().push(form);
-    Json(json!({"request_uri": "urn:ietf:params:oauth:request_uri:r1"})).into_response()
+    let uri = json!({"request_uri": "urn:ietf:params:oauth:request_uri:r1", "expires_in": 60});
+    Json(uri).into_response()
 }
 
 async fn authorize(State(old): State<Arc<Old>>) -> Redirect {
@@ -135,6 +133,11 @@ async fn token(
     if let Some(ask) = nonce_first(&headers) {
         return ask;
     }
+    let refusal = *old.refuse_refresh.lock().unwrap();
+    if let Some(error) = refusal.filter(|_| form["grant_type"] == "refresh_token") {
+        let body = Json(json!({"error": error}));
+        return (StatusCode::BAD_REQUEST, body).into_response();
+    }
     let mut given = old.tokens.lock().unwrap();
     let access = format!("at{}", given.len() + 1);
     given.push(access.clone());
@@ -144,7 +147,7 @@ async fn token(
         _ => form["code"].clone(),
     };
     let lasts = std::mem::replace(&mut *old.first_lasts.lock().unwrap(), 3600);
-    let mut tokens = json!({"access_token": access, "refresh_token": format!("r{access}"), "token_type": "DPoP", "sub": sub, "expires_in": lasts});
+    let mut tokens = json!({"access_token": access, "refresh_token": format!("r{access}"), "token_type": "DPoP", "sub": sub, "scope": "atproto", "expires_in": lasts});
     if *old.no_refresh.lock().unwrap() {
         tokens.as_object_mut().unwrap().remove("refresh_token");
     }
@@ -560,8 +563,9 @@ async fn moves_an_account_signed_in_at_its_server_and_gives_its_tokens_back() {
     assert_eq!(moving["started"], false);
     // Signed in again, the tokens before are given back.
     w.sign_in_to_move().await;
-    // (Its own sign-in gave back the person's first, at1.)
-    assert_eq!(*w.old.revoked.lock().unwrap(), ["at1", "at2", "rat2"]);
+    // (Its own sign-in gave back the person's first, its grant by its
+    // refresh token, rat1.)
+    assert_eq!(*w.old.revoked.lock().unwrap(), ["rat1", "rat2"]);
 
     // Started: the account copied, its spaces brought, and a code asked
     // for; the token lapses partway and is refreshed.
@@ -618,10 +622,7 @@ async fn moves_an_account_signed_in_at_its_server_and_gives_its_tokens_back() {
             .contains(&"admin".to_string())
     );
     let revoked = w.old.revoked.lock().unwrap().clone();
-    assert!(
-        revoked.ends_with(&["at4".to_string(), "rat4".to_string()]),
-        "{revoked:?}"
-    );
+    assert!(revoked.ends_with(&["rat4".to_string()]), "{revoked:?}");
     assert_eq!(w.call("getAccountMove", None).await, (200, json!({})));
 }
 
@@ -688,7 +689,7 @@ async fn refreshes_a_token_about_to_lapse_and_says_what_its_server_refused() {
     let nothing = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     kept.pds = format!("http://{}", nothing.local_addr().unwrap());
     drop(nothing);
-    store.keep_move(&w.person, &kept, now).unwrap();
+    store.keep_oauth_session(&kept).unwrap();
     let unreachable = w.call("startAccountMove", Some(json!({}))).await;
     assert_eq!(error(&unreachable), (502, "UpstreamFailure"));
     // Forgotten before it started, it leaves nothing to discard.
@@ -804,12 +805,67 @@ async fn gives_back_and_forgets_a_move_kept_a_day() {
     // Not yet a day: kept.
     assert_eq!(w.h.host.sweep_moves(now).await.unwrap(), 0);
     let day = 24 * 60 * 60_000;
-    store.keep_move(&w.person, &kept, now - day - 1).unwrap();
+    store
+        .keep_move(&w.person, &kept.did, now - day - 1)
+        .unwrap();
     assert_eq!(w.h.host.sweep_moves(now).await.unwrap(), 1);
     let revoked = w.old.revoked.lock().unwrap().clone();
-    assert!(
-        revoked.ends_with(&["at2".to_string(), "rat2".to_string()]),
-        "{revoked:?}"
-    );
+    assert!(revoked.ends_with(&["rat2".to_string()]), "{revoked:?}");
     assert!(store.move_of(&w.person, now).unwrap().is_none());
+}
+
+#[tokio::test]
+async fn signing_in_to_move_another_account_gives_back_the_one_before() {
+    let w = world().await;
+    // Their own account first, then the one they mean.
+    let first = through(&w.h, "/console/move/login", &w.person, Some(&w.cookie)).await;
+    assert_eq!(first.status(), 303);
+    assert_eq!(w.call("getAccountMove", None).await.1["did"], w.person);
+    w.sign_in_to_move().await;
+    assert_eq!(w.call("getAccountMove", None).await.1["did"], w.did);
+    // (rat1 the person's own sign-in, rat2 the move of their account.)
+    assert_eq!(*w.old.revoked.lock().unwrap(), ["rat1", "rat2"]);
+}
+
+#[tokio::test]
+async fn a_refresh_refused_ends_the_move_or_says_what_its_server_said() {
+    let w = world().await;
+    // A session about to lapse, whose server will not refresh it.
+    *w.old.first_lasts.lock().unwrap() = 10;
+    w.sign_in_to_move().await;
+    *w.old.refuse_refresh.lock().unwrap() = Some("invalid_request");
+    let said = w.call("startAccountMove", Some(json!({}))).await;
+    assert_eq!(error(&said), (502, "UpstreamFailure"));
+    // Its grant ended: sign in again, and the move is forgotten.
+    *w.old.refuse_refresh.lock().unwrap() = Some("invalid_grant");
+    let said = w.call("startAccountMove", Some(json!({}))).await;
+    assert_eq!(error(&said), (400, "SignInAgain"));
+    assert_eq!(w.call("getAccountMove", None).await, (200, json!({})));
+}
+
+#[test]
+fn a_database_from_before_lets_its_sign_ins_under_way_go() {
+    use group_host::store::{MIGRATIONS, Store};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("host.sqlite");
+    drop(Store::open(&path).unwrap());
+    // Back to before sign-ins went through atproto-client, a sign-in and
+    // a move under way.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let at = MIGRATIONS
+        .iter()
+        .position(|m| m.contains("CREATE TABLE move_session"))
+        .unwrap();
+    common::rewind(&conn, at);
+    let login = "INSERT INTO console_login (state, did, issuer, token_endpoint, key, verifier, back, started) VALUES ('s', 'did:plc:a', 'https://pds.example', 'https://pds.example/token', x'00', 'v', '/', 1)";
+    conn.execute(login, []).unwrap();
+    let moving = "INSERT INTO account_move (mover, did, pds, issuer, token_endpoint, key, access, expires_at, started) VALUES ('did:plc:m', 'did:plc:a', 'https://pds.example', 'https://pds.example', 'https://pds.example/token', x'00', 'at', 1, 1)";
+    conn.execute(moving, []).unwrap();
+    drop(conn);
+    // Opened, it lets them go, and keeps what comes after.
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.request("s").unwrap(), None);
+    assert!(store.move_of("did:plc:m", 2).unwrap().is_none());
+    assert_eq!(store.keep_move("did:plc:m", "did:plc:a", 2).unwrap(), None);
+    assert_eq!(store.sweep_moves(2).unwrap(), ["did:plc:a"]);
 }

@@ -555,6 +555,28 @@ pub const MIGRATIONS: &[&str] = &[
             mod_tag.subject,
         ),
     ),
+    // Signing in goes through atproto-client's OAuth client: a request
+    // waiting for the browser is kept whole by its state, and a move's
+    // session by its account, so a move names only the account. A move
+    // under way is let go, to be signed in to again.
+    "
+    DROP TABLE console_login;
+    CREATE TABLE console_request (
+        state TEXT PRIMARY KEY,
+        pending TEXT NOT NULL,
+        started INTEGER NOT NULL
+    );
+    DROP TABLE account_move;
+    CREATE TABLE account_move (
+        mover TEXT PRIMARY KEY,
+        did TEXT NOT NULL,
+        started INTEGER NOT NULL
+    );
+    CREATE TABLE move_session (
+        did TEXT PRIMARY KEY,
+        session TEXT NOT NULL
+    );
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";

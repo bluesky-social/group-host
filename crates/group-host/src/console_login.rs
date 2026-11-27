@@ -1,10 +1,16 @@
 //! Signing in to the console, as oneself.
 //!
 //! The host is a confidential OAuth client of each person's own PDS, under
-//! a client id of its own, its key derived from the host's secret. It asks
-//! for `atproto` alone: the console's methods act as the group, never as
-//! the person, so the host needs only to know who they are. Once their PDS
-//! says so, it revokes the token it was given, and keeps nothing of theirs.
+//! a client id of its own, its key derived from the host's secret, through
+//! atproto-client's OAuth client ([`login::Client`]): the request pushed,
+//! the browser sent to approve it, the code redeemed, and the tokens taken
+//! only once the account's own authorization server, followed again from
+//! its DID, is the one that issued them. It asks for `atproto` alone: the
+//! console's methods act as the group, never as the person, so the host
+//! needs only to know who they are. Once their PDS says so, it revokes
+//! what it was given, and keeps nothing of theirs. A request waiting for
+//! the browser to come back is kept in the database by its state
+//! ([`Requests`]), so any of the host's processes answers it.
 //!
 //! The browser holds only a cookie the host signed, naming the person,
 //! HttpOnly and SameSite=Lax; where the console is on https, named
@@ -13,9 +19,9 @@
 //! one in its place. A request that says it comes from a page elsewhere
 //! (an `Origin` other than the console's) is as nobody's, whatever cookie
 //! it carries, and signs nobody in or out. A sign-in is answered only in
-//! the browser that started it, by a cookie naming its state, so a link
-//! to someone else's approval cannot sign a person in as them. Signing
-//! out refuses every cookie signed before.
+//! the browser that started it, by a cookie naming a secret its request
+//! carries, so a link to someone else's approval cannot sign a person in
+//! as them. Signing out refuses every cookie signed before.
 //!
 //! A browser can be signed in to several accounts at once: signing in to
 //! another keeps the one before in a second cookie, of such signed
@@ -29,17 +35,24 @@
 //! The console serves `/console/*` from the host, beside its pages.
 
 use crate::Host;
+use crate::config::Config;
 use crate::oauth_dpop::hmac;
+use crate::observe;
+use crate::secrets::Secrets;
 use crate::store::Store;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
-use atproto::{Curve, Keypair, did};
-use atproto::{dpop, jose};
-use axum::extract::{Query, State};
+use atproto::oauth::{Callback, ClientKeys, WebClient, client_jwk};
+use atproto::{Curve, Keypair, jose};
+use atproto_client::guard::Guarded;
+use atproto_client::identity::Resolver;
+use atproto_client::oauth::{self as login, Authorize, Session, StateStore, StoreError};
+use axum::extract::{Query, RawQuery, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
 use axum::{Form, Json};
 use rusqlite::{OptionalExtension, params};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -56,74 +69,70 @@ const OTHERS: &str = "group_host_accounts";
 const MOST: usize = 4;
 /// How long a sign-in lasts, and how long approving one may take.
 const LASTS: i64 = 30 * 86_400_000;
-const TAKES: i64 = 15 * 60_000;
+const TAKES: i64 = login::PENDING_FOR as i64 * 1000;
+/// The console's key, as its client metadata names it.
+const KID: &str = "console";
 
-/// A sign-in gone to a PDS, waiting for the browser to come back.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Pending {
-    pub did: String,
-    /// Their PDS, as their DID document named it.
-    pub pds: String,
-    pub issuer: String,
-    pub token_endpoint: String,
-    pub revocation_endpoint: Option<String>,
-    /// The DPoP key its tokens are bound to.
-    pub key: Vec<u8>,
-    pub verifier: String,
-    /// The page to go back to.
+/// What a sign-in carries to the browser's return, beside what the OAuth
+/// client keeps: the page to go back to, the secret the browser that
+/// started it holds in its cookie, and, for an account being moved here,
+/// who is moving it.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Started {
     pub back: String,
-    pub started: i64,
-    /// For a sign-in to an account being moved here, who is moving it:
-    /// its tokens are kept for them, and the browser is not signed in.
+    browser: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mover: Option<String>,
 }
 
+/// The requests waiting for the browser to come back, in the database:
+/// both of the console's OAuth clients keep theirs here.
+pub(crate) struct Requests(pub Store);
+
+/// A store's failure, as the OAuth client takes it.
+pub(crate) fn unstored(e: anyhow::Error) -> StoreError {
+    StoreError(format!("{e:#}"))
+}
+
+impl StateStore for Requests {
+    fn put(&self, state: &str, pending: &login::Pending) -> Result<(), StoreError> {
+        self.0.put_request(state, pending).map_err(unstored)
+    }
+
+    fn take(&self, state: &str) -> Result<Option<login::Pending>, StoreError> {
+        self.0.take_request(state).map_err(unstored)
+    }
+}
+
 impl Store {
-    /// Keeps a sign-in under way by its state; those lapsed by `now` are
-    /// forgotten.
-    pub fn start_login(&self, state: &str, p: &Pending, now: i64) -> anyhow::Result<()> {
+    /// Keeps a request waiting for the browser by its state; those lapsed
+    /// by the time it was pushed are forgotten.
+    pub fn put_request(&self, state: &str, p: &login::Pending) -> anyhow::Result<()> {
+        let started = i64::try_from(p.started)?;
         let conn = self.conn();
-        let forgot = conn.execute(
-            "DELETE FROM console_login WHERE started <= ?1",
-            [now - TAKES],
-        );
-        forgot?;
-        let values = params![
-            state,
-            p.did,
-            p.issuer,
-            p.token_endpoint,
-            p.revocation_endpoint,
-            p.key,
-            p.verifier,
-            p.back,
-            p.started,
-            p.mover,
-            p.pds
-        ];
-        conn.execute(START_LOGIN, values)?;
+        let lapsed = started - login::PENDING_FOR as i64;
+        conn.execute("DELETE FROM console_request WHERE started < ?1", [lapsed])?;
+        let values = params![state, serde_json::to_string(p)?, started];
+        conn.execute(PUT_REQUEST, values)?;
         Ok(())
     }
 
-    /// The sign-in `state` names, forgotten as it is read, if it began
-    /// after `since`.
-    pub fn finish_login(&self, state: &str, since: i64) -> anyhow::Result<Option<Pending>> {
+    /// The request `state` names, forgotten as it is read.
+    pub fn take_request(&self, state: &str) -> anyhow::Result<Option<login::Pending>> {
+        let sql = "DELETE FROM console_request WHERE state = ?1 RETURNING pending";
         let conn = self.conn();
-        let found = conn.query_row(FINISH_LOGIN, params![state, since], |r| {
-            Ok(Pending {
-                did: r.get(0)?,
-                issuer: r.get(1)?,
-                token_endpoint: r.get(2)?,
-                revocation_endpoint: r.get(3)?,
-                key: r.get(4)?,
-                verifier: r.get(5)?,
-                back: r.get(6)?,
-                started: r.get(7)?,
-                mover: r.get(8)?,
-                pds: r.get(9)?,
-            })
-        });
-        Ok(found.optional()?)
+        let found = conn.query_row(sql, [state], |r| r.get(0)).optional();
+        let found: Option<String> = found?;
+        Ok(found.map(|p| serde_json::from_str(&p)).transpose()?)
+    }
+
+    /// The request `state` names, left as it is.
+    pub fn request(&self, state: &str) -> anyhow::Result<Option<login::Pending>> {
+        let sql = "SELECT pending FROM console_request WHERE state = ?1";
+        let conn = self.conn();
+        let found = conn.query_row(sql, [state], |r| r.get(0)).optional();
+        let found: Option<String> = found?;
+        Ok(found.map(|p| serde_json::from_str(&p)).transpose()?)
     }
 
     /// Notes that `did` signed out of the console at `at`.
@@ -142,10 +151,51 @@ impl Store {
     }
 }
 
-const START_LOGIN: &str = "INSERT INTO console_login (state, did, issuer, token_endpoint, revocation_endpoint, key, verifier, back, started, mover, pds) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
-const FINISH_LOGIN: &str = "DELETE FROM console_login WHERE state = ?1 AND started > ?2 RETURNING did, issuer, token_endpoint, revocation_endpoint, key, verifier, back, started, mover, pds";
+const PUT_REQUEST: &str =
+    "INSERT INTO console_request (state, pending, started) VALUES (?1, ?2, ?3)";
 const SIGN_OUT: &str =
     "INSERT INTO console_logout (did, at) VALUES (?1, ?2) ON CONFLICT (did) DO UPDATE SET at = ?2";
+
+/// The key the host signs its client assertions with, as the console.
+fn console_key(secrets: &Secrets) -> Keypair {
+    let secret = hmac(
+        &secrets.rotation.to_bytes(),
+        b"group-host console client key",
+    );
+    Keypair::from_bytes(Curve::P256, &secret).expect("an HMAC is a P-256 secret")
+}
+
+fn client_id(config: &Config) -> String {
+    format!("{}/console/client-metadata.json", config.console_url)
+}
+
+/// The console's two OAuth clients, under its one client id and key, each
+/// call they make through [`observe::Calls`]: one signing people in, who
+/// keeps no session past its callback, and one signing in to accounts
+/// being moved here, keeping their sessions in the database until the move
+/// is done ([`crate::account_move::Moves`]). They are two, each with a
+/// callback of its own, as a sign-in ends any session its client keeps
+/// for the same account: someone signing in to the console as an account
+/// would otherwise end its move.
+pub(crate) fn clients(
+    config: &Config,
+    secrets: &Secrets,
+    store: &Store,
+    guarded: &Guarded,
+    identity: &Resolver,
+) -> (login::Client, login::Client) {
+    let id = client_id(config);
+    let requests: Arc<dyn StateStore> = Arc::new(Requests(store.clone()));
+    let client = || {
+        let credentials = login::Credentials::private_key_jwt(console_key(secrets), KID);
+        let credentials = credentials.expect("a P-256 key");
+        login::Client::new(&id, credentials, guarded.clone(), identity.clone())
+            .states(requests.clone())
+            .sending(Arc::new(observe::Calls))
+    };
+    let moves = Arc::new(crate::account_move::Moves(store.clone()));
+    (client(), client().sessions(moves))
+}
 
 fn failed(status: StatusCode, why: impl Into<String>) -> Response {
     let why = why.into();
@@ -153,12 +203,38 @@ fn failed(status: StatusCode, why: impl Into<String>) -> Response {
     (status, format!("Signing in failed: {why}")).into_response()
 }
 
+/// Why a sign-in could not start or finish, as the browser is told.
+fn refused(e: &login::Error) -> Response {
+    use login::Error;
+    let (status, why) = match e {
+        Error::UnknownState => (StatusCode::BAD_REQUEST, TOOK_TOO_LONG.to_string()),
+        Error::Identity(_) | Error::Handle { .. } => (
+            StatusCode::BAD_REQUEST,
+            format!("no account we can find: {e}"),
+        ),
+        Error::Refused(_) | Error::Invalid(_) => (StatusCode::BAD_REQUEST, e.to_string()),
+        Error::OAuth(_) | Error::WrongAccount { .. } | Error::Issuer(_) => {
+            (StatusCode::FORBIDDEN, e.to_string())
+        }
+        Error::Store(_) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        _ => (StatusCode::BAD_GATEWAY, e.to_string()),
+    };
+    failed(status, why)
+}
+
+const TOOK_TOO_LONG: &str = "this browser did not start that sign-in, or it took too long";
+
 /// A cookie, as the host sets one: for the whole site, HttpOnly, Lax, and
 /// Secure, named `__Host-`, where the console is on https.
-fn cookie(host: &Host, name: &str, value: &str, max_age: i64) -> String {
+pub(crate) fn cookie(host: &Host, name: &str, value: &str, max_age: i64) -> String {
     let secure = if host.secure() { "; Secure" } else { "" };
     let name = host.cookie_name(name);
     format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}")
+}
+
+/// The `Set-Cookie` that ends a sign-in under way.
+pub(crate) fn done(host: &Host) -> String {
+    cookie(host, STARTED, "", 0)
 }
 
 /// Refuses what only the console's own pages may ask: signing in to
@@ -225,21 +301,12 @@ impl Host {
             .is_some_and(|o| o.as_bytes() != ours.as_bytes())
     }
 
-    /// The key the host signs its client assertions with, as the console.
-    fn console_key(&self) -> Keypair {
-        let secret = hmac(
-            &self.secrets.rotation.to_bytes(),
-            b"group-host console client key",
-        );
-        Keypair::from_bytes(Curve::P256, &secret).expect("an HMAC is a P-256 secret")
-    }
-
-    fn console_client_id(&self) -> String {
-        format!("{}/console/client-metadata.json", self.config.console_url)
-    }
-
     pub(crate) fn console_callback(&self) -> String {
         format!("{}/console/callback", self.config.console_url)
+    }
+
+    pub(crate) fn move_callback(&self) -> String {
+        format!("{}/console/move/callback", self.config.console_url)
     }
 
     fn cookie_key(&self) -> Vec<u8> {
@@ -314,140 +381,36 @@ impl Host {
         let current = exp > now_millis() && out.is_none_or(|at| iat > at);
         Ok(current.then(|| did.to_string()))
     }
-
-    /// Sends `form` to `url` from the console's client, with a DPoP proof
-    /// of `key` and its assertion for `issuer`, once more with the nonce
-    /// the server asks for. The JSON answered, if it took it.
-    pub(crate) async fn console_post(
-        &self,
-        url: &str,
-        issuer: &str,
-        key: &Keypair,
-        form: &[(&str, &str)],
-    ) -> Result<Value, String> {
-        let mut nonce: Option<String> = None;
-        for _ in 0..2 {
-            let now = now_millis() / 1000;
-            let mut claims = dpop::Claims::new("POST", url, now as u64);
-            claims.nonce = nonce.clone();
-            let proof = dpop::sign(key, &claims);
-            let id = self.console_client_id();
-            let assertion = jose::sign(
-                &self.console_key(),
-                &json!({"typ": "JWT", "kid": "console"}),
-                &json!({"iss": id, "sub": id, "aud": issuer, "jti": jose::random(12), "iat": now, "exp": now + 60}),
-            );
-            let mut fields: Vec<(&str, &str)> = form.to_vec();
-            fields.extend([
-                ("client_id", id.as_str()),
-                (
-                    "client_assertion_type",
-                    crate::oauth_clients::CLIENT_ASSERTION_TYPE,
-                ),
-                ("client_assertion", assertion.as_str()),
-            ]);
-            let asked = self.guarded.post(url).map_err(|e| e.0)?;
-            let sent = asked.header("dpop", proof).form(&fields).send().await;
-            let res = sent.map_err(|e| format!("{url}: {e}"))?;
-            let ok = res.status().is_success();
-            nonce = res
-                .headers()
-                .get("dpop-nonce")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from);
-            let body: Value = res.json().await.unwrap_or_default();
-            if ok {
-                return Ok(body);
-            }
-            if body["error"] != "use_dpop_nonce" {
-                let said = body["error_description"]
-                    .as_str()
-                    .or(body["error"].as_str());
-                return Err(format!(
-                    "{url} refused: {}",
-                    said.unwrap_or("no reason given")
-                ));
-            }
-        }
-        Err(format!("{url} asked for a nonce twice"))
-    }
-
-    /// Where `identifier`, a handle or DID, signs in: their DID, their PDS,
-    /// and its authorization server's metadata.
-    async fn sign_in_at(&self, identifier: &str) -> Result<(String, String, Value), String> {
-        let identifier = identifier.trim().trim_start_matches('@').to_lowercase();
-        let did = match identifier.starts_with("did:") {
-            true => Some(identifier.clone()),
-            false => self.identity.resolve_handle(&identifier).await.ok(),
-        };
-        let did = did.ok_or_else(|| format!("{identifier} is no account we can find"))?;
-        let doc = self
-            .identity
-            .document_now(&did)
-            .await
-            .map_err(|e| format!("{did}: {e:#}"))?;
-        let pds = did::pds(&doc).ok_or_else(|| format!("{did} names no PDS"))?;
-        let server = self.authorization_server(&pds).await?;
-        Ok((did, pds, server))
-    }
-
-    /// The metadata of the authorization server `pds` names.
-    async fn authorization_server(&self, pds: &str) -> Result<Value, String> {
-        let resource = self
-            .public_json(
-                &format!("{pds}/.well-known/oauth-protected-resource"),
-                "its PDS",
-            )
-            .await?;
-        let issuer = resource["authorization_servers"][0].as_str();
-        let issuer = issuer.ok_or_else(|| format!("{pds} names no authorization server"))?;
-        let server = self
-            .public_json(
-                &format!("{issuer}/.well-known/oauth-authorization-server"),
-                "its authorization server",
-            )
-            .await?;
-        if server["issuer"] != issuer {
-            return Err(format!("{issuer} calls itself {}", server["issuer"]));
-        }
-        Ok(server)
-    }
-
-    /// A sign-up at `p`'s server come back with `sub`, the account made:
-    /// the sign-in, now naming it, once the account's own authorization
-    /// server is the one that answered, as a sign-in checks it before.
-    async fn signed_up(&self, p: Pending, sub: &str) -> Result<Pending, String> {
-        let (did, pds, server) = self.sign_in_at(sub).await?;
-        if server["issuer"] != p.issuer.as_str() {
-            return Err(format!(
-                "{did} signs in at {}, not {}",
-                server["issuer"], p.issuer
-            ));
-        }
-        Ok(Pending { did, pds, ..p })
-    }
 }
 
-/// The console's client metadata, at its client id.
-pub async fn client_metadata(State(host): State<Arc<Host>>) -> Json<Value> {
-    let mut jwk = jose::jwk(&host.console_key().public());
-    jwk["kid"] = json!("console");
-    jwk["use"] = json!("sig");
-    jwk["alg"] = json!("ES256");
-    Json(json!({
-        "client_id": host.console_client_id(),
-        "client_name": "Group host",
-        "client_uri": host.config.console_url,
-        "redirect_uris": [host.console_callback()],
-        "scope": format!("atproto {}", host.move_scope()),
-        "grant_types": ["authorization_code", "refresh_token"],
-        "response_types": ["code"],
-        "token_endpoint_auth_method": "private_key_jwt",
-        "token_endpoint_auth_signing_alg": "ES256",
-        "application_type": "web",
-        "dpop_bound_access_tokens": true,
-        "jwks": {"keys": [jwk]},
-    }))
+/// The console's client metadata, at its client id: as atproto's profile
+/// has a confidential web client's, which only a console on https at a
+/// public name can have.
+pub async fn client_metadata(State(host): State<Arc<Host>>) -> Result<Json<Value>, XrpcError> {
+    let key = [client_jwk(&console_key(&host.secrets).public(), KID)];
+    let (id, callbacks) = (
+        client_id(&host.config),
+        [host.console_callback(), host.move_callback()],
+    );
+    let callbacks: Vec<&str> = callbacks.iter().map(String::as_str).collect();
+    let scope = format!("atproto {}", host.move_scope());
+    let client = WebClient {
+        client_id: &id,
+        client_name: Some("Group host"),
+        client_uri: Some(&host.config.console_url),
+        redirect_uris: &callbacks,
+        scope: &scope,
+        keys: ClientKeys::Jwks(&key),
+    };
+    let meta = client.metadata().map_err(|e| {
+        let why = format!("CONSOLE_URL cannot be an OAuth client's: {e}");
+        XrpcError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "InternalServerError",
+            why,
+        )
+    })?;
+    Ok(Json(meta))
 }
 
 /// Starts signing `handle` in: pushes the request to their PDS's
@@ -457,98 +420,85 @@ pub async fn login(
     State(host): State<Arc<Host>>,
     Query(q): Query<HashMap<String, String>>,
 ) -> Result<Response, XrpcError> {
-    sign_in(&host, &q, "atproto", None).await
+    Ok(sign_in(&host, &q, None).await)
 }
 
-/// Starts a sign-in to `q`'s `handle`, asking for `scope`, for `mover`
-/// where it is an account they are moving here.
+/// Starts a sign-in to `q`'s `handle`, for `mover` where it is an account
+/// they are moving here: asking what a move needs, by the client that keeps
+/// moves' sessions.
 pub(crate) async fn sign_in(
     host: &Host,
     q: &HashMap<String, String>,
-    scope: &str,
     mover: Option<String>,
-) -> Result<Response, XrpcError> {
-    let identifier = q.get("handle").filter(|h| !h.trim().is_empty());
+) -> Response {
+    let identifier = q.get("handle").map(|h| h.trim()).filter(|h| !h.is_empty());
     // A sign-up names no one yet: the account it makes is checked as it
     // comes back. Never for an account being moved, which is someone's.
     let create = identifier.is_none() && q.contains_key("create") && mover.is_none();
-    let found = match (identifier, create) {
-        (Some(who), _) => host.sign_in_at(who).await,
-        (None, true) => {
-            let pds = host.config.signup_pds.clone();
-            let server = host.authorization_server(&pds).await;
-            server.map(|s| (String::new(), pds, s))
-        }
-        (None, false) => return Ok(failed(StatusCode::BAD_REQUEST, "say who you are")),
+    let input = match (identifier, create) {
+        (Some(who), _) => who,
+        (None, true) => host.config.signup_pds.as_str(),
+        (None, false) => return failed(StatusCode::BAD_REQUEST, "say who you are"),
     };
-    let (did, pds, server) = match found {
-        Ok(found) => found,
-        Err(why) => return Ok(failed(StatusCode::BAD_REQUEST, why)),
+    let (client, redirect_uri, scope) = match mover {
+        Some(_) => (
+            &host.moving,
+            host.move_callback(),
+            format!("atproto {}", host.move_scope()),
+        ),
+        None => (&host.console, host.console_callback(), "atproto".into()),
     };
-    let text = |k: &str| server[k].as_str().unwrap_or_default().to_string();
-    let issuer = text("issuer");
-    let key = Keypair::generate(Curve::P256);
-    let (verifier, state) = (jose::random(32), jose::random(16));
-    let callback = host.console_callback();
-    let challenge = dpop::pkce_challenge(&verifier);
-    let hint = match identifier {
-        Some(who) => ("login_hint", who.as_str()),
-        None => ("prompt", "create"),
-    };
-    let form = [
-        ("response_type", "code"),
-        ("code_challenge", challenge.as_str()),
-        ("code_challenge_method", "S256"),
-        ("redirect_uri", callback.as_str()),
-        ("scope", scope),
-        ("state", state.as_str()),
-        hint,
-    ];
-    let pushed = host
-        .console_post(
-            &text("pushed_authorization_request_endpoint"),
-            &issuer,
-            &key,
-            &form,
-        )
-        .await;
-    let pushed = match pushed {
-        Ok(p) => p,
-        Err(why) => return Ok(failed(StatusCode::BAD_GATEWAY, why)),
-    };
-    let Some(request_uri) = pushed["request_uri"].as_str() else {
-        return Ok(failed(
-            StatusCode::BAD_GATEWAY,
-            format!("{issuer} gave no request_uri"),
-        ));
-    };
-    let Ok(mut to) = reqwest::Url::parse(&text("authorization_endpoint")) else {
-        return Ok(failed(
-            StatusCode::BAD_GATEWAY,
-            format!("{issuer} names no authorization endpoint"),
-        ));
-    };
-    to.query_pairs_mut()
-        .append_pair("client_id", &host.console_client_id())
-        .append_pair("request_uri", request_uri);
-    let now = now_millis();
-    let pending = Pending {
-        did,
-        pds,
-        issuer,
-        token_endpoint: text("token_endpoint"),
-        revocation_endpoint: server["revocation_endpoint"].as_str().map(String::from),
-        key: key.to_bytes().to_vec(),
-        verifier,
+    let started = Started {
         back: back_to(q.get("back")),
-        started: now,
+        browser: jose::random(16),
         mover,
     };
-    host.store
-        .start_login(&state, &pending, now)
-        .map_err(XrpcError::internal)?;
-    let started = cookie(host, STARTED, &state, TAKES / 1000);
-    Ok(([(header::SET_COOKIE, started)], Redirect::to(to.as_str())).into_response())
+    let carried = serde_json::to_string(&started).expect("JSON");
+    let ask = Authorize {
+        redirect_uri: &redirect_uri,
+        scope: &scope,
+        prompt: create.then_some("create"),
+        app_state: Some(&carried),
+    };
+    let to = match client.authorize(input, &ask).await {
+        Ok(to) => to,
+        Err(e) => return refused(&e),
+    };
+    let held = cookie(host, STARTED, &started.browser, TAKES / 1000);
+    ([(header::SET_COOKIE, held)], Redirect::to(&to)).into_response()
+}
+
+/// The session the browser's return, `query`, grants by `client`, at its
+/// `callback`, and what its sign-in carried: only in the browser that
+/// started it, at the callback it was started for, and for an account
+/// being moved, while the one moving it is still the one signed in. Else
+/// the answer refusing it. The request is answered once; one refused
+/// before its code is redeemed is left to lapse.
+pub(crate) async fn come_back(
+    host: &Host,
+    headers: &HeaderMap,
+    query: &str,
+    client: &login::Client,
+    callback: &str,
+) -> Result<Result<(Session, Started), Response>, XrpcError> {
+    let state = Callback::parse(query).state.unwrap_or_default();
+    let pending = host.store.request(&state).map_err(XrpcError::internal)?;
+    let started = pending
+        .filter(|p| p.redirect_uri == callback)
+        .and_then(|p| serde_json::from_str::<Started>(&p.app_state?).ok())
+        .filter(|s| host.cookie_of(headers, STARTED) == Some(s.browser.as_str()));
+    let Some(started) = started else {
+        return Ok(Err(failed(StatusCode::BAD_REQUEST, TOOK_TOO_LONG)));
+    };
+    let caller = host.console_caller(headers).map_err(XrpcError::internal)?;
+    if started.mover.is_some() && caller != started.mover {
+        let why = "sign in to the console again first";
+        return Ok(Err(failed(StatusCode::FORBIDDEN, why)));
+    }
+    Ok(match client.callback(query).await {
+        Ok((session, _)) => Ok((session, started)),
+        Err(e) => Err(refused(&e)),
+    })
 }
 
 /// The browser comes back from approving: the code is exchanged, the
@@ -556,108 +506,36 @@ pub(crate) async fn sign_in(
 pub async fn callback(
     State(host): State<Arc<Host>>,
     headers: HeaderMap,
-    Query(q): Query<HashMap<String, String>>,
+    RawQuery(query): RawQuery,
 ) -> Result<Response, XrpcError> {
-    let state = q.get("state").map(String::as_str).unwrap_or_default();
-    let ours = host.cookie_of(&headers, STARTED) == Some(state);
-    let since = now_millis() - TAKES;
-    let pending = host
-        .store
-        .finish_login(state, since)
-        .map_err(XrpcError::internal)?;
-    let Some(p) = pending.filter(|_| ours) else {
-        let why = "this browser did not start that sign-in, or it took too long";
-        return Ok(failed(StatusCode::BAD_REQUEST, why));
+    let query = query.unwrap_or_default();
+    let at = host.console_callback();
+    let back = come_back(&host, &headers, &query, &host.console, &at).await?;
+    let (session, started) = match back {
+        Ok(back) => back,
+        Err(refused) => return Ok(refused),
     };
-    // Atproto's servers always say who answered: one that does not may
-    // be another, mixing its answer up with ours.
-    if q.get("iss") != Some(&p.issuer) {
-        return Ok(failed(
-            StatusCode::BAD_REQUEST,
-            "the answer came from another server, or did not say which server",
-        ));
-    }
-    let Some(code) = q.get("code") else {
-        let why = q.get("error_description").or(q.get("error"));
-        let why = format!(
-            "it was refused: {}",
-            why.map_or("no reason given", String::as_str)
-        );
-        return Ok(failed(StatusCode::FORBIDDEN, why));
-    };
-    let key = Keypair::from_bytes(Curve::P256, &p.key).expect("a key the host made");
-    let callback = host.console_callback();
-    let form = [
-        ("grant_type", "authorization_code"),
-        ("code", code.as_str()),
-        ("redirect_uri", callback.as_str()),
-        ("code_verifier", p.verifier.as_str()),
-    ];
-    let tokens = match host
-        .console_post(&p.token_endpoint, &p.issuer, &key, &form)
-        .await
-    {
-        Ok(t) => t,
-        Err(why) => return Ok(failed(StatusCode::BAD_GATEWAY, why)),
-    };
-    let sub = tokens["sub"].as_str().unwrap_or_default();
-    let p = match p.did.is_empty() {
-        true => match host.signed_up(p, sub).await {
-            Ok(p) => p,
-            Err(why) => return Ok(failed(StatusCode::FORBIDDEN, why)),
-        },
-        false => p,
-    };
-    if sub != p.did {
-        let why = format!("signed in as {sub:?}, not {}", p.did);
-        return Ok(failed(StatusCode::FORBIDDEN, why));
-    }
-    let done = cookie(&host, STARTED, "", 0);
-    // An account being moved here: its tokens kept for the one moving it,
-    // still signed in, and this browser signed in as nobody new.
-    if let Some(mover) = &p.mover {
-        let caller = host.console_caller(&headers).map_err(XrpcError::internal)?;
-        if caller.as_ref() != Some(mover) {
-            return Ok(failed(
-                StatusCode::FORBIDDEN,
-                "sign in to the console again first",
-            ));
-        }
-        host.keep_move(&p, &tokens)
-            .await
-            .map_err(XrpcError::internal)?;
-        tracing::info!(did = p.did, mover, "signed in to an account to move");
-        return Ok(([(header::SET_COOKIE, done)], Redirect::to(&p.back)).into_response());
-    }
+    let did = session.did;
     // Knowing who they are is all the host wanted: it keeps nothing.
-    if let (Some(url), Some(token)) = (&p.revocation_endpoint, tokens["access_token"].as_str()) {
-        let revoked = host
-            .console_post(url, &p.issuer, &key, &[("token", token)])
-            .await;
-        tracing::debug!(?revoked, "gave back the console's token");
-    }
+    let revoked = host.console.revoke(&did).await;
+    tracing::debug!(?revoked, "gave back the console's tokens");
     let now = now_millis();
-    let session = cookie(
-        &host,
-        COOKIE,
-        &host.session_cookie(&p.did, now),
-        LASTS / 1000,
-    );
+    let session = cookie(&host, COOKIE, &host.session_cookie(&did, now), LASTS / 1000);
     // The account in use before, if another, is kept beside it.
     let before = host.console_caller(&headers).map_err(XrpcError::internal)?;
     let mut others = host
-        .console_others(&headers, Some(&p.did))
+        .console_others(&headers, Some(&did))
         .map_err(XrpcError::internal)?;
-    if let (Some(did), Some(value)) = (before, host.cookie_of(&headers, COOKIE))
-        && did != p.did
+    if let (Some(was), Some(value)) = (before, host.cookie_of(&headers, COOKIE))
+        && was != did
     {
-        others.retain(|(d, _)| *d != did);
-        others.insert(0, (did, value.to_string()));
+        others.retain(|(d, _)| *d != was);
+        others.insert(0, (was, value.to_string()));
     }
-    tracing::info!(did = p.did, "signed in to the console");
-    let mut res = Redirect::to(&p.back).into_response();
+    tracing::info!(did, "signed in to the console");
+    let mut res = Redirect::to(&started.back).into_response();
     let set = res.headers_mut();
-    for c in [session, done] {
+    for c in [session, done(&host)] {
         set.append(header::SET_COOKIE, c.parse().expect("a cookie is a header"));
     }
     if !others.is_empty() || host.cookie_of(&headers, OTHERS).is_some() {

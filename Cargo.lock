@@ -101,14 +101,15 @@ dependencies = [
 
 [[package]]
 name = "atproto-client"
-version = "0.2.0"
+version = "0.4.0"
 source = "sparse+https://knotless.dev/cargo/did:plc:bcgltzqazw5tb6k2g3ttenbj/3mzr5vldibtui/"
-checksum = "1e6a4bb506f0e06f7af889944399fdf66ad7148e62cf122ac2a751b0427524a3"
+checksum = "81f32e71ca81cee2b36389863573b43de81b17239ac214122f0bb9bbb48f73c5"
 dependencies = [
  "atproto",
  "bytes",
  "futures-util",
  "hickory-resolver",
+ "http",
  "reqwest",
  "serde",
  "serde_json",

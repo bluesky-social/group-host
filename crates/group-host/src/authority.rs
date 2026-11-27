@@ -33,6 +33,7 @@ use atproto::space_auth::{self, space_host_aud};
 use atproto::{Value, jose, syntax};
 use atproto_client::guard::Guarded;
 use atproto_client::identity;
+use atproto_client::sender::SendError;
 use axum::http::StatusCode;
 use futures::future::{OptionFuture, join_all};
 use futures::{StreamExt, stream};
@@ -147,7 +148,7 @@ fn syncer_update(update: &SyncerUpdate) -> Json {
 }
 
 /// What a request's answer says of delivering it.
-fn delivery(sent: reqwest::Result<reqwest::Response>) -> Delivery {
+fn delivery(sent: Result<reqwest::Response, SendError>) -> Delivery {
     match sent.map(|r| r.status()) {
         Ok(s) if s.is_success() => Delivery::Delivered,
         Ok(s) if retryable(s) => Delivery::Retry,

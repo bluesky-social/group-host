@@ -52,8 +52,9 @@ pub fn turn(switch: &AtomicBool, to: bool) {
 /// made then would be, so opening it runs `to` and those after again:
 /// each later migration undone, the last first, statement by statement.
 /// A table or index it made is dropped, a rename is reversed, a column it
-/// added is dropped, and a table it dropped is made again as an earlier
-/// one made it. What only moves rows is left as it is.
+/// added is dropped, and a table it dropped is made again as earlier ones
+/// made it, with the columns they added to it since. What only moves rows
+/// is left as it is.
 #[allow(dead_code)]
 pub fn rewind(conn: &rusqlite::Connection, to: usize) {
     let migrations = group_host::store::MIGRATIONS;
@@ -92,12 +93,25 @@ pub fn rewind(conn: &rusqlite::Connection, to: usize) {
                     s.strip_prefix("CREATE TABLE ")
                         .is_some_and(|r| name(r) == table)
                 };
-                let mut earlier = migrations[..at].iter().flat_map(|m| statements(m));
-                earlier.rfind(made).expect("a table made before")
+                let added = format!("ALTER TABLE {table} ADD COLUMN ");
+                let earlier: Vec<String> = migrations[..at]
+                    .iter()
+                    .flat_map(|m| statements(m))
+                    .collect();
+                let since = earlier.iter().rposition(made).expect("a table made before");
+                let grown = earlier[since + 1..]
+                    .iter()
+                    .filter(|s| s.starts_with(&added));
+                let remade: Vec<&String> = std::iter::once(&earlier[since]).chain(grown).collect();
+                remade
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(";\n")
             } else {
                 continue;
             };
-            conn.execute(&undo, []).unwrap();
+            conn.execute_batch(&undo).unwrap();
         }
     }
     conn.pragma_update(None, "user_version", to as i64).unwrap();

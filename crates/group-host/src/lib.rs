@@ -95,6 +95,10 @@ pub struct Host {
     /// domain. Held to https at public addresses, but for a host on http
     /// itself (`PUBLIC_URL`), as on a network of test servers.
     pub(crate) guarded: Guarded,
+    /// The console's OAuth clients: signing people in, and signing in to
+    /// accounts being moved here (`console_login::clients`).
+    pub(crate) console: atproto_client::oauth::Client,
+    pub(crate) moving: atproto_client::oauth::Client,
     /// The spaces the index is to read, and its wake.
     indexing: std::sync::Mutex<std::collections::BTreeSet<String>>,
     index_wake: tokio::sync::Notify,
@@ -128,7 +132,11 @@ impl Host {
             false => Guard::strict(),
         };
         let guarded = Guarded::new(guard, client_builder()).expect("a client builds");
+        // Each call to a host others' data names traced and logged.
+        let guarded = guarded.sending(Arc::new(observe::Calls));
         let identity = resolver(&config, guarded.clone());
+        let (console, moving) =
+            console_login::clients(&config, &secrets, &store, &guarded, &identity);
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
         let limits = limits::Limiter::new(config.rate_limits);
@@ -143,6 +151,8 @@ impl Host {
             events: tokio::sync::broadcast::channel(16).0,
             http: client(),
             guarded,
+            console,
+            moving,
             indexing: Default::default(),
             index_wake: Default::default(),
             clients: Default::default(),
@@ -493,6 +503,7 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
             post(account_move::cancel_account_move),
         )
         .route("/console/callback", get(console_login::callback))
+        .route("/console/move/callback", get(account_move::callback))
         .route("/console/switch", post(console_login::switch))
         .route("/console/logout", post(console_login::logout))
         .merge(token_routes())

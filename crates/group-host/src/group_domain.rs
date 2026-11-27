@@ -72,12 +72,18 @@ impl Host {
     /// name, over https as the host holds any host others' data names.
     async fn reaches(&self, domain: &str) -> bool {
         let path = "/xrpc/com.atproto.server.describeServer";
-        let asked = match &self.config.domain_check_at {
-            Some(at) => Some(self.http.get(format!("{at}{path}"))),
-            None => self.guarded.get(&format!("https://{domain}{path}")).ok(),
+        let answered = match &self.config.domain_check_at {
+            Some(at) => {
+                let asked = self.http.get(format!("{at}{path}"));
+                let asked = asked.header(header::HOST, domain).timeout(LOOKUP);
+                asked.send().await.ok()
+            }
+            None => {
+                let asked = self.guarded.get(&format!("https://{domain}{path}")).ok();
+                let asked = asked.map(|a| a.header(header::HOST, domain).timeout(LOOKUP).send());
+                OptionFuture::from(asked).await.and_then(Result::ok)
+            }
         };
-        let asked = asked.map(|a| a.header(header::HOST, domain).timeout(LOOKUP).send());
-        let answered = OptionFuture::from(asked).await.and_then(Result::ok);
         let Some(answer) = answered else {
             return false;
         };

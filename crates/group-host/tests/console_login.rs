@@ -43,7 +43,7 @@ async fn resource(State(pds): State<Arc<Pds>>) -> Json<Json_> {
         Json_::Null => json!([pds.base()]),
         other => other,
     };
-    Json(json!({ "authorization_servers": servers }))
+    Json(json!({ "resource": pds.base(), "authorization_servers": servers }))
 }
 
 async fn server(State(pds): State<Arc<Pds>>) -> Json<Json_> {
@@ -52,14 +52,17 @@ async fn server(State(pds): State<Arc<Pds>>) -> Json<Json_> {
         .says("issuer")
         .as_str()
         .map_or(base.clone(), String::from);
-    let mut meta = json!({
-        "issuer": issuer,
-        "pushed_authorization_request_endpoint": pds.says("par_at").as_str().map_or(format!("{base}/par"), String::from),
-        "authorization_endpoint": pds.says("authorize").as_str().map_or(format!("{base}/authorize"), String::from),
-        "token_endpoint": format!("{base}/token"),
-    });
-    if pds.says("revocation") != false {
-        meta["revocation_endpoint"] = json!(format!("{base}/revoke"));
+    let mut meta = common::oauth::server_metadata(&issuer, &base);
+    for (said, field) in [
+        ("par_at", "pushed_authorization_request_endpoint"),
+        ("authorize", "authorization_endpoint"),
+    ] {
+        if let Some(url) = pds.says(said).as_str() {
+            meta[field] = json!(url);
+        }
+    }
+    if pds.says("revocation") == false {
+        meta.as_object_mut().unwrap().remove("revocation_endpoint");
     }
     Json(meta)
 }
@@ -311,21 +314,20 @@ async fn signs_a_person_in_at_their_own_pds_and_out() {
         pushed["client_id"],
         format!("{}/console/client-metadata.json", h.url)
     );
-    let (_, meta) = h.get_path("/console/client-metadata.json").await;
-    assert_eq!(meta["client_id"], pushed["client_id"]);
-    assert_eq!(
-        meta["redirect_uris"],
-        json!([format!("{}/console/callback", h.url)])
-    );
-    let key = jose::from_jwk(&meta["jwks"]["keys"][0]).unwrap();
-    let (header, claims) = jose::verify(&pushed["client_assertion"], &key).unwrap();
+    let (header, claims) = jose::parts(&pushed["client_assertion"]).unwrap();
     assert_eq!(header["kid"], "console");
     assert_eq!(
         (claims["iss"].clone(), claims["aud"].clone()),
         (json!(pushed["client_id"]), json!(pds.base()))
     );
-    // And it gave back what it was given.
-    assert_eq!(*pds.revoked.lock().unwrap(), ["at"]);
+    // A console on http is no client an authorization server takes: its
+    // metadata says why.
+    let (status, meta) = h.get_path("/console/client-metadata.json").await;
+    assert_eq!(status, 500);
+    let why = meta["message"].as_str().unwrap();
+    assert!(why.contains("cannot be an OAuth client's"), "{why}");
+    // And it gave back what it was given: its grant, by its refresh token.
+    assert_eq!(*pds.revoked.lock().unwrap(), ["rt"]);
 
     // The cookie is who calls the host's methods.
     let (status, made) = create_group(&h, Some(&session), "riders.groups.test").await;
@@ -399,30 +401,31 @@ async fn refuses_a_sign_in_it_cannot_trust() {
     for (case, value, said) in [
         ("servers", json!([]), "names no authorization server"),
         ("issuer", json!("https://elsewhere.test"), "calls itself"),
-        ("par", json!("refuse"), "refused: no"),
-        ("par", json!("silent"), "refused: no reason given"),
-        ("par", json!("empty"), "gave no request_uri"),
-        (
-            "authorize",
-            json!("not a url"),
-            "names no authorization endpoint",
-        ),
-        ("nonce", json!("always"), "asked for a nonce twice"),
+        ("par", json!("refuse"), "refused: invalid_request: no"),
+        ("par", json!("silent"), "refused: refused"),
+        ("par", json!("empty"), "no request_uri"),
+        ("authorize", json!("not a url"), "not on http or https"),
+        ("nonce", json!("always"), "refused: use_dpop_nonce"),
         ("par_at", json!(closed()), "error sending request"),
-        ("par_at", json!("ftp://127.0.0.1/par"), "is not on https"),
+        (
+            "par_at",
+            json!("ftp://127.0.0.1/par"),
+            "not on http or https",
+        ),
         (
             "iss",
             json!("https://elsewhere.test"),
-            "came from another server",
+            "answered by https://elsewhere.test",
         ),
-        ("iss", json!(false), "did not say which server"),
-        ("approve", json!("deny"), "it was refused: access_denied"),
-        ("approve", json!("bare"), "it was refused: no reason given"),
+        ("iss", json!(false), "does not say it is"),
+        ("approve", json!("deny"), "refused: access_denied"),
+        ("approve", json!("bare"), "a callback with no code"),
         ("token", json!("refuse"), "refused: invalid_grant"),
+        ("sub", json!("did:plc:someone"), "not an atproto DID"),
         (
             "sub",
-            json!("did:plc:someone"),
-            "signed in as \"did:plc:someone\"",
+            json!("did:plc:aaaaaaaaaaaaaaaaaaaaaaaa"),
+            "logged in as did:plc:aaaaaaaaaaaaaaaaaaaaaaaa",
         ),
     ] {
         let before = pds.said.lock().unwrap().clone();
@@ -460,7 +463,7 @@ async fn refuses_a_sign_in_it_cannot_trust() {
         genesis.did()
     };
     let (_, why) = refused(&no_pds_person).await;
-    assert!(why.contains("names no PDS"), "{why}");
+    assert!(why.contains("names no #atproto_pds service"), "{why}");
     let (_, why) = refused("did:plc:unknownunknownunknown").await;
     assert!(why.contains("did:plc:unknownunknownunknown"), "{why}");
 
@@ -482,25 +485,76 @@ async fn refuses_a_sign_in_it_cannot_trust() {
     assert_eq!(back.status(), 400);
     let back = b.get(location(&approved)).send().await.unwrap();
     assert_eq!(back.status(), 400);
+    // A sign-in refused once its code was redeemed, as another account's,
+    // gave back what it was given.
+    let revoked = std::mem::take(&mut *pds.revoked.lock().unwrap());
+    assert_eq!(revoked, ["rt"]);
     // A server without revocation is not asked to revoke.
     set("revocation", json!(false));
     let (back, _) = sign_in(&h, &did, "/").await;
     assert_eq!(back.status(), 303);
     assert_eq!(*pds.revoked.lock().unwrap(), Vec::<String>::new());
+    set("revocation", json!(true));
+
+    // One that waited past its time, though this browser started it.
+    let url = reqwest::Url::parse_with_params(
+        &format!("{}/console/login", h.url),
+        &[("handle", did.as_str())],
+    )
+    .unwrap();
+    let started = b.get(url).send().await.unwrap();
+    let login = set_cookie(&started, "group_host_login").unwrap();
+    let approved = b.get(location(&started)).send().await.unwrap();
+    let state = pds.pushed.lock().unwrap().last().unwrap()["state"].clone();
+    let store = &h.host.store;
+    let mut waiting = store.take_request(&state).unwrap().unwrap();
+    waiting.started -= atproto_client::oauth::PENDING_FOR + 1;
+    store.put_request(&state, &waiting).unwrap();
+    let back = b
+        .get(location(&approved))
+        .header("cookie", login)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(back.status(), 400);
+    assert!(text(back).await.contains("took too long"));
+
+    // Its store failing, it says so.
+    common::oauth::age(&h, "DROP TABLE console_request");
+    let (res, _) = sign_in(&h, &did, "/").await;
+    assert_eq!(res.status(), 500);
 }
 
 #[tokio::test]
 async fn reaches_only_public_servers_for_a_host_on_the_internet() {
-    let h = start(&[("CONSOLE_URL", "https://console.test")], false).await;
+    let h = start(&[("CONSOLE_URL", "https://console.example.com")], false).await;
     let (did, _) = person(&h, true).await;
     let (res, _) = sign_in(&h, &did, "/").await;
     assert_eq!(res.status(), 400);
     let why = text(res).await;
     assert!(why.contains("not on https"), "{why}");
+    // Its client metadata, a confidential web client's.
+    let console = "https://console.example.com";
     let (_, meta) = h.get_path("/console/client-metadata.json").await;
     assert_eq!(
         meta["client_id"],
-        "https://console.test/console/client-metadata.json"
+        format!("{console}/console/client-metadata.json")
+    );
+    assert_eq!(
+        meta["redirect_uris"],
+        json!([
+            format!("{console}/console/callback"),
+            format!("{console}/console/move/callback")
+        ])
+    );
+    assert_eq!(meta["token_endpoint_auth_method"], "private_key_jwt");
+    assert_eq!(meta["application_type"], "web");
+    assert_eq!(meta["jwks"]["keys"][0]["kid"], "console");
+    assert_eq!(meta["jwks"]["keys"][0]["alg"], "ES256");
+    let scope = meta["scope"].as_str().unwrap();
+    assert!(
+        scope.starts_with("atproto rpc:com.atproto.server.createAccount"),
+        "{scope}"
     );
     // Its cookies are for https alone.
     let out = browser()
@@ -605,16 +659,16 @@ async fn refuses_a_sign_up_it_cannot_trust() {
     pds.said.lock().unwrap()["sub"] = json!(elsewhere);
     let res = sign_up(&h, "/").await;
     assert_eq!(res.status().as_u16(), 403);
-    assert!(text(res).await.contains("signs in at"));
+    assert!(text(res).await.contains("logs in at"));
     // No account at all.
     pds.said.lock().unwrap()["sub"] = json!("");
     let res = sign_up(&h, "/").await;
-    assert_eq!(res.status().as_u16(), 403);
+    assert_eq!(res.status().as_u16(), 400);
 
     // A sign-up PDS that cannot be reached.
     let away = start_reachable(&[("SIGNUP_PDS", "http://127.0.0.1:9")]).await;
     let res = sign_up(&away, "/").await;
-    assert_eq!(res.status().as_u16(), 400);
+    assert_eq!(res.status().as_u16(), 502);
     // Neither who they are nor that they are new.
     let res = browser()
         .get(format!("{}/console/login", h.url))

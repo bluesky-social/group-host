@@ -265,7 +265,9 @@ one a W3C `traceparent` header names. Since the caller names that one, a
 trace read may hold the lines of another request that named it too. A
 method other than HTTP's own seven is counted as `OTHER`.
 
-When the host resolves an identity or checks a token, it logs each
+When the host calls another server others' data names (resolving an
+identity, checking a token, signing someone in, reading a client's
+metadata, sending a call on, telling a PDS or a syncer), it logs each
 attempt of each call it makes as a `call` line, with the server's `host`,
 the `path`, the `status` or `error`, `resend` (0 for the first attempt,
 then 1 for a retry after a broken connection or a fresh DPoP nonce) and
@@ -308,8 +310,8 @@ Moving groups between hosts, and accounts here to become groups ([moving](../des
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /console/login`, `GET /console/callback`, `POST /console/logout` | sign in to the console as yourself (`?handle=`), sign up at `SIGNUP_PDS` (`?create`), and sign out. Signing in again keeps the earlier account beside the new one, and signing out switches to the one used last |
 | `POST /console/switch`                                                | switches to another account the browser is signed in to (`did`), and goes back to the page `back`                                                                                                                |
-| `GET /console/move/login`                                             | signs in to an account to move here                                                                                                                                                                              |
-| `GET /console/client-metadata.json`                                   | the host's metadata as the console's OAuth client                                                                                                                                                                |
+| `GET /console/move/login`, `GET /console/move/callback`               | signs in to an account to move here                                                                                                                                                                              |
+| `GET /console/client-metadata.json`                                   | the host's metadata as the console's OAuth client, a confidential web client's as atproto's profile has one; 500 where `CONSOLE_URL` cannot be one (not https at a public name)                                  |
 
 ## The PDS
 

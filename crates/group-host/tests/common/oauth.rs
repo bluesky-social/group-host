@@ -456,3 +456,27 @@ pub fn age(h: &Running, sql: &str) {
     let conn = rusqlite::Connection::open(h.data.path().join("host.sqlite")).unwrap();
     conn.execute(sql, []).unwrap();
 }
+
+/// The metadata of an authorization server at `base` calling itself
+/// `issuer`, whole as atproto's profile asks of one: PAR required, client
+/// metadata documents taken, and each list holding what it must.
+pub fn server_metadata(issuer: &str, base: &str) -> Json {
+    json!({
+        "issuer": issuer,
+        "pushed_authorization_request_endpoint": format!("{base}/par"),
+        "authorization_endpoint": format!("{base}/authorize"),
+        "token_endpoint": format!("{base}/token"),
+        "revocation_endpoint": format!("{base}/revoke"),
+        "require_pushed_authorization_requests": true,
+        "authorization_response_iss_parameter_supported": true,
+        "client_id_metadata_document_supported": true,
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
+        "token_endpoint_auth_signing_alg_values_supported": ["ES256"],
+        "scopes_supported": ["atproto"],
+        "dpop_signing_alg_values_supported": ["ES256"],
+        "prompt_values_supported": ["login", "consent", "create"],
+    })
+}

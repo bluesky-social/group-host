@@ -40,7 +40,18 @@ The host is a confidential OAuth client of each person's PDS, with
 client id `<CONSOLE_URL>/console/client-metadata.json`. Its client key
 is derived from the host's rotation secret, so it needs no storage. The
 sign-in asks for `atproto` alone, which proves the account and grants
-nothing.
+nothing. The OAuth client is atproto-client's, which follows atproto's
+profile throughout.
+
+The metadata at the client id is a confidential web client's, as
+atproto's profile has one: `application_type` `web`, signing its
+assertions with ES256 (`private_key_jwt`) by the key named `console`,
+its tokens bound by DPoP, and two redirects, `/console/callback` for
+signing in and `/console/move/callback` for an account being moved
+here. Its scope is every scope either asks for. Only a console on https
+at a public name can be such a client: for any other `CONSOLE_URL` the
+metadata answers 500, saying why, and no authorization server would
+take its sign-ins.
 
 If you aren't signed in, you see no group, since the host tells you
 nothing about one but its DID and handle ([groups](groups.md#what-each-person-sees-and-finding-a-group)).
@@ -48,21 +59,29 @@ The console's home page names the host and asks you to sign in. A
 group's page shows its handle and asks the same. Either one opens the
 sign-in dialog, which comes back to the page it was opened on.
 
-You type your handle or DID. The host finds your PDS and its
-authorization server, pushes the request with PKCE and a fresh DPoP key,
-and sends the browser there. On return it exchanges the code, checks
-that the token names the DID that started, and revokes the access token
-at once.
+You type your handle or DID. The host resolves it, and takes a handle
+only if its account's document claims it back. It finds your PDS and its
+authorization server, from the PDS's protected resource metadata, and
+reads that server's metadata. The server must be the issuer the PDS
+names and take what atproto's profile asks: PAR required, client
+metadata documents, `iss` on every answer, and the methods it must
+list. The host pushes the request with PKCE and a fresh DPoP key, and
+sends the browser there. On return it exchanges the code, checks that
+the token names the DID that started, and reads that account's
+authorization server again from its DID. That must be the server that
+issued the token. It then revokes what it was given at once: the refresh
+token, which ends the whole grant. A sign-in it refuses after the code
+is exchanged is revoked the same way.
 
 If you have no account, you follow "Create one". That makes one at the
 host's `SIGNUP_PDS` (Bluesky's, unless set) and signs you in with it.
 The host pushes a request to that PDS's authorization server the same
 way as for a sign-in, with `prompt=create` and no handle, and the server
 shows its sign-up. On return the token's `sub` is the account it made,
-which nobody named before. So the host resolves it, as it would a typed
-handle, and signs you in only if that account's own authorization server
-is the one that answered. The sign-in field's example handle is under
-the sign-up PDS's own name, such as `you.bsky.social`.
+which nobody named before. The host signs you in only if that account's
+own authorization server, read from its DID, is the one that answered,
+as for any sign-in. The sign-in field's example handle is under the
+sign-up PDS's own name, such as `you.bsky.social`.
 
 As you type, the field suggests the accounts whose handle matches, with
 each one's picture, name and handle where they're known. Picking one
@@ -104,8 +123,10 @@ server do).
 Details:
 
 - The host keeps the sign-in under way by its `state` for 15 minutes,
-  and the browser holds the same `state` in a cookie. The callback
-  requires both.
+  in its database, so any of its processes answers it. The browser
+  holds a secret the request carries in a cookie, and the callback
+  requires both. A callback refused for want of that cookie leaves the
+  request to lapse.
 - The authorization server's `issuer` must equal the URL its metadata
   came from. The callback must carry `iss`, equal to that issuer.
   Atproto's servers always send it, and the host refuses a callback
@@ -116,7 +137,12 @@ Details:
 
 Moving an account onto this host needs more, because the host must act
 at the old PDS. That sign-in asks a wider scope, needs a console session
-already, and keeps its tokens at most 24 hours. [moving](moving.md)
+already, comes back to `/console/move/callback`, and keeps its session
+at most 24 hours. Its client keeps that session in the database, by the
+account, and refreshes it, the server read again from the account's DID
+first, as it is about to lapse. Each client ends any session it keeps
+for an account it signs in to again, so the two are apart: signing in to
+the console as an account never ends its move. [moving](moving.md)
 explains it.
 
 ## Calling the host's own methods
