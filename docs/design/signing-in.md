@@ -260,6 +260,24 @@ At approval, the host narrows the asked scope to what the roles grant
 then. At every write, it checks both that scope and the roles as they
 are at that moment.
 
+### Reading a scope
+
+The host reads every scope as atproto's permission spec and its
+reference (`@atproto/oauth-scopes`) read one, with the `scope` module
+of the `atproto` crate: an app's scopes, a role's permissions and a
+space policy's alike. A scope the grammar doesn't take is no scope. That
+includes an action there's none of (`repo:C?action=upsert`), a parameter
+its resource doesn't take, a value it takes once named twice, and a
+value that isn't what it names: a collection that isn't an NSID, or an
+`rpc:` audience without its service (`did:web:grain.social#grain_appview`,
+written `%23` for `#`). Narrowing withholds such a scope, and a space's
+policy refuses it as a permission.
+
+A blob scope names one type or pattern (`blob:image/*`), never a list
+(`blob:image/*,video/*` is no scope), and an upload's type is compared
+with it as written. A token keeps a blob scope as one for each type it
+takes, lowercase, the way atproto writes one.
+
 ### Narrowing at approval
 
 - `atproto` is always kept.
@@ -314,9 +332,10 @@ are at that moment.
   hold `repo:*` and `M` isn't `*`. For one of the host's own methods
   the spec has a group session call (`listJoinRequests`,
   `denyJoinRequest`, `mod.querySubjects`, `mod.querySubjectHistory`,
-  `mod.updateSubject`), with `aud` this host or `*`, it's kept if the
-  roles hold the action the method asks, as for the sets above. Never
-  one of the `internal` methods.
+  `mod.updateSubject`), with `aud` this host's service
+  (`<host DID>#atgrp`) or `*`, it's kept if the roles hold the action
+  the method asks, as for the sets above. Never one of the `internal`
+  methods.
 - `space:T?…` is kept if some space of type `T` lets the roles write
   what's asked there. For a scope that only reads, reading it there is
   enough. In the members space, the roles write its roles and labeler

@@ -408,8 +408,8 @@ fn reads_a_scope_as_covered_by_those_held() {
         "repo:*",
         "space:com.example.calendar?skey=rides&collection=com.example.event",
         "space:*?manage=create",
-        "rpc:com.example.thing?aud=did:web:example.com",
-        "rpc:*?aud=*",
+        "rpc:com.example.thing?aud=did:web:example.com%23svc",
+        "rpc:*?aud=did:web:example.com%23svc",
         "blob:image/*",
     ]
     .map(String::from)
@@ -423,9 +423,10 @@ fn reads_a_scope_as_covered_by_those_held() {
         "space:com.example.calendar?skey=rides&action=read",
         "space?spaceType=com.example.calendar&skey=rides&collection=com.example.event",
         "space:com.example.thing?manage=create",
-        "rpc:com.example.other?aud=did:web:example.com",
+        "rpc:com.example.other?aud=did:web:example.com%23svc",
+        "rpc?lxm=com.example.thing&lxm=com.example.other&aud=did:web:example.com%23svc",
         "blob:image/png",
-        "blob?accept=image/jpeg",
+        "blob?accept=image/jpeg&accept=image/*",
     ] {
         assert!(some(yes), "{yes}");
     }
@@ -437,23 +438,33 @@ fn reads_a_scope_as_covered_by_those_held() {
         "space?skey=rides",
         "space:*?manage=delete",
         "blob:video/*",
+        "blob:Image/png",
         "blob?action=x",
+        "rpc:com.example.thing?aud=did:web:other.example%23svc",
+        "rpc:*?aud=*",
         "transition:generic",
     ] {
         assert!(!some(no), "{no}");
     }
-    let narrow = ["rpc:com.example.thing?aud=did:web:example.com".to_string()];
+    let narrow = ["rpc:com.example.thing?aud=did:web:example.com%23svc".to_string()];
     assert!(covers(
         &narrow,
-        "rpc:com.example.thing?aud=did:web:example.com",
+        "rpc:com.example.thing?aud=did:web:example.com%23svc",
         group
     ));
     assert!(!covers(&narrow, "rpc:com.example.thing?aud=*", group));
     assert!(!covers(
         &narrow,
-        "rpc:com.example.other?aud=did:web:example.com",
+        "rpc:com.example.other?aud=did:web:example.com%23svc",
         group
     ));
+    // An app password's scope writes any record and takes any file.
+    let generic = ["transition:generic".to_string()];
+    assert!(covers(&generic, "repo:a.b.c", group));
+    assert!(covers(&generic, "blob:*/*", group));
+    assert!(!covers(&generic, "space:*?collection=*", group));
+    let any = ["blob:*/*".to_string()];
+    assert!(covers(&any, "blob?accept=video/*&accept=text/plain", group));
 }
 
 #[tokio::test]

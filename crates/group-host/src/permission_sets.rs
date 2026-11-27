@@ -19,9 +19,9 @@
 
 use crate::Host;
 use crate::rbac::NS;
-use crate::scopes::{decoded, named, query};
 use atproto::did;
-use atproto::syntax::{is_did, is_nsid};
+use atproto::scope::Scope;
+use atproto::syntax::is_did;
 use reqwest::Url;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
@@ -49,11 +49,10 @@ pub struct Read(Mutex<HashMap<String, (i64, Option<Value>)>>);
 /// The NSID an `include:` scope names, and its audience, if it is one of
 /// another app's sets.
 pub fn include(scope: &str) -> Option<(String, Option<String>)> {
-    let scope = decoded(scope);
-    let nsid = named(&scope, "include")?;
-    let aud = query(&scope, "aud").first().map(|a| a.to_string());
-    let ours = nsid.starts_with(&format!("{NS}."));
-    (is_nsid(nsid) && !ours).then(|| (nsid.to_string(), aud))
+    match Scope::parse(scope) {
+        Scope::Include(i) if !i.nsid.starts_with(&format!("{NS}.")) => Some((i.nsid, i.aud)),
+        _ => None,
+    }
 }
 
 /// Whether `nsid` is within the namespace of the set `set`: its NSID up

@@ -728,16 +728,21 @@ fn makes_a_permission_set_concrete() {
 
 #[test]
 fn reads_a_space_scope() {
-    let s = SpaceScope::parse("space:com.example.calendar?skey=rides&collection=a&collection=b&action=create&manage=create").unwrap();
+    let s = SpaceScope::parse("space:com.example.calendar?skey=rides&collection=a.b.c&collection=d.e.f&action=create&manage=create").unwrap();
     assert_eq!(s.kind, "com.example.calendar");
-    assert_eq!((s.authority.as_str(), s.skey.as_str()), ("*", "rides"));
-    assert_eq!(s.collections, ["a", "b"]);
+    assert_eq!((s.authority.as_str(), s.skey.as_str()), ("self", "rides"));
+    assert_eq!(s.collections, ["a.b.c", "d.e.f"]);
     assert_eq!(s.writes, ["create"]);
+    assert_eq!(s.manage, ["create"]);
     assert!(!s.read_only);
     let s = SpaceScope::parse("space:*").unwrap();
     assert_eq!(s.writes, ["create", "update", "delete"]);
     assert!(!s.read_only);
-    assert_eq!(SpaceScope::parse("repo:x"), None);
+    let s = SpaceScope::parse("space:*?action=read&action=read_self").unwrap();
+    assert!(s.read_only);
+    assert_eq!(SpaceScope::parse("repo:x.y.z"), None);
+    // A scope atproto's grammar does not take is none.
+    assert_eq!(SpaceScope::parse("space:*?action=frob"), None);
 }
 
 #[test]
@@ -745,15 +750,20 @@ fn unions_a_roles_writes() {
     let space = SpaceRef::parse("at:space/did:plc:g/com.example.calendar/rides").unwrap();
     let at = "space:com.example.calendar";
     let policy = json!({"grants": [
-        {"role": "a", "permissions": [format!("{at}?collection=x&action=create"), format!("{at}?collection=y")]},
-        {"role": "b", "permissions": [format!("{at}?collection=x&action=delete&action=other")]},
-        {"role": "c", "permissions": [format!("{at}?collection=z")]},
+        {"role": "a", "permissions": [format!("{at}?collection=a.b.x&action=create"), format!("{at}?collection=a.b.y")]},
+        {"role": "b", "permissions": [format!("{at}?collection=a.b.x&action=delete"), format!("{at}?collection=a.b.w&action=delete&action=other")]},
+        {"role": "c", "permissions": [format!("{at}?collection=a.b.z"), "repo:a.b.q".to_string()]},
     ]});
     let writes = Policy::of(&policy, &space).writes(&roles(&["a", "b"]));
-    let x: Vec<&str> = writes["x"].iter().map(String::as_str).collect();
+    let x: Vec<&str> = writes["a.b.x"].iter().map(String::as_str).collect();
     assert_eq!(x, ["create", "delete"]);
-    assert_eq!(writes["y"].len(), 3);
-    assert!(!writes.contains_key("z"));
+    assert_eq!(writes["a.b.y"].len(), 3);
+    assert!(!writes.contains_key("a.b.z"));
+    // A permission naming an action there is none of grants nothing.
+    assert!(!writes.contains_key("a.b.w"));
+    // Nor does one that is no space scope.
+    let c = Policy::of(&policy, &space).writes(&roles(&["c"]));
+    assert_eq!(c.keys().collect::<Vec<_>>(), ["a.b.z"]);
     assert!(
         Policy::of(&json!({}), &space)
             .writes(&roles(&["a"]))

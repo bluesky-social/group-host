@@ -12,7 +12,8 @@
 
 use crate::group::{members_space, meta_space};
 use crate::oauth_scope::{concrete, scopes_of, set_of};
-use crate::scopes::{Permissions, decoded};
+use crate::scopes::Permissions;
+use atproto::scope::{Scope, Space, SpaceAction, Write};
 use atproto::space::SpaceRef;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -156,7 +157,8 @@ impl Policy {
         let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for scope in self.permissions(roles) {
             let held = self.held(std::slice::from_ref(&scope));
-            for collection in query_of(&decoded(&scope), "collection") {
+            let named = space_of(&scope).and_then(|s| s.collections);
+            for collection in named.into_iter().flatten() {
                 for action in WRITES {
                     if held.space(&self.space, Some(&collection), action) {
                         out.entry(collection.clone())
@@ -179,9 +181,12 @@ fn strings(value: &Value) -> Vec<String> {
     items.filter_map(|s| s.as_str().map(String::from)).collect()
 }
 
-/// The values of `name` in a scope's query, owned.
-fn query_of(scope: &str, name: &str) -> Vec<String> {
-    query(scope, name).into_iter().map(String::from).collect()
+/// The space scope `scope` is, if it is one.
+fn space_of(scope: &str) -> Option<Space> {
+    match Scope::parse(scope) {
+        Scope::Space(s) => Some(s),
+        _ => None,
+    }
 }
 
 /// The actions a host method's `rpc:` permission grants, by method.
@@ -225,43 +230,54 @@ pub fn scope_of(action: &str) -> Option<String> {
     })
 }
 
-/// The values of `name` in a scope's query.
-fn query<'a>(scope: &'a str, name: &str) -> Vec<&'a str> {
-    let q = scope.split_once('?').map_or("", |(_, q)| q);
-    q.split('&')
-        .filter_map(|kv| kv.split_once('='))
-        .filter(|(k, _)| *k == name)
-        .map(|(_, v)| v)
-        .collect()
-}
-
 /// What a space scope lets its holder do of writing memberships: `admit`
 /// for making one, `role.assign` for changing one, `eject` for deleting
 /// one, in the members space or in every space.
-fn membership_actions(scope: &str, out: &mut BTreeSet<&'static str>) {
-    let Some(rest) = scope.strip_prefix("space:") else {
-        return;
-    };
-    let kind = rest.split('?').next().unwrap_or_default();
-    let members = kind == "*" || kind == format!("{NS}.members");
-    if !members || !query(scope, "manage").is_empty() {
-        return;
-    }
-    let collections = query(scope, "collection");
+fn membership_actions(scope: &Space, out: &mut BTreeSet<&'static str>) {
+    let members = scope.space_type == "*" || scope.space_type == format!("{NS}.members");
     let membership = format!("{NS}.membership");
-    let any = collections.is_empty() || collections.contains(&"*");
-    if !any && !collections.contains(&membership.as_str()) {
+    let named = |c: &Vec<String>| c.iter().any(|c| *c == "*" || *c == membership);
+    if !members || scope.manage.is_some() || !scope.collections.as_ref().is_none_or(named) {
         return;
     }
-    let named = query(scope, "action");
     let writes = [
-        ("create", "admit"),
-        ("update", "role.assign"),
-        ("delete", "eject"),
+        (SpaceAction::Create, "admit"),
+        (SpaceAction::Update, "role.assign"),
+        (SpaceAction::Delete, "eject"),
     ];
     for (write, action) in writes {
-        if named.is_empty() || named.contains(&write) {
+        if scope.actions.contains(&write) {
             out.insert(action);
+        }
+    }
+}
+
+/// What a space scope lets its holder do: write memberships, invites in
+/// people's inboxes, labels in every space, and make, change and end
+/// spaces of every type.
+fn space_actions(scope: &Space, out: &mut BTreeSet<&'static str>) {
+    membership_actions(scope, out);
+    let collections = scope.collections.as_deref().unwrap_or_default();
+    if scope.space_type == format!("{NS}.inbox") {
+        // Invites written in people's inboxes.
+        if collections.contains(&format!("{NS}.invite")) {
+            out.insert("invite");
+        }
+    } else if scope.space_type == "*" {
+        let manage = scope.manage.as_deref().unwrap_or_default();
+        let ops = [
+            (Write::Create, "space.create"),
+            (Write::Update, "space.configure"),
+            (Write::Delete, "space.delete"),
+        ];
+        for (op, action) in ops {
+            if manage.contains(&op) {
+                out.insert(action);
+            }
+        }
+        let every = |c: &String| c == "*" || c == LABEL;
+        if scope.manage.is_none() && (collections.is_empty() || collections.iter().any(every)) {
+            out.insert("label");
         }
     }
 }
@@ -273,44 +289,20 @@ fn membership_actions(scope: &str, out: &mut BTreeSet<&'static str>) {
 pub fn actions_of(scopes: &[String]) -> BTreeSet<&'static str> {
     let mut out = BTreeSet::new();
     for scope in scopes {
-        membership_actions(scope, &mut out);
         if let Some(set) = set_of(scope) {
             out.extend(actions_of(&scopes_of(set)));
             if *scope == format!("include:{NS}.{ADMIN_SET}") {
                 out.insert("group.configure");
             }
-        } else if let Some(rpc) = scope.strip_prefix("rpc:") {
-            let method = rpc.split('?').next().unwrap_or_default();
-            let action = BY_METHOD
-                .iter()
-                .find(|(m, _)| method == format!("{NS}.{m}"));
-            if let Some((_, action)) = action {
-                out.insert(*action);
+            continue;
+        }
+        match Scope::parse(scope) {
+            Scope::Rpc(rpc) => {
+                let ours = |m: &&(&str, &str)| rpc.lxms.contains(&format!("{NS}.{}", m.0));
+                out.extend(BY_METHOD.iter().filter(ours).map(|(_, a)| *a));
             }
-        } else if scope.starts_with(&format!("space:{NS}.inbox?")) {
-            // Invites written in people's inboxes.
-            if query(scope, "collection").contains(&format!("{NS}.invite").as_str()) {
-                out.insert("invite");
-            }
-        } else if scope.starts_with("space:*") {
-            let manage = query(scope, "manage");
-            if manage.contains(&"create") {
-                out.insert("space.create");
-            }
-            if manage.contains(&"update") {
-                out.insert("space.configure");
-            }
-            if manage.contains(&"delete") {
-                out.insert("space.delete");
-            }
-            if !manage.is_empty() {
-                continue;
-            }
-            let collections = query(scope, "collection");
-            let every = collections.is_empty() || collections.contains(&"*");
-            if every || collections.contains(&LABEL) {
-                out.insert("label");
-            }
+            Scope::Space(space) => space_actions(&space, &mut out),
+            _ => {}
         }
     }
     out
@@ -375,12 +367,15 @@ pub fn actions_for(grants: &[Grant], roles: &[String]) -> BTreeSet<&'static str>
 
 /// The public-repo collections a holder of `roles` may write as the group.
 pub fn repo_collections_for(grants: &[Grant], roles: &[String]) -> BTreeSet<String> {
+    let collections = |s: &String| match Scope::parse(s) {
+        Scope::Repo(r) => r.collections,
+        _ => Vec::new(),
+    };
     grants
         .iter()
         .filter(|g| roles.contains(&g.role))
         .flat_map(|g| g.permissions.iter())
-        .filter_map(|s| s.strip_prefix("repo:"))
-        .map(|c| c.split('?').next().unwrap_or_default().to_string())
+        .flat_map(collections)
         .collect()
 }
 

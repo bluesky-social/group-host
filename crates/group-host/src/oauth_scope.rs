@@ -17,8 +17,9 @@ use crate::group::{members_space, meta_space};
 use crate::lexicons::lexicons;
 use crate::permission_sets::{Sets, included};
 use crate::rbac::{self, LABEL, NS, actions_for, label_writes, meta_writes, repo_collections_for};
-use crate::scopes::{decoded, is_blob, repo_collections};
+use crate::scopes::blob_scopes;
 use crate::xrpc::XrpcError;
+use atproto::scope::{Rpc, Scope, SpaceAction};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -76,38 +77,32 @@ pub struct SpaceScope {
 }
 
 impl SpaceScope {
+    /// `scope`, if it is a space scope, as atproto reads one.
     pub fn parse(scope: &str) -> Option<SpaceScope> {
-        let scope = decoded(scope);
-        let rest = scope.strip_prefix("space:")?;
-        let (kind, query) = rest.split_once('?').unwrap_or((rest, ""));
-        let mut values: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-        for (k, v) in query.split('&').filter_map(|kv| kv.split_once('=')) {
-            values.entry(k).or_default().push(v);
-        }
-        let all = |k: &str| values.get(k).cloned().unwrap_or_default();
-        let one = |k: &str| all(k).first().map_or("*", |v| v).to_string();
-        let actions = all("action");
-        let named: Vec<String> = WRITES
-            .iter()
-            .filter(|w| actions.contains(w))
-            .map(|w| w.to_string())
-            .collect();
+        let Scope::Space(s) = Scope::parse(scope) else {
+            return None;
+        };
+        let asked = |w: &&str| s.actions.iter().any(|a| a.as_str() == *w);
+        let named: Vec<String> = WRITES.into_iter().filter(asked).map(String::from).collect();
         let writes = if named.is_empty() {
             WRITES.map(String::from).to_vec()
         } else {
             named
         };
-        let manage: Vec<String> = all("manage").iter().map(|m| m.to_string()).collect();
-        let read_only = manage.is_empty()
-            && !actions.is_empty()
-            && actions.iter().all(|a| *a == "read" || *a == "read_self");
+        let manage: Vec<String> = s
+            .manage
+            .iter()
+            .flatten()
+            .map(|m| m.as_str().into())
+            .collect();
+        let reads = |a: &SpaceAction| matches!(a, SpaceAction::Read | SpaceAction::ReadSelf);
         Some(SpaceScope {
-            kind: kind.into(),
-            authority: one("authority"),
-            skey: one("skey"),
-            collections: all("collection").iter().map(|c| c.to_string()).collect(),
+            read_only: manage.is_empty() && s.actions.iter().all(reads),
+            kind: s.space_type,
+            authority: s.authority,
+            skey: s.skey,
+            collections: s.collections.unwrap_or_default(),
             writes,
-            read_only,
             manage,
         })
     }
@@ -115,6 +110,14 @@ impl SpaceScope {
     /// Whether it may be for `group`'s spaces.
     fn for_group(&self, group: &str) -> bool {
         ["*", "self", group].contains(&self.authority.as_str())
+    }
+}
+
+/// The collections `scope` names, if it is a repo scope.
+fn repo_collections(scope: &str) -> Option<Vec<String>> {
+    match Scope::parse(scope) {
+        Scope::Repo(r) => Some(r.collections),
+        _ => None,
     }
 }
 
@@ -245,23 +248,17 @@ impl Host {
         Ok(rooms.iter().any(|r| !r.writable.is_empty()))
     }
 
-    /// Whether `scope`, `rpc:method?aud=…` for one of this host's own
-    /// methods, may be given to a holder of `held`: a method a group
-    /// session calls ([`ASKS`], but the `internal` ones), for this host
-    /// or any audience, and the roles hold the action it asks.
-    fn own_method(&self, scope: &str, method: &str, held: &BTreeSet<&'static str>) -> bool {
+    /// Whether `rpc`'s method `method`, one of this host's own, may be
+    /// given to a holder of `held`: a method a group session calls
+    /// ([`ASKS`], but the `internal` ones), for this host or any
+    /// audience, and the roles hold the action it asks.
+    fn own_method(&self, rpc: &Rpc, method: &str, held: &BTreeSet<&'static str>) -> bool {
         let internal = format!("{NS}.internal.");
         let asks = ASKS
             .iter()
             .find(|(m, _)| *m == method && !m.starts_with(&internal));
-        let decoded = decoded(scope);
-        let query = decoded.split_once('?').map_or("", |(_, q)| q);
-        let mut auds = query.split('&').filter_map(|kv| kv.strip_prefix("aud="));
-        let ours = |aud: &str| aud == "*" || crate::group_api::for_host(self, aud);
-        let first = auds.next();
-        asks.is_some_and(|(_, action)| held.contains(action))
-            && first.is_some_and(ours)
-            && auds.all(ours)
+        let ours = rpc.aud == "*" || crate::group_api::for_host(self, &rpc.aud);
+        asks.is_some_and(|(_, action)| held.contains(action)) && ours
     }
 
     /// The scopes of `requested` a holder of `roles` in `group` may give
@@ -310,6 +307,7 @@ impl Host {
         // What each scope asked for gives, in the order asked.
         let mut each: Vec<Vec<String>> = Vec::new();
         for s in requested {
+            let scope = Scope::parse(s);
             let space = SpaceScope::parse(s).filter(|w| w.for_group(group));
             let keep = if s == "atproto" {
                 true
@@ -330,16 +328,14 @@ impl Host {
                 continue;
             } else if s == "transition:generic" || s == "transition:chat.bsky" {
                 everything
-            } else if let Some(named) = repo_collections(s) {
-                let each = !named.is_empty() && named.iter().all(|c| repo.contains(c));
-                everything || each
-            } else if let Some(m) = s.strip_prefix("rpc:") {
-                let method = m.split('?').next().unwrap_or_default();
-                if method.starts_with(&format!("{NS}.")) {
-                    self.own_method(s, method, &held)
-                } else {
-                    everything && method != "*"
-                }
+            } else if let Scope::Repo(r) = &scope {
+                everything || r.collections.iter().all(|c| repo.contains(c))
+            } else if let Scope::Rpc(r) = &scope {
+                let ours = format!("{NS}.");
+                r.lxms.iter().all(|m| match m.starts_with(&ours) {
+                    true => self.own_method(r, m, &held),
+                    false => everything && m != "*",
+                })
             } else if let Some(want) = space.as_ref().filter(|w| !w.manage.is_empty()) {
                 manages(want, &held, &rooms)
             } else if let Some(want) = inbox_scope(s) {
@@ -369,7 +365,7 @@ impl Host {
         let any_write = each.iter().flatten().any(writes);
         let mut out: Vec<String> = Vec::new();
         for (s, mut gives) in requested.iter().zip(each) {
-            if any_write && is_blob(s) {
+            if any_write && matches!(Scope::parse(s), Scope::Blob(_)) {
                 gives.push(s.clone());
             }
             for g in gives {
@@ -391,10 +387,10 @@ impl Host {
 fn parts(set: &Value, actions: &BTreeSet<&'static str>, rooms: &[Room]) -> Vec<String> {
     let mut out = Vec::new();
     for scope in scopes_of(set) {
-        if let Some(rpc) = scope.strip_prefix("rpc:") {
-            let method = rpc.split('?').next().unwrap_or_default();
-            let asks = ASKS.iter().find(|(m, _)| *m == method);
-            if asks.is_some_and(|(_, a)| actions.contains(a)) {
+        if let Scope::Rpc(rpc) = Scope::parse(&scope) {
+            let asks = |l: &String| ASKS.iter().find(|(m, _)| m == l);
+            let held = |l: &String| asks(l).is_some_and(|(_, a)| actions.contains(a));
+            if rpc.lxms.iter().all(held) {
                 out.push(scope);
             }
             continue;
@@ -534,8 +530,9 @@ fn any_kind(group: &str, want: &SpaceScope, rooms: &[Room]) -> Vec<String> {
 
 /// A granted scope as the token carries it: a permission set, ours or
 /// another app's (as `sets` holds it), as the scopes it lists,
-/// `authority=self` as the group, and a space scope naming no collection
-/// as naming every one.
+/// `authority=self` as the group, a space scope naming no collection as
+/// naming every one, and a blob scope as a scope of each type it takes,
+/// written as atproto writes one ([`blob_scopes`]).
 pub fn concrete(granted: &[String], group: &str, sets: &Sets) -> String {
     let mut out: Vec<String> = Vec::new();
     for s in granted {
@@ -554,8 +551,14 @@ pub fn concrete(granted: &[String], group: &str, sets: &Sets) -> String {
                     "?collection=*"
                 });
             }
-            if !out.contains(&s) {
-                out.push(s);
+            let each = match Scope::parse(&s) {
+                Scope::Blob(b) => blob_scopes(&b),
+                _ => vec![s],
+            };
+            for s in each {
+                if !out.contains(&s) {
+                    out.push(s);
+                }
             }
         }
     }

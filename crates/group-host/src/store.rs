@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use atproto::{Cid, Curve, Keypair};
+use rusqlite::functions::FunctionFlags;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -577,6 +578,14 @@ pub const MIGRATIONS: &[&str] = &[
         session TEXT NOT NULL
     );
 ",
+    // Scopes are read as atproto's reference reads them: each token's,
+    // and each approved request's, written so that it grants what it did
+    // (`scopes::upgraded`, which `Store::open` gives SQL as
+    // `upgraded_scope`).
+    "
+    UPDATE oauth_token SET scope = upgraded_scope(scope);
+    UPDATE oauth_request SET scope = upgraded_scope(scope) WHERE scope IS NOT NULL;
+",
 ];
 
 const NEW_ACCOUNT: &str = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (handle) DO NOTHING";
@@ -1076,6 +1085,12 @@ fn record(row: &rusqlite::Row) -> rusqlite::Result<Record> {
     })
 }
 
+/// A scope as [`crate::scopes::upgraded`] writes it, for the migration
+/// that rewrites those kept.
+fn upgraded_scope(ctx: &mut rusqlite::functions::Context) -> rusqlite::Result<String> {
+    Ok(crate::scopes::upgraded(&ctx.get::<String>(0)?))
+}
+
 impl Store {
     /// The database at `path`, made or brought up to date. `:memory:` for
     /// one that lasts as long as the process.
@@ -1084,6 +1099,8 @@ impl Store {
         let mut conn = Connection::open(path).context(opening)?;
         conn.pragma_update(None, "journal_mode", "wal")?;
         conn.pragma_update(None, "foreign_keys", true)?;
+        let pure = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
+        conn.create_scalar_function("upgraded_scope", 1, pure, upgraded_scope)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let tx = conn.transaction()?;
         for (i, migration) in (0..).zip(MIGRATIONS).skip(version as usize) {

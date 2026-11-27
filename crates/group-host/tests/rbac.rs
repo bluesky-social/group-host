@@ -47,7 +47,7 @@ fn reads_writes_and_manages_by_the_policy() {
         "space:xyz.app.forum?manage=update",
         "space:xyz.app.calendar?skey=laps&manage=update",
         "space:xyz.app.calendar?authority=did:plc:other&manage=update",
-        "repo:xyz.event",
+        "repo:xyz.app.event",
     ] {
         let p = policy(json!({"grants": [{"role": "member", "permissions": [elsewhere]}]}));
         assert!(!p.manages(&roles(&["member"]), "update"), "{elsewhere}");
@@ -65,8 +65,8 @@ fn reads_writes_and_manages_by_the_policy() {
     // What a role writes as the group: each collection a permission names,
     // as its actions say, every write when it names none.
     let writers = policy(json!({"grants": [
-        {"role": "admin", "permissions": ["space:xyz.app.calendar?collection=xyz.event&collection=xyz.rsvp", "space:xyz.app.forum?collection=xyz.post"]},
-        {"role": "member", "read": true, "permissions": ["space:xyz.app.calendar?collection=xyz.rsvp&action=create"]},
+        {"role": "admin", "permissions": ["space:xyz.app.calendar?collection=xyz.app.event&collection=xyz.app.rsvp", "space:xyz.app.forum?collection=xyz.app.post"]},
+        {"role": "member", "read": true, "permissions": ["space:xyz.app.calendar?collection=xyz.app.rsvp&action=create"]},
     ]}));
     let writes = writers.writes(&roles(&["admin", "member"]));
     let as_lists: Vec<(&str, Vec<&str>)> = writes
@@ -76,12 +76,12 @@ fn reads_writes_and_manages_by_the_policy() {
     assert_eq!(
         as_lists,
         [
-            ("xyz.event", vec!["create", "delete", "update"]),
-            ("xyz.rsvp", vec!["create", "delete", "update"]),
+            ("xyz.app.event", vec!["create", "delete", "update"]),
+            ("xyz.app.rsvp", vec!["create", "delete", "update"]),
         ]
     );
     let member = writers.writes(&roles(&["member"]));
-    assert_eq!(member["xyz.rsvp"].len(), 1);
+    assert_eq!(member["xyz.app.rsvp"].len(), 1);
     assert_eq!(writers.permissions(&roles(&["member"])).len(), 1);
     assert_eq!(
         listed(&json!({"x": [{"role": 1}, {"role": "a"}]}), "x", "role"),
@@ -183,7 +183,7 @@ fn answers_each_action_by_its_scope() {
         manage.into_iter().collect::<Vec<_>>(),
         ["space.create", "space.delete"]
     );
-    let other = actions_of(&["space:*?collection=xyz.task".into()]);
+    let other = actions_of(&["space:*?collection=xyz.app.task".into()]);
     assert!(other.is_empty());
 }
 
@@ -203,7 +203,7 @@ fn roles_compose_by_union() {
                 "mod",
                 &["label"],
                 &[],
-                &["xyz.post?action=create"],
+                &["xyz.app.post?action=create"],
             )),
         ),
         ("odd".into(), json!({"displayName": "Odd"})),
@@ -221,7 +221,7 @@ fn roles_compose_by_union() {
         repo_collections_for(&granted, &both)
             .into_iter()
             .collect::<Vec<_>>(),
-        ["*", "xyz.post"]
+        ["*", "xyz.app.post"]
     );
     assert!(actions_for(&granted, &[]).is_empty());
     assert!(grants(&[]).is_empty());

@@ -111,7 +111,10 @@ impl Host {
 /// The scopes the writes a role holds in `space` become: each collection
 /// with its actions, in the space and in the group's repo, and the files
 /// those records hold.
-fn scopes_for(space: &SpaceRef, writes: &BTreeMap<String, BTreeSet<String>>) -> Vec<String> {
+pub(crate) fn scopes_for(
+    space: &SpaceRef,
+    writes: &BTreeMap<String, BTreeSet<String>>,
+) -> Vec<String> {
     let mut out = vec!["atproto".to_string()];
     let at = format!(
         "space:{}?authority={}&skey={}",

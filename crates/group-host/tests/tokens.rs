@@ -858,19 +858,22 @@ fn reads_a_scope_as_atproto_has_it() {
     use group_host::scopes::Permissions;
     let group = "did:plc:riders";
     let p = Permissions::new(
-        "atproto repo?collection=a.b.c&collection=d.e.f&action=create repo:g.h.i?action=delete&action=other repository:x.y.z blob?accept=video/mp4 blob:image/*,text/plain",
+        "atproto repo?collection=a.b.c&collection=d.e.f&action=create repo:g.h.i?action=delete repo:j.k.l?action=delete&action=other repository:x.y.z blob?accept=video/mp4 blob:image/* blob:text/plain,text/html",
         group,
     );
     assert!(p.repo("a.b.c", "create") && p.repo("d.e.f", "create"));
-    assert!(!p.repo("a.b.c", "update"));
+    assert!(!p.repo("a.b.c", "update") && !p.repo("a.b.c", "upsert"));
     assert!(p.repo("g.h.i", "delete") && !p.repo("g.h.i", "create"));
+    // A scope naming an action there is none of is no scope.
+    assert!(!p.repo("j.k.l", "delete"));
     assert!(!p.repo("x.y.z", "create"));
     assert!(Permissions::new("repo:*", group).repo("any.thing.here", "update"));
-    assert!(p.blob("video/mp4") && p.blob("IMAGE/png") && p.blob("text/plain"));
-    assert!(!p.blob("text/html") && !p.blob("video/webm"));
+    // A blob scope takes one type or pattern, compared as written.
+    assert!(p.blob("video/mp4") && p.blob("image/png"));
+    assert!(!p.blob("IMAGE/png") && !p.blob("text/plain") && !p.blob("video/webm"));
     assert!(Permissions::new("blob:*/*", group).blob("application/zip"));
-    // Escaped values read as they are meant; an escape of what shapes a
-    // scope, or none at all, stays as written.
+    // Escaped values read as they are meant, each value on its own, so
+    // an escaped `&` or `=` stays in its value.
     let ours = SpaceRef::parse("at:space/did:plc:riders/com.example.calendar/rides").unwrap();
     let p = Permissions::new(
         "space:com.example.calendar?authority=did%3Aplc%3Ariders&collection=a.b%2Ec",
@@ -1055,8 +1058,10 @@ async fn calls_the_hosts_own_methods_with_an_rpc_scope() {
         .await;
     assert_eq!(said.error(), (400, "SubjectNotFound"));
 
-    // Or for this host by name, or through one of its permission sets.
-    let ours = &h.host.config.service_did;
+    // Or for this host's service by name, its value escaped as an app's
+    // URLSearchParams writes it, or through one of its permission sets.
+    let ours = format!("{}#atgrp", h.host.config.service_did);
+    let ours = ours.replace('%', "%25").replace('#', "%23");
     let named = format!("atproto rpc:{NS}.mod.querySubjects?aud={ours}");
     for scope in [named.as_str(), "atproto include:org.atgrp.authModerate"] {
         let app = App::loopback(scope);
@@ -1247,4 +1252,74 @@ async fn what_a_grant_bought_ends_once_its_member_reads_no_more() {
         .call(&h, "com.atproto.server.getSession", &access, None)
         .await;
     assert_eq!(said.status, 200, "{}", said.body);
+}
+
+#[test]
+fn a_token_from_before_keeps_what_its_scope_granted() {
+    use group_host::store::{MIGRATIONS, Store};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("host.sqlite");
+    drop(Store::open(&path).unwrap());
+    // Back to before scopes were read as atproto reads them, with a token
+    // whose scope this host took then as an app asked for it.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let account = "INSERT INTO account (did, handle, signing_key, kem_key, created_at) VALUES ('did:plc:g', 'g.test', x'', x'', 0)";
+    conn.execute(account, []).unwrap();
+    let before = [
+        "atproto",
+        "repo:app.bsky.feed.post?action=create&action=upsert",
+        "repo:app.bsky.feed.like?collection=app.bsky.feed.repost",
+        "repo:a.b.c?action=bogus",
+        "repository:x.y.z",
+        "blob:image/*,VIDEO/MP4",
+        "blob:IMAGE/*",
+        "blob?accept=Image/PNG",
+        "blob?accept=image/svg+xml",
+        "blob:*",
+        "space:com.example.calendar?authority=did:plc:g&skey=*&collection=com.example.event&action=read&action=create&action=frob&foo=bar",
+        "space:com.example.calendar?spaceType=com.example.other&skey=a&skey=b&manage=create&manage=frob",
+        "space:com.example.calendar?foo=1",
+        "rpc:com.example.get?aud=did:web:x.example%23svc&aud=did:web:y.example%23svc",
+        "rpc:com.example.get?aud=did:web:nofragment",
+        "rpc:org.atgrp.mod.querySubjects?aud=did:web:groups.example",
+    ]
+    .join(" ");
+    let token = "INSERT INTO oauth_token (id, grp, member, client_id, client_auth, scope, dpop_jkt, access_hash, access_expires, refresh_hash, expires_at, created_at) VALUES ('t', 'did:plc:g', 'did:plc:m', 'https://app.example/client.json', '{}', ?1, 'jkt', 'a', 0, 'r', 0, 0)";
+    conn.execute(token, [&before]).unwrap();
+    let upgrade = MIGRATIONS
+        .iter()
+        .position(|m| m.contains("upgraded_scope"))
+        .unwrap();
+    common::rewind(&conn, upgrade);
+    drop(conn);
+    drop(Store::open(&path).unwrap());
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let scope: String = conn
+        .query_row("SELECT scope FROM oauth_token", [], |r| r.get(0))
+        .unwrap();
+    let after = [
+        "atproto",
+        "repo:app.bsky.feed.post?action=create",
+        "repo:app.bsky.feed.like",
+        "repo:a.b.c?action=bogus",
+        "repository:x.y.z",
+        "blob:image/*",
+        "blob:video/mp4",
+        "blob:image/png",
+        "blob:image/svg+xml",
+        "space:com.example.calendar?authority=did:plc:g&skey=*&collection=com.example.event&action=read&action=create",
+        "space:com.example.calendar?skey=a&manage=create",
+        "space:com.example.calendar",
+        "rpc:com.example.get?aud=did:web:x.example%23svc",
+        "rpc:com.example.get?aud=did:web:nofragment",
+        "rpc:org.atgrp.mod.querySubjects?aud=did:web:groups.example%23atgrp",
+    ];
+    assert_eq!(scope.split(' ').collect::<Vec<_>>(), after);
+    // And grants, read as atproto reads it, what it did.
+    let p = group_host::scopes::Permissions::new(&scope, "did:plc:g");
+    assert!(p.repo("app.bsky.feed.post", "create") && !p.repo("app.bsky.feed.post", "delete"));
+    assert!(p.blob("video/mp4") && p.blob("image/png") && p.blob("image/svg+xml"));
+    assert!(p.rpc("com.example.get", "did:web:x.example#svc"));
+    let here = |aud: &str| aud == "did:web:groups.example#atgrp";
+    assert!(p.calls("org.atgrp.mod.querySubjects", here));
 }
