@@ -4,6 +4,22 @@ What changed in each version of the group host, its console and the
 `opensocial` command for those who run and use them, from the change
 files in `.changeset/` (see `knope.toml`).
 
+## 0.6.1 (2026-11-27)
+
+### Fixes
+
+#### DPoP proofs, PKCE, did:webs and AT URIs are read by atproto 0.4.1
+
+The host checks DPoP proofs, PKCE verifiers and challenges, `did:web`s and AT URIs with the `atproto` crate's own, as the reference implementation does. A DPoP proof with an `ath` sent with no access token, as to `/oauth/par` or `/oauth/token`, is now refused (`invalid_dpop_proof`), where before its `ath` went unread. A pushed authorization request whose `code_challenge` is not 43 to 128 unreserved characters is refused there, rather than at the token endpoint. A `PUBLIC_URL` whose host is no hostname, with a port if any, is refused at start unless `SERVICE_DID` is set, and `atgrp` refuses an `ATGRP_HOST` or `--to` address whose did:web it cannot make, unless `ATGRP_HOST_DID` or `--to-did` names one.
+
+#### The console's header stays on one line on a phone
+
+The site's name and the signed-in account's menu sit side by side at every width. On a narrow screen the handle in the menu is cut short with an ellipsis, rather than the menu dropping to a second line under the name.
+
+#### The host asks no host a DID or handle names at a private address
+
+A `did:web`'s document, a handle's `/.well-known/atproto-did`, the PDS a DID document names (told of a write in a space or of revoked credentials, or read for a space's repo or file) and a group's own domain, when the host checks that it reaches it, are now asked only over `https`, at public addresses, with no redirect followed. These are the rules the host already held client metadata, syncer endpoints and proxied services to. Before, anyone controlling a `did:web` or a handle could point the host at an address on its own network. A host whose `PUBLIC_URL` is `http`, a network of test servers, asks them over `http` too, at any address, as before. So `DID_WEB_SCHEME=http` now reaches a `did:web`'s own host only from such a host. The addresses `DID_WEB_HOSTS` sets are the host's own settings, and are read as they are set.
+
 ## 0.6.0 (2026-11-27)
 
 ### Features
