@@ -107,7 +107,8 @@ fn failed(host: &Host, e: OAuthError) -> Response {
     res
 }
 
-/// Lets a page anywhere reach the authorization server, as an app in a
+/// Lets a page anywhere reach the authorization server, and the methods
+/// an app calls as a group, proxied ones among them, as an app in a
 /// browser does: its requests carry no cookies, so any origin may.
 pub async fn cors(req: HttpRequest, next: Next) -> Response {
     let mut res = if req.method() == Method::OPTIONS {
@@ -121,11 +122,11 @@ pub async fn cors(req: HttpRequest, next: Next) -> Response {
         (header::ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS"),
         (
             header::ACCESS_CONTROL_ALLOW_HEADERS,
-            "content-type, dpop, authorization",
+            "content-type, dpop, authorization, atproto-proxy, atproto-accept-labelers",
         ),
         (
             header::ACCESS_CONTROL_EXPOSE_HEADERS,
-            "dpop-nonce, www-authenticate, retry-after, ratelimit-limit, ratelimit-remaining, ratelimit-reset, ratelimit-policy",
+            "dpop-nonce, www-authenticate, retry-after, ratelimit-limit, ratelimit-remaining, ratelimit-reset, ratelimit-policy, atproto-repo-rev, atproto-content-labelers",
         ),
         (header::ACCESS_CONTROL_MAX_AGE, "600"),
     ] {

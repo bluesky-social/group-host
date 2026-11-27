@@ -91,7 +91,10 @@ async fn keeps_for_each_role_what_its_grants_hold() {
         "blob:*/*",
         "transition:generic",
     ]);
-    let admin = h.host.narrow(&did, &roles(&["admin"]), &all).unwrap();
+    let admin = h
+        .host
+        .narrow(&did, &roles(&["admin"]), &all, &Default::default())
+        .unwrap();
     assert_eq!(
         admin,
         asked(&[
@@ -103,9 +106,14 @@ async fn keeps_for_each_role_what_its_grants_hold() {
             // One of the host's own, as an admin holds mod.read.
             "rpc:org.atgrp.mod.querySubjects?aud=*",
             "blob:*/*",
+            // As an app password's maker, who holds repo:*.
+            "transition:generic",
         ])
     );
-    let poster = h.host.narrow(&did, &roles(&["poster"]), &all).unwrap();
+    let poster = h
+        .host
+        .narrow(&did, &roles(&["poster"]), &all, &Default::default())
+        .unwrap();
     assert_eq!(
         poster,
         asked(&[
@@ -115,7 +123,10 @@ async fn keeps_for_each_role_what_its_grants_hold() {
         ])
     );
     // A plain member writes nothing, so has no use for blobs.
-    let member = h.host.narrow(&did, &roles(&["member"]), &all).unwrap();
+    let member = h
+        .host
+        .narrow(&did, &roles(&["member"]), &all, &Default::default())
+        .unwrap();
     assert_eq!(member, asked(&["atproto"]));
 }
 
@@ -133,10 +144,16 @@ async fn reads_every_form_a_scope_may_take() {
         "blob?accept=image/*",
         &encoded,
     ]);
-    let admin = h.host.narrow(&did, &roles(&["admin"]), &all).unwrap();
+    let admin = h
+        .host
+        .narrow(&did, &roles(&["admin"]), &all, &Default::default())
+        .unwrap();
     assert_eq!(admin, all);
     // Kept only when every collection it names is one the roles write.
-    let poster = h.host.narrow(&did, &roles(&["poster"]), &all).unwrap();
+    let poster = h
+        .host
+        .narrow(&did, &roles(&["poster"]), &all, &Default::default())
+        .unwrap();
     assert_eq!(
         poster,
         asked(&[
@@ -153,7 +170,12 @@ async fn keeps_a_space_scope_a_spaces_policy_grants() {
     let (did, _, _) = group(&h).await;
     let member = |scopes: &[&str]| {
         h.host
-            .narrow(&did, &roles(&["member"]), &asked(scopes))
+            .narrow(
+                &did,
+                &roles(&["member"]),
+                &asked(scopes),
+                &Default::default(),
+            )
             .unwrap()
     };
     for (scope, kept) in [
@@ -207,6 +229,7 @@ async fn keeps_a_space_scope_a_spaces_policy_grants() {
             &did,
             &roles(&["admin"]),
             &asked(&[&format!("space:{CALENDAR}")]),
+            &Default::default(),
         )
         .unwrap();
     assert_eq!(admin, [format!("space:{CALENDAR}")]);
@@ -219,7 +242,12 @@ async fn makes_a_scope_for_every_type_one_for_each_space_the_roles_read() {
     // The group's own spaces are among them, read by members.
     let all = h
         .host
-        .narrow(&did, &roles(&["member"]), &asked(&["space:*?action=read"]))
+        .narrow(
+            &did,
+            &roles(&["member"]),
+            &asked(&["space:*?action=read"]),
+            &Default::default(),
+        )
         .unwrap();
     assert_eq!(
         all,
@@ -230,7 +258,11 @@ async fn makes_a_scope_for_every_type_one_for_each_space_the_roles_read() {
         ]
     );
     let narrow = |r: &[&str], scope: &str| {
-        calendar(h.host.narrow(&did, &roles(r), &asked(&[scope])).unwrap())
+        calendar(
+            h.host
+                .narrow(&did, &roles(r), &asked(&[scope]), &Default::default())
+                .unwrap(),
+        )
     };
     let at = format!("space:{CALENDAR}?authority={did}&skey=rides");
     assert_eq!(
@@ -257,6 +289,7 @@ async fn makes_a_scope_for_every_type_one_for_each_space_the_roles_read() {
             &did,
             &roles(&["member"]),
             &asked(&[&read, "space:*?action=read"]),
+            &Default::default(),
         )
         .unwrap();
     assert_eq!(calendar(twice), [read]);
@@ -309,7 +342,7 @@ async fn keeps_a_manage_scope_for_roles_that_may_do_it_to_spaces() {
     let (did, uri, _) = group(&h).await;
     let narrow = |r: &[&str], scope: &str| {
         h.host
-            .narrow(&did, &roles(r), &asked(&[scope]))
+            .narrow(&did, &roles(r), &asked(&[scope]), &Default::default())
             .unwrap()
             .len()
             == 1
@@ -358,6 +391,7 @@ async fn gives_nothing_to_write_for_a_role_without_its_record() {
             &did,
             &roles(&["admin"]),
             &asked(&["atproto", "include:org.atgrp.authModerate", "repo:x"]),
+            &Default::default(),
         )
         .unwrap();
     assert_eq!(narrowed, asked(&["atproto"]));
@@ -376,6 +410,7 @@ fn makes_a_grant_concrete() {
             "atproto",
         ]),
         did,
+        &Default::default(),
     );
     let scopes: Vec<&str> = scope.split(' ').collect();
     assert_eq!(
@@ -413,8 +448,11 @@ async fn keeps_of_a_permission_set_what_the_roles_grant() {
     ] {
         define(&h, &did, Grant::with(role, actions, &[], &[])).await;
     }
-    let narrow =
-        |r: &[&str], scopes: &[&str]| h.host.narrow(&did, &roles(r), &asked(scopes)).unwrap();
+    let narrow = |r: &[&str], scopes: &[&str]| {
+        h.host
+            .narrow(&did, &roles(r), &asked(scopes), &Default::default())
+            .unwrap()
+    };
     let admin = "include:org.atgrp.authManageAdmin";
     let members = "include:org.atgrp.authManageMembers";
     let moderation = "include:org.atgrp.authModerate";
@@ -514,8 +552,11 @@ async fn keeps_labels_only_in_the_spaces_the_roles_label_in() {
         },
     )
     .await;
-    let narrow =
-        |r: &[&str], scopes: &[&str]| h.host.narrow(&did, &roles(r), &asked(scopes)).unwrap();
+    let narrow = |r: &[&str], scopes: &[&str]| {
+        h.host
+            .narrow(&did, &roles(r), &asked(scopes), &Default::default())
+            .unwrap()
+    };
     let named = format!("space:{CALENDAR}?collection={label}");
     // The moderation set's labels are the meta and members spaces'.
     let moderator = narrow(&["member", "moderator"], &[&every]);
@@ -636,7 +677,9 @@ async fn keeps_an_inbox_scope_for_roles_that_may_invite() {
     let wanted = [any.as_str(), bobs.as_str(), other.as_str(), "blob:image/*"];
     let narrow = |r: &[&str]| {
         let wanted = asked(&wanted);
-        h.host.narrow(&did, &roles(r), &wanted).unwrap()
+        h.host
+            .narrow(&did, &roles(r), &wanted, &Default::default())
+            .unwrap()
     };
     // Invites, in anyone's inbox or one person's, and nothing else there.
     assert_eq!(
@@ -649,7 +692,11 @@ async fn keeps_an_inbox_scope_for_roles_that_may_invite() {
 #[test]
 fn makes_a_permission_set_concrete() {
     let did = "did:plc:riders";
-    let scope = concrete(&asked(&["include:org.atgrp.authManageAdmin"]), did);
+    let scope = concrete(
+        &asked(&["include:org.atgrp.authManageAdmin"]),
+        did,
+        &Default::default(),
+    );
     let scopes: Vec<&str> = scope.split(' ').collect();
     let all = "action=read&action=create&action=update&action=delete";
     let at = format!("authority={did}&skey=self");

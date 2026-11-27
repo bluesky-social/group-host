@@ -26,6 +26,7 @@ fn defaults_serve_localhost() {
         ["well-known:https", "https://public.api.bsky.app"]
     );
     assert_eq!(c.console_url, "http://localhost:2600");
+    assert_eq!(c.dns_over_https, "https://cloudflare-dns.com/dns-query");
     assert!(c.provisioning_clients.is_empty());
 }
 
@@ -50,6 +51,7 @@ fn the_environment_names_the_host() {
         ("HANDLE_RESOLVERS", "https://resolver.example/, /"),
         ("PDS_CRAWLERS", "https://relay.example/"),
         ("DID_WEB_HOSTS", "grain.social=127.0.0.1:2584, "),
+        ("DNS_OVER_HTTPS", "https://dns.google/resolve"),
     ])
     .unwrap();
     // A service's URL is taken without its trailing slash.
@@ -62,6 +64,7 @@ fn the_environment_names_the_host() {
         c.did_web_hosts,
         [("grain.social".to_string(), "127.0.0.1:2584".to_string())].into()
     );
+    assert_eq!(c.dns_over_https, "https://dns.google/resolve");
     let c = config(&[
         ("CONSOLE_URL", "https://console.example.com/"),
         (
@@ -113,6 +116,10 @@ fn refuses_what_does_not_read() {
     assert_eq!(
         err(&[("CONSOLE_URL", "console")]),
         "CONSOLE_URL is no URL: console"
+    );
+    assert_eq!(
+        err(&[("DNS_OVER_HTTPS", "dns")]),
+        "DNS_OVER_HTTPS is no URL: dns"
     );
 }
 

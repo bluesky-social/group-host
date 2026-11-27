@@ -11,6 +11,7 @@ use crate::group_api::{group_of, signed_in};
 use crate::mcp;
 use crate::oauth_scope::{concrete, set_of};
 use crate::oauth_store::Request;
+use crate::permission_sets::Sets;
 use crate::rbac::{INTERNAL, NS};
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
@@ -82,13 +83,20 @@ impl Host {
     }
 
     /// A group as the approval page shows it to `member`: what of its
-    /// about record they may read, their roles, and what the app would get.
-    pub(crate) fn offered(&self, group: &str, member: &str, requested: &[String]) -> Answer {
+    /// about record they may read, their roles, and what the app would
+    /// get, other apps' permission sets read as `sets` holds them.
+    pub(crate) fn offered(
+        &self,
+        group: &str,
+        member: &str,
+        requested: &[String],
+        sets: &Sets,
+    ) -> Answer {
         let handle = group_of(self, group)?;
         let roles = self.roles(group, member).map_err(XrpcError::internal)?;
         let granted = match roles.is_empty() {
             true => Vec::new(),
-            false => self.narrow(group, &roles, requested)?,
+            false => self.narrow(group, &roles, requested, sets)?,
         };
         let withheld: Vec<String> = requested
             .iter()
@@ -127,12 +135,13 @@ impl Host {
     }
 }
 
-/// What each of this host's permission sets among `scopes` is called,
-/// and says it is for, once each.
-fn labels(scopes: &[&str]) -> Value {
+/// What each permission set among `scopes`, this host's or another app's
+/// in `sets`, is called, and says it is for, once each.
+fn labels(scopes: &[&str], sets: &Sets) -> Value {
     let mut out: Vec<Value> = Vec::new();
     for (i, s) in scopes.iter().enumerate() {
-        let set = set_of(s).filter(|_| !scopes[..i].contains(s));
+        let set = set_of(s).or_else(|| sets.get(*s));
+        let set = set.filter(|_| !scopes[..i].contains(s));
         out.extend(
             set.map(|set| json!({"scope": s, "title": set["title"], "text": set["detail"]})),
         );
@@ -171,9 +180,10 @@ pub async fn get_authorization(
         Some(named) => vec![named],
         None => host.groups_of(&me)?,
     };
+    let sets = host.permission_sets(&requested).await;
     let mut offered = Vec::new();
     for group in &groups {
-        offered.push(host.offered(group, &me, &requested)?.0);
+        offered.push(host.offered(group, &me, &requested, &sets)?.0);
     }
     // Each set asked for, and any within it a group would give in its
     // place.
@@ -188,7 +198,7 @@ pub async fn get_authorization(
     let mut out = json!({
         "client": client,
         "requested": objects("scope", &requested),
-        "labels": labels(&named),
+        "labels": labels(&named, &sets),
         "groups": offered,
     });
     if let Some(hint) = request.parameters.get("login_hint") {
@@ -225,8 +235,10 @@ pub async fn approve_authorization(
     if roles.is_empty() {
         return Err(forbidden("you hold no role in this group"));
     }
-    let granted = host.narrow(group, &roles, &requested(&request))?;
-    let scope = concrete(&granted, group);
+    let requested = requested(&request);
+    let sets = host.permission_sets(&requested).await;
+    let granted = host.narrow(group, &roles, &requested, &sets)?;
+    let scope = concrete(&granted, group, &sets);
     let approved = host.approve_request(&request, group, &me, &scope);
     let redirect = approved.map_err(XrpcError::internal)?.ok_or_else(expired)?;
     tracing::info!(

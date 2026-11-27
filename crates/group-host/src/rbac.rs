@@ -395,7 +395,8 @@ pub fn writes_in(
     space: &SpaceRef,
     collection: &str,
 ) -> BTreeSet<String> {
-    let held = Permissions::new(&concrete(&theirs(grants, roles), group), group);
+    let own = concrete(&theirs(grants, roles), group, &Default::default());
+    let held = Permissions::new(&own, group);
     let writes = WRITES
         .into_iter()
         .filter(|w| held.space(space, Some(collection), w));

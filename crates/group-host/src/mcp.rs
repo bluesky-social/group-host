@@ -516,7 +516,7 @@ pub(crate) fn mcp_view(host: &Host, uri: &str, me: &str) -> Result<Value, XrpcEr
     let mut groups = Vec::new();
     // It asks for no scope: it does what the member's roles allow.
     for group in host.groups_of(me)? {
-        groups.push(host.offered(&group, me, &[])?.0);
+        groups.push(host.offered(&group, me, &[], &Default::default())?.0);
     }
     Ok(json!({
         "client": {"clientId": request.client_id, "name": request.client_name},

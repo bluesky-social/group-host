@@ -50,7 +50,7 @@ pub fn is_blob(scope: &str) -> bool {
 }
 
 /// The values of `name` in a scope's query.
-fn query<'a>(scope: &'a str, name: &str) -> Vec<&'a str> {
+pub(crate) fn query<'a>(scope: &'a str, name: &str) -> Vec<&'a str> {
     let q = scope.split_once('?').map_or("", |(_, q)| q);
     q.split('&')
         .filter_map(|kv| kv.split_once('='))
@@ -61,7 +61,7 @@ fn query<'a>(scope: &'a str, name: &str) -> Vec<&'a str> {
 
 /// The resource a scope names after its prefix and colon, if any:
 /// `repo:app.bsky.feed.post?…` names `app.bsky.feed.post`.
-fn named<'a>(scope: &'a str, prefix: &str) -> Option<&'a str> {
+pub(crate) fn named<'a>(scope: &'a str, prefix: &str) -> Option<&'a str> {
     let rest = scope.strip_prefix(prefix)?;
     let resource = rest.split('?').next().unwrap_or_default();
     match resource.strip_prefix(':') {
@@ -199,6 +199,29 @@ impl Permissions {
         self.scopes.iter().any(|s| {
             named(s, "rpc").is_some_and(|m| m == method)
                 && query(s, "aud").iter().any(|a| *a == "*" || ours(a))
+        })
+    }
+
+    /// May it call `lxm` (`*`: any method) of the service `aud`
+    /// (`did#service`), through this host, as atproto's permissions read
+    /// a token: an `rpc:` scope naming the method, or `*`, and the
+    /// audience, or `*` (but never both `*`); `transition:generic` any
+    /// method but chat's (`chat.bsky.*`), and `transition:chat.bsky`
+    /// chat's. A token's `rpc:` scopes name one method each, as narrowing
+    /// keeps them.
+    pub fn rpc(&self, lxm: &str, aud: &str) -> bool {
+        let chat = lxm.starts_with("chat.bsky.");
+        let holds = |scope: &str| self.scopes.iter().any(|s| s == scope);
+        if (holds("transition:generic") && !chat) || (holds("transition:chat.bsky") && chat) {
+            return true;
+        }
+        self.scopes.iter().any(|s| {
+            let Some(method) = named(s, "rpc") else {
+                return false;
+            };
+            let to = query(s, "aud").first().copied().unwrap_or_default();
+            let any = method == "*";
+            (to == aud || (to == "*" && !any)) && (any || method == lxm)
         })
     }
 }

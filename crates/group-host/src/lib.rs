@@ -48,8 +48,10 @@ pub mod oauth_resource;
 pub mod oauth_scope;
 pub mod oauth_store;
 pub mod observe;
+pub mod permission_sets;
 pub mod plc;
 pub mod provision;
+pub mod proxy;
 pub mod rbac;
 pub mod recovery;
 pub mod repo;
@@ -64,14 +66,12 @@ pub mod time;
 pub mod token_writes;
 pub mod xrpc;
 
-use axum::extract::Path;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use config::Config;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use xrpc::XrpcError;
 
 /// What every request is answered with.
 pub struct Host {
@@ -95,6 +95,8 @@ pub struct Host {
     pub(crate) clients: oauth_clients::Clients,
     /// The handles the directory names, as last read for a search.
     pub(crate) handles: actor_search::Handles,
+    /// Other apps' permission sets, as read.
+    pub(crate) sets: permission_sets::Read,
     /// The lines it logged, kept for its operators.
     pub logs: Arc<logs::Logs>,
     /// How it is used, counted for its operators.
@@ -131,6 +133,7 @@ impl Host {
             index_wake: Default::default(),
             clients: Default::default(),
             handles: Default::default(),
+            sets: Default::default(),
             logs: Arc::new(logs),
             stats,
             limits,
@@ -461,7 +464,6 @@ pub(crate) fn routes(host: Arc<Host>) -> Router {
         .route("/tls/ask", get(group_domain::tls_ask))
         .route("/.well-known/did.json", get(api::did_json))
         .route("/.well-known/atproto-did", get(api::atproto_did))
-        .route("/xrpc/{nsid}", get(not_implemented).post(not_implemented))
         .layer(axum::middleware::from_fn(lexicons::check))
         .layer(axum::middleware::from_fn_with_state(
             host.clone(),
@@ -630,6 +632,12 @@ fn token_routes() -> Router<Arc<Host>> {
             &x("org.atgrp.internal.getGroupAuth"),
             post(group_tokens::get_group_auth),
         )
+        .route(
+            &x("com.atproto.server.getServiceAuth"),
+            get(proxy::get_service_auth),
+        )
+        // Any other method, proxied where `atproto-proxy` says.
+        .route("/xrpc/{nsid}", get(proxy::proxy).post(proxy::proxy))
         .layer(axum::middleware::from_fn(oauth::cors))
 }
 
@@ -640,10 +648,6 @@ const COMMIT: Option<&str> = option_env!("GROUP_HOST_COMMIT");
 /// That the host is up, and which build it is.
 async fn health() -> Json<Value> {
     Json(json!({ "version": env!("CARGO_PKG_VERSION"), "commit": COMMIT }))
-}
-
-async fn not_implemented(Path(nsid): Path<String>) -> XrpcError {
-    XrpcError::not_implemented(&nsid)
 }
 
 /// What `group-host` prints for a command it does not know.

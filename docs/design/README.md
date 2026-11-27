@@ -22,7 +22,8 @@ under `org.atgrp.internal.*`, and may change.
   written ([spaces](spaces.md)).
 - Its OAuth server. A member signs an app in as the group, and the app
   gets what that member's roles allow. The host checks it again at every
-  write ([signing in](signing-in.md)).
+  write, and sends the app's calls to other services on as the group
+  ([signing in](signing-in.md)).
 - An MCP server. A member connects an AI app here to act for them in
   one group, and its tools are the twins of the `atgrp` commands
   ([MCP](mcp.md)).

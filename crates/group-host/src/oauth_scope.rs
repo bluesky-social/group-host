@@ -3,17 +3,19 @@
 //! group, then made concrete, so the token never depends on how a scope
 //! is read later.
 //!
-//! No lexicon is resolved: the only permission sets a token keeps are
-//! this host's own for a group's session (`org.atgrp.authManageBasic`,
-//! `authManageMembers` and `authModerate`, and `authManageAdmin`, which
-//! holds all three), read from their lexicons here, each an upper bound:
-//! the parts of it the roles grant are kept. A space scope naming no
-//! collection keeps every one, which narrowing allowed only to roles that
-//! may write every one there.
+//! The permission sets a token keeps are this host's own for a group's
+//! session (`org.atgrp.authManageBasic`, `authManageMembers` and
+//! `authModerate`, and `authManageAdmin`, which holds all three), read
+//! from their lexicons here, and other apps' sets, read as they publish
+//! them (`permission_sets`): each an upper bound, of which the parts the
+//! roles grant are kept. A space scope naming no collection keeps every
+//! one, which narrowing allowed only to roles that may write every one
+//! there.
 
 use crate::Host;
 use crate::group::{members_space, meta_space};
 use crate::lexicons::lexicons;
+use crate::permission_sets::{Sets, included};
 use crate::rbac::{self, LABEL, NS, actions_for, label_writes, meta_writes, repo_collections_for};
 use crate::scopes::{decoded, is_blob, repo_collections};
 use crate::xrpc::XrpcError;
@@ -268,7 +270,13 @@ impl Host {
     /// - `atproto`, always;
     /// - one of this host's permission sets for a group's session
     ///   ([`TIERS`]), as far as the roles grant it ([`parts`]);
+    /// - another app's permission set (`include:…`), read as `sets` holds
+    ///   it, as far as the roles grant its parts: each collection as
+    ///   `repo:C` is, and each method as `rpc:M` is; the whole set when
+    ///   they grant every part, else the parts they grant;
     /// - `repo:C`, for roles whose grants hold `repo:C` or `repo:*`;
+    /// - `transition:generic` and `transition:chat.bsky`, for roles with
+    ///   `repo:*`, as an app password's maker holds;
     /// - `rpc:M`, a method of another service, for roles with `repo:*`;
     ///   or one of this host's own the proposal has a group session call
     ///   ([`ASKS`], but the `internal` ones), for this host or any, for
@@ -291,6 +299,7 @@ impl Host {
         group: &str,
         roles: &[String],
         requested: &[String],
+        sets: &Sets,
     ) -> Result<Vec<String>, XrpcError> {
         let grants = self.role_grants(group).map_err(XrpcError::internal)?;
         let repo = repo_collections_for(&grants, roles);
@@ -307,6 +316,20 @@ impl Host {
             } else if let Some(set) = tier_of(s) {
                 each.push(parts(set, &held, &rooms));
                 continue;
+            } else if let Some(set) = sets.get(s) {
+                let all = included(s, set);
+                let granted = |p: &&String| {
+                    let c = repo_collections(p);
+                    everything || c.is_some_and(|c| c.iter().all(|c| repo.contains(c)))
+                };
+                let kept: Vec<String> = all.iter().filter(granted).cloned().collect();
+                each.push(match !all.is_empty() && kept == all {
+                    true => vec![s.clone()],
+                    false => kept,
+                });
+                continue;
+            } else if s == "transition:generic" || s == "transition:chat.bsky" {
+                everything
             } else if let Some(named) = repo_collections(s) {
                 let each = !named.is_empty() && named.iter().all(|c| repo.contains(c));
                 everything || each
@@ -332,7 +355,14 @@ impl Host {
             each.push(keep.then(|| s.clone()).into_iter().collect());
         }
         let writes = |s: &String| {
+            let repo_of = |set: &Value| {
+                included(s, set)
+                    .iter()
+                    .any(|p| repo_collections(p).is_some())
+            };
             tier_of(s).is_some()
+                || s == "transition:generic"
+                || sets.get(s).is_some_and(repo_of)
                 || repo_collections(s).is_some()
                 || SpaceScope::parse(s).is_some_and(|w| !w.read_only)
         };
@@ -502,15 +532,17 @@ fn any_kind(group: &str, want: &SpaceScope, rooms: &[Room]) -> Vec<String> {
     out
 }
 
-/// A granted scope as the token carries it: a permission set of ours as
-/// the scopes its lexicon lists, `authority=self` as the group, and a
-/// space scope naming no collection as naming every one.
-pub fn concrete(granted: &[String], group: &str) -> String {
+/// A granted scope as the token carries it: a permission set, ours or
+/// another app's (as `sets` holds it), as the scopes it lists,
+/// `authority=self` as the group, and a space scope naming no collection
+/// as naming every one.
+pub fn concrete(granted: &[String], group: &str, sets: &Sets) -> String {
     let mut out: Vec<String> = Vec::new();
     for s in granted {
-        let scopes = match set_of(s) {
-            Some(set) => scopes_of(set),
-            None => vec![s.clone()],
+        let scopes = match (set_of(s), sets.get(s)) {
+            (Some(set), _) => scopes_of(set),
+            (None, Some(set)) => included(s, set),
+            (None, None) => vec![s.clone()],
         };
         for s in scopes {
             let mut s = s.replace("authority=self", &format!("authority={group}"));

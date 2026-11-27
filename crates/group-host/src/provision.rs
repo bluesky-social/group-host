@@ -97,7 +97,8 @@ pub async fn provision_group(
     let new = new_group(&body, founder.clone())?;
     let Made { did, meta, members } = host.create_group(&new).await?;
     let roles = host.roles(&did, &founder).map_err(XrpcError::internal)?;
-    let granted = host.narrow(&did, &roles, &requested)?;
+    let sets = host.permission_sets(&requested).await;
+    let granted = host.narrow(&did, &roles, &requested, &sets)?;
     let (access, refresh, access_expires, expires_at) = new_tokens(&auth, now);
     let tokens = Tokens {
         access_hash: &jose::sha256(&access),
@@ -111,7 +112,7 @@ pub async fn provision_group(
         member: founder,
         client_id: client.id,
         client_auth: auth,
-        scope: concrete(&granted, &did),
+        scope: concrete(&granted, &did, &sets),
         dpop_jkt: proof.jkt,
         access_expires,
         expires_at,

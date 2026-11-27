@@ -31,7 +31,9 @@ writes a record as a group in one of our own `org.atgrp.*`
 collections, the host checks it against its lexicon and answers
 `validationStatus: "valid"`. It keeps a record of any other collection
 without reading it and answers `unknown`. A GET or POST under `/xrpc/`
-that no route answers gets 501 `MethodNotImplemented`.
+that no route answers gets 501 `MethodNotImplemented`, unless it carries
+`atproto-proxy` and a group's token: then the host sends it on
+([signing in](../design/signing-in.md#calling-other-services-as-the-group)).
 
 ## Who asks
 
@@ -189,6 +191,8 @@ group:
 | `POST com.atproto.space.deleteSpace`                                                                                                                                                   | ends the group's `space`: out of the index, its syncers told, and the group's repo in it gone. It needs `manage=delete` in the scope (`ScopeMissing`), and a role holding `space.delete` or a `manage=delete` permission in the space's policy (`NotAuthorized`). The meta and members spaces are never deleted (`NotAuthorized`), and a space the group doesn't have fails `SpaceNotFound`                                                                                                                                                                                                                    |
 | `GET com.atproto.space.getSpace`                                                                                                                                                       | answers the group's `space` and its `policy`, for a scope that reads it (`ScopeMissing`) and a member who reads it or may change it (`NotAuthorized`, `SpaceNotFound`)                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `GET com.atproto.space.getDelegationToken` | answers a delegation `token` the group signs for its `space`, which buys a credential from `authorizeSpaceSync` to read the space as any reader does: the group's repo there, here, and its members' repos at their PDSes. It's for a scope that reads the space (`ScopeMissing`) and a member who reads it themselves at that moment (`NotAuthorized`), in one of the group's own spaces (`SpaceNotFound`) |
+| `GET com.atproto.server.getServiceAuth` | answers a `token`, service auth the group signs with its key, for `aud` (a DID, or `did#service`), `lxm` if given, lapsing at `exp` (a minute from now unless asked; within an hour for one method, a minute for any: `BadExpiration`). A token's scope must hold calling `lxm` (or any method) at `aud` (`ScopeMissingError`), and its member still hold `repo:*` (`Forbidden`). An app password's session gets one for anything but chat and `createAccount`, unless it may use chat. Never for a method managing an account directly (`InvalidRequest`) |
+| any other method, with `atproto-proxy: <did>#<service>` | sent on to that service, signed as the group (`aud` the service's DID, `lxm` the method, a minute), and its answer streamed back, as an account's PDS does. Refused as `getServiceAuth` refuses, and with `InvalidToken` for a method managing an account directly or, for an app password that may not, chat; `InvalidRequest` for a header that doesn't parse, a service its document doesn't name, or this host itself; `UpstreamFailure` for a service that isn't at a public address or doesn't answer |
 
 A group's about record and config, in `meta`, and its rules and roles,
 in `members`, change only this way. An app writes the records as the

@@ -129,8 +129,11 @@ instead. The host's DID document names a `#atgrp` service, so a PDS
 can proxy these calls.
 
 Writing a group's records is different. Those calls go to the group's
-PDS, which is this host, with a token issued as the group. The rest of
-this page is about those tokens.
+PDS, which is this host, with a token issued as the group. So do the
+calls an app makes to other services as the group, such as Grain's
+AppView, which the host sends on for it
+([below](#calling-other-services-as-the-group)). The rest of this page is
+about those tokens.
 
 ## Signing an app in as a group
 
@@ -238,7 +241,26 @@ are at that moment.
   `include:org.atgrp.authParticipate` is for a person's own
   session, at their PDS, and it's never kept for a group's.
 
+- Another app's permission set, `include:<nsid>?aud=<did>#<service>`
+  (Grain's `include:social.grain.authFull`), is read as its app
+  publishes it. The host looks up the TXT record `_lexicon.<authority>`
+  (`_lexicon.grain.social`) at `DNS_OVER_HTTPS`
+  ([configuration](../reference/config.md)). The DID it names keeps the
+  set as the record `com.atproto.lexicon.schema/<nsid>` in its repo,
+  read from its PDS at a public address. The host keeps a set it read,
+  or found missing, for ten minutes. A set gives what atproto's
+  permissions give of one. That's each collection its `repo`
+  permissions name and each method its `rpc` permissions name, all
+  within the set's own namespace (`social.grain.`). An `rpc` permission
+  takes the include's `aud` where it inherits it (`inheritAud`), and
+  gives nothing if it names an audience of its own but `*`. Its `space`
+  permissions give a group's session nothing. Of the parts, each
+  collection is kept as `repo:C` is below and each method as `rpc:M` is.
+  When the roles keep every part, the set is kept whole, and otherwise
+  the parts they keep are. A set that doesn't resolve is withheld.
 - `repo:C` is kept if the roles' grants hold `repo:C` or `repo:*`.
+- `transition:generic` and `transition:chat.bsky` are kept if the roles
+  hold `repo:*`, the same as an app password's maker.
 - `rpc:M` for a method of another service is kept only if the roles
   hold `repo:*` and `M` isn't `*`. For one of the host's own methods
   the spec has a group session call (`listJoinRequests`,
@@ -274,14 +296,17 @@ are at that moment.
   a `manage=` scope a space's policy grants them there.
 - `blob:…` is kept only if something kept writes.
 
-The host withholds everything else: other `include:` sets,
-`transition:*`, `identity:` and `account:` scopes, and space scopes for
-another authority. It then makes the kept scope concrete. Each
-permission set becomes the scopes its lexicon lists, compiled into the
+The host withholds everything else: sets that don't resolve,
+`identity:` and `account:` scopes, and space scopes for another
+authority. It then makes the kept scope concrete. Each of its own
+permission sets becomes the scopes its lexicon lists, compiled into the
 host. That's a space scope for each space permission, or two where it
 both writes records and changes the space (one writing, one reading and
 changing), and an `rpc:` scope for each method. `authority=self` becomes
 the group's DID.
+Another app's set becomes the scopes it gives, as read at approval. A
+set that grows later reaches the group's apps only when a member
+approves them again.
 
 A token calls the host's own methods its `rpc:` scopes name, a set's
 included, as its member: those methods take a member's service auth or
@@ -374,6 +399,66 @@ Details:
   This is the only way to change them, since no method of the host's
   does.
 - Each use marks the grant used, at most once a minute.
+
+### Calling other services as the group
+
+An app signed in as a group calls other services the way it would for
+any account. It asks the group's PDS, this host, with the header
+`atproto-proxy: <did>#<service>`, and the host sends the call on. That's
+how an app like Grain reads the group's profile and preferences from its
+AppView (`social.grain.actor.getProfile` at
+`did:web:grain.social#grain_appview`).
+
+The host answers a method it serves itself, header or not. For any
+other method it first checks the call:
+
+- The header must name a DID and a service id. The host refuses a
+  method that manages an account directly (`getSession`,
+  `createAppPassword`, `updateHandle` and the like, and every
+  `com.atproto.admin.*`) with `InvalidToken`.
+- A token's scope must hold the method at `<did>#<service>`. That's an
+  `rpc:` scope naming both (or `*` for one of them), a set that gave
+  one, or `transition:generic` (any method but chat's) and
+  `transition:chat.bsky` (chat's). Otherwise the call fails 403
+  `ScopeMissingError`, naming the scope it needs
+  (`rpc:<method>?aud=<did>%23<service>`). The member who signed the app
+  in must still hold `repo:*`, or it fails `Forbidden`.
+- An app password's session may call anything but chat
+  (`chat.bsky.*`) and `createAccount`, unless its password may use
+  chat. Otherwise it fails `InvalidToken`.
+- The host reads the service's endpoint from the DID's document. It
+  refuses a DID it can't resolve, a service the document doesn't name,
+  and this host itself (its own DID, or an endpoint at `PUBLIC_URL`,
+  such as a group's `#atproto_pds`), each with `InvalidRequest`.
+
+Then it signs service auth as the group, with the group's signing key.
+Its `iss` is the group's DID, its `aud` the service's DID (without the
+`#service`), its `lxm` the method, and it lapses in a minute. The host
+sends the call there with the same method, path and query. It passes
+on `accept-encoding` (`identity` if none), `accept-language`,
+`atproto-accept-labelers`, `x-bsky-topics` and every `x-atproto-*`
+header, and for a POST its body (up to `BLOB_UPLOAD_LIMIT`),
+`content-type` and `content-encoding`. It reaches the service only at a
+public address, pinned the same way as client metadata, and over https
+unless `PUBLIC_URL` is http (a test network).
+
+The answer streams back with its status and its `content-*`,
+`atproto-repo-rev`, `atproto-content-labelers` and `retry-after`
+headers. A failure comes back as `{error, message}`, with the service's
+names where it gives them, and a 500 as 502 `UpstreamFailure`. So does a
+service that can't be reached, or isn't at a public address. A call may
+take 60 seconds. The host logs each call's method, service and status,
+never its token or body. Proxied calls count against the same limit per
+address as every other request ([limits](limits.md)).
+
+An app that calls a service itself asks
+`com.atproto.server.getServiceAuth` for a token instead. It takes
+`aud` (a DID, or `did#service`, used as given), `lxm` if the token is
+for one method, and `exp`. The token lapses a minute from now unless
+`exp` says otherwise, within an hour for one method and within a minute
+for any (`BadExpiration`). The checks are the same as for sending a
+call on, with `*` for the method when none is named. A method that
+manages an account directly gets no token (`InvalidRequest`).
 
 ## Lifetimes
 
@@ -473,8 +558,10 @@ every session signed in with it.
 A session is a grant with source `appPassword`. Its tokens are Bearer
 JWTs that aren't DPoP-bound, and the host finds them by hash like any
 other. Its scope is `atproto transition:generic`, which covers the
-group's repo and blobs and never a space. A privileged password adds
-`transition:chat.bsky`, though the host serves no chat.
+group's repo and blobs and never a space. It also calls other services
+as the group ([above](#calling-other-services-as-the-group)). A
+privileged password adds `transition:chat.bsky`, so it may call chat
+too.
 
 The host can't narrow its scope, so it follows its maker's roles more
 bluntly. At each use and refresh the host checks that the password still

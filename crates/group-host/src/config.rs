@@ -34,6 +34,10 @@ pub struct Config {
     /// `/.well-known/atproto-did`, or a service answering
     /// `com.atproto.identity.resolveHandle`, which reads its DNS record.
     pub handle_resolvers: Vec<String>,
+    /// Where the host reads a DNS TXT record, `DNS_OVER_HTTPS`: a
+    /// DNS-over-HTTPS service answering JSON (`application/dns-json`),
+    /// for the `_lexicon` record of another app's permission set.
+    pub dns_over_https: String,
     /// Who this host starts groups for, `GROUP_FOUNDERS`, comma-separated
     /// DIDs: anyone when it names none.
     pub group_founders: Vec<String>,
@@ -79,6 +83,10 @@ pub struct Config {
 
 /// The service that finds anyone on the network by what is typed.
 pub const TYPEAHEAD: &str = "https://typeahead.waow.tech/xrpc/tech.waow.typeahead.searchActors";
+
+/// The DNS-over-HTTPS service the host reads TXT records from unless
+/// `DNS_OVER_HTTPS` names another.
+pub const DNS_OVER_HTTPS: &str = "https://cloudflare-dns.com/dns-query";
 
 impl Config {
     /// The config `var` names, as `std::env::var` would read it; the
@@ -144,6 +152,10 @@ impl Config {
             ];
         }
         let crawlers = urls("PDS_CRAWLERS");
+        let dns_over_https = var("DNS_OVER_HTTPS").unwrap_or_else(|| DNS_OVER_HTTPS.into());
+        if reqwest::Url::parse(&dns_over_https).is_err() {
+            bail!("DNS_OVER_HTTPS is no URL: {dns_over_https}");
+        }
         let blob_upload_limit = match var("BLOB_UPLOAD_LIMIT") {
             Some(l) => l
                 .parse()
@@ -190,6 +202,7 @@ impl Config {
             did_web_scheme,
             did_web_hosts,
             handle_resolvers,
+            dns_over_https,
             group_founders,
             crawlers,
             blob_upload_limit,
