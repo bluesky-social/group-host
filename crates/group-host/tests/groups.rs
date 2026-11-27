@@ -4,6 +4,7 @@
 
 mod common;
 
+use atproto::plc::Op;
 use atproto::{Curve, Keypair};
 use common::groups::*;
 use common::spaces::*;
@@ -521,12 +522,39 @@ async fn its_policies_say_who_reads_and_writes_its_spaces() {
     );
 }
 
+/// An account whose document, once it named a key, names none.
+async fn keyless(h: &common::Running) -> Authority {
+    let mut who = authority(h, false, true).await;
+    let mut op = Op::atproto(
+        &who.key.public().did_key(),
+        &[who.rotation.public().did_key()],
+        "authority.test",
+        &who.pds,
+    );
+    op.verification_methods.clear();
+    let signed = op.sign(who.last, &who.rotation);
+    let res = h
+        .http
+        .post(format!("{}/{}", plc_url(h), who.did))
+        .json(&signed.to_json())
+        .send()
+        .await
+        .unwrap();
+    assert!(res.status().is_success());
+    who.last = Some(signed.cid());
+    who
+}
+
 #[tokio::test]
 async fn refuses_a_group_it_should_not_start() {
     let h = start(&[], false).await;
     let [alice, _, _] = people(&h).await;
     let lxm = format!("{INTERNAL}.createGroup");
     let me = [auth(&h, &alice, &lxm)];
+    // One whose DID resolves to nothing, and one whose document names no key.
+    let mut unresolved = authority(&h, false, true).await;
+    unresolved.did = "did:plc:resolvestonothing".into();
+    let keyless = keyless(&h).await;
     let body = |extra: Json| {
         let mut b = json!({"handle": RIDERS, "displayName": "Riders"});
         b.as_object_mut()
@@ -545,6 +573,16 @@ async fn refuses_a_group_it_should_not_start() {
             body(json!({})),
             vec![auth(&h, &alice, "org.atgrp.internal.getGroup")],
             (401, "BadJwtLexiconMethod"),
+        ),
+        (
+            body(json!({})),
+            vec![auth(&h, &unresolved, &lxm)],
+            (401, "BadJwtIss"),
+        ),
+        (
+            body(json!({})),
+            vec![auth(&h, &keyless, &lxm)],
+            (401, "BadJwtIss"),
         ),
         (
             json!({"displayName": "Riders"}),
