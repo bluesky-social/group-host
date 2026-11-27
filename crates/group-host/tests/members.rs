@@ -574,7 +574,9 @@ async fn roles_are_given_by_those_who_may() {
 
 #[tokio::test]
 async fn one_put_out_reads_no_more() {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDSes are on this
+    // machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let (did, [alice, bob, carol]) = group(&h).await;
     let members = members_space(&did);
     // Bob has a credential to the members space, and wrote there.

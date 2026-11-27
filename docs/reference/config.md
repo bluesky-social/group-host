@@ -13,14 +13,14 @@ item of spaces and a trailing `/`.
 | Variable | What it is | Default |
 | --- | --- | --- |
 | `PORT` | the port it listens on, or `0` for any free one | `2600` |
-| `PUBLIC_URL` | its origin, an `http` or `https` address with no path | `http://localhost:<PORT>` |
+| `PUBLIC_URL` | its origin, an `http` or `https` address with no path. On `https`, the host asks a server that someone else names (a `did:web`'s host, a handle's, the PDS or service a DID document names, an OAuth client's metadata, a syncer's endpoint, a group's own domain) only over `https`, at public addresses, and follows no redirect. On `http`, it takes itself to be on a network of test servers, and asks those over `http` too, at any address | `http://localhost:<PORT>` |
 | `SERVICE_DID` | its own DID | `did:web:` of `PUBLIC_URL`'s host, a port as `%3A` |
 | `HANDLE_DOMAIN` | the domain it makes groups' handles under, with its leading dot | `.test` |
 | `DATA_DIR` | where it keeps its database (`host.sqlite`), blobs and keys (`host-secrets.json`), the lines it logged (`logs.sqlite`) and its usage counts (`stats.sqlite`) | `data` |
 | `PLC_URL` | the PLC directory it publishes groups' `did:plc`s to | `https://plc.directory` |
-| `DID_WEB_SCHEME` | how it reads a `did:web`'s document (`https`, or `http` for test servers) | `https` |
+| `DID_WEB_SCHEME` | how it reads a `did:web`'s document (`https`, or `http` for test servers). A host whose `PUBLIC_URL` is `https` reads a `did:web`'s own host over `https` alone, whatever this says | `https` |
 | `DID_WEB_HOSTS` | where it reads the documents of some `did:web`s instead of at their own host, as comma-separated `host=address` pairs, for test servers (`grain.social=127.0.0.1:2584`) | none |
-| `HANDLE_RESOLVERS` | how it resolves a handle, trying each in turn: `well-known:<scheme>` for the handle's own `/.well-known/atproto-did`, or a service answering `com.atproto.identity.resolveHandle` (which reads its DNS record). It drops a trailing `/` | `well-known:https,https://public.api.bsky.app` |
+| `HANDLE_RESOLVERS` | how it resolves a handle, trying each in turn: `well-known:<scheme>` for the handle's own `/.well-known/atproto-did`, or a service answering `com.atproto.identity.resolveHandle` (which reads its DNS record). It asks a handle's own host as `PUBLIC_URL` says, and a service as it's set. It drops a trailing `/` | `well-known:https,https://public.api.bsky.app` |
 | `DNS_OVER_HTTPS` | the DNS-over-HTTPS service, answering JSON (`application/dns-json`), where it reads the `_lexicon` TXT record of another app's permission set that an app signing in as a group asks for ([signing in](../design/signing-in.md#narrowing-at-approval)) | `https://cloudflare-dns.com/dns-query` |
 | `GROUP_FOUNDERS` | who the host starts groups for, as comma-separated DIDs, by `createGroup`, `provisionGroup`, or moving a group or an account here | anyone |
 | `BLOB_UPLOAD_LIMIT` | the most bytes one blob may be, whether uploaded or brought with a group, an account or a space. `describeServer` answers it | 52428800 (50 MiB) |

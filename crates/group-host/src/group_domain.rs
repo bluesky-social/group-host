@@ -66,19 +66,22 @@ impl Host {
     }
 
     /// Whether `domain` answers as this host: its `describeServer` naming
-    /// this host's DID. Asked at the domain over https, or at
-    /// `DOMAIN_CHECK_AT` with the domain as its `Host`.
+    /// this host's DID. Asked at `DOMAIN_CHECK_AT`, as it is set, with the
+    /// domain as its `Host`; or else at the domain itself, a group's to
+    /// name, over https as [`crate::guard`] holds such a host.
     async fn reaches(&self, domain: &str) -> bool {
-        let base = match &self.config.domain_check_at {
-            Some(at) => at.clone(),
-            None => format!("https://{domain}"),
+        let path = "/xrpc/com.atproto.server.describeServer";
+        let asked = match &self.config.domain_check_at {
+            Some(at) => Ok(self.http.get(format!("{at}{path}"))),
+            None => {
+                let pinned = self.pinned(&format!("https://{domain}{path}")).await;
+                pinned.map(|(client, at)| client.get(at))
+            }
         };
-        let url = format!("{base}/xrpc/com.atproto.server.describeServer");
-        let asked = self
-            .http
-            .get(url)
-            .header(header::HOST, domain)
-            .timeout(LOOKUP);
+        let Ok(asked) = asked else {
+            return false;
+        };
+        let asked = asked.header(header::HOST, domain).timeout(LOOKUP);
         let Ok(answer) = asked.send().await else {
             return false;
         };

@@ -42,6 +42,8 @@ struct Remote {
     space: String,
     did: String,
     pds: String,
+    /// For asking `pds`, held to [`crate::guard`].
+    client: reqwest::Client,
     kem: String,
     /// `Atproto-Space-Credential <jwt>`, the group's to its own space.
     authorization: String,
@@ -66,10 +68,10 @@ impl Vouched {
 }
 
 impl Remote {
-    async fn ask(&self, host: &Host, method: &str, params: &[(&str, &str)]) -> Result<Vouched> {
+    async fn ask(&self, method: &str, params: &[(&str, &str)]) -> Result<Vouched> {
         let (share, secret) = encapsulate(&self.kem)?;
-        let mut req = host
-            .http
+        let mut req = self
+            .client
             .get(format!("{}/xrpc/com.atproto.space.{method}", self.pds))
             .query(&[("space", self.space.as_str()), ("repo", self.did.as_str())])
             .query(params)
@@ -218,6 +220,7 @@ impl Host {
     async fn remote(&self, space: &str, authority: &str, did: &str) -> Result<Remote> {
         let doc = self.identity.document(did).await?;
         let pds = did::pds(&doc).context("a writer's document names no PDS")?;
+        let (client, _) = self.pinned(&pds).await.map_err(anyhow::Error::msg)?;
         let kem = did::kem_key(&doc).context("a writer with no #atproto_kem key")?;
         let key = Keypair::generate(Curve::P256);
         let signing = self
@@ -239,6 +242,7 @@ impl Host {
             space: space.into(),
             did: did.into(),
             pds,
+            client,
             kem: kem.did_key(),
             authorization: format!("Atproto-Space-Credential {credential}"),
             key,
@@ -257,7 +261,7 @@ impl Host {
             if let Some(c) = &cursor {
                 params.push(("cursor", c));
             }
-            let answer = remote.ask(self, "listRepoOps", &params).await?;
+            let answer = remote.ask("listRepoOps", &params).await?;
             let page: Json = serde_json::from_slice(&answer.body)?;
             for op in page["ops"].as_array().context("a page with no ops")? {
                 let (collection, rkey) = (
@@ -325,7 +329,7 @@ impl Host {
     /// Reads the repo whole, from its STAR archive, checked against the
     /// commit it opens with.
     async fn read_whole(&self, remote: &Remote) -> Result<()> {
-        let answer = remote.ask(self, "getRepo", &[]).await?;
+        let answer = remote.ask("getRepo", &[]).await?;
         let (commit, records) = read_repo_star(
             &answer.body,
             &remote.space,

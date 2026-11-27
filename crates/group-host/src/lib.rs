@@ -28,6 +28,7 @@ pub mod group_lifecycle;
 pub mod group_members;
 pub mod group_spaces;
 pub mod group_tokens;
+pub mod guard;
 pub mod identity;
 pub mod import;
 pub mod import_space;
@@ -118,7 +119,8 @@ impl Host {
         let stats = stats::Stats::open(&config.data_dir.join("stats.sqlite"))?;
         let plc = plc::Directory::new(&config.plc_url);
         let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme)
-            .reading_at(&config.did_web_hosts);
+            .reading_at(&config.did_web_hosts)
+            .http_here(config.public_url.starts_with("http://"));
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
         let limits = limits::Limiter::new(config.rate_limits);

@@ -12,7 +12,6 @@ use atproto::jose;
 use reqwest::Url;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
 
 pub const CLIENT_ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
@@ -184,69 +183,6 @@ fn validate(id: &str, metadata: Value) -> Result<Value, OAuthError> {
     }
 }
 
-/// A client for requests to `url`, an https URL at a public address (or
-/// http at any address, with `http_here`, as on a network of test servers
-/// whose host is on http itself), and the URL. Its connections go to the
-/// addresses checked, so a name that resolves elsewhere a moment later is
-/// not followed there, and it follows no redirect.
-pub(crate) async fn pinned_client(
-    url: &str,
-    http_here: bool,
-) -> Result<(reqwest::Client, Url), String> {
-    let at = Url::parse(url).map_err(|_| format!("{url} is not a URL"))?;
-    let scheme_ok = at.scheme() == "https" || (http_here && at.scheme() == "http");
-    if !scheme_ok || at.fragment().is_some() || !at.username().is_empty() {
-        return Err(format!("{url} is not an https URL"));
-    }
-    let host = at.host_str().unwrap_or_default().to_string();
-    let port = at.port_or_known_default().unwrap_or_default();
-    let found = tokio::net::lookup_host(format!("{host}:{port}")).await;
-    let addrs: Vec<SocketAddr> = found.map_err(|e| format!("{url}: {e}"))?.collect();
-    if !http_here && !addrs.iter().all(|a| public(a.ip())) {
-        return Err(format!("{url} is not at a public address"));
-    }
-    let pinned = crate::client_builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .resolve_to_addrs(host.trim_matches(['[', ']']), &addrs)
-        .build()
-        .expect("a client builds");
-    Ok((pinned, at))
-}
-
-/// Whether `ip` is on the public internet: not loopback, private,
-/// link-local (a cloud's metadata service among them), shared, reserved,
-/// documentation or multicast.
-pub fn public(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => {
-            let [a, b, ..] = v4.octets();
-            !(v4.is_loopback()
-                || v4.is_private()
-                || v4.is_link_local()
-                || v4.is_broadcast()
-                || v4.is_documentation()
-                || v4.is_unspecified()
-                || v4.is_multicast()
-                || a == 0
-                || a >= 240
-                || (a == 100 && (64..128).contains(&b))
-                || (a == 192 && b == 0)
-                || (a == 198 && (18..20).contains(&b)))
-        }
-        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
-            Some(v4) => public(IpAddr::V4(v4)),
-            None => {
-                !(v6.is_loopback()
-                    || v6.is_unspecified()
-                    || v6.is_multicast()
-                    || v6.is_unique_local()
-                    || v6.is_unicast_link_local()
-                    || v6.segments()[0] == 0x2001 && v6.segments()[1] == 0xdb8)
-            }
-        },
-    }
-}
-
 /// Whether a later request authenticates as the first did: the same
 /// method, and for a confidential client, the same key, by its thumbprint.
 pub fn same_auth(first: &Value, now: &Value) -> bool {
@@ -302,12 +238,6 @@ impl Host {
             id: id.into(),
             metadata,
         })
-    }
-
-    /// A client for requests to `url`, as [`pinned_client`] makes one, and
-    /// the URL: http allowed while this host is on http itself.
-    pub(crate) async fn pinned(&self, url: &str) -> Result<(reqwest::Client, Url), String> {
-        pinned_client(url, self.config.public_url.starts_with("http://")).await
     }
 
     /// The JSON object at `url`, fetched by a [`Host::pinned`] client.

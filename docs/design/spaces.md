@@ -257,10 +257,19 @@ it, with the group's credential. It fetches only from a repo in the
 space's writer set, so a caller can't point the host at a server of
 their choosing. The bytes must hash to the CID asked for.
 
+Anyone can write a DID document, so it can name any server as a PDS, and
+a `did:web` can name any host. The host asks such a server only over
+`https`, at public addresses, and follows no redirect. So nobody can
+point the host at an address on its own network, whether it's reading a
+repo or a file, or telling a PDS of a write or a revoked credential. A
+host whose `PUBLIC_URL` is `http` is taken to be on a test network, and
+asks them over `http` too, at any address.
+
 Details:
 
-- `DID_WEB_SCHEME` picks `https` or `http` ([config](../reference/config.md)).
-  A `did:web` with a path is refused, and redirects aren't followed.
+- `DID_WEB_SCHEME` picks `https` or `http` ([config](../reference/config.md)),
+  and `http` works only on a host that's on `http` itself. A `did:web`
+  with a path is refused.
 - A document is read up to 256 KiB, and a file up to 5 MiB.
 
 ## Reading a space through the host

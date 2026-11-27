@@ -30,7 +30,8 @@ struct Fixture {
 }
 
 async fn fixture() -> Fixture {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDS is on this machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
     let kem = h
         .host
@@ -166,7 +167,9 @@ async fn writes_a_repo_in_a_space_and_tells_its_authority() {
 
 #[tokio::test]
 async fn a_write_stands_when_its_authority_does_not_hear_of_it() {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDSes are on this
+    // machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
     let refusing = authority(&h, true, true).await;
     let pdsless = authority(&h, false, false).await;
@@ -185,8 +188,26 @@ async fn a_write_stands_when_its_authority_does_not_hear_of_it() {
 }
 
 #[tokio::test]
-async fn a_write_waits_on_its_authority_no_longer_than_the_timeout() {
+async fn tells_no_authority_whose_pds_is_not_at_a_public_address() {
+    // A host on https: the PDS the authority's document names is on this
+    // machine, so the host does not ask it, and owes it word still.
     let h = start(&[], false).await;
+    let group = h.host.create_account(RIDERS).await.unwrap();
+    let inward = authority(&h, false, true).await;
+    let space = format!("at:space/{}/org.atgrp.content/self", inward.did);
+    h.host
+        .space_write(&group, &space, &[create(RULE, "one", rule("Be kind"))])
+        .await
+        .unwrap();
+    assert!(inward.told.writes.lock().unwrap().is_empty());
+    let later = now() as i64 + 20;
+    assert_eq!(h.host.store.due(later, 10).unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_write_waits_on_its_authority_no_longer_than_the_timeout() {
+    // On http, as on a network of test servers: the PDS is on this machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
     // A PDS that takes the request and never answers.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1210,7 +1231,13 @@ async fn web_authority(told: Arc<Told>) -> (String, Keypair) {
 
 #[tokio::test]
 async fn a_space_of_a_did_web_authority() {
-    let h = start(&[("DID_WEB_SCHEME", "http")], false).await;
+    // On http, as on a network of test servers: the did:web is on this
+    // machine.
+    let vars = [
+        ("PUBLIC_URL", "http://host.test"),
+        ("DID_WEB_SCHEME", "http"),
+    ];
+    let h = start(&vars, false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
     let kem = h
         .host

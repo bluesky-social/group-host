@@ -194,3 +194,21 @@ async fn a_group_stays_at_its_address_while_its_domain_reaches_no_host() {
         "{message}"
     );
 }
+
+#[tokio::test]
+async fn a_domain_pointing_inward_is_not_asked() {
+    // A host on https asks a group's domain only at a public address:
+    // localhost is not one.
+    let h = start(&[], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    h.host.store.set_handle(&did, "localhost", &[]).unwrap();
+    let said = call(&h, &alice, "putGroupDomain", json!({"group": did})).await;
+    assert_eq!(error(&said), (400, "NotReaching"));
+    // A host on http, on a network of test servers, asks it, over https,
+    // where nothing answers.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
+    let (did, [alice, ..]) = group(&h).await;
+    h.host.store.set_handle(&did, "localhost", &[]).unwrap();
+    let said = call(&h, &alice, "putGroupDomain", json!({"group": did})).await;
+    assert_eq!(error(&said), (400, "NotReaching"));
+}

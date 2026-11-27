@@ -18,8 +18,8 @@
 //! or a day has passed, as pds.js's `outbox.js` does.
 
 use crate::Host;
+use crate::guard::pinned_client;
 use crate::index_api::capped;
-use crate::oauth_clients::pinned_client;
 use crate::rbac::Policy;
 use crate::repo::invalid;
 use crate::space::NOTIFY_REPO_UPDATE;
@@ -31,7 +31,7 @@ use anyhow::{Context, Result};
 use atproto::service_auth::{self, Claims};
 use atproto::space::SpaceRef;
 use atproto::space_auth::{self, space_host_aud};
-use atproto::{Value, did, jose, syntax};
+use atproto::{Value, jose, syntax};
 use axum::http::StatusCode;
 use futures::future::join_all;
 use futures::{StreamExt, stream};
@@ -658,11 +658,11 @@ impl Host {
         jtis: &[String],
     ) -> Result<()> {
         let doc = self.identity.document(writer).await?;
-        let pds = did::pds(&doc).context("the writer's document names no PDS")?;
         let claims = self.claims(authority, writer, NOTIFY_REVOKED);
-        let res = self
-            .http
-            .post(format!("{pds}/xrpc/{NOTIFY_REVOKED}"))
+        let pds = self.at_pds(&doc, NOTIFY_REVOKED).await;
+        let (client, at) = pds.map_err(anyhow::Error::msg)?;
+        let res = client
+            .post(at)
             .bearer_auth(service_auth::sign(signing, &claims))
             .json(&json!({ "space": space, "credentials": jtis }))
             .send()
@@ -710,8 +710,10 @@ impl Host {
             Some(doc) => Ok(doc),
             None => self.identity.document(&space.authority).await,
         };
-        // An authority not found, or naming no PDS yet, may be found later.
-        let Some(pds) = doc.ok().as_ref().and_then(did::pds) else {
+        // An authority not found, or naming no PDS yet, or none to be
+        // asked ([`crate::guard`]), may be found later.
+        let doc = doc.unwrap_or_default();
+        let Ok((client, at)) = self.at_pds(&doc, NOTIFY_REPO_UPDATE).await else {
             return Delivery::Retry;
         };
         let aud = space_host_aud(&space.authority);
@@ -725,13 +727,7 @@ impl Host {
             "repoRev": notice.rev,
             "data": Value::Bytes(notice.data.clone()).to_json(),
         });
-        let sent = self
-            .http
-            .post(format!("{pds}/xrpc/{NOTIFY_REPO_UPDATE}"))
-            .bearer_auth(token)
-            .json(&body)
-            .send()
-            .await;
+        let sent = client.post(at).bearer_auth(token).json(&body).send().await;
         delivery(sent)
     }
 

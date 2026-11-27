@@ -1,8 +1,14 @@
 //! Other accounts' DID documents, as the host reads them to check what
 //! they sign and to find their servers: a `did:plc`'s from the PLC
 //! directory, a `did:web`'s from its host, each kept a few minutes.
+//!
+//! The hosts identity data names, a `did:web`'s and a handle's own, are
+//! held to [`crate::guard`]; the PLC directory, the addresses
+//! `DID_WEB_HOSTS` sets and the handle resolvers set are asked as they are
+//! set.
 
-use anyhow::{Context, Result, bail};
+use crate::guard::pinned_client;
+use anyhow::{Context, Error, Result, bail};
 use atproto::{PublicKey, did};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -33,13 +39,17 @@ async fn body(mut res: reqwest::Response) -> Result<Vec<u8>> {
 pub const KEPT_AT_MOST: usize = 10_000;
 
 /// How long a lookup at a host a name alone points to may take: a
-/// handle's `/.well-known/atproto-did` may be anyone's, and never answer.
+/// `did:web`'s host, or a handle's `/.well-known/atproto-did`, may be
+/// anyone's, and never answer.
 pub const LOOKUP: Duration = Duration::from_secs(3);
 
 pub struct Resolver {
     plc_url: String,
     did_web_scheme: String,
     did_web_hosts: BTreeMap<String, String>,
+    /// Whether a host identity data names may be asked on http, at any
+    /// address, as on a network of test servers ([`crate::guard`]).
+    http_here: bool,
     http: reqwest::Client,
     kept: Mutex<HashMap<String, (Instant, Value)>>,
     kept_for: Duration,
@@ -65,8 +75,9 @@ impl Resolver {
             plc_url: plc_url.trim_end_matches('/').to_string(),
             did_web_scheme: did_web_scheme.to_string(),
             did_web_hosts: BTreeMap::new(),
-            // A document or handle is at a host the caller names: one that
-            // redirects is not followed elsewhere.
+            http_here: false,
+            // The PLC directory and the handle resolvers are as set: one
+            // that redirects is not followed elsewhere all the same.
             http: crate::client_builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -82,21 +93,40 @@ impl Resolver {
         self
     }
 
-    /// Where `did`'s document is read.
-    fn url(&self, did: &str) -> Result<String> {
+    /// This resolver, for a host on http itself (`PUBLIC_URL`), as on a
+    /// network of test servers: asking the hosts identity data names on
+    /// http too, at any address ([`crate::guard`]).
+    pub fn http_here(mut self, here: bool) -> Resolver {
+        self.http_here = here;
+        self
+    }
+
+    /// What a host identity data names answers at `url`, asked as
+    /// [`crate::guard`] holds it.
+    async fn guarded(&self, url: &str) -> Result<reqwest::Response> {
+        let pinned = pinned_client(url, self.http_here).await;
+        let (client, at) = pinned.map_err(Error::msg)?;
+        Ok(client.get(at).timeout(LOOKUP).send().await?)
+    }
+
+    /// Where `did`'s document is read, and whether at a host the DID
+    /// names, rather than one the host is set to read it at
+    /// (`DID_WEB_HOSTS`) or the PLC directory.
+    fn url(&self, did: &str) -> Result<(String, bool)> {
         if let Some(host) = did.strip_prefix("did:web:") {
             // A did:web of a host alone: one with a path names no host here.
             if host.is_empty() || host.contains(':') {
                 bail!("{did} is not a did:web of a host");
             }
             let host = host.replace("%3A", ":");
-            let host = self.did_web_hosts.get(&host).unwrap_or(&host);
-            Ok(format!(
-                "{}://{host}/.well-known/did.json",
-                self.did_web_scheme
-            ))
+            let (host, named) = match self.did_web_hosts.get(&host) {
+                Some(set) => (set, false),
+                None => (&host, true),
+            };
+            let scheme = &self.did_web_scheme;
+            Ok((format!("{scheme}://{host}/.well-known/did.json"), named))
         } else if did.starts_with("did:plc:") {
-            Ok(format!("{}/{did}", self.plc_url))
+            Ok((format!("{}/{did}", self.plc_url), false))
         } else {
             bail!("{did}: not a did:plc or a did:web");
         }
@@ -104,7 +134,11 @@ impl Resolver {
 
     /// `did`'s document, read now, and kept.
     pub async fn document(&self, did: &str) -> Result<Value> {
-        let res = self.http.get(self.url(did)?).send().await?;
+        let (url, named) = self.url(did)?;
+        let res = match named {
+            true => self.guarded(&url).await?,
+            false => self.http.get(url).send().await?,
+        };
         let res = res.error_for_status().context(format!("resolving {did}"))?;
         let doc: Value = serde_json::from_slice(&body(res).await?)?;
         if doc.get("id").and_then(Value::as_str) != Some(did) {
@@ -129,7 +163,7 @@ impl Resolver {
             let named = match resolver.strip_prefix("well-known:") {
                 Some(scheme) => {
                     let url = format!("{scheme}://{handle}/.well-known/atproto-did");
-                    text(self.http.get(url).timeout(LOOKUP).send().await).await
+                    text(self.guarded(&url).await.ok()).await
                 }
                 None => {
                     let url = format!("{resolver}/xrpc/com.atproto.identity.resolveHandle");
@@ -138,7 +172,7 @@ impl Resolver {
                         .get(url)
                         .query(&[("handle", handle)])
                         .timeout(LOOKUP);
-                    let body = json(asked.send().await).await;
+                    let body = json(asked.send().await.ok()).await;
                     body.and_then(|b| b["did"].as_str().map(String::from))
                 }
             };
@@ -181,11 +215,11 @@ impl Resolver {
 
 /// A response's text, if it answered with one no longer than a document
 /// may be.
-async fn text(res: reqwest::Result<reqwest::Response>) -> Option<String> {
-    String::from_utf8(body(res.ok()?.error_for_status().ok()?).await.ok()?).ok()
+async fn text(res: Option<reqwest::Response>) -> Option<String> {
+    String::from_utf8(body(res?.error_for_status().ok()?).await.ok()?).ok()
 }
 
 /// A response's JSON, as [`text`] reads it.
-async fn json(res: reqwest::Result<reqwest::Response>) -> Option<Value> {
-    serde_json::from_slice(&body(res.ok()?.error_for_status().ok()?).await.ok()?).ok()
+async fn json(res: Option<reqwest::Response>) -> Option<Value> {
+    serde_json::from_slice(&body(res?.error_for_status().ok()?).await.ok()?).ok()
 }

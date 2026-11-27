@@ -59,7 +59,8 @@ async fn take_back(h: &Running, who: &Authority, group: &str, uri: &str) -> Said
 
 #[tokio::test]
 async fn an_invite_is_written_in_the_invitees_inbox() {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDS is on this machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let [alice, bob, carol] = people(&h).await;
     let did = start_group(
         &h,

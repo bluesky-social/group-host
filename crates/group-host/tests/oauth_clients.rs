@@ -634,38 +634,6 @@ async fn takes_the_loopback_client_as_atproto_has_it() {
     );
 }
 
-#[test]
-fn knows_a_public_address() {
-    use group_host::oauth_clients::public;
-    for (ip, is) in [
-        ("8.8.8.8", true),
-        ("2606:4700::1111", true),
-        ("::ffff:8.8.8.8", true),
-        ("127.0.0.1", false),
-        ("10.1.2.3", false),
-        ("172.16.0.1", false),
-        ("192.168.1.1", false),
-        ("169.254.169.254", false),
-        ("100.64.0.1", false),
-        ("192.0.0.8", false),
-        ("198.18.0.1", false),
-        ("0.1.2.3", false),
-        ("240.0.0.1", false),
-        ("255.255.255.255", false),
-        ("224.0.0.1", false),
-        ("192.0.2.1", false),
-        ("::1", false),
-        ("::", false),
-        ("::ffff:127.0.0.1", false),
-        ("fd00::1", false),
-        ("fe80::1", false),
-        ("ff02::1", false),
-        ("2001:db8::1", false),
-    ] {
-        assert_eq!(public(ip.parse().unwrap()), is, "{ip}");
-    }
-}
-
 #[tokio::test]
 async fn keeps_what_it_read_a_while() {
     let h = start_reachable(&[]).await;

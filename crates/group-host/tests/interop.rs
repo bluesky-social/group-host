@@ -118,7 +118,13 @@ async fn a_groups_repo_in_a_space_of_the_reference_pds() {
         eprintln!("the reference PDS has no spaces: GROUP_HOST_DEV_ENV names the alpha's build");
         return;
     }
-    let h = start(&[("PLC_URL", net.plc.as_str())], false).await;
+    // On http, as on a network of test servers: the reference PDS is on
+    // this machine.
+    let vars = [
+        ("PLC_URL", net.plc.as_str()),
+        ("PUBLIC_URL", "http://host.test"),
+    ];
+    let h = start(&vars, false).await;
     let group = h.host.create_account("climbers.groups.test").await.unwrap();
     let http = reqwest::Client::new();
 

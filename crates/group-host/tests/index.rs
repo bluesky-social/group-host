@@ -456,7 +456,8 @@ fn bytes_of(value: &Json) -> Vec<u8> {
 
 #[tokio::test]
 async fn takes_only_what_a_writers_host_vouches_for() {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDS is on this machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let fake = Arc::new(Fake::default());
     let writer = fake_writer(&h, &fake).await;
     let [alice, _, _] = people(&h).await;
@@ -770,7 +771,8 @@ async fn takes_only_what_a_writers_host_vouches_for() {
 
 #[tokio::test]
 async fn fetches_no_file_too_big_or_not_asked_for() {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDS is on this machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let fake = Arc::new(Fake::default());
     let writer = fake_writer(&h, &fake).await;
     let [alice, _, _] = people(&h).await;

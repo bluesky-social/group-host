@@ -284,6 +284,9 @@ again, and nobody may delete them: they go when the group does.
 A group may take a handle on a domain it controls. The domain must name
 the group the way any handle names an account, by
 `/.well-known/atproto-did` or through the services in `HANDLE_RESOLVERS`.
+The host asks a domain's own `/.well-known/atproto-did` only over
+`https`, at public addresses, and follows no redirect, so a handle can't
+point it at an address on its own network ([config](../reference/config.md)).
 Under `HANDLE_DOMAIN` a group may take only its own address.
 
 `checkGroupHandle` says whether a handle names the group yet, and changes
@@ -314,9 +317,10 @@ domain only when a steward switches it on, with
 `org.atgrp.internal.putGroupDomain` (for `group.configure`), and
 only if the domain then answers as this host. The host asks
 `https://<domain>/xrpc/com.atproto.server.describeServer`, or
-`DOMAIN_CHECK_AT` with the domain as its `Host`, for its own DID. If the
-handle is the group's address, the call fails with `NoOwnDomain`. If the
-domain doesn't answer as this host, it fails with `NotReaching`.
+`DOMAIN_CHECK_AT` with the domain as its `Host`, for its own DID. It asks
+the domain itself only at public addresses, without following redirects.
+If the handle is the group's address, the call fails with `NoOwnDomain`.
+If the domain doesn't answer as this host, it fails with `NotReaching`.
 
 Once it's on, the domain keeps `/.well-known/` and `/xrpc/` for the host,
 as the address does. A request to the address, or to `www.` under the

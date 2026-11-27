@@ -1030,7 +1030,8 @@ fn waits_longer_between_tries_up_to_an_hour() {
 
 #[tokio::test]
 async fn owes_an_authority_word_of_a_write_until_it_lands() {
-    let h = start(&[], false).await;
+    // On http, as on a network of test servers: the PDS is on this machine.
+    let h = start(&[("PUBLIC_URL", "http://host.test")], false).await;
     let group = h.host.create_account(RIDERS).await.unwrap();
     let elsewhere = authority(&h, true, true).await;
     let space = format!("at:space/{}/{KIND}/self", elsewhere.did);
