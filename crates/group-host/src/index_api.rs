@@ -15,6 +15,7 @@ use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
 use atproto::space_auth::{self, Kind, Make, sign_request};
 use atproto::{Cid, Curve, Keypair, drisl};
+use atproto_client::identity;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
@@ -236,8 +237,12 @@ impl Host {
             let (blob, bytes) = self.read_blob(repo, cid).ok()??;
             return Some((blob.mime_type, bytes));
         }
-        let doc = self.identity.document(repo).await.ok()?;
-        let (client, at) = self.at_pds(&doc, "com.atproto.space.getBlob").await.ok()?;
+        let doc = self.identity.document_now(repo).await.ok()?;
+        let pds = identity::pds(repo, &doc, self.guarded.guard()).ok()?;
+        let asked = self
+            .guarded
+            .get(&format!("{pds}/xrpc/com.atproto.space.getBlob"));
+        let asked = asked.ok()?;
         let key = Keypair::generate(Curve::P256);
         let signing = self.store.account(group).ok()??.signing;
         let kid = key.public().did_key();
@@ -250,10 +255,7 @@ impl Host {
         let now = crate::time::now_millis() as u64 / 1000;
         let credential = space_auth::create(Kind::Credential, &make, &signing, now).ok()?;
         let authorization = format!("Atproto-Space-Credential {credential}");
-        let mut req =
-            client
-                .get(at)
-                .query(&[("space", space), ("repo", repo), ("cid", &cid.to_string())]);
+        let mut req = asked.query(&[("space", space), ("repo", repo), ("cid", &cid.to_string())]);
         for (k, v) in sign_request(&key, &authorization, repo).ok()? {
             req = req.header(k, v);
         }

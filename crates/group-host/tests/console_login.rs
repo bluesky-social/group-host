@@ -409,6 +409,7 @@ async fn refuses_a_sign_in_it_cannot_trust() {
         ),
         ("nonce", json!("always"), "asked for a nonce twice"),
         ("par_at", json!(closed()), "error sending request"),
+        ("par_at", json!("ftp://127.0.0.1/par"), "is not on https"),
         (
             "iss",
             json!("https://elsewhere.test"),
@@ -495,7 +496,7 @@ async fn reaches_only_public_servers_for_a_host_on_the_internet() {
     let (res, _) = sign_in(&h, &did, "/").await;
     assert_eq!(res.status(), 400);
     let why = text(res).await;
-    assert!(why.contains("not an https URL"), "{why}");
+    assert!(why.contains("not on https"), "{why}");
     let (_, meta) = h.get_path("/console/client-metadata.json").await;
     assert_eq!(
         meta["client_id"],

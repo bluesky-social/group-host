@@ -26,7 +26,7 @@ pub async fn get_viewer(State(host): State<Arc<Host>>, headers: HeaderMap) -> An
         return Ok(Json(json!({ "signUpAt": signup })));
     };
     let mut actor = json!({"did": me, "canCreateGroup": host.may_found(&me)});
-    let doc = host.identity.document(&me).await.ok();
+    let doc = host.identity.document_now(&me).await.ok();
     if let Some(handle) = doc.as_ref().and_then(did::handle) {
         actor["handle"] = json!(handle);
     }
@@ -44,7 +44,7 @@ impl Host {
     /// A person as a list names them: their DID, and the handle their DID
     /// document names, if it can be read.
     pub(crate) async fn actor_view(&self, did: &str) -> Value {
-        let doc = self.identity.document(did).await.ok();
+        let doc = self.identity.document_now(did).await.ok();
         match doc.as_ref().and_then(did::handle) {
             Some(handle) => json!({"did": did, "handle": handle}),
             None => json!({"did": did}),
@@ -139,11 +139,7 @@ pub async fn get_actor_groups(
     let asked = param(&p, "actor")?.trim_start_matches('@').to_lowercase();
     let actor = match asked.starts_with("did:") {
         true => Some(asked.clone()),
-        false => {
-            host.identity
-                .resolve_handle(&asked, &host.config.handle_resolvers)
-                .await
-        }
+        false => host.identity.resolve_handle(&asked).await.ok(),
     };
     let not_found = || XrpcError::new(StatusCode::BAD_REQUEST, "ActorNotFound", "no such actor");
     let actor = actor.ok_or_else(not_found)?;

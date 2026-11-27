@@ -6,8 +6,15 @@
 //! caller's to name, so one may name another's and have its lines read
 //! with them. The health checks, asked every few seconds, are logged at
 //! debug and not counted.
+//!
+//! The host's own calls to other servers through `atproto-client` go
+//! through [`Calls`]: each attempt sent with a `traceparent` naming the
+//! trace of the request it is made for, if any, and logged in it as a
+//! line, `call`.
 
 use crate::Host;
+use atproto_client::sender::{self, BoxFuture, SendError, Sender};
+use atproto_client::xrpc::XrpcError;
 use axum::extract::{MatchedPath, Request, State};
 use axum::http::{HeaderValue, Method};
 use axum::middleware::Next;
@@ -15,6 +22,57 @@ use axum::response::Response;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::Instrument;
+
+tokio::task_local! {
+    /// The trace of the request being answered.
+    static TRACE: String;
+}
+
+/// `N` random bytes, in lower-case hex.
+fn random_hex<const N: usize>() -> String {
+    let mut bytes = [0u8; N];
+    rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Sends each of the host's calls through `atproto-client` in the trace of
+/// the request it is made for, and logs each attempt: a line, `call`, with
+/// the server's host, the path, its status or error, `resend` (how many
+/// times it was sent before) and duration. A refusal an XRPC call is
+/// answered with is logged too, as `refused`.
+#[derive(Debug)]
+pub struct Calls;
+
+impl Sender for Calls {
+    fn send<'a>(
+        &'a self,
+        mut req: reqwest::Request,
+        next: sender::Next<'a>,
+    ) -> BoxFuture<'a, Result<reqwest::Response, SendError>> {
+        Box::pin(async move {
+            if let Ok(trace) = TRACE.try_with(String::clone) {
+                let parent = format!("00-{trace}-{}-01", random_hex::<8>());
+                let parent = HeaderValue::try_from(parent).expect("hex is a header's value");
+                req.headers_mut().insert("traceparent", parent);
+            }
+            let host = req.url().host_str().unwrap_or_default().to_string();
+            let path = req.url().path().to_string();
+            let (resend, started) = (next.resend(), Instant::now());
+            let res = next.run(req).await;
+            let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let status = res.as_ref().map(|r| r.status().as_u16()).ok();
+            let error = res.as_ref().err().map(ToString::to_string);
+            tracing::info!(host, path, status, error, resend, duration_ms, "call");
+            res
+        })
+    }
+
+    fn refused(&self, url: &reqwest::Url, refusal: &XrpcError) {
+        let origin = url.origin().ascii_serialization();
+        let (status, error) = (refusal.status, refusal.error.as_str());
+        tracing::info!(origin, status, error, message = refusal.message, "refused");
+    }
+}
 
 /// The health checks' route.
 const HEALTH: &str = "/xrpc/_health";
@@ -57,11 +115,7 @@ pub fn trace_from(traceparent: Option<&str>) -> String {
                 && trace.bytes().any(|b| b != b'0'));
         ok.then(|| parts[1].to_ascii_lowercase())
     });
-    named.unwrap_or_else(|| {
-        let mut bytes = [0u8; 16];
-        rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut bytes);
-        bytes.iter().map(|b| format!("{b:02x}")).collect()
-    })
+    named.unwrap_or_else(random_hex::<16>)
 }
 
 /// Logs and counts the request, answered in its trace.
@@ -74,7 +128,8 @@ pub async fn observe(State(host): State<Arc<Host>>, req: Request, next: Next) ->
     let parent = req.headers().get("traceparent");
     let trace = trace_from(parent.and_then(|v| v.to_str().ok()));
     let span = tracing::info_span!("request", trace = %trace);
-    let mut res = next.run(req).instrument(span.clone()).await;
+    let answered = next.run(req).instrument(span.clone());
+    let mut res = TRACE.scope(trace.clone(), answered).await;
     let took = started.elapsed();
     let status = res.status().as_u16();
     let id = HeaderValue::try_from(trace.as_str()).expect("hex is a header's value");

@@ -11,8 +11,9 @@ use crate::space_api::{credential, forbidden, now, refused, service_caller};
 use crate::store::{Registration, Space};
 use crate::xrpc::XrpcError;
 use atproto::space::SpaceRef;
-use atproto::space_auth::{self, Expect, Kind, Make, space_host_aud};
+use atproto::space_auth::{self, Kind, Make, space_host_aud};
 use atproto::{PublicKey, Value as Drisl, syntax, tid};
+use atproto_client::service_auth;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -197,17 +198,12 @@ async fn delegated(
     space: &SpaceRef,
 ) -> Result<space_auth::Token, XrpcError> {
     let refused = |m: String| bad("InvalidDelegationToken", m);
-    let (_, claims) = space_auth::parse(Kind::Delegation, token).map_err(|e| refused(e.message))?;
-    let aud = space_host_aud(&space.authority);
-    let uri = space.to_string();
-    let expect = Expect {
-        aud: Some(&aud),
-        sub: Some(&uri),
-    };
-    let check = |key: &PublicKey| space_auth::verify(Kind::Delegation, token, key, &expect, now());
-    let checked = host.identity.with_key(&claims.iss, check).await;
-    let checked = checked.ok_or_else(|| refused(format!("no signing key for {}", claims.iss)))?;
-    checked.map_err(|e| refused(e.message))
+    let checked = service_auth::verify_delegation(&host.identity, token, now()).await;
+    let checked = checked.map_err(|e| refused(e.to_string()))?;
+    if checked.sub != space.to_string() {
+        return Err(refused(format!("a token for {}, not {space}", checked.sub)));
+    }
+    Ok(checked)
 }
 
 /// A repo host says a repo of one of its accounts was written in a space

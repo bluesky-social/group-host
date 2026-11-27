@@ -15,6 +15,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use atproto::keys::{Curve, Keypair};
 use atproto::space::{SPACE_URI_PREFIX, SpaceRecordUri, SpaceRef};
 use atproto::{did, dpop};
+use atproto_client::service_auth;
+use atproto_client::xrpc::{self, Auth, Xrpc};
 use group_host_mcp::{Plan, Tool};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -193,8 +195,9 @@ pub struct Host {
 /// A person signed in at their PDS.
 pub struct Client {
     http: reqwest::Client,
-    pds: String,
-    access: String,
+    /// Their PDS, asked as them.
+    pds: Xrpc,
+    auth: Auth,
     /// Who they are.
     pub did: String,
 }
@@ -211,74 +214,80 @@ async fn answer(res: reqwest::Response, what: &str) -> Result<Value> {
     Ok(body)
 }
 
+/// Why `what` failed, said as [`answer`] says it: the server's refusal,
+/// its status, error and message; or that `at` could not be reached.
+fn failed(what: &str, at: &str, e: xrpc::Error) -> anyhow::Error {
+    let Some(refused) = e.xrpc() else {
+        return anyhow::Error::new(e).context(format!("reaching {at}"));
+    };
+    let status = reqwest::StatusCode::from_u16(refused.status).map(|s| s.to_string());
+    let (error, message) = (&refused.error, &refused.message);
+    anyhow!("{what}: {} {error} {message}", status.unwrap_or_default())
+}
+
+/// What `at` answered `what` with, or why it failed ([`failed`]).
+fn said<T>(what: &str, at: &str, said: Result<T, xrpc::Error>) -> Result<T> {
+    said.map_err(|e| failed(what, at, e))
+}
+
 impl Client {
     /// Signs `handle` in at `pds` with `password`.
     pub async fn sign_in(pds: &str, handle: &str, password: &str) -> Result<Client> {
         let http = reqwest::Client::new();
-        let sent = http
-            .post(format!("{pds}/xrpc/com.atproto.server.createSession"))
-            .json(&json!({"identifier": handle, "password": password}))
-            .send()
-            .await;
-        let res = sent.with_context(|| format!("reaching {pds}"))?;
-        let session = answer(res, &format!("signing in as {handle}")).await?;
+        let at = Xrpc::new(http.clone(), pds);
+        let body = json!({"identifier": handle, "password": password});
+        let signed = at.procedure("com.atproto.server.createSession", Some(&body), None);
+        let signed: Result<Value, _> = signed.await;
+        let session = said(&format!("signing in as {handle}"), pds, signed)?;
         let field = |k: &str| text(&session[k]).to_string();
         Ok(Client {
             http,
-            pds: pds.into(),
-            access: field("accessJwt"),
+            pds: at,
+            auth: Auth::bearer(text(&session["accessJwt"])),
             did: field("did"),
         })
     }
 
     /// A service token from the person's PDS, for `aud`'s `lxm`.
     async fn token(&self, aud: &str, lxm: &str) -> Result<String> {
-        let url = format!("{}/xrpc/com.atproto.server.getServiceAuth", self.pds);
-        let asked = self.http.get(url).query(&[("aud", aud), ("lxm", lxm)]);
-        let res = asked.bearer_auth(&self.access).send().await?;
-        let said = answer(res, &format!("a token for {lxm}")).await?;
-        Ok(text(&said["token"]).to_string())
+        let token = service_auth::token(&self.pds, &self.auth, aud, Some(lxm), None).await;
+        said(&format!("a token for {lxm}"), self.pds.base(), token)
+    }
+
+    /// `host` called as the person, with a service token for `lxm`.
+    async fn at(&self, host: &Host, lxm: &str) -> Result<(Xrpc, Auth)> {
+        let token = self.token(&host.did, lxm).await?;
+        Ok((
+            Xrpc::new(self.http.clone(), &host.url),
+            Auth::bearer(&token),
+        ))
     }
 
     /// `host`'s procedure `lxm`, with `body`.
     pub async fn call(&self, host: &Host, lxm: &str, body: &Value) -> Result<Value> {
-        let token = self.token(&host.did, lxm).await?;
-        let url = format!("{}/xrpc/{lxm}", host.url);
-        let sent = self.http.post(url).bearer_auth(token).json(body).send();
-        let res = sent
-            .await
-            .with_context(|| format!("reaching {}", host.url))?;
-        answer(res, lxm).await
+        let (at, auth) = self.at(host, lxm).await?;
+        let answer = at.procedure(lxm, Some(body), Some(&auth)).await;
+        said(lxm, &host.url, answer)
     }
 
     /// `host`'s query `lxm`, with `params`.
     pub async fn query(&self, host: &Host, lxm: &str, params: &[(&str, &str)]) -> Result<Value> {
-        let token = self.token(&host.did, lxm).await?;
-        let url = format!("{}/xrpc/{lxm}", host.url);
-        let sent = self.http.get(url).bearer_auth(token).query(params).send();
-        let res = sent
-            .await
-            .with_context(|| format!("reaching {}", host.url))?;
-        answer(res, lxm).await
+        let (at, auth) = self.at(host, lxm).await?;
+        let answer = at.query(lxm, params, Some(&auth)).await;
+        said(lxm, &host.url, answer)
     }
 
-    /// `nsid` of the person's own PDS, as them: a query with `params`, or
-    /// with `body`, a procedure (one that takes none with a null body).
-    async fn own(
-        &self,
-        nsid: &str,
-        params: &[(&str, &str)],
-        body: Option<&Value>,
-    ) -> Result<Value> {
-        let url = format!("{}/xrpc/{nsid}", self.pds);
-        let asked = match body {
-            Some(Value::Null) => self.http.post(url),
-            Some(body) => self.http.post(url).json(body),
-            None => self.http.get(url),
-        };
-        let sent = asked.query(params).bearer_auth(&self.access).send().await;
-        let res = sent.context(format!("reaching {}", self.pds))?;
-        answer(res, nsid).await
+    /// The query `nsid` of the person's own PDS, as them, with `params`.
+    async fn own_query(&self, nsid: &str, params: &[(&str, &str)]) -> Result<Value> {
+        let answer = self.pds.query(nsid, params, Some(&self.auth)).await;
+        said(nsid, self.pds.base(), answer)
+    }
+
+    /// The procedure `nsid` of the person's own PDS, as them, with `body`,
+    /// or none for one that takes none.
+    async fn own_call(&self, nsid: &str, body: Option<&Value>) -> Result<Value> {
+        let answer = self.pds.procedure(nsid, body, Some(&self.auth)).await;
+        said(nsid, self.pds.base(), answer)
     }
 
     /// The bytes `nsid` of the person's own PDS answers with `params`, and
@@ -288,21 +297,16 @@ impl Client {
         nsid: &str,
         params: &[(&str, &str)],
     ) -> Result<Option<(Vec<u8>, String)>> {
-        let url = format!("{}/xrpc/{nsid}", self.pds);
-        let asked = self.http.get(url).query(params).bearer_auth(&self.access);
-        let res = asked.send().await;
-        let res = res.context(format!("reaching {}", self.pds))?;
-        let kind = res
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok());
+        let read = self.pds.query_raw(nsid, params, Some(&self.auth)).await;
+        let errored = read.as_ref().err().and_then(xrpc::Error::xrpc);
+        let none = errored.is_some_and(|r| r.error == "RepoNotFound");
+        let (headers, bytes) = match none {
+            true => return Ok(None),
+            false => said(nsid, self.pds.base(), read)?,
+        };
+        let kind = headers.get("content-type").and_then(|v| v.to_str().ok());
         let kind = kind.unwrap_or("application/octet-stream").to_string();
-        if !res.status().is_success() {
-            let said = answer(res, nsid).await.expect_err("a refusal");
-            let none = format!("{said}").contains("RepoNotFound");
-            return none.then_some(None).ok_or(said);
-        }
-        Ok(Some((res.bytes().await?.to_vec(), kind)))
+        Ok(Some((bytes.to_vec(), kind)))
     }
 
     /// `host`'s procedure `lxm` with `params`, taking `bytes` of `kind`.
@@ -1161,7 +1165,7 @@ async fn start_import(
     let mut spaces = Vec::new();
     // Only a server that says it holds spaces has any to bring.
     let described = theirs
-        .own("com.atproto.server.describeServer", &[], None)
+        .own_query("com.atproto.server.describeServer", &[])
         .await?;
     let holds = described["spacesAlpha"] == true;
     let mut cursor = holds.then_some(String::new());
@@ -1169,7 +1173,7 @@ async fn start_import(
         let mut page = vec![("limit", "100")];
         page.extend((!after.is_empty()).then_some(("cursor", after.as_str())));
         let listed = theirs
-            .own("com.atproto.space.listSpaces", &page, None)
+            .own_query("com.atproto.space.listSpaces", &page)
             .await?;
         let uris = listed["spaces"].as_array().into_iter().flatten();
         spaces.extend(uris.map(|s| text(&s["space"]).to_string()));
@@ -1193,7 +1197,7 @@ async fn start_import(
             let mut page = at.to_vec();
             page.extend((!after.is_empty()).then_some(("cursor", after.as_str())));
             let listed = theirs
-                .own("com.atproto.space.listBlobs", &page, None)
+                .own_query("com.atproto.space.listBlobs", &page)
                 .await?;
             for cid in listed["cids"].as_array().into_iter().flatten() {
                 let at = [at[0], at[1], ("cid", text(cid))];
@@ -1217,7 +1221,7 @@ async fn start_import(
         spaces.len()
     );
     let ask = "com.atproto.identity.requestPlcOperationSignature";
-    theirs.own(ask, &[], Some(&Value::Null)).await?;
+    theirs.own_call(ask, None).await?;
     out += &format!(
         "its server has emailed a code to move its identity; finish with\n  atgrp account import {account} --code <code>\n"
     );
@@ -1238,7 +1242,7 @@ async fn finish_import(
     let mut asked = creds.clone();
     asked.insert("token".into(), json!(code.trim()));
     let sign = "com.atproto.identity.signPlcOperation";
-    let signed = theirs.own(sign, &[], Some(&Value::Object(asked))).await?;
+    let signed = theirs.own_call(sign, Some(&Value::Object(asked))).await?;
     let body = json!({ "did": did, "operation": signed["operation"] });
     let done = me.call(host, &internal("completeImport"), &body).await?;
     Ok(format!(

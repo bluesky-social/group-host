@@ -265,6 +265,15 @@ one a W3C `traceparent` header names. Since the caller names that one, a
 trace read may hold the lines of another request that named it too. A
 method other than HTTP's own seven is counted as `OTHER`.
 
+When the host resolves an identity or checks a token, it logs each
+attempt of each call it makes as a `call` line, with the server's `host`,
+the `path`, the `status` or `error`, `resend` (0 for the first attempt,
+then 1 for a retry after a broken connection or a fresh DPoP nonce) and
+`duration_ms`. A call made while answering a request is logged in that
+request's trace and sends a `traceparent` header naming it. A refusal an
+XRPC call gets back is logged as `refused`, with the server's `origin`,
+the `status` and the `error`.
+
 ## Recovery
 
 | Method                                  | What it does                                                                                     |

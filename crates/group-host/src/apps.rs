@@ -141,8 +141,8 @@ impl Host {
 
     async fn read_logo(&self, id: &str, now: i64) -> Option<Logo> {
         let view = self.client_view(id, now).await?;
-        let (pinned, at) = self.pinned(view["logo"].as_str()?).await.ok()?;
-        let res = pinned.get(at).send().await.ok()?;
+        let asked = self.guarded.get(view["logo"].as_str()?).ok()?;
+        let res = asked.send().await.ok()?;
         let res = res.error_for_status().ok()?;
         let bytes = capped(res, LOGO_AT_MOST).await?;
         let kind = image_kind(&bytes)?;

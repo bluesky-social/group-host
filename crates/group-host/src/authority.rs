@@ -18,7 +18,6 @@
 //! or a day has passed, as pds.js's `outbox.js` does.
 
 use crate::Host;
-use crate::guard::pinned_client;
 use crate::index_api::capped;
 use crate::rbac::Policy;
 use crate::repo::invalid;
@@ -32,8 +31,10 @@ use atproto::service_auth::{self, Claims};
 use atproto::space::SpaceRef;
 use atproto::space_auth::{self, space_host_aud};
 use atproto::{Value, jose, syntax};
+use atproto_client::guard::Guarded;
+use atproto_client::identity;
 use axum::http::StatusCode;
-use futures::future::join_all;
+use futures::future::{OptionFuture, join_all};
 use futures::{StreamExt, stream};
 use serde_json::{Value as Json, json};
 
@@ -160,8 +161,9 @@ fn delivery(sent: reqwest::Result<reqwest::Response>) -> Delivery {
 #[derive(Clone)]
 struct Syncers {
     store: Store,
-    /// Whether the host is on http, and so may call endpoints on http.
-    http_here: bool,
+    /// For the endpoints syncers chose, held as the host holds any host
+    /// others' data names.
+    guarded: Guarded,
 }
 
 impl Syncers {
@@ -172,11 +174,11 @@ impl Syncers {
             to.endpoint.trim_end_matches('/')
         );
         // The syncer chose the endpoint: it is fetched as one not trusted.
-        let Ok((client, at)) = pinned_client(&url, self.http_here).await else {
-            return Delivery::Retry;
-        };
+        // A refused endpoint is as one that did not answer.
         let body = json!({"space": space, "token": to.token, "update": update});
-        delivery(client.post(at).json(&body).send().await)
+        let asked = self.guarded.post(&url).ok().map(|a| a.json(&body).send());
+        let sent = OptionFuture::from(asked).await;
+        sent.map_or(Delivery::Retry, delivery)
     }
 
     /// Tells each syncer registered for `space` of `update`, a change to
@@ -423,7 +425,7 @@ impl Host {
     fn syncers(&self) -> Syncers {
         Syncers {
             store: self.store.clone(),
-            http_here: self.config.public_url.starts_with("http://"),
+            guarded: self.guarded.clone(),
         }
     }
 
@@ -513,8 +515,8 @@ impl Host {
         let echoed = async {
             // The syncer chose the endpoint: it is fetched as one not
             // trusted.
-            let (client, at) = self.pinned(&url).await.ok()?;
-            let res = client.post(at).json(&body).send().await.ok()?;
+            let asked = self.guarded.post(&url).ok()?;
+            let res = asked.json(&body).send().await.ok()?;
             let bytes = capped(res, CONFIRMATION_AT_MOST).await?;
             let said: Json = serde_json::from_slice(&bytes).ok()?;
             said["challenge"].as_str().map(String::from)
@@ -657,12 +659,11 @@ impl Host {
         space: &str,
         jtis: &[String],
     ) -> Result<()> {
-        let doc = self.identity.document(writer).await?;
+        let doc = self.identity.document_now(writer).await?;
         let claims = self.claims(authority, writer, NOTIFY_REVOKED);
-        let pds = self.at_pds(&doc, NOTIFY_REVOKED).await;
-        let (client, at) = pds.map_err(anyhow::Error::msg)?;
-        let res = client
-            .post(at)
+        let pds = identity::pds(writer, &doc, self.guarded.guard())?;
+        let asked = self.guarded.post(&format!("{pds}/xrpc/{NOTIFY_REVOKED}"))?;
+        let res = asked
             .bearer_auth(service_auth::sign(signing, &claims))
             .json(&json!({ "space": space, "credentials": jtis }))
             .send()
@@ -706,14 +707,11 @@ impl Host {
         let Ok(Some(account)) = self.store.account(&notice.repo) else {
             return Delivery::Failed;
         };
-        let doc = match self.identity.kept(&space.authority) {
-            Some(doc) => Ok(doc),
-            None => self.identity.document(&space.authority).await,
-        };
         // An authority not found, or naming no PDS yet, or none to be
-        // asked ([`crate::guard`]), may be found later.
-        let doc = doc.unwrap_or_default();
-        let Ok((client, at)) = self.at_pds(&doc, NOTIFY_REPO_UPDATE).await else {
+        // asked, may be found later.
+        let pds = self.identity.pds(&space.authority).await;
+        let url = pds.map(|pds| format!("{pds}/xrpc/{NOTIFY_REPO_UPDATE}"));
+        let Some(asked) = url.ok().and_then(|url| self.guarded.post(&url).ok()) else {
             return Delivery::Retry;
         };
         let aud = space_host_aud(&space.authority);
@@ -727,7 +725,7 @@ impl Host {
             "repoRev": notice.rev,
             "data": Value::Bytes(notice.data.clone()).to_json(),
         });
-        let sent = client.post(at).bearer_auth(token).json(&body).send().await;
+        let sent = asked.bearer_auth(token).json(&body).send().await;
         delivery(sent)
     }
 

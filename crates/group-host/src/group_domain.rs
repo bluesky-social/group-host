@@ -19,15 +19,16 @@
 
 use crate::Host;
 use crate::group_api::{group_of, signed_in};
-use crate::identity::LOOKUP;
 use crate::rbac::INTERNAL;
 use crate::time::now_millis;
 use crate::xrpc::XrpcError;
+use atproto_client::identity::LOOKUP;
 use axum::Json;
 use axum::extract::{Query, Request, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use futures::future::OptionFuture;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -68,21 +69,16 @@ impl Host {
     /// Whether `domain` answers as this host: its `describeServer` naming
     /// this host's DID. Asked at `DOMAIN_CHECK_AT`, as it is set, with the
     /// domain as its `Host`; or else at the domain itself, a group's to
-    /// name, over https as [`crate::guard`] holds such a host.
+    /// name, over https as the host holds any host others' data names.
     async fn reaches(&self, domain: &str) -> bool {
         let path = "/xrpc/com.atproto.server.describeServer";
         let asked = match &self.config.domain_check_at {
-            Some(at) => Ok(self.http.get(format!("{at}{path}"))),
-            None => {
-                let pinned = self.pinned(&format!("https://{domain}{path}")).await;
-                pinned.map(|(client, at)| client.get(at))
-            }
+            Some(at) => Some(self.http.get(format!("{at}{path}"))),
+            None => self.guarded.get(&format!("https://{domain}{path}")).ok(),
         };
-        let Ok(asked) = asked else {
-            return false;
-        };
-        let asked = asked.header(header::HOST, domain).timeout(LOOKUP);
-        let Ok(answer) = asked.send().await else {
+        let asked = asked.map(|a| a.header(header::HOST, domain).timeout(LOOKUP).send());
+        let answered = OptionFuture::from(asked).await.and_then(Result::ok);
+        let Some(answer) = answered else {
             return false;
         };
         let said: Value = answer.json().await.unwrap_or_default();

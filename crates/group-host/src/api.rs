@@ -256,10 +256,7 @@ pub async fn resolve_handle(
             .await?
             .is_some()
     {
-        did = host
-            .identity
-            .resolve_handle(&handle, &host.config.handle_resolvers)
-            .await;
+        did = host.identity.resolve_handle(&handle).await.ok();
     }
     let not_found = || {
         XrpcError::new(

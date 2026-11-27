@@ -76,8 +76,9 @@ async fn named(host: &Host, group: &str, address: &str, handle: &str) -> Option<
     if handle == address {
         return Some(group.to_string());
     }
-    let resolvers = &host.config.handle_resolvers;
-    host.identity.resolve_handle(handle, resolvers).await
+    // Asked again, not as kept: its owner may have just pointed it here.
+    host.identity.forget(handle);
+    host.identity.resolve_handle(handle).await.ok()
 }
 
 /// Whether a domain is ready to be the group's handle. Changes nothing.

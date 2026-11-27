@@ -24,6 +24,8 @@ use atproto::space::{
 };
 use atproto::space_auth::{self, Kind, Make, sign_request};
 use atproto::{Cid, Curve, Keypair, Value, did, drisl};
+use atproto_client::guard::Guarded;
+use atproto_client::identity;
 use serde_json::Value as Json;
 use std::collections::{BTreeMap, HashSet};
 
@@ -42,8 +44,8 @@ struct Remote {
     space: String,
     did: String,
     pds: String,
-    /// For asking `pds`, held to [`crate::guard`].
-    client: reqwest::Client,
+    /// For asking `pds`, a host others' data names.
+    client: Guarded,
     kem: String,
     /// `Atproto-Space-Credential <jwt>`, the group's to its own space.
     authorization: String,
@@ -70,9 +72,10 @@ impl Vouched {
 impl Remote {
     async fn ask(&self, method: &str, params: &[(&str, &str)]) -> Result<Vouched> {
         let (share, secret) = encapsulate(&self.kem)?;
+        let url = format!("{}/xrpc/com.atproto.space.{method}", self.pds);
         let mut req = self
             .client
-            .get(format!("{}/xrpc/com.atproto.space.{method}", self.pds))
+            .get(&url)?
             .query(&[("space", self.space.as_str()), ("repo", self.did.as_str())])
             .query(params)
             .header("accept-signature", accept_signature(COMMIT_MAC, &share));
@@ -218,9 +221,9 @@ impl Host {
     /// `did`'s repo in `space`, at their PDS, with a credential to it the
     /// group `authority` issues itself.
     async fn remote(&self, space: &str, authority: &str, did: &str) -> Result<Remote> {
-        let doc = self.identity.document(did).await?;
-        let pds = did::pds(&doc).context("a writer's document names no PDS")?;
-        let (client, _) = self.pinned(&pds).await.map_err(anyhow::Error::msg)?;
+        let doc = self.identity.document_now(did).await?;
+        let pds = identity::pds(did, &doc, self.guarded.guard())?;
+        let client = self.guarded.clone();
         let kem = did::kem_key(&doc).context("a writer with no #atproto_kem key")?;
         let key = Keypair::generate(Curve::P256);
         let signing = self

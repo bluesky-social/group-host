@@ -7,6 +7,9 @@ use atproto::did;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+/// In `HANDLE_RESOLVERS`, a handle's own `/.well-known/atproto-did`.
+pub const WELL_KNOWN: &str = "well-known";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     /// The port it listens on, `PORT`; 0 for any free one.
@@ -31,9 +34,10 @@ pub struct Config {
     /// network of test servers: `grain.social=127.0.0.1:2584`.
     pub did_web_hosts: BTreeMap<String, String>,
     /// How a handle is resolved, `HANDLE_RESOLVERS`, comma-separated, each
-    /// tried in turn: `well-known:<scheme>` for the handle's own
-    /// `/.well-known/atproto-did`, or a service answering
-    /// `com.atproto.identity.resolveHandle`, which reads its DNS record.
+    /// tried in turn: [`WELL_KNOWN`] for the handle's own
+    /// `/.well-known/atproto-did` (on http where `DID_WEB_SCHEME` is), or
+    /// a service answering `com.atproto.identity.resolveHandle`, which
+    /// reads its DNS record.
     pub handle_resolvers: Vec<String>,
     /// Where the host reads a DNS TXT record, `DNS_OVER_HTTPS`: a
     /// DNS-over-HTTPS service answering JSON (`application/dns-json`),
@@ -149,10 +153,14 @@ impl Config {
         let group_founders = list("GROUP_FOUNDERS");
         let mut handle_resolvers = urls("HANDLE_RESOLVERS");
         if handle_resolvers.is_empty() {
-            handle_resolvers = vec![
-                "well-known:https".into(),
-                "https://public.api.bsky.app".into(),
-            ];
+            handle_resolvers = vec![WELL_KNOWN.into(), "https://public.api.bsky.app".into()];
+        }
+        let service = |r: &String| r.starts_with("https://") || r.starts_with("http://");
+        if let Some(r) = handle_resolvers
+            .iter()
+            .find(|r| *r != WELL_KNOWN && !service(r))
+        {
+            bail!("HANDLE_RESOLVERS is {WELL_KNOWN} or a service's URL, not {r}");
         }
         let crawlers = urls("PDS_CRAWLERS");
         let dns_over_https = var("DNS_OVER_HTTPS").unwrap_or_else(|| DNS_OVER_HTTPS.into());

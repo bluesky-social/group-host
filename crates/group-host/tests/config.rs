@@ -23,7 +23,7 @@ fn defaults_serve_localhost() {
     assert!(c.group_founders.is_empty());
     assert_eq!(
         c.handle_resolvers,
-        ["well-known:https", "https://public.api.bsky.app"]
+        ["well-known", "https://public.api.bsky.app"]
     );
     assert_eq!(c.console_url, "http://localhost:2600");
     assert_eq!(c.dns_over_https, "https://cloudflare-dns.com/dns-query");
@@ -112,6 +112,10 @@ fn refuses_what_does_not_read() {
     assert_eq!(
         err(&[("DID_WEB_HOSTS", "grain.social")]),
         "DID_WEB_HOSTS is host=address pairs, not grain.social"
+    );
+    assert_eq!(
+        err(&[("HANDLE_RESOLVERS", "well-known:https")]),
+        "HANDLE_RESOLVERS is well-known or a service's URL, not well-known:https"
     );
     assert_eq!(
         err(&[("HANDLE_DOMAIN", "example.com")]),

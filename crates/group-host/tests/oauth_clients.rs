@@ -536,10 +536,11 @@ async fn reads_a_document_only_where_it_should() {
         (format!("{url}/text"), "not a JSON object"),
         (format!("{url}/gone"), "answered 500"),
         (format!("{url}/nothing"), "answered 404"),
-        (format!("{url}/x#fragment"), "not an https URL"),
-        (format!("ftp://{}/x", &url[7..]), "not an https URL"),
+        // A fragment is never sent: the document asked for is `/x`'s.
+        (format!("{url}/x#fragment"), "answered 404"),
+        (format!("ftp://{}/x", &url[7..]), "not on https"),
         (closed, "client metadata at"),
-        ("nonsense".into(), "not a URL"),
+        ("nonsense".into(), "relative URL without a base"),
     ] {
         let e = h.host.client(&id, now).await.unwrap_err();
         assert!(e.description.contains(refused), "{id}: {}", e.description);
@@ -555,7 +556,7 @@ async fn reads_a_document_only_where_it_should() {
     ] {
         let e = https.host.client(id, now).await.unwrap_err();
         assert!(
-            e.description.contains("not at a public address"),
+            e.description.contains("public address"),
             "{id}: {}",
             e.description
         );
@@ -576,11 +577,7 @@ async fn reads_a_document_only_where_it_should() {
         .client(&format!("{url}/text"), now)
         .await
         .unwrap_err();
-    assert!(
-        e.description.contains("not an https URL"),
-        "{}",
-        e.description
-    );
+    assert!(e.description.contains("not on https"), "{}", e.description);
 }
 
 #[tokio::test]
@@ -627,11 +624,7 @@ async fn takes_the_loopback_client_as_atproto_has_it() {
         .client("http://localhost:8080", now)
         .await
         .unwrap_err();
-    assert!(
-        e.description.contains("not an https URL"),
-        "{}",
-        e.description
-    );
+    assert!(e.description.contains("not on https"), "{}", e.description);
 }
 
 #[tokio::test]

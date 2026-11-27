@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 atproto.workspace = true
+atproto-client.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 futures.workspace = true

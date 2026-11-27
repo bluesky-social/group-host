@@ -40,7 +40,7 @@ async fn here() -> (Running, Arc<Names>, String, [Authority; 3]) {
         )
         .with_state(names.clone());
     let service = serve(router).await;
-    let resolvers = format!("well-known:http,{service}");
+    let resolvers = format!("well-known,{service}");
     let h = start(&[("HANDLE_RESOLVERS", resolvers.as_str())], false).await;
     let [alice, bob, carol] = people(&h).await;
     let did = start_group(

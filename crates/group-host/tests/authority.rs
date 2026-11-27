@@ -353,6 +353,11 @@ async fn refuses_a_sync_it_should_not_authorize() {
             json!({"space": x.space, "credentialKey": kid, "delegationToken": token(&x.alice, &elsewhere, &x.group)}),
             (400, "InvalidDelegationToken"),
         ),
+        // For another space of the same authority.
+        (
+            json!({"space": x.space, "credentialKey": kid, "delegationToken": token(&x.alice, &never_made, &x.group)}),
+            (400, "InvalidDelegationToken"),
+        ),
         (
             json!({"space": x.space, "credentialKey": kid, "delegationToken": token(&stranger, &x.space, &x.group)}),
             (400, "InvalidDelegationToken"),

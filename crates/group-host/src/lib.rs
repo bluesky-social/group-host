@@ -28,8 +28,6 @@ pub mod group_lifecycle;
 pub mod group_members;
 pub mod group_spaces;
 pub mod group_tokens;
-pub mod guard;
-pub mod identity;
 pub mod import;
 pub mod import_space;
 pub mod index;
@@ -68,6 +66,8 @@ pub mod time;
 pub mod token_writes;
 pub mod xrpc;
 
+use atproto_client::guard::{Guard, Guarded};
+use atproto_client::identity::{HandleResolver, Resolver};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use config::Config;
@@ -81,8 +81,8 @@ pub struct Host {
     pub store: store::Store,
     pub secrets: secrets::Secrets,
     pub plc: plc::Directory,
-    /// Other accounts' documents.
-    pub identity: identity::Resolver,
+    /// Other accounts' documents and handles, as read.
+    pub identity: Resolver,
     /// Each commit's revision, later than the last.
     pub clock: atproto::tid::TidClock,
     /// Held while a commit is made, one lock for each group's commits.
@@ -90,6 +90,11 @@ pub struct Host {
     /// Told of each new event, which wakes the firehose's streams.
     pub events: tokio::sync::broadcast::Sender<()>,
     pub(crate) http: reqwest::Client,
+    /// For the hosts others' data names: a DID document's PDS and
+    /// services, a syncer's endpoint, a client's metadata, a group's own
+    /// domain. Held to https at public addresses, but for a host on http
+    /// itself (`PUBLIC_URL`), as on a network of test servers.
+    pub(crate) guarded: Guarded,
     /// The spaces the index is to read, and its wake.
     indexing: std::sync::Mutex<std::collections::BTreeSet<String>>,
     index_wake: tokio::sync::Notify,
@@ -118,9 +123,12 @@ impl Host {
         let logs = logs::Logs::open(&config.data_dir.join("logs.sqlite"), config.logs_keep)?;
         let stats = stats::Stats::open(&config.data_dir.join("stats.sqlite"))?;
         let plc = plc::Directory::new(&config.plc_url);
-        let identity = identity::Resolver::new(&config.plc_url, &config.did_web_scheme)
-            .reading_at(&config.did_web_hosts)
-            .http_here(config.public_url.starts_with("http://"));
+        let guard = match config.public_url.starts_with("http://") {
+            true => Guard::allowing_private(),
+            false => Guard::strict(),
+        };
+        let guarded = Guarded::new(guard, client_builder()).expect("a client builds");
+        let identity = resolver(&config, guarded.clone());
         // A clock id of its own, so two hosts' revisions never collide.
         let clock = atproto::tid::TidClock::new(u64::from(secrets.signing.public().to_sec1()[1]));
         let limits = limits::Limiter::new(config.rate_limits);
@@ -134,6 +142,7 @@ impl Host {
             writing: Default::default(),
             events: tokio::sync::broadcast::channel(16).0,
             http: client(),
+            guarded,
             indexing: Default::default(),
             index_wake: Default::default(),
             clients: Default::default(),
@@ -169,6 +178,31 @@ pub fn client_builder() -> reqwest::ClientBuilder {
 pub fn client() -> reqwest::Client {
     let built = client_builder().build();
     built.expect("a client with a timeout builds")
+}
+
+/// The resolver of other accounts' identities `config` sets: the PLC
+/// directory, the handle resolvers in their order (`HANDLE_RESOLVERS`),
+/// the `did:web`s read elsewhere (`DID_WEB_HOSTS`) and on http
+/// (`DID_WEB_SCHEME`); the hosts others' data names asked through
+/// `guarded`, the services it is set with through a client following no
+/// redirect.
+pub fn resolver(config: &Config, guarded: Guarded) -> Resolver {
+    let set = client_builder().redirect(reqwest::redirect::Policy::none());
+    let set = set.build().expect("a client builds");
+    let resolvers = config.handle_resolvers.iter().map(|r| match r.as_str() {
+        config::WELL_KNOWN => HandleResolver::WellKnown,
+        service => HandleResolver::Xrpc(service.to_string()),
+    });
+    let scheme = &config.did_web_scheme;
+    let hosts = config.did_web_hosts.iter();
+    let hosts = hosts.map(|(host, at)| (host.clone(), format!("{scheme}://{at}")));
+    let resolver = Resolver::new(set, guarded, &config.plc_url, resolvers.collect());
+    let resolver = resolver.reading_at(hosts.collect());
+    let resolver = resolver.sending(Arc::new(observe::Calls));
+    match scheme.as_str() {
+        "http" => resolver.on_http(),
+        _ => resolver,
+    }
 }
 
 /// The host's routes, each request logged and counted

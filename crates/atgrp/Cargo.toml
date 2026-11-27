@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 atproto.workspace = true
+atproto-client.workspace = true
 group-host-mcp.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true

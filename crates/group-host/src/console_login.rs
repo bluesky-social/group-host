@@ -325,7 +325,6 @@ impl Host {
         key: &Keypair,
         form: &[(&str, &str)],
     ) -> Result<Value, String> {
-        let (pinned, at) = self.pinned(url).await?;
         let mut nonce: Option<String> = None;
         for _ in 0..2 {
             let now = now_millis() / 1000;
@@ -347,12 +346,8 @@ impl Host {
                 ),
                 ("client_assertion", assertion.as_str()),
             ]);
-            let sent = pinned
-                .post(at.clone())
-                .header("dpop", proof)
-                .form(&fields)
-                .send()
-                .await;
+            let asked = self.guarded.post(url).map_err(|e| e.0)?;
+            let sent = asked.header("dpop", proof).form(&fields).send().await;
             let res = sent.map_err(|e| format!("{url}: {e}"))?;
             let ok = res.status().is_success();
             nonce = res
@@ -383,16 +378,12 @@ impl Host {
         let identifier = identifier.trim().trim_start_matches('@').to_lowercase();
         let did = match identifier.starts_with("did:") {
             true => Some(identifier.clone()),
-            false => {
-                self.identity
-                    .resolve_handle(&identifier, &self.config.handle_resolvers)
-                    .await
-            }
+            false => self.identity.resolve_handle(&identifier).await.ok(),
         };
         let did = did.ok_or_else(|| format!("{identifier} is no account we can find"))?;
         let doc = self
             .identity
-            .document(&did)
+            .document_now(&did)
             .await
             .map_err(|e| format!("{did}: {e:#}"))?;
         let pds = did::pds(&doc).ok_or_else(|| format!("{did} names no PDS"))?;

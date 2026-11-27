@@ -170,7 +170,7 @@ impl Host {
         if !did.starts_with("did:plc:") {
             return Err(not_plc());
         }
-        let doc = self.identity.document(did).await;
+        let doc = self.identity.document_now(did).await;
         let doc = doc.map_err(|e| invalid(format!("could not resolve {did}: {e:#}")))?;
         let (Ok(key), Some(pds)) = (did::signing_key(&doc), did::pds(&doc)) else {
             return Err(invalid(format!("{did} names no key, or no server")));
@@ -247,8 +247,8 @@ impl Host {
         url: &str,
         query: &[(&str, &str)],
     ) -> Result<reqwest::Response, XrpcError> {
-        let (pinned, at) = self.pinned(url).await.map_err(upstream)?;
-        let res = pinned.get(at).query(query).send().await.map_err(upstream)?;
+        let asked = self.guarded.get(url).map_err(upstream)?;
+        let res = asked.query(query).send().await.map_err(upstream)?;
         if !res.status().is_success() {
             return Err(upstream(format!("{url} answered {}", res.status())));
         }
@@ -359,7 +359,7 @@ async fn proof(host: &Host, jwt: &str) -> Result<String, XrpcError> {
     if !did.starts_with("did:plc:") {
         return Err(not_plc());
     }
-    let doc = host.identity.document(&did).await;
+    let doc = host.identity.document_now(&did).await;
     let doc = doc.map_err(|e| invalid(format!("could not resolve {did}: {e:#}")))?;
     let key = did::signing_key(&doc).map_err(|_| bad("its DID names no key"))?;
     let now = (now_millis() / 1000) as u64;

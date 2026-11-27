@@ -186,7 +186,7 @@ impl Host {
         if did == self.config.service_did {
             return Err(invalid("a call is never proxied to this host itself"));
         }
-        let doc = self.identity.document(did).await;
+        let doc = self.identity.document_now(did).await;
         let doc = doc.map_err(|_| invalid("could not resolve proxy did"))?;
         let found = did::service(&doc, &format!("#{service}"));
         let url = found.ok_or_else(|| invalid("could not resolve proxy did service url"))?;
@@ -243,9 +243,8 @@ pub async fn proxy(
         false => None,
     };
     let path = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
-    let pinned = host.pinned(&format!("{endpoint}{path}")).await;
-    let (client, at) = pinned.map_err(upstream)?;
-    let mut sent = client.request(method, at).timeout(PROXIED_FOR);
+    let asked = host.guarded.request(method, &format!("{endpoint}{path}"));
+    let mut sent = asked.map_err(|e| upstream(e.0))?.timeout(PROXIED_FOR);
     let encoding = headers.get("accept-encoding").cloned();
     sent = sent.header(
         "accept-encoding",

@@ -421,8 +421,8 @@ impl Host {
         url: &str,
         query: &[(&str, &str)],
     ) -> Result<reqwest::Response, XrpcError> {
-        let (pinned, at) = self.pinned(url).await.map_err(source)?;
-        let res = pinned.get(at).query(query).send().await.map_err(source)?;
+        let asked = self.guarded.get(url).map_err(source)?;
+        let res = asked.query(query).send().await.map_err(source)?;
         if !res.status().is_success() {
             return Err(source(format!("{url} answered {}", res.status())));
         }
@@ -486,11 +486,12 @@ pub(crate) fn creds(host: &Host, account: &Account) -> Value {
 }
 
 impl Host {
-    /// Whether `handle` names `did`, as the resolvers this host asks say.
+    /// Whether `handle` names `did` now, as the resolvers this host asks
+    /// say.
     pub(crate) async fn names(&self, handle: &str, did: &str) -> bool {
-        let resolvers = &self.config.handle_resolvers;
-        let named = self.identity.resolve_handle(handle, resolvers).await;
-        named.as_deref() == Some(did)
+        self.identity.forget(handle);
+        let named = self.identity.resolve_handle(handle).await;
+        named.ok().as_deref() == Some(did)
     }
 
     /// An account taken in part way, and its files, gone.
@@ -528,15 +529,13 @@ pub async fn migrate_receive(
         return Err(refused("AlreadyHere", "the group is on this host already"));
     }
     // The group itself says it is moving here, by its current key.
-    let doc = host.identity.document(group).await.map_err(source)?;
+    let doc = host.identity.document_now(group).await.map_err(source)?;
     let (Ok(key), Some(pds)) = (did::signing_key(&doc), did::pds(&doc)) else {
         return Err(source("the group's DID names no key, or no host"));
     };
-    let now = (now_millis() / 1000) as u64;
-    let checked = service_auth::verify(jwt, &key, now).and_then(|claims| {
-        service_auth::check(&claims, &host.config.service_did, RECEIVE).map(String::from)
-    });
-    if checked.as_deref() != Ok(group) {
+    let (aud, now) = (&host.config.service_did, (now_millis() / 1000) as u64);
+    let checked = atproto_client::service_auth::verify(&host.identity, jwt, aud, RECEIVE, now);
+    if checked.await.ok().as_deref() != Some(group) {
         return Err(refused(
             "BadServiceJwt",
             "not the group's token for moving here",
@@ -761,7 +760,7 @@ pub async fn migrate_activate(
     let (group, _) = host
         .mover(&headers, "migrateActivate", body["did"].as_str())
         .await?;
-    let doc = host.identity.document(&group).await.map_err(source)?;
+    let doc = host.identity.document_now(&group).await.map_err(source)?;
     let account = host
         .store
         .account(&group)

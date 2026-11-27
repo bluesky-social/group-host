@@ -176,7 +176,7 @@ impl Host {
     /// and its description, all that is kept of it.
     async fn read_lexicon(&self, nsid: &str) -> Option<Value> {
         let publisher = self.lexicon_did(nsid).await?;
-        let doc = self.identity.document(&publisher).await.ok()?;
+        let doc = self.identity.document_now(&publisher).await.ok()?;
         let pds = did::pds(&doc)?;
         let at = format!("{pds}/xrpc/com.atproto.repo.getRecord");
         let q = [

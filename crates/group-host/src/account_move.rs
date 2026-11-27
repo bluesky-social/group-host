@@ -266,7 +266,7 @@ impl Host {
         body: Option<&Value>,
     ) -> Result<reqwest::Response, XrpcError> {
         let url = format!("{}/xrpc/{nsid}", m.pds);
-        let (pinned, at) = self.pinned(&url).await.map_err(upstream)?;
+        self.guarded.guard().may_ask(&url).map_err(upstream)?;
         if m.expires_at - EARLY <= now_millis() {
             self.renew(mover, m).await?;
         }
@@ -283,7 +283,11 @@ impl Host {
             let mut claims = dpop::Claims::new(method.as_str(), &url, now).token(&m.access);
             claims.nonce = nonce.clone();
             let proof = dpop::sign(&key, &claims);
-            let mut req = pinned.request(method.clone(), at.clone()).query(query);
+            let req = self
+                .guarded
+                .request(method.clone(), &url)
+                .map_err(upstream)?;
+            let mut req = req.query(query);
             req = req.header("authorization", format!("DPoP {}", m.access));
             req = req.header("dpop", proof);
             // A procedure that takes no body is sent none.
@@ -480,7 +484,7 @@ pub async fn get_account_move(State(host): State<Arc<Host>>, headers: HeaderMap)
     else {
         return Ok(Json(json!({})));
     };
-    let doc = host.identity.document(&m.did).await.ok();
+    let doc = host.identity.document_now(&m.did).await.ok();
     let handle = doc.as_ref().and_then(did::handle);
     let pending = host
         .store

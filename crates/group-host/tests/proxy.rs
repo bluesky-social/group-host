@@ -852,7 +852,7 @@ async fn reaches_a_service_only_at_a_public_address() {
     let (app, token) = signed_in(&h, &alice, &did, "atproto transition:generic").await;
     for (service, why) in [
         ("did:web:grain.test#private", "is not at a public address"),
-        ("did:web:grain.test#grain_appview", "is not an https URL"),
+        ("did:web:grain.test#grain_appview", "is not on https"),
     ] {
         let said = call(&h, &app, &token, "test.grain.x", &to(service), None).await;
         assert_eq!(said.error(), (502, "UpstreamFailure"), "{}", said.body);

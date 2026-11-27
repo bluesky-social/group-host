@@ -240,12 +240,15 @@ impl Host {
         })
     }
 
-    /// The JSON object at `url`, fetched by a [`Host::pinned`] client.
+    /// The JSON object at `url`, asked as any host others' data names is
+    /// ([`Host::guarded`]).
     pub(crate) async fn public_json(&self, url: &str, what: &str) -> Result<Value, String> {
         let unreadable = |why: String| format!("{what} at {url}: {why}");
-        let (pinned, at) = self.pinned(url).await.map_err(unreadable)?;
-        let sent = pinned.get(at).header("accept", "application/json");
-        let res = sent.send().await.map_err(|e| unreadable(e.to_string()))?;
+        let asked = self.guarded.get(url).map_err(|e| unreadable(e.0))?;
+        let sent = asked.header("accept", "application/json");
+        // With its causes: a name the guard would not resolve says so there.
+        let failed = |e: reqwest::Error| unreadable(format!("{:#}", anyhow::Error::new(e)));
+        let res = sent.send().await.map_err(failed)?;
         if !res.status().is_success() {
             return Err(unreadable(format!("answered {}", res.status())));
         }
