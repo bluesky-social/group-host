@@ -4,6 +4,14 @@ What changed in each version of the group host, its console and the
 `opensocial` command for those who run and use them, from the change
 files in `.changeset/` (see `knope.toml`).
 
+## 0.5.1 (2026-11-27)
+
+### Fixes
+
+#### A group's record is served with its proof
+
+The host answers `com.atproto.sync.getRecord`, as a PDS does: a CAR rooted at the group's signed commit, holding the tree's nodes down to the record and the record itself, or proving it absent. Apps that read a record a group just wrote through `getRecord` were refused with `MethodNotImplemented`, so the record showed only once the network brought it.
+
 ## 0.5.0 (2026-11-27)
 
 ### Features
