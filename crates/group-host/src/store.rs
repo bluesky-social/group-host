@@ -1,5 +1,5 @@
-//! The host's database: one SQLite file holding every group's account, its
-//! repo's current commit, and its records. The tree a commit names is
+//! The host's database, in SQLite: every group's account, its repo's
+//! current commit, and its records. The tree a commit names is
 //! not kept: it is built again from the records, as a group's repo is
 //! small (`atproto::mst`).
 

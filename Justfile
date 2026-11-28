@@ -9,12 +9,14 @@ oxfmt := "web/node_modules/.bin/oxfmt"
 js := "web harness docs-site"
 
 # Install the web pages' packages, the harness's (the reference PDS the
-# tests reach the network through), and coverage tools.
+# tests reach the network through), coverage tools, and cargo-deny for
+# `just lint`.
 setup:
     cd web && npm install --no-audit --no-fund
     cd harness && npm ci --no-audit --no-fund
     rustup component add llvm-tools-preview --toolchain stable
     command -v cargo-llvm-cov >/dev/null || cargo install cargo-llvm-cov
+    command -v cargo-deny >/dev/null || cargo install --locked cargo-deny
 
 test:
     {{cargo}} test --workspace

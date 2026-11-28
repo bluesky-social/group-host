@@ -5,7 +5,7 @@ You need Rust's stable toolchain through rustup, Node at the version
 for the lexicons.
 
 ```sh
-just setup     # the console's and harness's packages, and coverage tools
+just setup     # the console's and harness's packages, coverage tools, and cargo-deny
 just dev       # all of it, to use: see below
 just serve     # the host alone, on http://localhost:2600
 just web-dev   # the console alone, asking that host
@@ -241,8 +241,8 @@ versions too; a permissive licence for every one; and crates from
 crates.io and the atproto registry alone. An advisory is fixed by an
 upgrade, never ignored. The advisories are read as they are at the run,
 so `check` can fail on `main` the day one is published, with nothing
-changed. It needs `cargo install --locked cargo-deny` once; CI runs
-0.22.0.
+changed. `just setup` installs it (`cargo install --locked cargo-deny`);
+CI runs 0.22.0.
 
 No crate has unsafe code: `[workspace.lints.rust]` in `Cargo.toml`
 forbids it, and each crate takes the workspace's lints, so the build
